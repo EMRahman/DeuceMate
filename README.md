@@ -44,7 +44,7 @@ This project also showcases my ability to ship production-quality native iOS/wat
 
 ## Privacy
 
-DeuceMate collects **zero data** — no servers, no analytics, no tracking, and no network requests at all. Match data stays on your devices; export and AI-coaching features share data only when you explicitly choose to. See [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
+DeuceMate collects **zero data** — no servers, no analytics, no tracking, and no network requests at all. Match data stays on your devices; export and AI-coaching features share data only when you explicitly choose to. See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) (also published at [emrahman.github.io/DeuceMate/privacy.html](https://emrahman.github.io/DeuceMate/privacy.html)).
 
 ## Requirements & Installation
 
@@ -54,6 +54,7 @@ DeuceMate collects **zero data** — no servers, no analytics, no tracking, and 
 
 ## Support & Feedback
 
+- 🌐 Support site: [emrahman.github.io/DeuceMate](https://emrahman.github.io/DeuceMate/)
 - 📧 Email: [mail@ehsanrahman.com](mailto:mail@ehsanrahman.com?subject=DeuceMate%20Feedback)
 - 🐛 Report issues: [GitHub Issues](https://github.com/EMRahman/DeuceMate/issues)
 - 📖 Help & FAQs: [SUPPORT_PAGE.md](SUPPORT_PAGE.md)
