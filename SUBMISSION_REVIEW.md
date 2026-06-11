@@ -139,6 +139,53 @@ live scoreboard, announcements) need one. The testable no-watch surface is
 
 ---
 
+## 📸 Screenshot & demo-video plan (one session, ~2 hours)
+
+### 1. Confirm required sizes (5 min)
+- [ ] Open App Store Connect → version → screenshot panel and note the device
+  classes it actually asks for (Apple shuffles these periodically). Expected:
+  **iPhone 6.9"** (one set covers all smaller iPhones; iPhone-only device
+  family ⇒ no iPad set) and **Apple Watch** (largest size required; smaller
+  sizes optional / auto-scaled).
+
+### 2. Seed good-looking data (20–30 min)
+- [ ] Real matches on the physical devices for authentic stats — and for every
+  HR-dependent panel (PulseCoach, HR/steps overlays): **simulators have no
+  HealthKit**, so those screens must come from a real match.
+- [ ] Staged simulator match for everything else: boot the paired
+  watch+iPhone simulators, enable outcome tracking, swipe through a 2-set
+  match on the watch sim (~10 min) to fill the stats views, category sheet,
+  and points graph. WatchConnectivity between paired sims can be flaky — if
+  the live scoreboard won't mirror, capture that one screen on real devices.
+
+### 3. Shot list (5–6 per platform; the first 3 show in search results)
+Use one theme across all shots (e.g. Hard Court Night for contrast).
+- **Watch:** ① live scoreboard mid-match (server badge + momentum strip),
+  ② match setup, ③ live stats, ④ point-category sheet, ⑤ history.
+- **iPhone:** ① live scoreboard with LIVE badge, ② match detail stats,
+  ③ points graph with overlays on, ④ AI Coach sheet, ⑤ archive list,
+  ⑥ manual match entry (doubles as the reviewer test path, Item #3).
+
+### 4. Capture mechanics (30–40 min)
+- [ ] Run each scheme on the size-exact simulator (6.9"-class iPhone; largest
+  watch). **Cmd+S** in Simulator saves a pixel-perfect PNG at native
+  resolution — no resolution math, which is why sims beat physical devices here.
+- [ ] Polish the iPhone status bar before capturing:
+  `xcrun simctl status_bar booted override --time "9:41" --batteryLevel 100
+  --cellularBars 4 --wifiBars 3` (watch sims don't support the override — fine).
+- Raw screens are acceptable for v1; skip marketing frames/captions.
+
+### 5. Demo video in the same session (feeds Item #3)
+- [ ] Shoot watch scoring → iPhone live scoreboard → announcements on real
+  devices (phone propped up), or `xcrun simctl io booted recordVideo demo.mp4`
+  if sim pairing cooperates. Attach in App Review Information.
+
+### 6. Upload
+- [ ] Drag the sets into App Store Connect, confirm the dimensions are
+  accepted, then tick the screenshots line in the checklist below.
+
+---
+
 ## Final pre-submit checklist
 
 - [x] GitHub Pages enabled (or URLs hosted elsewhere) and both URLs verified
@@ -149,5 +196,6 @@ live scoreboard, announcements) need one. The testable no-watch surface is
 - [ ] HealthKit denied/again-no-DOB paths verified — **Item #4**.
 - [ ] App Privacy questionnaire = "Data Not Collected"; HealthKit declared as
       on-device only.
-- [ ] Screenshots prepared (iPhone 6.9"; Apple Watch 41mm + 45mm).
+- [ ] Screenshots prepared (iPhone 6.9"; Apple Watch 41mm + 45mm) — see the
+      screenshot & demo-video plan above.
 - [ ] Bundle ID confirmed as final — **low-risk item**.
