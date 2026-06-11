@@ -24,13 +24,13 @@ return 404 to Apple's reviewers.
   published build.
 - [x] **[fixed in this PR]** Updated the URLs in `APP_STORE_METADATA.md` to the
   GitHub Pages site.
-- [ ] **MANUAL — enable GitHub Pages:** repo **Settings → Pages → Build and
+- [x] **MANUAL — enable GitHub Pages:** repo **Settings → Pages → Build and
   deployment → Deploy from a branch → `main` / `/docs`**. Note: Pages on a
   **private** repo requires GitHub Pro or higher; on the free plan the repo must
   be **public** for Pages to publish.
   - Alternative: host `index.html` + `privacy.html` on `ehsanrahman.com` and use
     those URLs instead — Apple only needs the two URLs to resolve publicly.
-- [ ] **MANUAL — verify** both URLs load in a private/logged-out browser window
+- [x] **MANUAL — verify** both URLs load in a private/logged-out browser window
   before submitting.
 
 ---
@@ -141,7 +141,7 @@ live scoreboard, announcements) need one. The testable no-watch surface is
 
 ## Final pre-submit checklist
 
-- [ ] GitHub Pages enabled (or URLs hosted elsewhere) and both URLs verified
+- [x] GitHub Pages enabled (or URLs hosted elsewhere) and both URLs verified
       logged-out — **Blocker #1**.
 - [ ] Build archived from Xcode and tested on a **real** iPhone + Apple Watch.
 - [ ] App Review notes updated: manual-entry-first test path + demo video
