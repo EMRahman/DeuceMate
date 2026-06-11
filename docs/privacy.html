@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="index,follow">
+<title>Privacy Policy · DeuceMate</title>
+<meta name="description" content="DeuceMate privacy policy: the app collects no data, has no servers, and makes no network requests. Match data stays on your devices.">
+<style>
+  :root { --green:#2e7d32; --ink:#14241a; --muted:#5b6b60; --line:#e2e8e3; --bg:#f7faf7; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+  .wrap { max-width:760px; margin:0 auto; padding:32px 20px 64px; }
+  header.site { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+  header.site .ball { font-size:30px; }
+  header.site h1 { font-size:1.7rem; margin:0; }
+  .meta { color:var(--muted); font-size:.92rem; margin:4px 0 24px; }
+  nav.crumbs { font-size:.92rem; margin-bottom:20px; }
+  nav.crumbs a { color:var(--green); text-decoration:none; }
+  nav.crumbs a:hover { text-decoration:underline; }
+  h2 { font-size:1.2rem; margin:32px 0 8px; padding-top:8px; border-top:1px solid var(--line); }
+  h3 { font-size:1.02rem; margin:20px 0 6px; }
+  p, li { color:#243a2c; }
+  ul { padding-left:1.25rem; }
+  li { margin:4px 0; }
+  code { background:#eef3ef; padding:1px 5px; border-radius:5px; font-size:.9em; }
+  a { color:var(--green); }
+  .summary { background:#eef6ef; border:1px solid #d4e7d6; border-radius:12px; padding:16px 20px; margin:24px 0; }
+  .summary li { margin:6px 0; }
+  footer { margin-top:48px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:.9rem; }
+  footer a { color:var(--green); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="site"><span class="ball">🎾</span><h1>DeuceMate</h1></header>
+  <nav class="crumbs"><a href="./">← Support &amp; Home</a></nav>
+
+  <h1>Privacy Policy</h1>
+  <p class="meta"><strong>Effective Date:</strong> June 11, 2026 &nbsp;·&nbsp; <strong>Last Updated:</strong> June 11, 2026</p>
+
+  <h2>Overview</h2>
+  <p>DeuceMate is committed to protecting your privacy. This privacy policy explains how DeuceMate ("the App") handles information.</p>
+
+  <h2>Data Collection</h2>
+  <p><strong>DeuceMate does NOT collect, store, transmit, or share any personal information or user data.</strong></p>
+  <p>Specifically, the App does NOT collect:</p>
+  <ul>
+    <li>Personal identification information (name, email, phone number, etc.)</li>
+    <li>GPS location data or coordinates</li>
+    <li>Usage analytics or statistics</li>
+    <li>Device information</li>
+    <li>Crash reports</li>
+    <li>Advertising identifiers</li>
+    <li>Any other personal or non-personal data</li>
+  </ul>
+
+  <h2>Compass / Heading Permission</h2>
+  <p>The optional <strong>Check Changeover</strong> feature uses your Apple Watch's built-in compass to show which direction the court faces after a side change. If you enable this feature:</p>
+  <ul>
+    <li>The App requests the <strong>"When In Use" location permission</strong> on watchOS, which is required to access compass heading data.</li>
+    <li>Only the <strong>magnetic heading angle</strong> (a compass bearing in degrees) is read — no GPS coordinates, no location history, and no movement tracking of any kind.</li>
+    <li>The locked court bearing is stored <strong>locally on your device only</strong> and is cleared when you reset or end the match.</li>
+    <li>The compass heading is <strong>never transmitted</strong> to any server or third party.</li>
+    <li>This feature is <strong>entirely optional</strong>. You can use DeuceMate without enabling it; if you do not enable "Check Changeover", the App never requests or reads any heading data.</li>
+  </ul>
+
+  <h2>Health &amp; Fitness Data (HealthKit)</h2>
+  <p>DeuceMate includes optional fitness features on Apple Watch that use Apple's <strong>HealthKit</strong> framework. These features are off by default and activate only if you turn them on in Settings (the workout session and the Pulse Coach heart-rate features).</p>
+  <p>If you enable them, the App:</p>
+  <ul>
+    <li><strong>Reads</strong>, during a match, the following data from the Health app on your Apple Watch: heart rate, active and resting energy, step count, walking/running distance, and your date of birth. Date of birth is used only to estimate your maximum heart rate for Pulse Coach heart-rate zones.</li>
+    <li><strong>Writes</strong> a single workout of type "Tennis" to the Health app to record the match as a fitness activity.</li>
+  </ul>
+  <p>How this data is handled:</p>
+  <ul>
+    <li>Heart-rate samples and the derived fitness metrics are used <strong>on-device only</strong> — to show live stats during the match and to compute per-match statistics and coaching insights.</li>
+    <li>Heart-rate values are saved as part of the match record stored <strong>locally on your devices</strong> (see "Local Data Storage" below), so heart-rate statistics remain available when you review a past match.</li>
+    <li>The iCloud backup copy of your archive (see "iCloud Sync" below) <strong>excludes</strong> heart-rate and fitness measurements (heart rate, steps, distance, and calories); those fields stay on your devices only. A manual archive export from Settings → Backup &amp; Transfer in the iPhone app retains them in full.</li>
+    <li>HealthKit data is <strong>never transmitted</strong> by the App to any server or third party.</li>
+    <li>HealthKit data is <strong>not</strong> used for advertising or marketing, is <strong>not</strong> sold, and is <strong>not</strong> shared with third parties.</li>
+    <li>These features are <strong>entirely optional</strong>. If you do not enable the workout session or Pulse Coach, the App does not request HealthKit access and reads no health data.</li>
+    <li>You can review or revoke DeuceMate's Health permissions at any time in the Apple Watch Settings app or the iPhone Health app.</li>
+  </ul>
+
+  <h2>Local Data Storage</h2>
+  <p>The App stores the following information <strong>locally on your devices only</strong>:</p>
+  <ul>
+    <li>Current match state (scores, games, sets, server)</li>
+    <li>Match history (completed and in-progress matches, including point-by-point statistics and, when the workout session is enabled, heart-rate values recorded during the match)</li>
+    <li>User preferences (haptic feedback settings, control preferences)</li>
+    <li>Locked court bearing angle (only when Check Changeover is enabled; cleared on match reset)</li>
+  </ul>
+  <p>This data:</p>
+  <ul>
+    <li>Is never sent to any server or third party by the App</li>
+    <li>When iCloud Drive is available, the iPhone app stores a backup copy of the match archive in your personal iCloud Drive account — see "iCloud Sync" below for details. No data is ever sent to any third-party server.</li>
+    <li>May also be included in your device's standard <strong>iCloud Backup</strong> if you have iCloud Backup enabled in iOS/watchOS Settings. That backup is encrypted and tied to your own Apple ID and is managed by iOS — the App does not trigger or control it. You can exclude DeuceMate from iCloud Backup, or turn iCloud Backup off entirely, in your device Settings.</li>
+    <li>Is removed from your device when you uninstall the App</li>
+    <li>Can be cleared by resetting the match or reinstalling the App</li>
+  </ul>
+
+  <h2>iCloud Sync</h2>
+  <p>The iPhone app stores your match archive on your iPhone and automatically keeps a backup copy of it in <strong>iCloud Drive</strong> when your Apple ID is signed in and iCloud Drive is available on your device. This means:</p>
+  <ul>
+    <li>Your match archive always lives on your iPhone; a backup copy is kept in your personal <strong>iCloud Drive</strong> container so it can be restored if you reinstall the App or move to a new iPhone.</li>
+    <li>The iCloud backup copy <strong>excludes</strong> HealthKit-derived measurements (heart rate, steps, distance, and calories) to comply with App Store Review Guideline 5.1.3(ii). Match scores, point statistics, and all other match data are included. A manual archive export (Settings → Backup &amp; Transfer) includes health measurements in full.</li>
+    <li>This data lives in <strong>your own Apple ID account</strong> — it is not accessible to the developer and is not shared with any third party.</li>
+    <li>iCloud Drive is Apple's own service, governed by Apple's privacy policy and encrypted using your credentials.</li>
+  </ul>
+  <p>If iCloud is unavailable (e.g., you are signed out of iCloud or iCloud Drive is disabled in iOS Settings), the archive is stored locally on your iPhone only. You can prevent iCloud from being used by disabling iCloud Drive in your iPhone's Settings app.</p>
+
+  <h2>iPhone Companion App &amp; WatchConnectivity</h2>
+  <p>DeuceMate includes an iPhone companion app. When both the Apple Watch app and iPhone app are installed, match data is automatically synced between your Apple Watch and iPhone using <strong>Apple's WatchConnectivity framework</strong>.</p>
+  <p>This sync is:</p>
+  <ul>
+    <li><strong>Entirely on-device and peer-to-peer</strong> — data travels directly between your Apple Watch and iPhone over their local wireless connection.</li>
+    <li><strong>Not a network transmission</strong> — no data passes through any server, the internet, or any third party.</li>
+    <li><strong>Not iCloud</strong> — the sync does not use Apple's iCloud service and does not require an Apple ID.</li>
+  </ul>
+  <p>The iPhone app stores your complete match history locally in its Documents directory with <code>.completeFileProtection</code> file protection, the same protection used on the watch. No match data is shared with any external service.</p>
+
+  <h2>Sharing, Export &amp; AI Coaching</h2>
+  <p>DeuceMate lets you <strong>choose</strong> to share your own match data:</p>
+  <ul>
+    <li><strong>Export / Share</strong> — From a match's detail screen you can export a match summary or full point-by-point data and share it through the standard iOS share sheet (for example to Files, Messages, or Mail).</li>
+    <li><strong>AI Coaching prompt</strong> — You can generate a coaching prompt built from your match statistics and copy it to the clipboard or open it in a third-party AI app you already have installed (such as ChatGPT, Claude, or Gemini).</li>
+  </ul>
+  <p>Important points about these features:</p>
+  <ul>
+    <li>They are <strong>always initiated by you</strong>. DeuceMate never shares, exports, or uploads match data on its own.</li>
+    <li>When you export, share, or send a prompt to another app, that data <strong>leaves your device</strong> and is then handled by the app or service you chose. Once it reaches a third-party AI tool or another app, <strong>that third party's privacy policy — not this one — governs how the data is used.</strong> Please review their policies before sending data you consider sensitive.</li>
+    <li>DeuceMate itself still makes <strong>no network requests</strong> and has no servers. To show which AI apps are available, the App checks for their app URL schemes locally on your device; no information about your installed apps is collected or transmitted.</li>
+  </ul>
+
+  <h2>Third-Party Services</h2>
+  <p>DeuceMate does NOT use any third-party services, including but not limited to:</p>
+  <ul>
+    <li>Analytics services (no Google Analytics, Firebase, etc.)</li>
+    <li>Advertising networks</li>
+    <li>Social media integrations</li>
+    <li>Third-party cloud storage services (the App automatically uses your own Apple iCloud Drive account when available — see "iCloud Sync" above)</li>
+    <li>Crash reporting tools</li>
+  </ul>
+
+  <h2>Internet Connectivity</h2>
+  <p>DeuceMate does NOT require internet connectivity and functions completely offline. The App makes NO network requests to external servers. The WatchConnectivity sync between the Apple Watch and iPhone companion app uses the local wireless connection between your paired devices — it is not an internet connection.</p>
+
+  <h2>Children's Privacy</h2>
+  <p>DeuceMate does not collect any data from anyone, including children under the age of 13. The App is suitable for users of all ages.</p>
+
+  <h2>Changes to This Privacy Policy</h2>
+  <p>We may update this Privacy Policy from time to time. Any changes will be reflected by updating the "Last Updated" date at the top of this policy.</p>
+
+  <h2>Your Rights</h2>
+  <p>Since DeuceMate does not collect any data, there is no data to:</p>
+  <ul>
+    <li>Access</li>
+    <li>Delete</li>
+    <li>Modify</li>
+    <li>Export</li>
+    <li>Or manage in any way</li>
+  </ul>
+  <p>All match data is stored locally on your device and is under your complete control.</p>
+
+  <h2>Contact</h2>
+  <p>If you have any questions about this Privacy Policy, please contact:</p>
+  <p><strong>Ehsan Rahman</strong><br>
+  Email: <a href="mailto:mail@ehsanrahman.com">mail@ehsanrahman.com</a><br>
+  Website: <a href="https://ehsanrahman.com">https://ehsanrahman.com</a></p>
+
+  <h2>Consent</h2>
+  <p>By using DeuceMate, you consent to this Privacy Policy.</p>
+
+  <div class="summary">
+    <strong>In Summary:</strong>
+    <ul>
+      <li>✅ No data collection by the app — no servers, no analytics, no tracking</li>
+      <li>✅ No GPS or location tracking (optional compass reads heading only)</li>
+      <li>✅ No internet required — the app makes no network requests</li>
+      <li>✅ Match data stays on your devices unless you choose to export or share it</li>
+      <li>✅ Watch ↔ iPhone sync is on-device peer-to-peer only — no servers, no iCloud</li>
+      <li>✅ iCloud Sync: match archive is automatically stored in your own iCloud Drive account when available — never accessible to the developer</li>
+      <li>✅ HealthKit data (heart rate, etc.) is optional, used on-device only, and never transmitted</li>
+      <li>✅ Export / AI-coaching is always user-initiated; shared data is then governed by the receiving app's policy</li>
+    </ul>
+  </div>
+
+  <footer>
+    <p>This privacy policy applies to DeuceMate for Apple Watch and the DeuceMate iPhone companion app, developed by Ehsan Rahman.</p>
+    <p><a href="./">Support &amp; Home</a> · <a href="mailto:mail@ehsanrahman.com">Contact</a></p>
+  </footer>
+</div>
+</body>
+</html>

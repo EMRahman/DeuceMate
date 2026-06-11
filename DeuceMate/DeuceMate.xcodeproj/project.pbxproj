@@ -1,0 +1,1104 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		5EB7682A2FA9522A0081049F /* DeuceMateCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5EB768292FA9522A0081049F /* DeuceMateCore */; };
+		5EB768682FA9EA9D0081049F /* DeuceMateCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5EB768672FA9EA9D0081049F /* DeuceMateCore */; };
+		5EB7686D2FA9EB300081049F /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5EB7686B2FA9EB200081049F /* WatchConnectivity.framework */; };
+		5EB768702FA9EB370081049F /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5EB768692FA9EB0B0081049F /* WatchConnectivity.framework */; };
+		5EB768C02FA9EC000081049F /* DeuceMate Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 5E6EB1E62DB3B84500F995F7 /* DeuceMate Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXBuildRule section */
+		5E9E75B82DB594D9001CED43 /* PBXBuildRule */ = {
+			isa = PBXBuildRule;
+			compilerSpec = com.apple.compilers.proxy.script;
+			fileType = text.plist;
+			inputFiles = (
+			);
+			isEditable = 1;
+			outputFiles = (
+			);
+			script = "# builtin-copyPlist\n";
+		};
+/* End PBXBuildRule section */
+
+/* Begin PBXContainerItemProxy section */
+		5E6EB1F62DB3B84600F995F7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5E6EB1DA2DB3B84500F995F7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5E6EB1E52DB3B84500F995F7;
+			remoteInfo = "DeuceMate Watch App";
+		};
+		5E6EB2002DB3B84600F995F7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5E6EB1DA2DB3B84500F995F7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5E6EB1E52DB3B84500F995F7;
+			remoteInfo = "DeuceMate Watch App";
+		};
+		5EB7683C2FA952C40081049F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5E6EB1DA2DB3B84500F995F7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5EB7682E2FA952C30081049F;
+			remoteInfo = DeuceMate;
+		};
+		5EB768462FA952C40081049F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5E6EB1DA2DB3B84500F995F7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5EB7682E2FA952C30081049F;
+			remoteInfo = DeuceMate;
+		};
+		5EB768C22FA9EC000081049F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5E6EB1DA2DB3B84500F995F7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5E6EB1E52DB3B84500F995F7;
+			remoteInfo = "DeuceMate Watch App";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		5EB7686F2FA9EB300081049F /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5EB768722FA9EB370081049F /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5EB768C12FA9EC000081049F /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				5EB768C02FA9EC000081049F /* DeuceMate Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		5E6EB1E62DB3B84500F995F7 /* DeuceMate Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DeuceMate Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E6EB1F52DB3B84600F995F7 /* DeuceMate Watch AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DeuceMate Watch AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E6EB1FF2DB3B84600F995F7 /* DeuceMate Watch AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DeuceMate Watch AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		5EB7682F2FA952C30081049F /* DeuceMate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DeuceMate.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5EB7683B2FA952C40081049F /* DeuceMateTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeuceMateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5EB768452FA952C40081049F /* DeuceMateUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeuceMateUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5EB768692FA9EB0B0081049F /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/WatchConnectivity.framework; sourceTree = DEVELOPER_DIR; };
+		5EB7686B2FA9EB200081049F /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS26.2.sdk/System/Library/Frameworks/WatchConnectivity.framework; sourceTree = DEVELOPER_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		5EB768732FAA07060081049F /* Exceptions for "DeuceMate" folder in "DeuceMate" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 5EB7682E2FA952C30081049F /* DeuceMate */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		5E6EB1EA2DB3B84500F995F7 /* DeuceMate Watch App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "DeuceMate Watch App";
+			sourceTree = "<group>";
+		};
+		5E6EB1F82DB3B84600F995F7 /* DeuceMate Watch AppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "DeuceMate Watch AppTests";
+			sourceTree = "<group>";
+		};
+		5E6EB2022DB3B84600F995F7 /* DeuceMate Watch AppUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "DeuceMate Watch AppUITests";
+			sourceTree = "<group>";
+		};
+		5EB768302FA952C30081049F /* DeuceMate */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5EB768732FAA07060081049F /* Exceptions for "DeuceMate" folder in "DeuceMate" target */,
+			);
+			path = DeuceMate;
+			sourceTree = "<group>";
+		};
+		5EB7683E2FA952C40081049F /* DeuceMateTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DeuceMateTests;
+			sourceTree = "<group>";
+		};
+		5EB768482FA952C40081049F /* DeuceMateUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DeuceMateUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5E6EB1E32DB3B84500F995F7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5EB7682A2FA9522A0081049F /* DeuceMateCore in Frameworks */,
+				5EB7686D2FA9EB300081049F /* WatchConnectivity.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E6EB1F22DB3B84600F995F7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E6EB1FC2DB3B84600F995F7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5EB7682C2FA952C30081049F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5EB768682FA9EA9D0081049F /* DeuceMateCore in Frameworks */,
+				5EB768702FA9EB370081049F /* WatchConnectivity.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5EB768382FA952C40081049F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5EB768422FA952C40081049F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		5E6EB1D92DB3B84500F995F7 = {
+			isa = PBXGroup;
+			children = (
+				5E6EB1EA2DB3B84500F995F7 /* DeuceMate Watch App */,
+				5E6EB1F82DB3B84600F995F7 /* DeuceMate Watch AppTests */,
+				5E6EB2022DB3B84600F995F7 /* DeuceMate Watch AppUITests */,
+				5EB768302FA952C30081049F /* DeuceMate */,
+				5EB7683E2FA952C40081049F /* DeuceMateTests */,
+				5EB768482FA952C40081049F /* DeuceMateUITests */,
+				5EB768662FA9EA9D0081049F /* Frameworks */,
+				5E6EB1E12DB3B84500F995F7 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		5E6EB1E12DB3B84500F995F7 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				5E6EB1E62DB3B84500F995F7 /* DeuceMate Watch App.app */,
+				5E6EB1F52DB3B84600F995F7 /* DeuceMate Watch AppTests.xctest */,
+				5E6EB1FF2DB3B84600F995F7 /* DeuceMate Watch AppUITests.xctest */,
+				5EB7682F2FA952C30081049F /* DeuceMate.app */,
+				5EB7683B2FA952C40081049F /* DeuceMateTests.xctest */,
+				5EB768452FA952C40081049F /* DeuceMateUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		5EB768662FA9EA9D0081049F /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				5EB7686B2FA9EB200081049F /* WatchConnectivity.framework */,
+				5EB768692FA9EB0B0081049F /* WatchConnectivity.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		5E6EB1E52DB3B84500F995F7 /* DeuceMate Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E6EB2092DB3B84700F995F7 /* Build configuration list for PBXNativeTarget "DeuceMate Watch App" */;
+			buildPhases = (
+				5E6EB1E22DB3B84500F995F7 /* Sources */,
+				5E6EB1E32DB3B84500F995F7 /* Frameworks */,
+				5E6EB1E42DB3B84500F995F7 /* Resources */,
+				5EB7686F2FA9EB300081049F /* Embed Frameworks */,
+			);
+			buildRules = (
+				5E9E75B82DB594D9001CED43 /* PBXBuildRule */,
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5E6EB1EA2DB3B84500F995F7 /* DeuceMate Watch App */,
+			);
+			name = "DeuceMate Watch App";
+			packageProductDependencies = (
+				5EB768292FA9522A0081049F /* DeuceMateCore */,
+			);
+			productName = "DeuceMate Watch App";
+			productReference = 5E6EB1E62DB3B84500F995F7 /* DeuceMate Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
+		5E6EB1F42DB3B84600F995F7 /* DeuceMate Watch AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E6EB2102DB3B84700F995F7 /* Build configuration list for PBXNativeTarget "DeuceMate Watch AppTests" */;
+			buildPhases = (
+				5E6EB1F12DB3B84600F995F7 /* Sources */,
+				5E6EB1F22DB3B84600F995F7 /* Frameworks */,
+				5E6EB1F32DB3B84600F995F7 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5E6EB1F72DB3B84600F995F7 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5E6EB1F82DB3B84600F995F7 /* DeuceMate Watch AppTests */,
+			);
+			name = "DeuceMate Watch AppTests";
+			packageProductDependencies = (
+			);
+			productName = "DeuceMate Watch AppTests";
+			productReference = 5E6EB1F52DB3B84600F995F7 /* DeuceMate Watch AppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		5E6EB1FE2DB3B84600F995F7 /* DeuceMate Watch AppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E6EB2132DB3B84700F995F7 /* Build configuration list for PBXNativeTarget "DeuceMate Watch AppUITests" */;
+			buildPhases = (
+				5E6EB1FB2DB3B84600F995F7 /* Sources */,
+				5E6EB1FC2DB3B84600F995F7 /* Frameworks */,
+				5E6EB1FD2DB3B84600F995F7 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5E6EB2012DB3B84600F995F7 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5E6EB2022DB3B84600F995F7 /* DeuceMate Watch AppUITests */,
+			);
+			name = "DeuceMate Watch AppUITests";
+			packageProductDependencies = (
+			);
+			productName = "DeuceMate Watch AppUITests";
+			productReference = 5E6EB1FF2DB3B84600F995F7 /* DeuceMate Watch AppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		5EB7682E2FA952C30081049F /* DeuceMate */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5EB7684D2FA952C40081049F /* Build configuration list for PBXNativeTarget "DeuceMate" */;
+			buildPhases = (
+				5EB7682B2FA952C30081049F /* Sources */,
+				5EB7682C2FA952C30081049F /* Frameworks */,
+				5EB7682D2FA952C30081049F /* Resources */,
+				5EB768722FA9EB370081049F /* Embed Frameworks */,
+				5EB768C12FA9EC000081049F /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5EB768C32FA9EC000081049F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5EB768302FA952C30081049F /* DeuceMate */,
+			);
+			name = DeuceMate;
+			packageProductDependencies = (
+				5EB768672FA9EA9D0081049F /* DeuceMateCore */,
+			);
+			productName = DeuceMate;
+			productReference = 5EB7682F2FA952C30081049F /* DeuceMate.app */;
+			productType = "com.apple.product-type.application";
+		};
+		5EB7683A2FA952C40081049F /* DeuceMateTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5EB768502FA952C40081049F /* Build configuration list for PBXNativeTarget "DeuceMateTests" */;
+			buildPhases = (
+				5EB768372FA952C40081049F /* Sources */,
+				5EB768382FA952C40081049F /* Frameworks */,
+				5EB768392FA952C40081049F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5EB7683D2FA952C40081049F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5EB7683E2FA952C40081049F /* DeuceMateTests */,
+			);
+			name = DeuceMateTests;
+			packageProductDependencies = (
+			);
+			productName = DeuceMateTests;
+			productReference = 5EB7683B2FA952C40081049F /* DeuceMateTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		5EB768442FA952C40081049F /* DeuceMateUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5EB768532FA952C40081049F /* Build configuration list for PBXNativeTarget "DeuceMateUITests" */;
+			buildPhases = (
+				5EB768412FA952C40081049F /* Sources */,
+				5EB768422FA952C40081049F /* Frameworks */,
+				5EB768432FA952C40081049F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5EB768472FA952C40081049F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5EB768482FA952C40081049F /* DeuceMateUITests */,
+			);
+			name = DeuceMateUITests;
+			packageProductDependencies = (
+			);
+			productName = DeuceMateUITests;
+			productReference = 5EB768452FA952C40081049F /* DeuceMateUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		5E6EB1DA2DB3B84500F995F7 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2620;
+				LastUpgradeCheck = 2620;
+				TargetAttributes = {
+					5E6EB1E52DB3B84500F995F7 = {
+						CreatedOnToolsVersion = 16.3;
+					};
+					5E6EB1F42DB3B84600F995F7 = {
+						CreatedOnToolsVersion = 16.3;
+						TestTargetID = 5E6EB1E52DB3B84500F995F7;
+					};
+					5E6EB1FE2DB3B84600F995F7 = {
+						CreatedOnToolsVersion = 16.3;
+						TestTargetID = 5E6EB1E52DB3B84500F995F7;
+					};
+					5EB7682E2FA952C30081049F = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					5EB7683A2FA952C40081049F = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 5EB7682E2FA952C30081049F;
+					};
+					5EB768442FA952C40081049F = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 5EB7682E2FA952C30081049F;
+					};
+				};
+			};
+			buildConfigurationList = 5E6EB1DD2DB3B84500F995F7 /* Build configuration list for PBXProject "DeuceMate" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 5E6EB1D92DB3B84500F995F7;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				5EB768282FA9522A0081049F /* XCLocalSwiftPackageReference "Packages/DeuceMateCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 5E6EB1E12DB3B84500F995F7 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				5E6EB1E52DB3B84500F995F7 /* DeuceMate Watch App */,
+				5E6EB1F42DB3B84600F995F7 /* DeuceMate Watch AppTests */,
+				5E6EB1FE2DB3B84600F995F7 /* DeuceMate Watch AppUITests */,
+				5EB7682E2FA952C30081049F /* DeuceMate */,
+				5EB7683A2FA952C40081049F /* DeuceMateTests */,
+				5EB768442FA952C40081049F /* DeuceMateUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		5E6EB1E42DB3B84500F995F7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E6EB1F32DB3B84600F995F7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E6EB1FD2DB3B84600F995F7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5EB7682D2FA952C30081049F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5EB768392FA952C40081049F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5EB768432FA952C40081049F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5E6EB1E22DB3B84500F995F7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E6EB1F12DB3B84600F995F7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E6EB1FB2DB3B84600F995F7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5EB7682B2FA952C30081049F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5EB768372FA952C40081049F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5EB768412FA952C40081049F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		5E6EB1F72DB3B84600F995F7 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5E6EB1E52DB3B84500F995F7 /* DeuceMate Watch App */;
+			targetProxy = 5E6EB1F62DB3B84600F995F7 /* PBXContainerItemProxy */;
+		};
+		5E6EB2012DB3B84600F995F7 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5E6EB1E52DB3B84500F995F7 /* DeuceMate Watch App */;
+			targetProxy = 5E6EB2002DB3B84600F995F7 /* PBXContainerItemProxy */;
+		};
+		5EB7683D2FA952C40081049F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5EB7682E2FA952C30081049F /* DeuceMate */;
+			targetProxy = 5EB7683C2FA952C40081049F /* PBXContainerItemProxy */;
+		};
+		5EB768472FA952C40081049F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5EB7682E2FA952C30081049F /* DeuceMate */;
+			targetProxy = 5EB768462FA952C40081049F /* PBXContainerItemProxy */;
+		};
+		5EB768C32FA9EC000081049F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5E6EB1E52DB3B84500F995F7 /* DeuceMate Watch App */;
+			targetProxy = 5EB768C22FA9EC000081049F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		5E6EB2072DB3B84700F995F7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		5E6EB2082DB3B84700F995F7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		5E6EB20A2DB3B84700F995F7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = "DeuceMate Watch App/DeuceMate Watch App.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FXNHMJHQFS;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "DeuceMate-Watch-App-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = DeuceMate;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "DeuceMate reads heart rate and calories during your tennis match, and your date of birth so Pulse Coach can estimate your max heart rate.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "DeuceMate records your tennis match as a workout.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Ehsan Rahman";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "DeuceMate reads your compass heading to show which direction the court faces.";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = ehsan.DeuceMate;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ehsan.DeuceMate.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = watchos;
+				SKIP_INSTALL = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 9.0;
+			};
+			name = Debug;
+		};
+		5E6EB20B2DB3B84700F995F7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = "DeuceMate Watch App/DeuceMate Watch App.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FXNHMJHQFS;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "DeuceMate-Watch-App-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = DeuceMate;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "DeuceMate reads heart rate and calories during your tennis match, and your date of birth so Pulse Coach can estimate your max heart rate.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "DeuceMate records your tennis match as a workout.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Ehsan Rahman";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "DeuceMate reads your compass heading to show which direction the court faces.";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = ehsan.DeuceMate;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ehsan.DeuceMate.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = watchos;
+				SKIP_INSTALL = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 9.0;
+			};
+			name = Release;
+		};
+		5E6EB2112DB3B84700F995F7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FXNHMJHQFS;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "ehsan.DeuceMate-Watch-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DeuceMate Watch App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DeuceMate Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 9.0;
+			};
+			name = Debug;
+		};
+		5E6EB2122DB3B84700F995F7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FXNHMJHQFS;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "ehsan.DeuceMate-Watch-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DeuceMate Watch App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DeuceMate Watch App";
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 9.0;
+			};
+			name = Release;
+		};
+		5E6EB2142DB3B84700F995F7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FXNHMJHQFS;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "ehsan.DeuceMate-Watch-AppUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_TARGET_NAME = "DeuceMate Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 9.0;
+			};
+			name = Debug;
+		};
+		5E6EB2152DB3B84700F995F7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FXNHMJHQFS;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "ehsan.DeuceMate-Watch-AppUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_TARGET_NAME = "DeuceMate Watch App";
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 9.0;
+			};
+			name = Release;
+		};
+		5EB7684E2FA952C40081049F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DeuceMate/DeuceMate.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FXNHMJHQFS;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DeuceMate/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_UIColorName = LaunchBackground;
+				INFOPLIST_KEY_UILaunchScreen_UIImageName = LaunchIcon;
+				INFOPLIST_KEY_UILaunchScreen_UIImageRespectsSafeAreaInsets = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ehsan.DeuceMate;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		5EB7684F2FA952C40081049F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DeuceMate/DeuceMate.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FXNHMJHQFS;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DeuceMate/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_UIColorName = LaunchBackground;
+				INFOPLIST_KEY_UILaunchScreen_UIImageName = LaunchIcon;
+				INFOPLIST_KEY_UILaunchScreen_UIImageRespectsSafeAreaInsets = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ehsan.DeuceMate;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		5EB768512FA952C40081049F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FXNHMJHQFS;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ehsan.DeuceMateTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DeuceMate.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DeuceMate";
+			};
+			name = Debug;
+		};
+		5EB768522FA952C40081049F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FXNHMJHQFS;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ehsan.DeuceMateTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DeuceMate.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DeuceMate";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		5EB768542FA952C40081049F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FXNHMJHQFS;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ehsan.DeuceMateUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = DeuceMate;
+			};
+			name = Debug;
+		};
+		5EB768552FA952C40081049F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FXNHMJHQFS;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ehsan.DeuceMateUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = DeuceMate;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5E6EB1DD2DB3B84500F995F7 /* Build configuration list for PBXProject "DeuceMate" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E6EB2072DB3B84700F995F7 /* Debug */,
+				5E6EB2082DB3B84700F995F7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5E6EB2092DB3B84700F995F7 /* Build configuration list for PBXNativeTarget "DeuceMate Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E6EB20A2DB3B84700F995F7 /* Debug */,
+				5E6EB20B2DB3B84700F995F7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5E6EB2102DB3B84700F995F7 /* Build configuration list for PBXNativeTarget "DeuceMate Watch AppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E6EB2112DB3B84700F995F7 /* Debug */,
+				5E6EB2122DB3B84700F995F7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5E6EB2132DB3B84700F995F7 /* Build configuration list for PBXNativeTarget "DeuceMate Watch AppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E6EB2142DB3B84700F995F7 /* Debug */,
+				5E6EB2152DB3B84700F995F7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5EB7684D2FA952C40081049F /* Build configuration list for PBXNativeTarget "DeuceMate" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5EB7684E2FA952C40081049F /* Debug */,
+				5EB7684F2FA952C40081049F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5EB768502FA952C40081049F /* Build configuration list for PBXNativeTarget "DeuceMateTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5EB768512FA952C40081049F /* Debug */,
+				5EB768522FA952C40081049F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5EB768532FA952C40081049F /* Build configuration list for PBXNativeTarget "DeuceMateUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5EB768542FA952C40081049F /* Debug */,
+				5EB768552FA952C40081049F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		5EB768282FA9522A0081049F /* XCLocalSwiftPackageReference "Packages/DeuceMateCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/DeuceMateCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5EB768292FA9522A0081049F /* DeuceMateCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DeuceMateCore;
+		};
+		5EB768672FA9EA9D0081049F /* DeuceMateCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5EB768282FA9522A0081049F /* XCLocalSwiftPackageReference "Packages/DeuceMateCore" */;
+			productName = DeuceMateCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 5E6EB1DA2DB3B84500F995F7 /* Project object */;
+}

@@ -1,0 +1,1021 @@
+// MatchDetailView.swift — iPhone stats view.
+// Shows Me vs Opponent stats side-by-side with split bars; no Me/Opp toggle needed.
+import SwiftUI
+import DeuceMateCore
+
+struct MatchDetailView: View {
+    let record: MatchRecord
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.appTheme) private var theme
+    @EnvironmentObject private var syncService: PhoneMatchSyncService
+    // Must be supplied by every presenter of MatchDetailView (only the
+    // PastMatchesView sheet today). Used to tell whether this match is still in
+    // the phone archive and to restore it on "Sync to iPhone".
+    @EnvironmentObject private var store: PhoneStatsStore
+
+    @AppStorage("userBirthYear") private var userBirthYear: Int = 0
+    @AppStorage("userMaxHROverride") private var userMaxHROverride: Int = 0
+    @AppStorage("maxHRComputed") private var maxHRComputed: Int = 0
+    @AppStorage("playerNTRP") private var playerNTRP: String = "3.0–3.5"
+    @State private var tab: Tab = .stats
+    @State private var setFilter: SetFilter = .all
+    @State private var exportSummary: String = ""
+    @State private var exportFull: String = ""
+    @State private var exportAI: String = ""
+    @State private var exportSummaryOpp: String = ""
+    @State private var exportFullOpp: String = ""
+    @State private var exportAIOpp: String = ""
+    @State private var showAICoachSheet: Bool = false
+
+    private enum Tab { case stats, points }
+
+    private enum SetFilter: Hashable {
+        case all
+        case set(Int)
+
+        func label(matchFormat: MatchFormat) -> String {
+            switch self {
+            case .all: return "All"
+            case .set(let i):
+                return matchFormat.config.isDecidingSuperTiebreak(setIndex: i) ? "TB" : "Set \(i + 1)"
+            }
+        }
+    }
+
+    private var meColor:  Color { theme.colors.me }
+    private var oppColor: Color { theme.colors.opponent }
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
+
+    private var title: String {
+        if record.isInProgress {
+            return Self.dateFormatter.string(from: record.startTime)
+        }
+        switch record.matchFormat {
+        case .superTiebreak: return "Super Tiebreak"
+        case .perpetualSuperTiebreak: return "Perpetual Tiebreak"
+        case .quick4Games: return "Quick 4 Games"
+        case .perpetualPoints: return "Perpetual Points"
+        case .standard, .bestOf3FullFinalSet:
+            let allUncategorized = record.stats.isEmpty ||
+                record.stats.allSatisfy { $0.outcome == .uncategorized }
+            return allUncategorized ? "Score Only Match" : "Match Stats"
+        }
+    }
+
+    private var formatLabel: String {
+        var parts: [String] = []
+        switch record.matchFormat {
+        case .standard:               parts.append("Best of 3")
+        case .bestOf3FullFinalSet:    parts.append("Best of 3 (Full Final Set)")
+        case .superTiebreak:          parts.append("Super Tiebreak")
+        case .perpetualSuperTiebreak: parts.append("Perpetual Tiebreak")
+        case .quick4Games:            parts.append("Quick 4 Games")
+        case .perpetualPoints:        parts.append("Perpetual Points")
+        }
+        parts.append(record.matchType == .doubles ? "Doubles" : "Singles")
+        return parts.joined(separator: " · ")
+    }
+
+    /// Storage location + iCloud status collapsed into one compact row.
+    /// Paired-watch line is still guarded by `isPaired`; iCloud shows unconditionally.
+    @ViewBuilder
+    private var storageInfoRow: some View {
+        let location = MatchStorageResolver.location(
+            matchID: record.id,
+            onPhone: store.history.contains { $0.id == record.id },
+            watchIDs: syncService.onWatchIDs
+        )
+        let iCloudStatus = ICloudBackupCopy.current(
+            isEnabled: true,
+            isAvailable: store.isICloudAvailable,
+            isRestoring: store.isRestoringFromICloud,
+            hasPendingRestore: store.pendingRestorePreview != nil,
+            isUploaded: store.isBackupUploaded
+        )
+        VStack(alignment: .leading, spacing: 4) {
+            if syncService.isPaired {
+                HStack(spacing: 6) {
+                    switch location {
+                    case .both:
+                        Label("Saved on Apple Watch & iPhone", systemImage: "applewatch")
+                        Spacer()
+                        Button {
+                            syncService.sendDeleteMatchOnWatch(record.id)
+                        } label: {
+                            Label("Remove from Watch", systemImage: "applewatch.slash")
+                                .fontWeight(.semibold)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.orange)
+                    case .phoneOnly:
+                        Label("Saved on iPhone only", systemImage: "iphone")
+                        Spacer()
+                        Button {
+                            syncService.sendMatchToWatch(record)
+                        } label: {
+                            Label("Sync to Watch", systemImage: "applewatch")
+                                .fontWeight(.semibold)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.green)
+                    case .watchOnly:
+                        Label("Saved on Apple Watch only", systemImage: "applewatch")
+                        Spacer()
+                        Button {
+                            store.syncToPhone(record)
+                        } label: {
+                            Label("Sync to iPhone", systemImage: "iphone")
+                                .fontWeight(.semibold)
+                        }
+                    }
+                }
+                .buttonStyle(.borderless)
+            }
+            Label(iCloudStatus.text, systemImage: iCloudStatus.systemImage)
+                .foregroundStyle(
+                    iCloudStatus == .unavailable ? AnyShapeStyle(.orange) :
+                    iCloudStatus == .pendingRestore ? AnyShapeStyle(.blue) :
+                    AnyShapeStyle(.secondary)
+                )
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+    }
+
+    private var scoreString: String? {
+        guard !record.setScores.isEmpty else { return nil }
+        let cfg = record.matchFormat.config
+        let decidingSetIndex = cfg.setsToWin * 2 - 2
+
+        if record.isInProgress {
+            // All sets except the last are completed; the last is the current set.
+            var parts = record.setScores.dropLast().enumerated().map { index, set -> String in
+                if !cfg.playRegularSets ||
+                   (cfg.finalSetStyle == .superTiebreak && index == decidingSetIndex && set.isTieBreak) {
+                    return "\(set.tieBreakPointsMe)–\(set.tieBreakPointsOpponent)"
+                }
+                if set.isTieBreak && set.gamesMe + set.gamesOpponent > 0 {
+                    return "\(set.gamesMe)–\(set.gamesOpponent)(\(set.tieBreakPointsMe)–\(set.tieBreakPointsOpponent))"
+                }
+                return "\(set.gamesMe)–\(set.gamesOpponent)"
+            }
+            if let current = record.setScores.last {
+                if current.isTieBreak {
+                    parts.append("TB \(current.tieBreakPointsMe)–\(current.tieBreakPointsOpponent)")
+                } else {
+                    parts.append("\(current.gamesMe)–\(current.gamesOpponent)")
+                    if let gs = MatchRecord.gameScoreString(mePoints: record.currentPointsMe, oppPoints: record.currentPointsOpponent) {
+                        parts.append("(\(gs))")
+                    }
+                }
+            }
+            return parts.joined(separator: "  ")
+        }
+
+        let parts = record.setScores.enumerated().map { index, set -> String in
+            if !cfg.playRegularSets ||
+               (cfg.finalSetStyle == .superTiebreak && index == decidingSetIndex && set.isTieBreak) {
+                return "\(set.tieBreakPointsMe)–\(set.tieBreakPointsOpponent)"
+            }
+            if set.isTieBreak && set.gamesMe + set.gamesOpponent > 0 {
+                return "\(set.gamesMe)–\(set.gamesOpponent)(\(set.tieBreakPointsMe)–\(set.tieBreakPointsOpponent))"
+            }
+            return "\(set.gamesMe)–\(set.gamesOpponent)"
+        }
+        return parts.joined(separator: "  ")
+    }
+
+
+    private var availableSetFilters: [SetFilter] {
+        var result: [SetFilter] = [.all]
+        for i in 0..<record.setScores.count { result.append(.set(i)) }
+        return result
+    }
+
+    private var filteredStats: [PointStat] {
+        switch setFilter {
+        case .all: return record.stats
+        case .set(let i): return record.stats.filter { $0.setIndex == i }
+        }
+    }
+
+    /// Per-set attribution of the match's Steps and Calories totals.
+    private var activitySplit: SetActivitySplit {
+        SetActivitySplit(setCount: record.setScores.count,
+                         stats: record.stats,
+                         setElapsedSeconds: record.setElapsedSeconds,
+                         totalSteps: record.totalSteps,
+                         totalCaloriesKcal: record.totalCaloriesKcal)
+    }
+
+    /// Steps for the current filter: match total for "All", set-specific otherwise.
+    private var displayedSteps: Int? {
+        switch setFilter {
+        case .all: return record.totalSteps
+        case .set(let i): return activitySplit.steps[i]
+        }
+    }
+
+    /// Calories for the current filter: match total for "All", set-specific otherwise.
+    private var displayedCalories: Double? {
+        switch setFilter {
+        case .all: return record.totalCaloriesKcal
+        case .set(let i): return activitySplit.calories[i]
+        }
+    }
+
+    /// Coaching Insights are generated from the whole match plus the selected
+    /// set scope so cross-set fatigue rules can still compare against the
+    /// preceding set when a single set is chosen.
+    private var coachSetScope: RecCoachInsights.SetScope {
+        switch setFilter {
+        case .all: return .all
+        case .set(let i): return .set(i)
+        }
+    }
+
+    private var coachingInsights: [String] {
+        RecCoachInsights.generate(
+            stats: record.stats,
+            focal: .me,
+            setElapsedSeconds: record.setElapsedSeconds,
+            setScope: coachSetScope
+        )
+    }
+
+    private var coachScopeLabel: String? {
+        switch setFilter {
+        case .all: return nil
+        case .set: return setFilter.label(matchFormat: record.matchFormat)
+        }
+    }
+
+    private var hasOutcomeData: Bool {
+        !filteredStats.isEmpty && filteredStats.allSatisfy { $0.outcome != .uncategorized }
+    }
+
+    private var hasAnyOutcomeData: Bool {
+        filteredStats.contains { $0.outcome != .uncategorized }
+    }
+
+    private var resolvedMaxHR: Int {
+        HRZone.resolveMaxHR(
+            historical99thPct: maxHRComputed > 0 ? maxHRComputed : nil,
+            manualOverride: userMaxHROverride > 0 ? userMaxHROverride : nil,
+            birthYear: userBirthYear > 0 ? userBirthYear : nil
+        )
+    }
+
+    private var meSummary: MatchStatsSummary {
+        MatchStatsSummary(
+            stats: filteredStats,
+            focal: .me,
+            setElapsedSeconds: record.setElapsedSeconds,
+            maxHR: resolvedMaxHR
+        )
+    }
+
+    private var oppSummary: MatchStatsSummary {
+        MatchStatsSummary(
+            stats: filteredStats,
+            focal: .opponent,
+            setElapsedSeconds: record.setElapsedSeconds,
+            maxHR: resolvedMaxHR
+        )
+    }
+
+    private enum ExportMode {
+        case summary, full, ai
+        case summaryOpp, fullOpp, aiOpp
+    }
+
+    private enum SharePerspective { case me, opponent }
+
+    @ViewBuilder
+    private func shareLinks(for perspective: SharePerspective) -> some View {
+        let isMe = perspective == .me
+        let summaryItem = isMe ? exportSummary : exportSummaryOpp
+        let fullItem    = isMe ? exportFull    : exportFullOpp
+        let summarySubject = isMe ? "Tennis Match Summary" : "Tennis Match Summary — Opponent Perspective"
+        let fullSubject    = isMe ? "Tennis Match Summary + Raw Points" : "Tennis Match Summary + Raw Points — Opponent Perspective"
+        let summaryMessage = isMe
+            ? "My match stats from DeuceMate."
+            : "Share with your opponent — their match stats from DeuceMate."
+        let fullMessage    = isMe
+            ? "My match stats and point-by-point data from DeuceMate."
+            : "Share with your opponent — their match stats and point-by-point data from DeuceMate."
+        let summaryMode: ExportMode = isMe ? .summary : .summaryOpp
+        let fullMode:    ExportMode = isMe ? .full    : .fullOpp
+
+        ShareLink(
+            item: summaryItem,
+            subject: Text(summarySubject),
+            message: Text(summaryMessage),
+            preview: SharePreview(exportFilename(for: record, mode: summaryMode), image: Image(systemName: "figure.tennis"))
+        ) {
+            Label("Share Summary", systemImage: "chart.bar.doc.horizontal")
+        }
+        if !record.stats.isEmpty {
+            ShareLink(
+                item: fullItem,
+                subject: Text(fullSubject),
+                message: Text(fullMessage),
+                preview: SharePreview(exportFilename(for: record, mode: fullMode), image: Image(systemName: "figure.tennis"))
+            ) {
+                Label("Share Summary + Raw Points", systemImage: "tablecells")
+            }
+        }
+    }
+
+    private func exportFilename(for record: MatchRecord, mode: ExportMode = .summary) -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withFullDate]
+        let suffix: String
+        switch mode {
+        case .summary:    suffix = ""
+        case .full:       suffix = "_full"
+        case .ai:         suffix = "_ai_prompt"
+        case .summaryOpp: suffix = "_opponent"
+        case .fullOpp:    suffix = "_full_opponent"
+        case .aiOpp:      suffix = "_ai_prompt_opponent"
+        }
+        return "deuce_mate_\(f.string(from: record.startTime))\(suffix).txt"
+    }
+
+    var body: some View {
+        List {
+            // Header
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        Text(Self.dateFormatter.string(from: record.startTime))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Text("·")
+                            .font(.footnote)
+                            .foregroundStyle(.tertiary)
+                        Text(formatLabel)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let score = scoreString {
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(styledScore(score, superSize: 14))
+                                .font(.title.weight(.bold).monospacedDigit())
+                            if !record.isInProgress && record.iWon == nil {
+                                Text("Draw")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(Color.orange)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(Capsule().fill(Color.orange.opacity(0.15)))
+                            } else if let won = record.iWon {
+                                Text(won ? "Won" : "Lost")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(won ? meColor : oppColor)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        Capsule()
+                                            .fill(won
+                                                  ? meColor.opacity(0.15)
+                                                  : oppColor.opacity(0.15))
+                                    )
+                            }
+                        }
+                    }
+
+                    if record.isInProgress {
+                        Label("In Progress — view only on iPhone", systemImage: "info.circle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    if !filteredStats.isEmpty && tab == .stats {
+                        pointsWonHeader
+                    }
+                }
+                .padding(.vertical, 6)
+            }
+
+            if !record.stats.isEmpty {
+                // Points Graph — featured directly under the main score
+                Section("Points Graph") {
+                    PointsGraphView(record: record)
+                }
+
+                // Stats / Points tab switcher
+                Section {
+                    Picker("View", selection: $tab) {
+                        Text("Stats").tag(Tab.stats)
+                        Text("Points").tag(Tab.points)
+                    }
+                    .pickerStyle(.segmented)
+                }
+            }
+
+            if !record.stats.isEmpty && tab == .stats {
+                // Set filter
+                if availableSetFilters.count > 2 {
+                    Section {
+                        Picker("Set", selection: $setFilter) {
+                            ForEach(availableSetFilters, id: \.self) { f in
+                                Text(f.label(matchFormat: record.matchFormat)).tag(f)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                }
+
+                // Set durations + activity
+                Section("Duration") {
+                    setDurationRows
+                    if let steps = displayedSteps, steps > 0 {
+                        statRow("Steps", steps.formatted())
+                    }
+                    if let kcal = displayedCalories, kcal > 0 {
+                        statRow("Calories", MatchRecord.formattedCalories(kcal))
+                    }
+                }
+
+                RecCoachSection(
+                    insights: coachingInsights,
+                    scopeLabel: coachScopeLabel,
+                    categorizedCount: filteredStats.filter { $0.outcome != .uncategorized }.count
+                )
+
+                PulseCoachSection(
+                    summary: meSummary,
+                    record: record,
+                    filteredStats: filteredStats
+                )
+
+                if hasAnyOutcomeData {
+                    Section(header: comparisonSectionHeader("Outcome Breakdown")) {
+                        wueRatioRow
+                        countComparisonRow("Winners",
+                            meCount: meSummary.myWinners,       oppCount: oppSummary.myWinners)
+                        countComparisonRow("Unforced Errors",
+                            meCount: meSummary.myUnforcedErrors, oppCount: oppSummary.myUnforcedErrors)
+                        countComparisonRow("Forced Errors",
+                            meCount: meSummary.myForcedErrors,   oppCount: oppSummary.myForcedErrors)
+                        countComparisonRow("Double Faults",
+                            meCount: meSummary.myDoubleFaults,   oppCount: oppSummary.myDoubleFaults)
+                        comparisonRow("Aggression Index",
+                            subtitle: "W ÷ (W + UE)",
+                            meNum: meSummary.myWinners,
+                                   meDen: meSummary.myWinners + meSummary.myUnforcedErrors,
+                            oppNum: oppSummary.myWinners,
+                                   oppDen: oppSummary.myWinners + oppSummary.myUnforcedErrors)
+                        comparisonRow("Own Errors %",
+                            meNum: meSummary.myDoubleFaults + meSummary.myUnforcedErrors,
+                                   meDen: meSummary.lostPoints,
+                            oppNum: oppSummary.myDoubleFaults + oppSummary.myUnforcedErrors,
+                                   oppDen: oppSummary.lostPoints)
+                    }
+                } else {
+                    Section("Outcome Breakdown") {
+                        Text("Outcome tracking not collected for this match.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if hasOutcomeData {
+                    Section(header: comparisonSectionHeader("Serve")) {
+                        comparisonRow("1st Serve In",
+                            meNum: meSummary.firstServeIn,    meDen: meSummary.firstServeTotal,
+                            oppNum: oppSummary.firstServeIn,  oppDen: oppSummary.firstServeTotal)
+                        comparisonRow("2nd Serve In",
+                            meNum: meSummary.secondServeIn,    meDen: meSummary.secondServeTotal,
+                            oppNum: oppSummary.secondServeIn,  oppDen: oppSummary.secondServeTotal)
+                        comparisonRow("1st Serve Win",
+                            meNum: meSummary.firstServeWins,   meDen: meSummary.firstServeIn,
+                            oppNum: oppSummary.firstServeWins, oppDen: oppSummary.firstServeIn)
+                        comparisonRow("2nd Serve Win",
+                            meNum: meSummary.secondServeWins,   meDen: meSummary.secondServeIn,
+                            oppNum: oppSummary.secondServeWins, oppDen: oppSummary.secondServeIn)
+                        comparisonRow("DF Rate (2nd)",
+                            meNum: meSummary.doubleFaults,    meDen: meSummary.secondServeTotal,
+                            oppNum: oppSummary.doubleFaults,  oppDen: oppSummary.secondServeTotal)
+                    }
+
+                    Section(header: comparisonSectionHeader("Return")) {
+                        comparisonRow("vs 1st Serve",
+                            meNum: meSummary.returnWinsOnFirst,    meDen: meSummary.returnOppsOnFirst,
+                            oppNum: oppSummary.returnWinsOnFirst,  oppDen: oppSummary.returnOppsOnFirst)
+                        comparisonRow("vs 2nd Serve",
+                            meNum: meSummary.returnWinsOnSecond,   meDen: meSummary.returnOppsOnSecond,
+                            oppNum: oppSummary.returnWinsOnSecond, oppDen: oppSummary.returnOppsOnSecond)
+                    }
+                }
+
+                Section(header: comparisonSectionHeader("Break Points")) {
+                    comparisonRow("BPs Won (Returner)",
+                        meNum: meSummary.breakPointWins,   meDen: meSummary.breakPointOpps,
+                        oppNum: oppSummary.breakPointWins, oppDen: oppSummary.breakPointOpps)
+                    comparisonRow("BPs Saved (Server)",
+                        meNum: meSummary.breakPointsFaced - meSummary.breakPointsLost,
+                               meDen: meSummary.breakPointsFaced,
+                        oppNum: oppSummary.breakPointsFaced - oppSummary.breakPointsLost,
+                               oppDen: oppSummary.breakPointsFaced)
+                }
+
+                if meSummary.bigPointTotal > 0 && meSummary.normalPointTotal > 0 {
+                    Section(header: comparisonSectionHeader("Pressure vs Normal")) {
+                        comparisonRow("Big Points",
+                            meNum: meSummary.bigPointWins,    meDen: meSummary.bigPointTotal,
+                            oppNum: oppSummary.bigPointWins,  oppDen: oppSummary.bigPointTotal)
+                        comparisonRow("Normal Points",
+                            meNum: meSummary.normalPointWins,   meDen: meSummary.normalPointTotal,
+                            oppNum: oppSummary.normalPointWins, oppDen: oppSummary.normalPointTotal)
+                    }
+                }
+
+                if !meSummary.rallyDepth.isEmpty {
+                    Section(header: comparisonSectionHeader("Rally Depth Won")) {
+                        ForEach(meSummary.rallyDepth, id: \.shot) { meRd in
+                            let oppRd = oppSummary.rallyDepth.first { $0.shot == meRd.shot }
+                            comparisonRow("@ \(meRd.shot.displayLabel)",
+                                meNum: meRd.wins,        meDen: meRd.total,
+                                oppNum: oppRd?.wins ?? 0, oppDen: oppRd?.total ?? 0)
+                        }
+                    }
+                }
+
+                if !meSummary.scoreStates.isEmpty {
+                    Section(header: comparisonSectionHeader("Score States")) {
+                        ForEach(meSummary.scoreStates, id: \.label) { meSs in
+                            let oppSs = oppSummary.scoreStates.first { $0.label == meSs.label }
+                            comparisonRow(meSs.label,
+                                meNum: meSs.wins,        meDen: meSs.total,
+                                oppNum: oppSs?.wins ?? 0, oppDen: oppSs?.total ?? 0)
+                        }
+                    }
+                }
+
+                if meSummary.uncategorizedCount > 0 {
+                    Section {
+                        Text("\(meSummary.uncategorizedCount) uncategorized point(s) excluded from outcome stats.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+            } else if !record.stats.isEmpty && tab == .points {
+                pointsListSections
+            } else if record.stats.isEmpty {
+                Section {
+                    Text("Point outcome tracking was off for this match.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Storage Info") {
+                storageInfoRow
+            }
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            guard exportSummary.isEmpty else { return }
+            let record = record
+            let maxHR = resolvedMaxHR
+            async let summary    = Task.detached { MatchExporter.summaryExport(for: record, maxHR: maxHR, focal: .me)       }.value
+            async let full       = Task.detached { MatchExporter.fullExport(for: record,    maxHR: maxHR, focal: .me)       }.value
+            async let summaryOpp = Task.detached { MatchExporter.summaryExport(for: record, maxHR: maxHR, focal: .opponent) }.value
+            async let fullOpp    = Task.detached { MatchExporter.fullExport(for: record,    maxHR: maxHR, focal: .opponent) }.value
+            let (s, f, so, fo) = await (summary, full, summaryOpp, fullOpp)
+            exportSummary = s; exportFull = f; exportSummaryOpp = so; exportFullOpp = fo
+        }
+        .task(id: "\(playerNTRP)-\(resolvedMaxHR)") {
+            let record = record
+            let maxHR = resolvedMaxHR
+            let ntRP = playerNTRP
+            async let ai    = Task.detached { MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .me,       playerNTRP: ntRP) }.value
+            async let aiOpp = Task.detached { MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .opponent, playerNTRP: ntRP) }.value
+            (exportAI, exportAIOpp) = await (ai, aiOpp)
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Done") { dismiss() }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if exportSummary.isEmpty || exportAI.isEmpty {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button {
+                        showAICoachSheet = true
+                    } label: {
+                        Label("AI Coach", systemImage: "sparkles")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .accessibilityLabel("Open AI Coach")
+                }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if !exportSummary.isEmpty {
+                    Menu {
+                        Section {
+                            shareLinks(for: .me)
+                        } header: {
+                            Text("My Stats")
+                                .foregroundStyle(meColor)
+                        }
+                        Section {
+                            shareLinks(for: .opponent)
+                        } header: {
+                            Text("Opponent's Stats")
+                                .foregroundStyle(oppColor)
+                        }
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showAICoachSheet) {
+            AICoachSheet(
+                mePrompt: exportAI,
+                opponentPrompt: exportAIOpp,
+                hasOpponentPrompt: !record.stats.isEmpty,
+                filenameMe: exportFilename(for: record, mode: .ai),
+                filenameOpponent: exportFilename(for: record, mode: .aiOpp)
+            )
+        }
+    }
+
+    // MARK: - Points list
+
+    @ViewBuilder
+    private var pointsListSections: some View {
+        let grouped = Dictionary(grouping: record.stats, by: \.setIndex)
+        let setIndices = grouped.keys.sorted()
+        ForEach(setIndices, id: \.self) { setIdx in
+            let points = grouped[setIdx] ?? []
+            Section(SetFilter.set(setIdx).label(matchFormat: record.matchFormat)) {
+                ForEach(Array(points.enumerated()), id: \.element.id) { idx, pt in
+                    pointRow(number: idx + 1, point: pt)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func pointRow(number: Int, point: PointStat) -> some View {
+        HStack(spacing: 8) {
+            Text("\(number)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.tertiary)
+                .frame(minWidth: 22, alignment: .trailing)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    if let score = point.gameScoreAtStart {
+                        Text(gameScoreLabel(score, server: point.server))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    if point.isBreakPoint {
+                        Text("BP")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.orange)
+                    }
+                    if point.isSecondServe {
+                        Text("2nd")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                HStack(spacing: 6) {
+                    outcomeChip(for: point)
+                    Text(outcomeLabel(point))
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                }
+            }
+
+            Spacer()
+
+            if point.endingShot != nil || point.heartRateBPM != nil {
+                VStack(alignment: .trailing, spacing: 2) {
+                    if let shot = point.endingShot {
+                        Text(shot.displayLabel)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    if let bpm = point.heartRateBPM {
+                        Text("My HR: \(bpm) bpm")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func gameScoreLabel(_ snap: GameScoreSnapshot, server: Player) -> String {
+        let s = snap.server, r = snap.returner
+        if snap.isTiebreak {
+            return server == .me ? "\(s)–\(r)" : "\(r)–\(s)"
+        }
+        let labels = ["0", "15", "30", "40"]
+        if s >= 3 && r >= 3 {
+            if s == r { return "Deuce" }
+            if s > r  { return "Ad \(server == .me ? "Me" : "Opp")" }
+            return "Ad \(server == .me ? "Opp" : "Me")"
+        }
+        let sLabel = s < labels.count ? labels[s] : "\(s)"
+        let rLabel = r < labels.count ? labels[r] : "\(r)"
+        return server == .me ? "\(sLabel)–\(rLabel)" : "\(rLabel)–\(sLabel)"
+    }
+
+    private func outcomeLabel(_ point: PointStat) -> String {
+        let winnerName = point.winner == .me ? "Me" : "Opp"
+        switch point.outcome {
+        case .winner:        return "Winner — \(winnerName)"
+        case .doubleFault:   return "Double Fault — \(point.server == .me ? "Me" : "Opp")"
+        case .unforcedError: return "Unforced Err — \(point.winner == .me ? "Opp" : "Me")"
+        case .forcedError:   return "Forced Err — \(point.winner == .me ? "Opp" : "Me")"
+        case .uncategorized: return "Point — \(winnerName)"
+        }
+    }
+
+    @ViewBuilder
+    private func outcomeChip(for point: PointStat) -> some View {
+        let isWin = point.winner == .me
+        let (chipColor, chipText): (Color, String) = {
+            switch point.outcome {
+            case .winner:
+                return (isWin ? meColor : oppColor, isWin ? "W" : "Opp W")
+            case .doubleFault:
+                // Color the server who committed the double fault
+                return (point.server == .me ? meColor : oppColor, "DF")
+            case .unforcedError:
+                // Color the player who made the error (loser of the point)
+                return (isWin ? oppColor : meColor, "UE")
+            case .forcedError:
+                return (isWin ? oppColor : meColor, "FE")
+            case .uncategorized:
+                return (isWin ? meColor : oppColor, isWin ? "+" : "−")
+            }
+        }()
+        Text(chipText)
+            .font(.caption2.weight(.bold).monospacedDigit())
+            .foregroundStyle(chipColor)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(chipColor.opacity(0.15)))
+    }
+
+    // MARK: - Duration
+
+    @ViewBuilder
+    private var setDurationRows: some View {
+        let indices: [Int] = {
+            switch setFilter {
+            case .all: return Array(0..<record.setScores.count)
+            case .set(let i): return [i]
+            }
+        }()
+        ForEach(indices, id: \.self) { i in
+            let label = indices.count > 1 ? "\(SetFilter.set(i).label(matchFormat: record.matchFormat)) Duration" : "Duration"
+            if let secs = record.setElapsedSeconds[i] {
+                statRow(label, "\(Int(secs) / 60) min")
+            } else {
+                let pts = record.stats.filter { $0.setIndex == i }
+                if let first = pts.map(\.timestamp).min(),
+                   let last  = pts.map(\.timestamp).max() {
+                    statRow(label, "\(Int(last.timeIntervalSince(first)) / 60) min")
+                }
+            }
+        }
+    }
+
+    // MARK: - Visual header bar
+
+    @ViewBuilder
+    private var pointsWonHeader: some View {
+        let total  = meSummary.totalPoints
+        let meWon  = meSummary.pointsWon
+        let oppWon = total - meWon
+        if total > 0 {
+            let mePct  = Int((Double(meWon)  / Double(total) * 100).rounded())
+            let oppPct = Int((Double(oppWon) / Double(total) * 100).rounded())
+            VStack(spacing: 6) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Me")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(meColor)
+                        Text("\(meWon) pts · \(mePct)%")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(meColor)
+                    }
+                    Spacer()
+                    VStack(spacing: 1) {
+                        Text("Points Won")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text("\(total) total")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("Opp")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(oppColor)
+                        Text("\(oppWon) pts · \(oppPct)%")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(oppColor)
+                    }
+                }
+
+                GeometryReader { geo in
+                    let meFrac  = Double(meWon)  / Double(total)
+                    let oppFrac = Double(oppWon) / Double(total)
+                    let spacing: CGFloat = 3
+                    let availableWidth = max(0, geo.size.width - spacing)
+                    HStack(spacing: spacing) {
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(meColor)
+                            .frame(width: availableWidth * meFrac)
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(oppColor)
+                            .frame(width: availableWidth * oppFrac)
+                    }
+                }
+                .frame(height: 16)
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    @ViewBuilder
+    private var wueRatioRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Win : Unforced Err")
+                    .foregroundStyle(.primary)
+                Text("aim for > 1.0")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            HStack(spacing: 4) {
+                Text(meSummary.wueRatio)
+                    .foregroundStyle(meColor)
+                Text("/")
+                    .foregroundStyle(.secondary)
+                Text(oppSummary.wueRatio)
+                    .foregroundStyle(oppColor)
+            }
+            .font(.body.monospacedDigit())
+        }
+    }
+
+    // MARK: - Comparison primitives
+
+    @ViewBuilder
+    private func comparisonSectionHeader(_ title: String) -> some View {
+        HStack {
+            Text("Me")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(meColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(meColor.opacity(0.15)))
+            Spacer()
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(nil)
+            Spacer()
+            Text("Opp")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(oppColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(oppColor.opacity(0.15)))
+        }
+    }
+
+    @ViewBuilder
+    private func comparisonRow(
+        _ label: String,
+        subtitle: String? = nil,
+        meNum: Int, meDen: Int,
+        oppNum: Int, oppDen: Int
+    ) -> some View {
+        let meFrac  = meDen  > 0 ? Double(meNum)  / Double(meDen)  : 0.0
+        let oppFrac = oppDen > 0 ? Double(oppNum) / Double(oppDen) : 0.0
+        let meText  = meDen  > 0 ? "\(Int((meFrac  * 100).rounded()))%" : "—"
+        let oppText = oppDen > 0 ? "\(Int((oppFrac * 100).rounded()))%" : "—"
+
+        VStack(spacing: 3) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            HStack(spacing: 4) {
+                Text(meText)
+                    .font(.subheadline.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(meColor)
+                    .frame(width: 44, alignment: .trailing)
+                splitBar(meFrac: meFrac, oppFrac: oppFrac)
+                Text(oppText)
+                    .font(.subheadline.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(oppColor)
+                    .frame(width: 44, alignment: .leading)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func countComparisonRow(_ label: String, meCount: Int, oppCount: Int) -> some View {
+        let maxVal  = max(meCount, oppCount, 1)
+        let meFrac  = Double(meCount)  / Double(maxVal)
+        let oppFrac = Double(oppCount) / Double(maxVal)
+
+        VStack(spacing: 3) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+            HStack(spacing: 4) {
+                Text("\(meCount)")
+                    .font(.subheadline.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(meColor)
+                    .frame(width: 44, alignment: .trailing)
+                splitBar(meFrac: meFrac, oppFrac: oppFrac)
+                Text("\(oppCount)")
+                    .font(.subheadline.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(oppColor)
+                    .frame(width: 44, alignment: .leading)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func splitBar(meFrac: Double, oppFrac: Double) -> some View {
+        GeometryReader { geo in
+            let halfW = max(0, (geo.size.width - 1) / 2)
+            HStack(spacing: 0) {
+                Rectangle()
+                    .fill(meColor.opacity(0.15))
+                    .frame(width: halfW)
+                    .overlay(alignment: .trailing) {
+                        Rectangle()
+                            .fill(meColor)
+                            .frame(width: halfW * meFrac)
+                    }
+                Rectangle()
+                    .fill(Color(.separator))
+                    .frame(width: 1)
+                Rectangle()
+                    .fill(oppColor.opacity(0.15))
+                    .frame(width: halfW)
+                    .overlay(alignment: .leading) {
+                        Rectangle()
+                            .fill(oppColor)
+                            .frame(width: halfW * oppFrac)
+                    }
+            }
+        }
+        .frame(height: 14)
+        .clipShape(RoundedRectangle(cornerRadius: 5))
+    }
+
+    // MARK: - Helpers
+
+    @ViewBuilder
+    private func statRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(.primary)
+            Spacer()
+            Text(value)
+                .font(.body.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+    }
+}
