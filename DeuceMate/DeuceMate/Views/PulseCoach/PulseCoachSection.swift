@@ -120,7 +120,8 @@ private struct HRZoneWinRateChart: View {
             }
             .chartXAxis {
                 AxisMarks(values: .automatic) { value in
-                    AxisValueLabel {
+                    AxisTick()
+                    AxisValueLabel(anchor: .top) {
                         if let label = value.as(String.self),
                            let zone = HRZoneStyle.zone(fromLabel: label) {
                             VStack(spacing: 1) {
