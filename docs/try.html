@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="index,follow">
+<meta name="theme-color" content="#080b0a">
+<title>Try DeuceMate — play the Apple Watch tennis scorer in your browser</title>
+<meta name="description" content="A free, interactive browser demo of the DeuceMate Apple Watch scorer. Tap or swipe to score points, games, sets and tiebreaks across all six match formats — no install required.">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Try DeuceMate in your browser">
+<meta property="og:description" content="Play the Apple Watch tennis scorer right in your browser — tap or swipe to score, with faithful tennis rules across six formats.">
+<meta property="og:image" content="assets/deucemate-icon.png">
+<meta property="og:url" content="https://emrahman.github.io/DeuceMate/try.html">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Try DeuceMate in your browser">
+<meta name="twitter:description" content="Play the Apple Watch tennis scorer in your browser — tap or swipe to score across six formats.">
+<meta name="twitter:image" content="assets/deucemate-icon.png">
+
+<link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+<link rel="apple-touch-icon" href="assets/deucemate-icon.png">
+<link rel="canonical" href="https://emrahman.github.io/DeuceMate/try.html">
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="assets/watch-demo.css">
+<noscript><style>.nav-links{display:flex!important}</style></noscript>
+</head>
+<body>
+<div class="mesh-grid" aria-hidden="true"></div>
+
+<header class="nav scrolled" id="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="index.html" aria-label="DeuceMate home">
+      <img class="logo" src="assets/logo.svg" alt="" width="34" height="34">
+      DeuceMate
+    </a>
+    <nav class="nav-links" id="nav-links" aria-label="Primary">
+      <a href="index.html#features">Features</a>
+      <a href="index.html#ai-coach">AI Coach</a>
+      <a href="index.html#privacy">Privacy</a>
+      <a href="support.html">Support</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn btn-primary" href="index.html#get">Get DeuceMate</a>
+      <button class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-links">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section style="padding-top:56px;padding-bottom:24px;">
+    <div class="wrap" style="text-align:center;">
+      <span class="eyebrow">🎾 Interactive demo · no install</span>
+      <h1 class="title" style="font-size:clamp(2rem,5vw,3rem);font-weight:850;max-width:18ch;margin:14px auto 0;">
+        Play the watch scorer <span class="grad-text">right here</span>
+      </h1>
+      <p class="lede" style="max-width:56ch;margin:16px auto 0;">
+        This is the same tennis logic that runs on the Apple&nbsp;Watch — points, games,
+        sets, tiebreaks and server rotation, faithfully ported to your browser.
+        Pick a format and start scoring.
+      </p>
+    </div>
+  </section>
+
+  <section style="padding-top:8px;">
+    <div class="wrap">
+      <div id="watch-demo">
+        <div class="demo-wrap">
+
+          <!-- Setup -->
+          <div class="setup-card" data-setup>
+            <h3>Choose a match format</h3>
+            <div class="opt-grid">
+              <button type="button" class="opt" data-format="standard">Best of 3<small>Deciding set: 10-point super tiebreak</small></button>
+              <button type="button" class="opt" data-format="bestOf3FullFinalSet">Best of 3 · full final set<small>Final set played out, 7-point tiebreak at 6–6</small></button>
+              <button type="button" class="opt" data-format="superTiebreak">10-point tiebreak<small>One super tiebreak decides it</small></button>
+              <button type="button" class="opt" data-format="quick4Games">Quick 4 games<small>First to 3 games; sudden death at 2–2</small></button>
+              <button type="button" class="opt" data-format="perpetualSuperTiebreak">Perpetual tiebreak<small>Endless tiebreak — keep rallying</small></button>
+              <button type="button" class="opt" data-format="perpetualPoints">Perpetual points<small>Running point counter, never ends</small></button>
+            </div>
+
+            <h3>Who serves first?</h3>
+            <div class="opt-grid">
+              <button type="button" class="opt" data-server="me">You</button>
+              <button type="button" class="opt" data-server="opponent">Opponent</button>
+            </div>
+
+            <div class="setup-actions">
+              <button type="button" class="btn btn-primary btn-block" data-start>Start match</button>
+            </div>
+          </div>
+
+          <!-- Play -->
+          <div data-play hidden>
+            <div class="watch-stage">
+              <div class="watch-frame">
+                <div class="watch-screen" data-screen tabindex="0" role="application"
+                     aria-label="Watch scoreboard. Tap the top half to score your point, the bottom half for the opponent.">
+                  <div class="toast" data-toast hidden></div>
+
+                  <div class="score-rows">
+                    <div class="score-row me" data-me-row>
+                      <div class="row-head"><span class="row-label">ME</span><span class="dot" data-me-dot></span></div>
+                      <div class="sets" data-me-sets></div>
+                      <div class="pts" data-me-pts>0</div>
+                    </div>
+                    <div class="divider"></div>
+                    <div class="score-row opp" data-opp-row>
+                      <div class="row-head"><span class="row-label">OPP</span><span class="dot" data-opp-dot></span></div>
+                      <div class="sets" data-opp-sets></div>
+                      <div class="pts" data-opp-pts>0</div>
+                    </div>
+                  </div>
+
+                  <div class="bp-flag" data-bp hidden>BREAK POINT</div>
+                  <div class="momentum-strip" data-momentum aria-hidden="true"></div>
+                  <div class="watch-foot" data-foot></div>
+
+                  <div class="banner" data-banner hidden>
+                    <div class="banner-text" data-banner-text></div>
+                    <button type="button" class="btn btn-primary" data-again>Play again</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="demo-controls">
+              <div class="pt-buttons">
+                <button type="button" class="pt-btn me" data-pt-me>▲ Your point</button>
+                <button type="button" class="pt-btn opp" data-pt-opp>▼ Opponent point</button>
+              </div>
+              <div class="util-buttons">
+                <button type="button" class="util-btn" data-undo>↶ Undo</button>
+                <button type="button" class="util-btn" data-reset>↻ New match</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <p class="demo-hint">
+        On the watch face: <strong>tap the top half</strong> (or swipe up) for your point,
+        <strong>bottom half</strong> (or swipe down) for the opponent. Swipe left to undo.<br>
+        Keyboard: <span class="kbd">↑</span> your point · <span class="kbd">↓</span> opponent ·
+        <span class="kbd">U</span> undo · <span class="kbd">R</span> new match.<br>
+        The gold dot marks the server; the strip shows the last 8 points.
+      </p>
+
+      <div style="text-align:center;margin-top:40px;">
+        <a class="btn btn-ghost" href="index.html">← Back to the overview</a>
+        <a class="btn btn-primary" href="index.html#get" style="margin-left:10px;">Get the real thing</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <a class="brand" href="index.html">
+      <img class="logo" src="assets/logo.svg" alt="" width="30" height="30" style="width:30px;height:30px;">
+      DeuceMate
+    </a>
+    <nav class="footer-links" aria-label="Footer">
+      <a href="index.html#features">Features</a>
+      <a href="index.html#ai-coach">AI Coach</a>
+      <a href="support.html">Support</a>
+      <a href="privacy.html">Privacy</a>
+    </nav>
+    <p class="fine">© 2026 Ehsan Rahman · This browser demo plays singles only and is for fun — the Apple Watch app is the real scorer. DeuceMate is not affiliated with Apple Inc.</p>
+  </div>
+</footer>
+
+<script src="assets/site.js" defer></script>
+<script src="assets/watch-demo.js" defer></script>
+</body>
+</html>
