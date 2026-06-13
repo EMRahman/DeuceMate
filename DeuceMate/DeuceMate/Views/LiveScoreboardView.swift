@@ -411,33 +411,44 @@ struct LiveScoreboardView: View {
             .frame(width: nameWidth, alignment: .leading)
             .padding(.leading, 16)
 
-            // Completed set scores
+            // Completed set scores — for tiebreak sets show games + superscript loser points
             ForEach(completedSets.indices, id: \.self) { i in
                 let set = completedSets[i]
-                let n = set.isTieBreak
-                    ? (forMe ? set.tieBreakPointsMe : set.tieBreakPointsOpponent)
-                    : (forMe ? set.gamesMe : set.gamesOpponent)
-                Text("\(n)")
-                    .font(.system(size: oldSetFont, weight: .bold, design: .monospaced))
-                    .foregroundStyle(color.opacity(0.60))
-                    .minimumScaleFactor(0.5)
-                    .frame(maxWidth: .infinity)
+                let games = forMe ? set.gamesMe : set.gamesOpponent
+                let tbPts = forMe ? set.tieBreakPointsMe : set.tieBreakPointsOpponent
+                HStack(alignment: .top, spacing: 1) {
+                    Text("\(games)")
+                        .font(.system(size: oldSetFont, weight: .bold, design: .monospaced))
+                        .foregroundStyle(color.opacity(0.60))
+                        .minimumScaleFactor(0.5)
+                    if set.isTieBreak && tbPts > 0 {
+                        Text("\(tbPts)")
+                            .font(.system(size: oldSetFont * 0.5, weight: .bold, design: .monospaced))
+                            .foregroundStyle(color.opacity(0.40))
+                            .baselineOffset(oldSetFont * 0.32)
+                    }
+                }
+                .frame(maxWidth: .infinity)
             }
 
-            // Current set score
+            // Current set score — always show games; tiebreak points move to the score column
             if let current = currentSet {
-                let n = current.isTieBreak
-                    ? (forMe ? current.tieBreakPointsMe : current.tieBreakPointsOpponent)
-                    : (forMe ? current.gamesMe : current.gamesOpponent)
-                Text("\(n)")
+                let games = forMe ? current.gamesMe : current.gamesOpponent
+                Text("\(games)")
                     .font(.system(size: curSetFont, weight: .heavy, design: .monospaced))
                     .foregroundStyle(color)
                     .minimumScaleFactor(0.5)
                     .frame(maxWidth: .infinity)
             }
 
-            // Game score (regular sets only)
-            if !inTiebreak {
+            // Game score column: tennis labels during regular play, raw count during tiebreak
+            if inTiebreak {
+                Text("\(forMe ? gamePoints : opponentPoints)")
+                    .font(.system(size: gameFont, weight: .heavy, design: .monospaced))
+                    .foregroundStyle(color)
+                    .minimumScaleFactor(0.5)
+                    .frame(maxWidth: .infinity)
+            } else {
                 let me  = gamePoints
                 let opp = opponentPoints
                 let isDeuce = me >= 3 && opp >= 3 && me == opp
