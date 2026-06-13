@@ -13,10 +13,10 @@ DeuceMate is a lightweight, native Apple Watch app for scoring tennis matches in
 
 |  |  |
 |:--:|:--:|
-| <img src="docs/screenshots/01-hero-watch-iphone.png" width="380" alt="Apple Watch and iPhone scoring a match together"> | <img src="docs/screenshots/02-points-momentum-graph.png" width="380" alt="Points momentum graph with heart rate and steps"> |
-| **Score on your wrist. Watch it live on your phone.** | **See your momentum — overlaid with heart rate and movement.** |
-| <img src="docs/screenshots/03-match-stats.png" width="380" alt="Side-by-side match statistics"> | <img src="docs/screenshots/04-watch-scoreboard.png" width="380" alt="Apple Watch live scoreboard"> |
-| **Pro-level analytics — 20+ stats, side by side.** | **Gesture-first scoring, right on your wrist.** |
+| <img src="docs/screenshots/04-watch-scoreboard.png" width="260" alt="Apple Watch live scoreboard"> | <img src="docs/screenshots/01-hero-watch-iphone.png" width="380" alt="iPhone companion showing the live score"> |
+| **Gesture-first scoring, right on your wrist.** | **Watch it live on your phone — same score, real time.** |
+| <img src="docs/screenshots/02-points-momentum-graph.png" width="380" alt="Points momentum graph with heart rate and steps"> | <img src="docs/screenshots/03-match-stats.png" width="380" alt="Side-by-side match statistics"> |
+| **See your momentum — overlaid with heart rate and movement.** | **Pro-level analytics — 20+ stats, side by side.** |
 | <img src="docs/screenshots/05-pulse-coach-hr-zones.png" width="380" alt="Pulse Coach heart-rate zone win rates"> | <img src="docs/screenshots/06-themes.png" width="380" alt="Five court-inspired themes"> |
 | **Discover the heart-rate zone you win in.** | **Five court-inspired themes.** |
 
