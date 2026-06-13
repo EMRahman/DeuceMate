@@ -23,7 +23,9 @@
 <link rel="apple-touch-icon" href="assets/deucemate-icon.png">
 <link rel="canonical" href="https://emrahman.github.io/DeuceMate/">
 <link rel="stylesheet" href="assets/site.css">
-<noscript><style>.reveal{opacity:1!important;transform:none!important}.nav-links{display:flex!important}</style></noscript>
+<link rel="stylesheet" href="assets/watch-demo.css">
+<link rel="stylesheet" href="assets/companion-demo.css">
+<noscript><style>.reveal{opacity:1!important;transform:none!important}.nav-links{display:flex!important}[data-play]{display:none!important}.no-js-shot{display:block!important}</style></noscript>
 </head>
 <body>
 <div class="mesh-grid" aria-hidden="true"></div>
@@ -80,13 +82,65 @@
         <span class="pill"><span class="dot"></span> No data collection</span>
       </div>
 
-      <figure class="hero-shot reveal" data-d="2">
-        <div class="device-landscape">
-          <img src="screenshots/01-hero-watch-iphone.png"
-               alt="DeuceMate live scoreboard on iPhone showing a tight three-set match — you 6–3, opponent 7–1, with the live momentum strip below."
-               loading="eager" width="2556" height="1179">
+      <div class="hero-demo reveal" data-d="2">
+        <div class="watch-demo" data-compact data-format="standard" data-server="me">
+          <div data-play hidden>
+            <div class="watch-stage">
+              <div class="watch-frame">
+                <div class="watch-screen" data-screen tabindex="0" role="application"
+                     aria-label="Live watch scoreboard. Tap the top half to score your point, the bottom half for the opponent.">
+                  <div class="toast" data-toast hidden></div>
+                  <div class="score-rows">
+                    <div class="score-row me" data-me-row>
+                      <div class="row-head"><span class="row-label">ME</span><span class="dot" data-me-dot></span></div>
+                      <div class="sets" data-me-sets></div>
+                      <div class="pts" data-me-pts>0</div>
+                    </div>
+                    <div class="divider"></div>
+                    <div class="score-row opp" data-opp-row>
+                      <div class="row-head"><span class="row-label">OPP</span><span class="dot" data-opp-dot></span></div>
+                      <div class="sets" data-opp-sets></div>
+                      <div class="pts" data-opp-pts>0</div>
+                    </div>
+                  </div>
+                  <div class="bp-flag" data-bp hidden>BREAK POINT</div>
+                  <div class="momentum-strip" data-momentum aria-hidden="true"></div>
+                  <div class="watch-foot" data-foot></div>
+                  <div class="banner" data-banner hidden>
+                    <div class="banner-text" data-banner-text></div>
+                    <button type="button" class="btn btn-primary" data-again>Play again</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="demo-controls" style="margin-top:18px;">
+              <div class="pt-buttons">
+                <button type="button" class="pt-btn me" data-pt-me>▲ You</button>
+                <button type="button" class="pt-btn opp" data-pt-opp>▼ Opponent</button>
+              </div>
+              <div class="util-buttons">
+                <button type="button" class="util-btn" data-undo>↶ Undo</button>
+                <button type="button" class="util-btn" data-reset>↻ Reset</button>
+              </div>
+            </div>
+          </div>
+          <div class="no-js-shot" style="display:none;">
+            <div class="watch" style="margin:0 auto;">
+              <img src="screenshots/04-watch-scoreboard.png" alt="DeuceMate watch scoreboard" width="396" height="484">
+            </div>
+          </div>
         </div>
-      </figure>
+        <p class="hero-demo-cap">👆 This is the real scoring engine — tap the watch (or the buttons) to play. <a href="try.html">Open the full playground →</a></p>
+
+        <figure class="hero-shot" style="margin-top:34px;">
+          <p class="hero-demo-cap" style="margin:0 0 14px;">…and every point mirrors live onto your iPhone:</p>
+          <div class="device-landscape">
+            <img src="screenshots/01-hero-watch-iphone.png"
+                 alt="DeuceMate live scoreboard on iPhone showing a tight three-set match — you 6–3, opponent 7–1, with the live momentum strip below."
+                 loading="lazy" width="2556" height="1179">
+          </div>
+        </figure>
+      </div>
     </div>
   </section>
 
@@ -298,6 +352,42 @@
     </div>
   </section>
 
+  <!-- ====================== COMPANION DEMO ====================== -->
+  <section id="companion">
+    <div class="wrap">
+      <div class="section-head center reveal">
+        <span class="eyebrow">Hands-on</span>
+        <h2 class="title">Explore a real match in the companion app</h2>
+        <p class="lede">This is a full singles match, generated with realistic point-by-point data and
+          rendered the way the iPhone app shows it. Switch tabs to read the stats, replay the momentum,
+          and see the exact AI-coaching prompt it produces.</p>
+      </div>
+
+      <div id="companion-demo" class="reveal">
+        <div class="phone-lg">
+          <div class="phone-screen">
+            <div class="c-header">
+              <div class="c-title">Match Stats</div>
+              <div class="c-meta" data-c-meta></div>
+            </div>
+            <div class="c-tabs" role="tablist">
+              <button type="button" data-c-tab="stats" aria-pressed="true">Stats</button>
+              <button type="button" data-c-tab="momentum" aria-pressed="false">Momentum</button>
+              <button type="button" data-c-tab="coach" aria-pressed="false">AI Coach</button>
+            </div>
+            <div class="c-body" data-c-body></div>
+          </div>
+        </div>
+        <div class="c-controls">
+          <button type="button" class="btn btn-ghost" data-c-regen>↻ Generate another match</button>
+          <a class="btn btn-primary" href="try.html">Score one yourself</a>
+        </div>
+        <noscript><p class="lede" style="text-align:center;margin-top:20px;">Enable JavaScript to explore the interactive companion demo, or
+          <a href="screenshots/03-match-stats.png" style="color:var(--green)">view a screenshot</a>.</p></noscript>
+      </div>
+    </div>
+  </section>
+
   <!-- ====================== STATS / DEPTH ====================== -->
   <section id="stats">
     <div class="wrap">
@@ -409,5 +499,7 @@
 </footer>
 
 <script src="assets/site.js" defer></script>
+<script src="assets/watch-demo.js" defer></script>
+<script src="assets/companion-demo.js" defer></script>
 </body>
 </html>

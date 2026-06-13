@@ -1,0 +1,82 @@
+/* ==========================================================================
+   DeuceMate — iPhone companion-app browser demo styles.
+   Layers on site.css (shares colour variables and dark theme).
+   ========================================================================== */
+
+#companion-demo { display: flex; flex-direction: column; align-items: center; }
+
+.phone-lg {
+  position: relative; width: 340px; max-width: 90vw;
+  border-radius: 44px; padding: 11px;
+  background: linear-gradient(160deg, #20262a, #0b0e0f);
+  border: 1px solid rgba(255,255,255,.12);
+  box-shadow: var(--shadow), 0 0 70px -16px rgba(79,155,255,.4);
+}
+.phone-lg::before { /* notch */
+  content: ""; position: absolute; top: 19px; left: 50%; transform: translateX(-50%);
+  width: 104px; height: 8px; border-radius: 99px; background: rgba(0,0,0,.7); z-index: 3;
+}
+.phone-screen {
+  background: #0a0d0c; border-radius: 34px; overflow: hidden;
+  height: 620px; max-height: 76vh; display: flex; flex-direction: column;
+}
+
+.c-header { padding: 30px 20px 12px; text-align: center; border-bottom: 1px solid var(--line-2); }
+.c-title { font-size: 1.15rem; font-weight: 800; }
+.c-meta { color: var(--muted); font-size: .82rem; margin-top: 4px; }
+
+.c-tabs { display: flex; gap: 6px; padding: 12px 14px; }
+.c-tabs button {
+  flex: 1; cursor: pointer; font: inherit; font-size: .86rem; font-weight: 650;
+  color: var(--muted); background: var(--glass-2); border: 1px solid var(--line);
+  border-radius: 11px; padding: 9px 6px; transition: color .15s, background .15s, border-color .15s;
+}
+.c-tabs button[aria-pressed="true"] {
+  color: var(--ink); background: rgba(47,208,138,.14);
+  border-color: rgba(47,208,138,.4);
+}
+
+.c-body { flex: 1; overflow-y: auto; padding: 8px 18px 22px; }
+.c-body::-webkit-scrollbar { width: 7px; }
+.c-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 4px; }
+.c-note { color: var(--muted); font-size: .85rem; margin: 6px 0 14px; }
+
+/* Stat rows */
+.stat-legend {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: .72rem; color: var(--muted-2); text-transform: uppercase; letter-spacing: .05em;
+  margin: 8px 0 14px; font-weight: 700;
+}
+.stat-legend .me { color: var(--green); }
+.stat-legend .opp { color: var(--blue); }
+.stat-row { margin: 0 0 16px; }
+.stat-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.stat-top .stat-label { font-size: .8rem; color: var(--muted); }
+.stat-top .v { font-size: .98rem; font-weight: 800; }
+.stat-top .v.me { color: var(--green); }
+.stat-top .v.opp { color: var(--blue); }
+.bar { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: rgba(255,255,255,.06); }
+.bar-me { background: linear-gradient(90deg, #25b876, var(--green)); }
+.bar-opp { background: linear-gradient(90deg, var(--blue), #2f6ed0); }
+
+/* Momentum */
+.momentum-svg { width: 100%; height: 150px; display: block; margin: 6px 0; }
+.c-momentum-foot { display: flex; justify-content: space-between; color: var(--muted-2); font-size: .76rem; margin-top: 6px; }
+.c-momentum-foot span:nth-child(2) { color: var(--ink); font-weight: 700; }
+
+/* AI coach */
+.coach-pre {
+  white-space: pre-wrap; word-break: break-word; margin: 0;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #cfe9dd; background: rgba(0,0,0,.4); border: 1px solid var(--line);
+  border-radius: 12px; padding: 14px;
+}
+#companion-demo .chip { cursor: pointer; font: inherit; }
+#companion-demo .chip:hover { border-color: rgba(47,208,138,.45); color: #d9ffe9; }
+.c-copied { color: var(--green); font-size: .82rem; font-weight: 600; margin: 12px 0 0; }
+
+.c-controls { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 26px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .c-tabs button, #companion-demo .chip { transition: none; }
+}

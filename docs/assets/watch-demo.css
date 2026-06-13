@@ -121,6 +121,13 @@
   border-radius: 6px; padding: 1px 7px; font-size: .85em; font-weight: 700; color: var(--ink);
 }
 
+/* ---- Hero (compact) embed ----------------------------------------------- */
+.hero-demo { margin: 50px auto 0; max-width: 760px; }
+.hero-demo .watch-frame { width: 250px; }
+.hero-demo .demo-controls { margin-top: 18px; gap: 10px; }
+.hero-demo-cap { text-align: center; color: var(--muted); font-size: .92rem; margin: 18px auto 0; max-width: 46ch; }
+.hero-demo-cap a { color: var(--green); white-space: nowrap; }
+
 @media (max-width: 560px) {
   .opt-grid { grid-template-columns: 1fr; }
 }

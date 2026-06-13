@@ -309,10 +309,11 @@
   }
 
   /* ====================================================================
-     Controller / view
+     Controller / view  (supports multiple instances + compact/hero mode)
      ==================================================================== */
-  var root = document.getElementById("watch-demo");
-  if (!root) return;
+  function initWatchDemo(root) {
+  var compact = root.hasAttribute("data-compact");
+  var useKeyboard = root.hasAttribute("data-keyboard");
 
   var el = {
     setup: root.querySelector("[data-setup]"),
@@ -342,8 +343,8 @@
     ptOpp: root.querySelector("[data-pt-opp]")
   };
 
-  var chosenFormat = "standard";
-  var chosenServer = "me";
+  var chosenFormat = root.getAttribute("data-format") || "standard";
+  var chosenServer = root.getAttribute("data-server") || "me";
   var state = null;
   var history = [];   // undo stack of prior states
   var momentum = [];  // last point winners
@@ -353,19 +354,27 @@
     btns.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute(attr) === value ? "true" : "false"); });
   }
 
-  el.formatBtns.forEach(function (b) {
-    b.addEventListener("click", function () { chosenFormat = b.getAttribute("data-format"); select(el.formatBtns, "data-format", chosenFormat); });
-  });
-  el.serverBtns.forEach(function (b) {
-    b.addEventListener("click", function () { chosenServer = b.getAttribute("data-server"); select(el.serverBtns, "data-server", chosenServer); });
-  });
-  select(el.formatBtns, "data-format", chosenFormat);
-  select(el.serverBtns, "data-server", chosenServer);
+  if (el.formatBtns.length) {
+    el.formatBtns.forEach(function (b) {
+      b.addEventListener("click", function () { chosenFormat = b.getAttribute("data-format"); select(el.formatBtns, "data-format", chosenFormat); });
+    });
+    select(el.formatBtns, "data-format", chosenFormat);
+  }
+  if (el.serverBtns.length) {
+    el.serverBtns.forEach(function (b) {
+      b.addEventListener("click", function () { chosenServer = b.getAttribute("data-server"); select(el.serverBtns, "data-server", chosenServer); });
+    });
+    select(el.serverBtns, "data-server", chosenServer);
+  }
 
-  el.start.addEventListener("click", startMatch);
-  el.again.addEventListener("click", function () { el.banner.hidden = true; el.play.hidden = true; el.setup.hidden = false; });
-  el.undo.addEventListener("click", undo);
-  el.reset.addEventListener("click", function () { startMatch(); });
+  if (el.start) el.start.addEventListener("click", startMatch);
+  if (el.again) el.again.addEventListener("click", function () {
+    el.banner.hidden = true;
+    if (compact || !el.setup) { startMatch(); return; }
+    el.play.hidden = true; el.setup.hidden = false;
+  });
+  if (el.undo) el.undo.addEventListener("click", undo);
+  if (el.reset) el.reset.addEventListener("click", function () { startMatch(); });
   if (el.ptMe) el.ptMe.addEventListener("click", function () { award("me"); });
   if (el.ptOpp) el.ptOpp.addEventListener("click", function () { award("opponent"); });
 
@@ -387,8 +396,8 @@
     touch = null;
   }, { passive: false });
 
-  /* Keyboard shortcuts while the demo is on screen. */
-  document.addEventListener("keydown", function (e) {
+  /* Keyboard shortcuts (only on instances that opt in via data-keyboard). */
+  if (useKeyboard) document.addEventListener("keydown", function (e) {
     if (el.play.hidden) return;
     if (e.key === "ArrowUp") { award("me"); e.preventDefault(); }
     else if (e.key === "ArrowDown") { award("opponent"); e.preventDefault(); }
@@ -400,8 +409,8 @@
     state = freshState(chosenFormat, chosenServer);
     history = [];
     momentum = [];
-    el.banner.hidden = true;
-    el.setup.hidden = true;
+    if (el.banner) el.banner.hidden = true;
+    if (el.setup) el.setup.hidden = true;
     el.play.hidden = false;
     showToast(null);
     render();
@@ -425,7 +434,7 @@
     prev.snapshot.cfg = state.cfg;
     state = prev.snapshot;
     momentum = prev.momentum;
-    el.banner.hidden = true;
+    if (el.banner) el.banner.hidden = true;
     showToast("Undo");
     render();
   }
@@ -435,8 +444,9 @@
     var matchEvt = events.filter(function (e) { return e.t === "matchWon"; })[0];
     if (matchEvt || (winner && isMatchComplete(state))) {
       var w = matchEvt ? matchEvt.winner : winner;
-      el.bannerText.textContent = (w === "me" ? "You win! 🎾" : "Opponent wins");
-      el.banner.hidden = false;
+      var msg = w === "me" ? "You win! 🎾" : "Opponent wins";
+      if (el.bannerText) el.bannerText.textContent = msg;
+      if (el.banner) el.banner.hidden = false; else showToast(msg);
       return;
     }
     // Pick the most significant transient toast.
@@ -492,7 +502,7 @@
     el.oppDot.style.visibility = state.currentServer === "opponent" ? "visible" : "hidden";
 
     // Break point flag.
-    el.bp.hidden = !isBreakPoint(state);
+    if (el.bp) el.bp.hidden = !isBreakPoint(state);
 
     // Momentum strip.
     el.momentum.innerHTML = "";
@@ -505,10 +515,10 @@
     }
 
     // Footer.
-    el.foot.textContent = FORMAT_LABELS[state.format] + " · Singles";
+    if (el.foot) el.foot.textContent = FORMAT_LABELS[state.format] + " · Singles";
 
     var over = isMatchComplete(state);
-    el.undo.disabled = !history.length;
+    if (el.undo) el.undo.disabled = !history.length;
     if (el.ptMe) el.ptMe.disabled = over;
     if (el.ptOpp) el.ptOpp.disabled = over;
   }
@@ -524,4 +534,10 @@
     }
     return span;
   }
+
+  if (compact) { if (el.setup) el.setup.hidden = true; startMatch(); }
+  } /* end initWatchDemo */
+
+  var demos = document.querySelectorAll("#watch-demo, .watch-demo");
+  for (var di = 0; di < demos.length; di++) initWatchDemo(demos[di]);
 })();
