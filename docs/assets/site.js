@@ -11,11 +11,12 @@
 
   /* 1) Add a frosted background to the nav once the page scrolls. */
   function onScroll() {
-    if (!nav) return;
     nav.classList.toggle("scrolled", window.scrollY > 12);
   }
-  window.addEventListener("scroll", onScroll, { passive: true });
-  onScroll();
+  if (nav) {
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+  }
 
   /* 2) Mobile menu toggle. */
   var toggle = document.querySelector(".nav-toggle");

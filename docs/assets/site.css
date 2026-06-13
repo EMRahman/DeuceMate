@@ -174,7 +174,7 @@ h2.title { font-size: clamp(1.9rem, 4.4vw, 2.9rem); font-weight: 800; }
   box-shadow: var(--shadow), var(--shadow-glow);
   overflow: hidden;
 }
-.device-landscape img { display: block; width: 100%; border-radius: 18px; }
+.device-landscape img { display: block; width: 100%; height: auto; border-radius: 18px; }
 .hero-shot::after { /* reflective floor glow */
   content: ""; position: absolute; left: 12%; right: 12%; bottom: -34px; height: 70px;
   background: radial-gradient(ellipse at center, rgba(47,208,138,.35), transparent 70%);
@@ -235,7 +235,7 @@ h2.title { font-size: clamp(1.9rem, 4.4vw, 2.9rem); font-weight: 800; }
   content: ""; position: absolute; top: 17px; left: 50%; transform: translateX(-50%);
   width: 92px; height: 7px; border-radius: 99px; background: rgba(0,0,0,.7); z-index: 2;
 }
-.phone img { display: block; width: 100%; border-radius: 30px; }
+.phone img { display: block; width: 100%; height: auto; border-radius: 30px; }
 .phone.glow-blue { box-shadow: var(--shadow), 0 0 70px -14px rgba(79,155,255,.4); }
 .phone.glow-green { box-shadow: var(--shadow), 0 0 70px -14px rgba(47,208,138,.4); }
 
@@ -246,7 +246,7 @@ h2.title { font-size: clamp(1.9rem, 4.4vw, 2.9rem); font-weight: 800; }
   border: 1px solid rgba(255,255,255,.14);
   box-shadow: var(--shadow), 0 0 60px -16px rgba(47,208,138,.4);
 }
-.watch img { display: block; width: 100%; border-radius: 42px; }
+.watch img { display: block; width: 100%; height: auto; border-radius: 42px; }
 
 /* --- AI Coach spotlight (full-bleed band) -------------------------------- */
 .spotlight {
@@ -281,6 +281,7 @@ h2.title { font-size: clamp(1.9rem, 4.4vw, 2.9rem); font-weight: 800; }
 
 /* AI screenshot strip */
 .shot-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 52px 0 0; }
+.shot-strip.cols-2 { grid-template-columns: repeat(2, 1fr); max-width: 640px; margin: 52px auto 0; }
 .shot-strip figure { margin: 0; }
 .shot-strip .phone { width: 100%; max-width: 100%; }
 .shot-strip figcaption { color: var(--muted); font-size: .86rem; text-align: center; margin-top: 12px; }
@@ -389,7 +390,7 @@ details.faq .body a { color: var(--green); }
 @media (max-width: 560px) {
   section { padding: 64px 0; }
   .grid-mini { grid-template-columns: 1fr; }
-  .shot-strip { grid-template-columns: 1fr; }
+  .shot-strip, .shot-strip.cols-2 { grid-template-columns: 1fr; }
   .hero-actions .btn { width: 100%; }
   .trust-row { gap: 10px 22px; }
 }
