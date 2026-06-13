@@ -197,13 +197,14 @@ Suggested Apple Watch screenshot content (in order):
 
 ## Support Information
 
-**Support URL:** `https://emrahman.github.io/DeuceMate/`
+**Support URL:** `https://emrahman.github.io/DeuceMate/support.html`
 **Support Email:** `mail@ehsanrahman.com`
 **Marketing URL (optional):** `https://emrahman.github.io/DeuceMate/`
 **Privacy Policy URL (REQUIRED):** `https://emrahman.github.io/DeuceMate/privacy.html`
 
 **Note:** These point at the public GitHub Pages site served from the `/docs`
-folder (`docs/index.html` = support, `docs/privacy.html` = privacy policy).
+folder (`docs/index.html` = marketing landing page, `docs/support.html` =
+support/help, `docs/privacy.html` = privacy policy).
 **Pages must be enabled before submission:** repo **Settings → Pages → Build
 and deployment → Deploy from a branch → `main` / `/docs`**. GitHub Pages on a
 private repo requires GitHub Pro or higher; on the free plan the repository must
