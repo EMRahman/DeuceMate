@@ -83,7 +83,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Author
 
 **Ehsan Rahman**
-📧 [mail@ehsanrahman.com](mailto:mail@ehsanrahman.com)
 🌐 [ehsanrahman.com](https://ehsanrahman.com)
 💼 [GitHub](https://github.com/EMRahman)
 
