@@ -555,7 +555,7 @@ private struct PointsChartCore: View {
             }
         }
         .chartXScale(domain: data.xDomain)
-        .chartXAxis(.hidden)
+        .applyOverlayXAxis(showXAxis)
         .chartYScale(domain: activeHRDomain)
         .chartYAxis {
             // Invisible leading placeholder matches primary chart's leading axis width.
@@ -593,7 +593,7 @@ private struct PointsChartCore: View {
             }
         }
         .chartXScale(domain: data.xDomain)
-        .chartXAxis(.hidden)
+        .applyOverlayXAxis(showXAxis)
         .chartYScale(domain: 0...data.stepsYMax)
         .chartYAxis {
             // Invisible leading placeholder matches primary chart's leading axis width.
@@ -624,6 +624,21 @@ private extension View {
     func applyChartXAxisVisible(_ visible: Bool) -> some View {
         if visible {
             self
+        } else {
+            self.chartXAxis(.hidden)
+        }
+    }
+
+    @ViewBuilder
+    func applyOverlayXAxis(_ showPrimary: Bool) -> some View {
+        if showPrimary {
+            // Phantom x-axis: reserves the same bottom inset as the primary
+            // chart's real x-axis so all three plot areas align vertically.
+            self.chartXAxis {
+                AxisMarks { _ in
+                    AxisValueLabel { Text("0").font(.caption2).opacity(0) }
+                }
+            }
         } else {
             self.chartXAxis(.hidden)
         }
