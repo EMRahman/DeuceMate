@@ -17,12 +17,12 @@ shots so the gallery feels cohesive; only `06-themes.png` shows multiple themes.
 
 | # | Filename | What to capture | Screen (source file) |
 |---|----------|-----------------|----------------------|
-| 1 | `01-hero-watch-iphone.png` | **Hero composite** — Apple Watch live scoreboard next to the iPhone live scoreboard/stats, both framed, side by side. The lead image: tells the watch→phone story at a glance. | Watch `ContentView` + iPhone `LiveScoreboardView`/`PointsGraphView` |
-| 2 | `02-points-momentum-graph.png` | iPhone **points-momentum graph** with the heart-rate and steps overlays on, set bands and outcome markers visible. The flagship "wow" shot. | `Views/PointsGraphView.swift` |
-| 3 | `03-match-stats.png` | iPhone **match stats** tab — the Me-vs-Opponent split bars (serve %, break points, Aggression Index, rally depth). | `Views/MatchDetailView.swift` |
-| 4 | `04-watch-scoreboard.png` | **Clean solo** Apple Watch live scoreboard mid-match — score rows, momentum strip, heart-rate badge. | `DeuceMate Watch App/ContentView.swift` |
-| 5 | `05-pulse-coach-hr-zones.png` | iPhone **PulseCoach** — win % by HR zone bars + the zone-banded HR timeline. | `Views/PulseCoach/PulseCoachSection.swift` |
-| 6 | `06-themes.png` | *(Optional)* a strip of the watch scoreboard across the five court-inspired themes. | `DeuceMate Watch App/AppTheme.swift` |
+| 1 | `01-hero-watch-iphone.png` | **Hero composite** — Apple Watch live scoreboard next to the iPhone live scoreboard/stats, both framed, side by side. The lead image: tells the watch→phone story at a glance. | Watch `DeuceMate/DeuceMate Watch App/ContentView.swift` + iPhone `DeuceMate/DeuceMate/Views/LiveScoreboardView.swift` / `DeuceMate/DeuceMate/Views/PointsGraphView.swift` |
+| 2 | `02-points-momentum-graph.png` | iPhone **points-momentum graph** with the heart-rate and steps overlays on, set bands and outcome markers visible. The flagship "wow" shot. | `DeuceMate/DeuceMate/Views/PointsGraphView.swift` |
+| 3 | `03-match-stats.png` | iPhone **match stats** tab — the Me-vs-Opponent split bars (serve %, break points, Aggression Index, rally depth). | `DeuceMate/DeuceMate/Views/MatchDetailView.swift` |
+| 4 | `04-watch-scoreboard.png` | **Clean solo** Apple Watch live scoreboard mid-match — score rows, momentum strip, heart-rate badge. | `DeuceMate/DeuceMate Watch App/ContentView.swift` |
+| 5 | `05-pulse-coach-hr-zones.png` | iPhone **PulseCoach** — win % by HR zone bars + the zone-banded HR timeline. | `DeuceMate/DeuceMate/Views/PulseCoach/PulseCoachSection.swift` |
+| 6 | `06-themes.png` | *(Optional)* a strip of the watch scoreboard across the five court-inspired themes. | `DeuceMate/DeuceMate Watch App/AppTheme.swift` |
 
 ## How to capture
 
