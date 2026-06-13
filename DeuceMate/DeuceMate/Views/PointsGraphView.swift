@@ -635,8 +635,8 @@ private extension View {
             // Phantom x-axis: reserves the same bottom inset as the primary
             // chart's real x-axis so all three plot areas align vertically.
             self.chartXAxis {
-                AxisMarks { _ in
-                    AxisValueLabel { Text("0").font(.caption2).opacity(0) }
+                AxisMarks(values: [0]) { _ in
+                    AxisValueLabel { Text("0").opacity(0) }
                 }
             }
         } else {
