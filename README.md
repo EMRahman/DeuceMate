@@ -9,6 +9,17 @@
 
 DeuceMate is a lightweight, native Apple Watch app for scoring tennis matches in real time, bundled with an **iPhone companion app** for live score viewing, umpire-style announcements, and a complete match archive with detailed statistics. Built from the ground up with SwiftUI, it delivers a fast, reliable scoring experience without the bloat, crashes, or privacy concerns of existing alternatives.
 
+## Screenshots
+
+|  |  |
+|:--:|:--:|
+| <img src="docs/screenshots/04-watch-scoreboard.png" width="260" alt="Apple Watch live scoreboard"> | <img src="docs/screenshots/01-hero-watch-iphone.png" width="380" alt="iPhone companion showing the live score"> |
+| **Gesture-first scoring, right on your wrist.** | **Watch it live on your phone — same score, real time.** |
+| <img src="docs/screenshots/02-points-momentum-graph.png" width="380" alt="Points momentum graph with heart rate and steps"> | <img src="docs/screenshots/03-match-stats.png" width="380" alt="Side-by-side match statistics"> |
+| **See your momentum — overlaid with heart rate and movement.** | **Pro-level analytics — 20+ stats, side by side.** |
+| <img src="docs/screenshots/05-pulse-coach-hr-zones.png" width="380" alt="Pulse Coach heart-rate zone win rates"> | <img src="docs/screenshots/06-themes.png" width="380" alt="Five court-inspired themes"> |
+| **Discover the heart-rate zone you win in.** | **Five court-inspired themes.** |
+
 ## Why DeuceMate Exists
 
 After trying multiple tennis scoring apps that crashed mid-match, collected unnecessary data, or required subscriptions with intrusive ads, I built DeuceMate to be:
