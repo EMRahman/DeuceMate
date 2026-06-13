@@ -15,13 +15,14 @@ struct PulseCoachSection: View {
                 if !summary.autoInsights.isEmpty {
                     AutoInsightCard(insights: summary.autoInsights)
                 }
-                HRZoneWinRateChart(zoneStats: summary.zoneWinRates, maxHR: summary.resolvedMaxHR)
-                HRTimelineChart(
-                    maxHR: summary.resolvedMaxHR,
-                    record: record,
-                    filteredStats: filteredStats
-                )
-
+                VStack(spacing: 0) {
+                    HRZoneWinRateChart(zoneStats: summary.zoneWinRates, maxHR: summary.resolvedMaxHR)
+                    HRTimelineChart(
+                        maxHR: summary.resolvedMaxHR,
+                        record: record,
+                        filteredStats: filteredStats
+                    )
+                }
             }
         }
     }
@@ -133,7 +134,7 @@ private struct HRZoneWinRateChart: View {
                     }
                 }
             }
-            .chartPlotStyle { $0.padding(.top, 20) }
+            .chartPlotStyle { $0.padding(.top, 16) }
             .frame(height: 170)
         }
         .padding(.vertical, 4)
