@@ -91,7 +91,7 @@ columns) rather than rewriting each view.
 - `DeuceMate/DeuceMate/ContentView.swift` — conditional `NavigationSplitView`.
 - `DeuceMate/DeuceMate/Views/PastMatchesView.swift` — sheets → split-view columns.
 - `DeuceMate/DeuceMate/Views/MatchDetailView.swift` — column layout, fix `frame(width: 44)` stat labels.
-- `DeuceMate.xcodeproj/project.pbxproj` — `TARGETED_DEVICE_FAMILY` (a build-setting edit — one of the cases that genuinely needs a pbxproj change).
+- `DeuceMate/DeuceMate.xcodeproj/project.pbxproj` — `TARGETED_DEVICE_FAMILY` (a build-setting edit — one of the cases that genuinely needs a pbxproj change).
 
 ---
 
