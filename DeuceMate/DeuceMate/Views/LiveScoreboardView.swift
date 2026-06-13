@@ -441,9 +441,14 @@ struct LiveScoreboardView: View {
                     .frame(maxWidth: .infinity)
             }
 
-            // Game score column: tennis labels during regular play, raw count during tiebreak
+            // Game score column: tennis labels during regular play, tiebreak counter during tiebreak.
+            // currentPointsMe/Opponent are NOT updated by the tiebreak scorer — only
+            // SetScore.tieBreakPointsMe/Opponent are, so read from currentSet directly.
             if inTiebreak {
-                Text("\(forMe ? gamePoints : opponentPoints)")
+                let tbScore = forMe
+                    ? (currentSet?.tieBreakPointsMe ?? 0)
+                    : (currentSet?.tieBreakPointsOpponent ?? 0)
+                Text("\(tbScore)")
                     .font(.system(size: gameFont, weight: .heavy, design: .monospaced))
                     .foregroundStyle(color)
                     .minimumScaleFactor(0.5)
