@@ -100,7 +100,7 @@ private struct HRZoneWinRateChart: View {
                     y: .value("Win %", winPct(stat))
                 )
                 .foregroundStyle(HRZoneStyle.color(for: stat.zone))
-                .annotation(position: .top, alignment: .center) {
+                .annotation(position: .top, alignment: .center, spacing: 4) {
                     Text("\(stat.wins)/\(stat.total)")
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.secondary)
@@ -133,7 +133,7 @@ private struct HRZoneWinRateChart: View {
                     }
                 }
             }
-            .chartPlotStyle { $0.padding(.top, 16) }
+            .chartPlotStyle { $0.padding(.top, 20) }
             .frame(height: 170)
         }
         .padding(.vertical, 4)
