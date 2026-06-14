@@ -1,7 +1,11 @@
 # GitHub Pages configuration for the public DeuceMate site.
 # Served from the /docs folder on the default branch:
-#   index.html   -> support / landing page (App Store Support + Marketing URL)
-#   privacy.html -> privacy policy          (App Store Privacy Policy URL)
+#   index.html   -> marketing landing page  (App Store Marketing URL)
+#   try.html     -> interactive browser demo of the Apple Watch scorer
+#   support.html -> support / help page      (App Store Support URL)
+#   privacy.html -> privacy policy           (App Store Privacy Policy URL)
+#   assets/      -> site CSS/JS, the browser-scorer demo, and the app icon
+#   screenshots/ -> marketing screenshots shown on the landing page
 #
 # The internal feature-planning docs under docs/features/ are NOT part of the
 # public site and are excluded from the published build.

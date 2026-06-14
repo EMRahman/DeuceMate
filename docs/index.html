@@ -4,171 +4,449 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="index,follow">
-<title>DeuceMate · Tennis Scoring for Apple Watch — Support</title>
-<meta name="description" content="DeuceMate is a free, privacy-focused tennis scoring app for Apple Watch with an iPhone companion for live scores, spoken announcements, history, and stats. Get help and support here.">
-<style>
-  :root { --green:#2e7d32; --green2:#1b5e20; --ink:#14241a; --muted:#5b6b60; --line:#e2e8e3; --bg:#f7faf7; --card:#fff; }
-  * { box-sizing:border-box; }
-  body { margin:0; font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); }
-  .wrap { max-width:820px; margin:0 auto; padding:0 20px 64px; }
-  .hero { background:linear-gradient(135deg,#1b5e20,#2e7d32); color:#fff; border-radius:0 0 22px 22px; padding:40px 24px 34px; text-align:center; }
-  .hero .ball { font-size:46px; }
-  .hero h1 { margin:8px 0 6px; font-size:2.1rem; }
-  .hero p { margin:0 auto; max-width:560px; opacity:.95; }
-  .pills { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:18px; }
-  .pill { background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.28); color:#fff; border-radius:999px; padding:5px 13px; font-size:.86rem; }
-  nav.top { display:flex; flex-wrap:wrap; gap:8px 18px; justify-content:center; margin:22px 0 4px; font-size:.95rem; }
-  nav.top a { color:var(--green2); text-decoration:none; font-weight:600; }
-  nav.top a:hover { text-decoration:underline; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px 24px; margin:22px 0; }
-  h2 { font-size:1.3rem; margin:0 0 12px; color:var(--green2); }
-  h3 { font-size:1.04rem; margin:18px 0 4px; }
-  p, li { color:#243a2c; }
-  ul { padding-left:1.2rem; }
-  li { margin:5px 0; }
-  .kbd { display:inline-block; background:#eef3ef; border:1px solid #d7e2d8; border-radius:6px; padding:0 7px; font-weight:600; font-size:.92em; }
-  .faq dt { font-weight:700; margin-top:16px; }
-  .faq dd { margin:4px 0 0; }
-  a { color:var(--green); }
-  .btn { display:inline-block; background:var(--green); color:#fff; text-decoration:none; padding:11px 18px; border-radius:10px; font-weight:600; }
-  .btn:hover { background:var(--green2); }
-  footer { text-align:center; color:var(--muted); font-size:.9rem; margin-top:40px; }
-  footer a { color:var(--green); }
-  .muted { color:var(--muted); }
-</style>
+<meta name="theme-color" content="#080b0a">
+<title>DeuceMate — Tennis scoring, live on your wrist. Coaching, from your data.</title>
+<meta name="description" content="DeuceMate keeps score on your Apple Watch, mirrors it live on your iPhone, and turns every match into 20+ stats and one-tap AI coaching. Free forever. No ads. No tracking.">
+
+<!-- Open Graph / Twitter -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="DeuceMate — Tennis scoring, live on your wrist">
+<meta property="og:description" content="Score on Apple Watch. Watch it live on iPhone. Get 20+ stats and one-tap AI coaching. Free, private, offline.">
+<meta property="og:image" content="assets/deucemate-icon.png">
+<meta property="og:url" content="https://emrahman.github.io/DeuceMate/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="DeuceMate — Tennis scoring, live on your wrist">
+<meta name="twitter:description" content="Score on Apple Watch. Watch it live on iPhone. 20+ stats and one-tap AI coaching. Free & private.">
+<meta name="twitter:image" content="assets/deucemate-icon.png">
+
+<link rel="icon" type="image/png" href="assets/deucemate-logo.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="canonical" href="https://emrahman.github.io/DeuceMate/">
+<link rel="stylesheet" href="assets/site.css">
+<noscript><style>.reveal{opacity:1!important;transform:none!important}.nav-links{display:flex!important}</style></noscript>
 </head>
 <body>
-  <div class="hero">
-    <div class="ball">🎾</div>
-    <h1>DeuceMate</h1>
-    <p>A reliable, privacy-focused tennis scoring app for Apple Watch — with an iPhone companion for live scores, spoken announcements, match history, and detailed statistics.</p>
-    <div class="pills">
-      <span class="pill">Free · no ads</span>
-      <span class="pill">No data collection</span>
-      <span class="pill">Works offline</span>
-      <span class="pill">Singles &amp; doubles</span>
-    </div>
-  </div>
+<div class="mesh-grid" aria-hidden="true"></div>
 
-  <div class="wrap">
-    <nav class="top">
-      <a href="#getting-started">Getting Started</a>
+<!-- ====================== NAV ====================== -->
+<header class="nav" id="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top" aria-label="DeuceMate home">
+      <img class="logo" src="assets/deucemate-logo.png" alt="" width="34" height="34">
+      DeuceMate
+    </a>
+    <nav class="nav-links" id="nav-links" aria-label="Primary">
       <a href="#features">Features</a>
-      <a href="#troubleshooting">Troubleshooting</a>
+      <a href="#stats">Stats</a>
+      <a href="#ai-coach">AI Coach</a>
+      <a href="try.html">Try it</a>
+      <a href="#privacy">Privacy</a>
       <a href="#faq">FAQ</a>
-      <a href="#contact">Contact</a>
-      <a href="privacy.html">Privacy</a>
+      <a href="support.html">Support</a>
     </nav>
-
-    <div class="card" id="getting-started">
-      <h2>Getting Started</h2>
-      <h3>Start a match</h3>
-      <ul>
-        <li>Open DeuceMate on your Apple Watch and tap <strong>Start Match</strong>.</li>
-        <li>Choose singles or doubles, enter names (optional), and pick your match format.</li>
-        <li>Select who serves first, then start scoring.</li>
-      </ul>
-      <h3>Score on the watch</h3>
-      <ul>
-        <li><span class="kbd">Swipe up</span> — award a point to you</li>
-        <li><span class="kbd">Swipe down</span> — award a point to your opponent</li>
-        <li><span class="kbd">Swipe left</span> — undo the last point (full game-state rollback)</li>
-        <li><span class="kbd">Swipe right</span> — open the live stats view</li>
-        <li><span class="kbd">Double tap</span> — toggle second-serve context</li>
-      </ul>
-      <h3>Review on the iPhone</h3>
-      <ul>
-        <li>The iPhone companion shows a live scoreboard during a match, plus your full match history and detailed per-match and per-set statistics.</li>
-        <li>No account, no login — the app works fully offline.</li>
-      </ul>
+    <div class="nav-cta">
+      <a class="btn btn-primary" href="#get">Get DeuceMate</a>
+      <button class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-links">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
     </div>
-
-    <div class="card" id="features">
-      <h2>Key Features</h2>
-      <ul>
-        <li><strong>Automatic tennis scoring</strong> — points, games, sets, tiebreaks and super tiebreaks, with correct server rotation and side-change reminders.</li>
-        <li><strong>Multiple formats</strong> — best-of-3, full final set, super tiebreak, and more; singles and doubles with full service-order management.</li>
-        <li><strong>iPhone live scoreboard</strong> — mirrors the watch in real time over Apple's WatchConnectivity.</li>
-        <li><strong>Spoken score announcements (iPhone)</strong> — umpire-style calls while the app is open on screen. Keep DeuceMate in the foreground courtside; announcements pause if the phone is locked or the app is in the background. Routes through the iPhone speaker or a connected Bluetooth speaker.</li>
-        <li><strong>Statistics &amp; coaching insights</strong> — serve, return, break points, winners/errors, pressure points, rally depth, and an interactive points graph.</li>
-        <li><strong>Optional fitness tracking</strong> — link a HealthKit workout for live heart rate, calories, steps, distance, and heart-rate-zone stats. Entirely optional.</li>
-        <li><strong>Optional Court Compass</strong> — "Check Changeover" reads the watch's compass heading (no GPS, no location tracking) to show which end to take.</li>
-      </ul>
-    </div>
-
-    <div class="card" id="troubleshooting">
-      <h2>Troubleshooting</h2>
-      <h3>Spoken announcements aren't playing</h3>
-      <ul>
-        <li>Turn on <strong>Announce scores aloud</strong> in the iPhone app's Settings.</li>
-        <li>Keep the iPhone app <strong>open on screen</strong> during the match — announcements are foreground-only and pause when the phone is locked or the app is backgrounded.</li>
-        <li>Check the phone isn't on silent/low volume, and that the right Bluetooth speaker is connected.</li>
-      </ul>
-      <h3>The watch and iPhone aren't in sync</h3>
-      <ul>
-        <li>Make sure both devices are paired and the DeuceMate iPhone app is installed.</li>
-        <li>Open the iPhone app's Settings → sync diagnostics and tap <strong>Sync Now</strong> or <strong>Ping Watch</strong>.</li>
-        <li>Keep both devices nearby and unlocked while a live match is in progress.</li>
-      </ul>
-      <h3>Match state was lost</h3>
-      <ul>
-        <li>DeuceMate auto-saves an in-progress match when the app is backgrounded — reopen it to restore.</li>
-        <li>If the watch storage is full, the save may have failed.</li>
-      </ul>
-      <h3>Haptics aren't working</h3>
-      <ul>
-        <li>Confirm Haptic Feedback is enabled in DeuceMate Settings and in the Apple Watch system settings, and that the watch isn't in Theater Mode.</li>
-      </ul>
-    </div>
-
-    <div class="card faq" id="faq">
-      <h2>Frequently Asked Questions</h2>
-      <dl>
-        <dt>Does DeuceMate work offline?</dt>
-        <dd>Yes. DeuceMate works completely offline and makes no network requests.</dd>
-
-        <dt>Is my match data synced to the cloud?</dt>
-        <dd>Watch ↔ iPhone sync is on-device peer-to-peer over Apple's WatchConnectivity — no servers. The iPhone app also keeps a backup copy of your match archive in your personal iCloud Drive account (when iCloud is available), used only for fresh-install restore. No data is sent to any third-party servers.</dd>
-
-        <dt>Is there an iPhone app?</dt>
-        <dd>Yes — DeuceMate is an iPhone app with a bundled Apple Watch app. You score on the watch; the iPhone companion gives you a live scoreboard, spoken announcements, unlimited match history, and statistics.</dd>
-
-        <dt>Can I review past matches?</dt>
-        <dd>Yes. Every completed match is saved to an unlimited on-device history in the iPhone app, with full per-match and per-set statistics.</dd>
-
-        <dt>Can I back up or move my match history to a file?</dt>
-        <dd>Yes. In the iPhone app, Settings → Backup &amp; Transfer lets you <strong>Export Match Archive</strong> to a single full-fidelity file (it includes any heart rate, steps, distance, and calories you recorded) and <strong>Import Match Archive</strong> back — on the same phone or a new one. On import you choose how it combines with what's already there:
-          <ul>
-            <li><strong>Merge</strong> keeps your current matches and adds the ones from the file. If a match is in both, it keeps the more complete copy — so you won't lose health data or finished results — and brings back any match you'd previously deleted if it's in the file.</li>
-            <li><strong>Replace</strong> swaps your iPhone archive for exactly what's in the file. Matches not in the file are removed from the iPhone (though any still on your Apple Watch can sync back), so the app asks you to confirm first.</li>
-          </ul>
-          This is a manual file you control, and is separate from the automatic iCloud backup.</dd>
-
-        <dt>Does it work for doubles?</dt>
-        <dd>Yes — singles and doubles are both supported, with full four-player service rotation in doubles.</dd>
-
-        <dt>Can I use it for padel?</dt>
-        <dd>Yes. Padel uses the same game/set scoring structure as tennis, so DeuceMate keeps score for padel too (tennis-only rule tips won't all apply).</dd>
-
-        <dt>Are there subscriptions or in-app purchases?</dt>
-        <dd>No. DeuceMate is completely free — no subscriptions, no in-app purchases, and no ads.</dd>
-
-        <dt>How do I manage Health permissions?</dt>
-        <dd>Fitness features are optional. You can review or revoke DeuceMate's Health access any time in the Apple Watch Settings app or the iPhone Health app.</dd>
-      </dl>
-    </div>
-
-    <div class="card" id="contact">
-      <h2>Contact &amp; Feedback</h2>
-      <p>Have a question, suggestion, or found a bug? I'd love to hear from you.</p>
-      <p><a class="btn" href="mailto:mail@ehsanrahman.com?subject=DeuceMate%20Support">Email Support</a></p>
-      <p class="muted" style="margin-top:14px;">When reporting an issue, please include your iPhone and Apple Watch models, iOS/watchOS versions, and a description of the problem (screenshots help).</p>
-    </div>
-
-    <footer>
-      <p>© 2026 Ehsan Rahman · <a href="privacy.html">Privacy Policy</a> · <a href="mailto:mail@ehsanrahman.com">mail@ehsanrahman.com</a> · <a href="https://ehsanrahman.com">ehsanrahman.com</a></p>
-      <p>Built with ❤️ for tennis players worldwide 🎾</p>
-    </footer>
   </div>
+</header>
+
+<main id="top">
+
+  <!-- ====================== HERO ====================== -->
+  <section class="hero" id="hero">
+    <div class="wrap">
+      <span class="eyebrow reveal">🎾 For club &amp; recreational players</span>
+      <h1 class="reveal" data-d="1">Never lose track of the score <span class="grad-text">again</span>.</h1>
+      <p class="sub reveal" data-d="2">
+        DeuceMate keeps score on your Apple&nbsp;Watch with a flick of the wrist, mirrors it
+        live on your iPhone, and turns every match into clear stats and one-tap AI&nbsp;coaching —
+        so you can stop arguing about the score and start improving your game.
+      </p>
+      <div class="hero-actions reveal" data-d="2">
+        <a class="btn btn-primary" href="#get">Get DeuceMate</a>
+        <a class="btn btn-ghost" href="try.html">▶ Try it in your browser</a>
+        <a class="btn btn-ghost" href="#features">See how it works</a>
+      </div>
+      <p class="hero-note reveal" data-d="3">Free forever · No ads · No account · Works offline</p>
+
+      <div class="pills reveal" data-d="3">
+        <span class="pill"><span class="dot"></span> Apple Watch + iPhone</span>
+        <span class="pill"><span class="dot"></span> Singles &amp; doubles</span>
+        <span class="pill"><span class="dot"></span> 20+ match stats</span>
+        <span class="pill"><span class="dot"></span> One-tap AI coaching</span>
+        <span class="pill"><span class="dot"></span> No data collection</span>
+      </div>
+
+      <div class="hero-demo reveal" data-d="2">
+        <figure class="hero-shot" style="margin:0;">
+          <div class="watch" style="width:230px;max-width:78vw;margin:0 auto;">
+            <img src="screenshots/04-watch-scoreboard.png"
+                 alt="DeuceMate live scoreboard on Apple Watch — set, game and point scores with a colour-coded momentum strip."
+                 loading="lazy" width="396" height="484">
+          </div>
+          <p class="hero-demo-cap">Live scoring, right on your wrist. <a href="try.html">▶ Try the interactive browser demo →</a></p>
+        </figure>
+
+        <figure class="hero-shot" style="margin-top:34px;">
+          <p class="hero-demo-cap" style="margin:0 0 14px;">…and every point mirrors live onto your iPhone:</p>
+          <div class="device-landscape">
+            <img src="screenshots/01-hero-watch-iphone.png"
+                 alt="DeuceMate live scoreboard on iPhone showing a tight three-set match — you 6–3, opponent 7–1, with the live momentum strip below."
+                 loading="lazy" width="2556" height="1179">
+          </div>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== TRUST STRIP ====================== -->
+  <section class="trust" aria-label="Why players trust DeuceMate">
+    <div class="wrap">
+      <div class="trust-row reveal">
+        <span><strong>Zero</strong> third-party tracking</span>
+        <span class="trust-sep" aria-hidden="true"></span>
+        <span><strong>On-device</strong> watch ↔ phone sync</span>
+        <span class="trust-sep" aria-hidden="true"></span>
+        <span><strong>Unlimited</strong> match history</span>
+        <span class="trust-sep" aria-hidden="true"></span>
+        <span><strong>No</strong> subscriptions, ever</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== TRY-IT BAND ====================== -->
+  <section style="padding:36px 0;">
+    <div class="wrap">
+      <div class="cta-final reveal" style="padding:30px 26px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;text-align:left;">
+        <div>
+          <h2 style="font-size:clamp(1.3rem,3vw,1.7rem);">Curious how it feels? Try it now — no install.</h2>
+          <p style="margin-top:8px;">Play the actual watch scorer in your browser: tap or swipe to score across all six formats.</p>
+        </div>
+        <a class="btn btn-primary" href="try.html" style="flex:none;">▶ Launch the browser demo</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== PROBLEM → RELIEF ====================== -->
+  <section id="why">
+    <div class="wrap">
+      <div class="section-head center reveal">
+        <span class="eyebrow">Sound familiar?</span>
+        <h2 class="title">Three headaches every club player knows</h2>
+        <p class="lede">DeuceMate was built for the realities of weekend tennis — not the pro tour.</p>
+      </div>
+      <div class="cards-3">
+        <article class="card reveal">
+          <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+          <p class="pain">The problem</p>
+          <h3>“Wait… what's the score?”</h3>
+          <p>Mid-match memory fails everyone. A quick swipe on your wrist tracks points, games, sets, deuce, advantage and tiebreaks automatically — so the count is never in dispute.</p>
+        </article>
+        <article class="card reveal" data-d="1">
+          <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></div>
+          <p class="pain">The problem</p>
+          <h3>“Who's serving? Which end?”</h3>
+          <p>Server rotation, doubles service order, side-change reminders and a court-end compass are handled for you — no more pausing the match to work out the logistics.</p>
+        </article>
+        <article class="card reveal" data-d="2">
+          <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="4"/></svg></div>
+          <p class="pain">The problem</p>
+          <h3>“What should I actually work on?”</h3>
+          <p>Guesswork ends here. Every match becomes 20+ stats and a coaching prompt you can hand to ChatGPT, Claude or Gemini for honest, specific feedback.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== FEATURES ====================== -->
+  <section id="features">
+    <div class="wrap">
+      <div class="section-head center reveal">
+        <span class="eyebrow">How it works</span>
+        <h2 class="title">Score on your wrist. Relive it on your phone.</h2>
+        <p class="lede">Everything happens on the Apple&nbsp;Watch you already wear — and shows up beautifully on iPhone the moment the point is over.</p>
+      </div>
+
+      <!-- Feature 1 — Watch scoring -->
+      <div class="feature reveal">
+        <div class="feature-body">
+          <span class="eyebrow">On Apple Watch</span>
+          <h2>Gesture-first scoring that just keeps up</h2>
+          <p class="lede">No fiddly buttons. Flick the score with your thumb and get back to the point.</p>
+          <ul class="flist">
+            <li><strong>Swipe up / down</strong> <span>— award the point to you or your opponent.</span></li>
+            <li><strong>Swipe left to undo</strong> <span>— a full game-state rollback, even across set boundaries.</span></li>
+            <li><strong>Double-tap</strong> <span>— flag a second serve so double faults are counted correctly.</span></li>
+            <li><strong>Always glanceable</strong> <span>— big score, current server, and an 8-point momentum strip.</span></li>
+          </ul>
+        </div>
+        <div class="feature-media">
+          <div class="watch">
+            <img src="screenshots/04-watch-scoreboard.png"
+                 alt="DeuceMate on Apple Watch: a clean live scoreboard with the current game score, set scores and a coloured momentum strip."
+                 loading="lazy" width="396" height="484">
+          </div>
+        </div>
+      </div>
+
+      <!-- Feature 2 — iPhone stats -->
+      <div class="feature flip reveal">
+        <div class="feature-body">
+          <span class="eyebrow">On iPhone</span>
+          <h2>The match, broken down side by side</h2>
+          <p class="lede">A clear you-vs-opponent breakdown of where the match was really won and lost.</p>
+          <ul class="flist">
+            <li><strong>Serve &amp; return</strong> <span>— 1st/2nd serve in &amp; win %, return win %, double faults.</span></li>
+            <li><strong>Winners &amp; errors</strong> <span>— winners, unforced and forced errors, and your W:UE ratio.</span></li>
+            <li><strong>Break &amp; pressure points</strong> <span>— conversion, save rate, and how you hold up on the big points.</span></li>
+            <li><strong>Per match and per set</strong> <span>— filter every stat to spot exactly where momentum turned.</span></li>
+          </ul>
+        </div>
+        <div class="feature-media">
+          <div class="phone glow-green">
+            <img src="screenshots/03-match-stats.png"
+                 alt="iPhone match stats: you-versus-opponent split bars for winners, unforced errors, double faults, aggression index and serve percentages."
+                 loading="lazy" width="1179" height="2556">
+          </div>
+        </div>
+      </div>
+
+      <!-- Feature 3 — Momentum graph -->
+      <div class="feature reveal">
+        <div class="feature-body">
+          <span class="eyebrow">On iPhone</span>
+          <h2>See every momentum swing</h2>
+          <p class="lede">An interactive timeline plots every point, with optional heart-rate and step overlays so you can feel the match again.</p>
+          <ul class="flist">
+            <li><strong>Set bands &amp; outcome markers</strong> <span>— spot runs, collapses and turning points at a glance.</span></li>
+            <li><strong>Filter to points won or lost</strong> <span>— see where you took control, and where it slipped away.</span></li>
+            <li><strong>Point outcomes &amp; rally depth</strong> <span>— winners, unforced &amp; forced errors and double faults, plus how each point ends (serve, return, serve+1 or rally).</span></li>
+            <li><strong>Heart-rate &amp; steps overlays</strong> <span>— correlate your effort with the scoreboard (optional).</span></li>
+          </ul>
+          <p class="feat-tip">💡 The deeper outcome &amp; rally-depth analysis switches on with <strong>Track Point Outcome</strong> — just 2 extra taps per point, and a wealth of performance insight is unleashed.</p>
+        </div>
+        <div class="feature-media">
+          <div class="phone glow-blue">
+            <img src="screenshots/02-points-momentum-graph.png"
+                 alt="iPhone points-momentum graph: a point-by-point timeline with set bands, outcome markers and a heart-rate overlay."
+                 loading="lazy" width="1179" height="2556">
+          </div>
+        </div>
+      </div>
+
+      <!-- Points won / lost — the momentum graph filtered (sits under "See every momentum swing") -->
+      <div class="shot-strip cols-2 reveal">
+        <figure>
+          <div class="phone glow-green"><img src="screenshots/07-points-outcomes-won.png" alt="Points graph filtered to the points you won." loading="lazy" width="1179" height="2556"></div>
+          <figcaption>Points you won — where you took control.</figcaption>
+        </figure>
+        <figure>
+          <div class="phone glow-blue"><img src="screenshots/08-points-outcomes-lost.png" alt="Points graph filtered to the points you lost." loading="lazy" width="1179" height="2556"></div>
+          <figcaption>Points you lost — where it slipped away.</figcaption>
+        </figure>
+      </div>
+
+      <!-- Feature 4 — PulseCoach (heart-rate efficiency) -->
+      <div class="feature flip reveal">
+        <div class="feature-body">
+          <span class="eyebrow">On iPhone · PulseCoach</span>
+          <h2>Winning points — or just working harder?</h2>
+          <p class="lede">PulseCoach overlays your Apple&nbsp;Watch heart rate on the match and shows how your points are won relative to physical exertion — so you can tell controlled tennis from sheer effort, and see where your game could be more efficient.</p>
+          <ul class="flist">
+            <li><strong>Win&nbsp;% by heart-rate zone</strong> <span>— how often you take the point when you're composed versus when your heart is pounding.</span></li>
+            <li><strong>Effort vs. reward</strong> <span>— spot the points you only win by grinding, where a smarter pattern would close them out cheaply.</span></li>
+            <li><strong>Where fatigue bites</strong> <span>— find the zones and stretches where tiredness starts costing you points.</span></li>
+          </ul>
+        </div>
+        <div class="feature-media">
+          <div class="phone glow-blue">
+            <img src="screenshots/05-pulse-coach-hr-zones.png"
+                 alt="PulseCoach on iPhone: win percentage by heart-rate zone with a zone-banded heart-rate timeline across the match."
+                 loading="lazy" width="1179" height="2556">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== AI COACH SPOTLIGHT ====================== -->
+  <section class="spotlight" id="ai-coach">
+    <div class="wrap">
+      <div class="section-head center reveal">
+        <span class="eyebrow">✨ The DeuceMate difference</span>
+        <h2 class="title">An AI coach in your pocket — <span class="grad-text">on every match</span></h2>
+        <p class="quote" style="margin-left:auto;margin-right:auto;">
+          One tap turns your match into a coaching brief for <strong class="grad-text">ChatGPT, Claude or Gemini</strong> — honest, specific, and available the second you walk off court.
+        </p>
+      </div>
+
+      <div class="feature reveal">
+        <div class="feature-body">
+          <h2>More inspiration than the coach you pay for</h2>
+          <p class="lede">DeuceMate writes a prompt scoped to <em>your</em> level (beginner, intermediate or club) and packs in every stat and the full point-by-point record — patterns a courtside memory simply can't hold.</p>
+          <div class="coach-grid">
+            <div class="coach-item"><div class="n">01</div><h4>Biggest weakness</h4><p>The single most costly problem, pulled straight from the numbers.</p></div>
+            <div class="coach-item"><div class="n">02</div><h4>Hidden strength</h4><p>One thing going well — cited with the stat that proves it.</p></div>
+            <div class="coach-item"><div class="n">03</div><h4>Two tactical tweaks</h4><p>Practical in-match adjustments you can make next time out.</p></div>
+            <div class="coach-item"><div class="n">04</div><h4>One drill</h4><p>A single targeted drill — doable on a public court, no coach required.</p></div>
+          </div>
+          <div class="apps-row">
+            <span class="lbl">Opens in</span>
+            <span class="chip">ChatGPT</span>
+            <span class="chip">Claude</span>
+            <span class="chip">Gemini</span>
+            <span class="chip">…or any app via Share</span>
+          </div>
+        </div>
+        <div class="feature-media">
+          <div class="phone glow-green">
+            <img src="screenshots/09-ai-coach-launcher.png"
+                 alt="DeuceMate AI Coach screen: send your match stats to ChatGPT, Claude or Gemini, with a My Stats / Opponent's toggle."
+                 loading="lazy" width="1179" height="2556">
+          </div>
+        </div>
+      </div>
+
+      <div class="shot-strip cols-3 reveal">
+        <figure>
+          <div class="phone"><img src="screenshots/10-ai-coach-prompt.png" alt="The generated coaching prompt, ready to paste into any AI app." loading="lazy" width="1179" height="2556"></div>
+          <figcaption>A ready-to-paste coaching prompt</figcaption>
+        </figure>
+        <figure>
+          <div class="phone"><img src="screenshots/11-ai-coach-stats.png" alt="Match statistics included in the AI export." loading="lazy" width="1179" height="2556"></div>
+          <figcaption>Every stat, included automatically</figcaption>
+        </figure>
+        <figure>
+          <div class="phone"><img src="screenshots/12-ai-coach-raw-data.png" alt="The full point-by-point data table included in the AI export." loading="lazy" width="1179" height="2556"></div>
+          <figcaption>The full point-by-point record</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== STATS / DEPTH ====================== -->
+  <section id="stats">
+    <div class="wrap">
+      <div class="section-head center reveal">
+        <span class="eyebrow">Built for real matches</span>
+        <h2 class="title">Serious depth, zero fuss</h2>
+        <p class="lede">Whatever format your club throws at you, DeuceMate already knows the rules.</p>
+      </div>
+      <div class="grid-mini">
+        <div class="mini reveal"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg></div><h3>Six match formats</h3><p>Best-of-3, full final set, super tiebreak, quick four, and perpetual modes for practice.</p></div>
+        <div class="mini reveal" data-d="1"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M3 20c0-3 2.5-5 5-5s5 2 5 5M13 20c0-3 2.5-5 5-5"/></svg></div><h3>Singles &amp; doubles</h3><p>Full four-player service rotation in doubles, tracked automatically every game.</p></div>
+        <div class="mini reveal" data-d="2"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></div><h3>Undo anything</h3><p>Roll back to any point with the complete game state restored — score, server and all.</p></div>
+        <div class="mini reveal"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 19 21 12 17 5 21 12 2"/></svg></div><h3>Court compass</h3><p>“Check Changeover” reads the watch compass to show which end to take. No GPS.</p></div>
+        <div class="mini reveal" data-d="1"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-8-8"/><path d="M12 6v6l4 2"/></svg></div><h3>Live announcements</h3><p>Your iPhone calls the score out loud, umpire-style, while the app is open courtside.</p></div>
+        <div class="mini reveal" data-d="2"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><h3>Heart-rate insights</h3><p>Optional HealthKit workout adds live HR, calories, distance and win-rate by HR zone.</p></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ====================== THEMES ====================== -->
+  <section id="themes">
+    <div class="wrap">
+      <div class="section-head center reveal">
+        <span class="eyebrow">🎨 A bit of fun</span>
+        <h2 class="title">Dress the app for your court</h2>
+        <p class="lede">Five court-inspired themes, so the app feels right at home wherever you're playing — from red clay to a floodlit night match. Pick one; it syncs across your Watch and iPhone.</p>
+      </div>
+      <div class="theme-cards reveal">
+        <div class="theme-card"><span class="sw" style="background:#2fd08a"></span><span class="tx"><span class="nm">Classic</span><span class="ct">The original green</span></span></div>
+        <div class="theme-card"><span class="sw" style="background:#f5852c"></span><span class="tx"><span class="nm">Clay</span><span class="ct">Red-dirt clay</span></span></div>
+        <div class="theme-card"><span class="sw" style="background:#8c39c6"></span><span class="tx"><span class="nm">Grass</span><span class="ct">Summer grass</span></span></div>
+        <div class="theme-card"><span class="sw" style="background:#249bf0"></span><span class="tx"><span class="nm">Hard Court</span><span class="ct">Hard-court blue</span></span></div>
+        <div class="theme-card"><span class="sw" style="background:#3357eb"></span><span class="tx"><span class="nm">Hard Court Night</span><span class="ct">Under the floodlights</span></span></div>
+      </div>
+      <figure class="hero-shot reveal" style="margin-top:38px;max-width:520px;">
+        <div class="phone glow-green" style="width:260px;margin:0 auto;">
+          <img src="screenshots/06-themes.png" alt="DeuceMate shown across its five court-inspired colour themes — Classic green, Clay orange, Grass purple, and Hard Court blues." loading="lazy" width="1179" height="2556">
+        </div>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ====================== PRIVACY ====================== -->
+  <section class="privacy" id="privacy">
+    <div class="wrap">
+      <div class="section-head center reveal">
+        <span class="eyebrow">Privacy first, always</span>
+        <h2 class="title">Your matches stay yours</h2>
+        <p class="lede">No account. No analytics. No servers. DeuceMate makes no network requests of its own — your data lives on your devices.</p>
+      </div>
+      <div class="badges reveal">
+        <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> No data collection</div>
+        <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14 0M8.5 16a6 6 0 0 1 7 0"/><line x1="12" y1="20" x2="12" y2="20"/></svg> Works fully offline</div>
+        <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> On-device sync</div>
+        <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6"/><path d="M12 2v14M7 9l5 5 5-5"/></svg> Your own iCloud backup</div>
+      </div>
+      <p class="lede reveal" style="text-align:center;margin-top:24px;font-size:.98rem;">
+        Watch ↔ iPhone sync uses Apple's WatchConnectivity (peer-to-peer, no cloud). HealthKit and compass data are used on-device only and never transmitted.
+        Read the full <a href="privacy.html" style="color:var(--green)">privacy policy</a>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ====================== FAQ ====================== -->
+  <section id="faq">
+    <div class="wrap">
+      <div class="section-head center reveal">
+        <span class="eyebrow">Good to know</span>
+        <h2 class="title">Frequently asked questions</h2>
+      </div>
+      <div class="faq-list">
+        <details class="faq reveal"><summary>Is DeuceMate really free?<span class="plus" aria-hidden="true"></span></summary><div class="body">Yes — completely free for unlimited match tracking. No subscriptions, no in-app purchases, no ads, ever.</div></details>
+        <details class="faq reveal"><summary>What do I need to use it?<span class="plus" aria-hidden="true"></span></summary><div class="body">An iPhone on iOS 17 or later and an Apple Watch on watchOS 9 or later (Series 4 or newer, SE, or any Ultra). You score on the watch; the iPhone is your live viewer and archive.</div></details>
+        <details class="faq reveal"><summary>Does it work for doubles and padel?<span class="plus" aria-hidden="true"></span></summary><div class="body">Yes to both. Doubles includes full four-player service rotation. Padel shares tennis's game/set scoring, so DeuceMate keeps score for it too (some tennis-specific tips won't all apply).</div></details>
+        <details class="faq reveal"><summary>Do I need the AI coaching feature to use the app?<span class="plus" aria-hidden="true"></span></summary><div class="body">Not at all. Scoring, live viewing and stats work on their own. The AI Coach is an optional one-tap export — you choose to hand your own match data to ChatGPT, Claude, Gemini or any app via Share.</div></details>
+        <details class="faq reveal"><summary>Is my data sent to a server?<span class="plus" aria-hidden="true"></span></summary><div class="body">No. The app has no servers and collects no data. Watch ↔ iPhone sync is on-device peer-to-peer. An optional backup of your archive can go to your own iCloud Drive (for fresh-install restore only) — never to us.</div></details>
+        <details class="faq reveal"><summary>How do the spoken announcements work?<span class="plus" aria-hidden="true"></span></summary><div class="body">When enabled, your iPhone speaks the score umpire-style while the app is open on screen courtside, through the phone speaker or a Bluetooth speaker. They pause if the phone is locked or the app is backgrounded.</div></details>
+      </div>
+      <p class="lede reveal" style="text-align:center;margin-top:28px;">More questions? Visit the <a href="support.html" style="color:var(--green)">full support page</a>.</p>
+    </div>
+  </section>
+
+  <!-- ====================== FINAL CTA ====================== -->
+  <section id="get">
+    <div class="wrap">
+      <div class="cta-final reveal">
+        <span class="eyebrow">🚧 Coming soon</span>
+        <h2>Walk on court with a clear head.</h2>
+        <p>DeuceMate is an iPhone app with a bundled Apple&nbsp;Watch app. Free forever, no ads, no tracking — just the score, the stats, and a coach in your pocket.</p>
+        <div class="hero-actions" style="margin-top:28px;">
+          <!-- Not yet downloadable — pending App Store review. Swap for the real App Store link on approval. -->
+          <span class="btn btn-disabled" role="button" aria-disabled="true" title="Pending App Store review — not yet available">Coming soon to the App Store</span>
+          <a class="btn btn-ghost" href="support.html">Read the user guide</a>
+        </div>
+        <p class="hero-note" style="margin-top:18px;">Pending App Store submission · iOS 17+ · watchOS 9+ · Apple Watch Series 4 or later, SE, or Ultra</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ====================== FOOTER ====================== -->
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <a class="brand" href="#top">
+      <img class="logo" src="assets/deucemate-logo.png" alt="" width="30" height="30" style="width:30px;height:30px;">
+      DeuceMate
+    </a>
+    <nav class="footer-links" aria-label="Footer">
+      <a href="#features">Features</a>
+      <a href="#ai-coach">AI Coach</a>
+      <a href="support.html">Support</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="mailto:mail@ehsanrahman.com">Contact</a>
+      <a href="https://ehsanrahman.com" target="_blank" rel="noopener">ehsanrahman.com</a>
+    </nav>
+    <p class="fine">© 2026 Ehsan Rahman · Built with ❤️ for tennis players worldwide 🎾 · DeuceMate is not affiliated with Apple Inc. Apple, Apple Watch and the App Store are trademarks of Apple Inc.</p>
+  </div>
+</footer>
+
+<script src="assets/site.js" defer></script>
 </body>
 </html>
