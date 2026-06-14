@@ -77,7 +77,7 @@ private struct OutcomeStep: View {
             .background(RoundedRectangle(cornerRadius: 8).fill(bannerTint))
 
             ScrollView {
-                VStack(spacing: 4) {
+                VStack(spacing: 3) {
                     ForEach(selectableOutcomes) { outcome in
                         Button {
                             viewModel.selectOutcome(outcome)
@@ -86,7 +86,7 @@ private struct OutcomeStep: View {
                             Text(outcome.displayLabel)
                                 .font(.footnote.weight(.semibold))
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 3)
+                                .padding(.vertical, 2)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(outcome.tintColor)
@@ -194,7 +194,7 @@ private struct EndingShotStep: View {
             )
 
             ScrollView {
-                VStack(spacing: 4) {
+                VStack(spacing: 3) {
                     ForEach(pills, id: \.0) { (shot, label) in
                         Button {
                             viewModel.commitEndingShot(shot)
@@ -203,7 +203,7 @@ private struct EndingShotStep: View {
                             Text(label)
                                 .font(.footnote.weight(.semibold))
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 3)
+                                .padding(.vertical, 2)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.blue)
@@ -256,6 +256,6 @@ private struct UndoPointButton: View {
         }
         .buttonStyle(.bordered)
         .tint(.gray)
-        .padding(.top, 4)
+        .padding(.top, 2)
     }
 }
