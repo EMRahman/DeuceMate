@@ -46,6 +46,14 @@ private struct OutcomeStep: View {
         }
     }
 
+    /// Outcomes chunked into rows of two so the grid lays out two buttons per
+    /// row. A trailing odd button stretches to fill the full row width.
+    private var outcomeRows: [[PointOutcome]] {
+        stride(from: 0, to: selectableOutcomes.count, by: 2).map {
+            Array(selectableOutcomes[$0..<min($0 + 2, selectableOutcomes.count)])
+        }
+    }
+
     private var bannerTint: Color {
         iWon
             ? Color(red: 0.13, green: 0.28, blue: 0.18)
@@ -77,17 +85,21 @@ private struct OutcomeStep: View {
             .background(RoundedRectangle(cornerRadius: 8).fill(bannerTint))
 
             VStack(spacing: 4) {
-                ForEach(selectableOutcomes) { outcome in
-                    Button {
-                        viewModel.selectOutcome(outcome)
-                        if viewModel.pendingStatPoint == nil { onCommit() }
-                    } label: {
-                        Text(outcome.displayLabel)
-                            .font(.footnote.weight(.semibold))
+                ForEach(Array(outcomeRows.enumerated()), id: \.offset) { _, row in
+                    HStack(spacing: 4) {
+                        ForEach(row) { outcome in
+                            Button {
+                                viewModel.selectOutcome(outcome)
+                                if viewModel.pendingStatPoint == nil { onCommit() }
+                            } label: {
+                                Text(outcome.displayLabel)
+                                    .font(.footnote.weight(.semibold))
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(outcome.tintColor)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(outcome.tintColor)
                 }
 
                 UndoPointButton {
@@ -98,7 +110,7 @@ private struct OutcomeStep: View {
             .frame(maxHeight: .infinity)
         }
         .padding(.horizontal, 4)
-        .padding(.top, 2)
+        .padding(.top, 8)
     }
 }
 
@@ -154,6 +166,14 @@ private struct EndingShotStep: View {
         }
     }
 
+    /// Pills chunked into rows of two so the grid lays out two buttons per row.
+    /// A trailing odd pill stretches to fill the full row width.
+    private var pillRows: [[(EndingShot, String)]] {
+        stride(from: 0, to: pills.count, by: 2).map {
+            Array(pills[$0..<min($0 + 2, pills.count)])
+        }
+    }
+
     var body: some View {
         VStack(spacing: 4) {
             HStack(alignment: .center, spacing: 5) {
@@ -191,17 +211,21 @@ private struct EndingShotStep: View {
             )
 
             VStack(spacing: 4) {
-                ForEach(pills, id: \.0) { (shot, label) in
-                    Button {
-                        viewModel.commitEndingShot(shot)
-                        onCommit()
-                    } label: {
-                        Text(label)
-                            .font(.footnote.weight(.semibold))
+                ForEach(Array(pillRows.enumerated()), id: \.offset) { _, row in
+                    HStack(spacing: 4) {
+                        ForEach(row, id: \.0) { (shot, label) in
+                            Button {
+                                viewModel.commitEndingShot(shot)
+                                onCommit()
+                            } label: {
+                                Text(label)
+                                    .font(.footnote.weight(.semibold))
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.blue)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
                 }
 
                 UndoPointButton {
@@ -212,7 +236,7 @@ private struct EndingShotStep: View {
             .frame(maxHeight: .infinity)
         }
         .padding(.horizontal, 4)
-        .padding(.top, 2)
+        .padding(.top, 8)
     }
 }
 
