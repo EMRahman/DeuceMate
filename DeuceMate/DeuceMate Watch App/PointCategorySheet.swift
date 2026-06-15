@@ -13,6 +13,11 @@ import DeuceMateCore
 /// button rolls back the entire score change AND drops any pending stat;
 /// it appears on both steps because the underlying drag-to-undo gesture is
 /// unreachable while the modal is up.
+///
+/// Tapping a button does not commit instantly: the chosen button shows a
+/// checkmark and the others dim for `commitDelay`, then the selection is
+/// applied. This gives a beat of visual confirmation so a mis-tap is noticed
+/// (and undone) rather than silently committed.
 struct PointCategorySheet: View {
     @EnvironmentObject var viewModel: ScoreViewModel
     let pending: PendingPointInfo
@@ -34,6 +39,11 @@ private struct OutcomeStep: View {
     @EnvironmentObject var viewModel: ScoreViewModel
     let pending: PendingPointInfo
     let onCommit: () -> Void
+
+    /// The outcome the user just tapped. While set, the chosen button shows a
+    /// checkmark and the others dim for a brief beat (`commitDelay`) before the
+    /// selection is actually applied — visual confirmation in case of a mis-tap.
+    @State private var selectedOutcome: PointOutcome?
 
     private var iWon: Bool { pending.winner == .me }
     private var iServed: Bool { pending.server == .me }
@@ -89,8 +99,14 @@ private struct OutcomeStep: View {
                     HStack(spacing: 4) {
                         ForEach(row) { outcome in
                             Button {
-                                viewModel.selectOutcome(outcome)
-                                if viewModel.pendingStatPoint == nil { onCommit() }
+                                guard selectedOutcome == nil else { return }
+                                withAnimation(.easeOut(duration: 0.12)) {
+                                    selectedOutcome = outcome
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + commitDelay) {
+                                    viewModel.selectOutcome(outcome)
+                                    if viewModel.pendingStatPoint == nil { onCommit() }
+                                }
                             } label: {
                                 Text(outcome.displayLabel)
                                     .font(.footnote.weight(.semibold))
@@ -98,6 +114,9 @@ private struct OutcomeStep: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(outcome.tintColor)
+                            .chosenFeedback(isChosen: selectedOutcome == outcome,
+                                            anyChosen: selectedOutcome != nil)
+                            .disabled(selectedOutcome != nil && selectedOutcome != outcome)
                         }
                     }
                 }
@@ -106,6 +125,7 @@ private struct OutcomeStep: View {
                     viewModel.undo()
                     onCommit()
                 }
+                .disabled(selectedOutcome != nil)
             }
             .frame(maxHeight: .infinity)
         }
@@ -121,6 +141,10 @@ private struct EndingShotStep: View {
     let pending: PendingPointInfo
     let outcome: PointOutcome
     let onCommit: () -> Void
+
+    /// The ending shot the user just tapped — drives the brief "chosen"
+    /// confirmation before the point is committed and the sheet dismisses.
+    @State private var selectedShot: EndingShot?
 
     /// The header question shown above the pill buttons, tailored to the outcome.
     ///
@@ -185,6 +209,7 @@ private struct EndingShotStep: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.leading, 2)
+                .disabled(selectedShot != nil)
 
                 Spacer()
 
@@ -215,8 +240,14 @@ private struct EndingShotStep: View {
                     HStack(spacing: 4) {
                         ForEach(row, id: \.0) { (shot, label) in
                             Button {
-                                viewModel.commitEndingShot(shot)
-                                onCommit()
+                                guard selectedShot == nil else { return }
+                                withAnimation(.easeOut(duration: 0.12)) {
+                                    selectedShot = shot
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + commitDelay) {
+                                    viewModel.commitEndingShot(shot)
+                                    onCommit()
+                                }
                             } label: {
                                 Text(label)
                                     .font(.footnote.weight(.semibold))
@@ -224,6 +255,9 @@ private struct EndingShotStep: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(.blue)
+                            .chosenFeedback(isChosen: selectedShot == shot,
+                                            anyChosen: selectedShot != nil)
+                            .disabled(selectedShot != nil && selectedShot != shot)
                         }
                     }
                 }
@@ -232,6 +266,7 @@ private struct EndingShotStep: View {
                     viewModel.undo()
                     onCommit()
                 }
+                .disabled(selectedShot != nil)
             }
             .frame(maxHeight: .infinity)
         }
@@ -263,6 +298,28 @@ struct PointCategorySheetPrewarm: View {
 }
 
 // MARK: - Shared bits
+
+/// How long the chosen button stays highlighted before the selection is applied
+/// and the sheet advances/dismisses. Matches the changeover-overlay scheduling in
+/// `ScoreViewModel.commitPointStat`, so it reads as one deliberate beat.
+private let commitDelay: TimeInterval = 0.4
+
+private extension View {
+    /// Brief "you chose this" treatment: a checkmark badge on the chosen button
+    /// and dimming of the others while the selection settles.
+    func chosenFeedback(isChosen: Bool, anyChosen: Bool) -> some View {
+        overlay(alignment: .topTrailing) {
+            if isChosen {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(3)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .opacity(anyChosen && !isChosen ? 0.35 : 1)
+    }
+}
 
 private struct UndoPointButton: View {
     let action: () -> Void
