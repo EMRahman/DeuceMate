@@ -84,10 +84,10 @@ private struct OutcomeStep: View {
                     } label: {
                         Text(outcome.displayLabel)
                             .font(.footnote.weight(.semibold))
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(outcome.tintColor)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
 
                 UndoPointButton {
@@ -198,10 +198,10 @@ private struct EndingShotStep: View {
                     } label: {
                         Text(label)
                             .font(.footnote.weight(.semibold))
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.blue)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
 
                 UndoPointButton {
