@@ -76,29 +76,26 @@ private struct OutcomeStep: View {
             .padding(.vertical, 3)
             .background(RoundedRectangle(cornerRadius: 8).fill(bannerTint))
 
-            ScrollView {
-                VStack(spacing: 3) {
-                    ForEach(selectableOutcomes) { outcome in
-                        Button {
-                            viewModel.selectOutcome(outcome)
-                            if viewModel.pendingStatPoint == nil { onCommit() }
-                        } label: {
-                            Text(outcome.displayLabel)
-                                .font(.footnote.weight(.semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 2)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(outcome.tintColor)
+            VStack(spacing: 4) {
+                ForEach(selectableOutcomes) { outcome in
+                    Button {
+                        viewModel.selectOutcome(outcome)
+                        if viewModel.pendingStatPoint == nil { onCommit() }
+                    } label: {
+                        Text(outcome.displayLabel)
+                            .font(.footnote.weight(.semibold))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(outcome.tintColor)
+                }
 
-                    UndoPointButton {
-                        viewModel.undo()
-                        onCommit()
-                    }
+                UndoPointButton {
+                    viewModel.undo()
+                    onCommit()
                 }
             }
-            .scrollIndicators(.hidden)
+            .frame(maxHeight: .infinity)
         }
         .padding(.horizontal, 4)
         .padding(.top, 2)
@@ -193,29 +190,26 @@ private struct EndingShotStep: View {
                     .fill(outcome.tintColor.opacity(0.30))
             )
 
-            ScrollView {
-                VStack(spacing: 3) {
-                    ForEach(pills, id: \.0) { (shot, label) in
-                        Button {
-                            viewModel.commitEndingShot(shot)
-                            onCommit()
-                        } label: {
-                            Text(label)
-                                .font(.footnote.weight(.semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 2)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.blue)
-                    }
-
-                    UndoPointButton {
-                        viewModel.undo()
+            VStack(spacing: 4) {
+                ForEach(pills, id: \.0) { (shot, label) in
+                    Button {
+                        viewModel.commitEndingShot(shot)
                         onCommit()
+                    } label: {
+                        Text(label)
+                            .font(.footnote.weight(.semibold))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                }
+
+                UndoPointButton {
+                    viewModel.undo()
+                    onCommit()
                 }
             }
-            .scrollIndicators(.hidden)
+            .frame(maxHeight: .infinity)
         }
         .padding(.horizontal, 4)
         .padding(.top, 2)
