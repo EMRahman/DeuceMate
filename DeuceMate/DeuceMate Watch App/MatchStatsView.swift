@@ -131,6 +131,27 @@ struct MatchStatsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
+                // Surfaced right under the score so an in-progress match can be
+                // resumed without scrolling past the stats below.
+                if let record = resumableRecord, record.isInProgress {
+                    Button {
+                        if hasConflictingLiveMatch {
+                            showResumeConflictAlert = true
+                        } else {
+                            viewModel.resumeMatch(record)
+                            dismiss()
+                        }
+                    } label: {
+                        Label("Resume this match", systemImage: "play.fill")
+                            .font(.caption.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+                    .padding(.vertical, 4)
+                }
+
                 if shouldShowStatControls && availableSetFilters.count > 1 {
                     HStack(spacing: 4) {
                         ForEach(availableSetFilters, id: \.self) { f in
@@ -161,25 +182,6 @@ struct MatchStatsView: View {
                         .padding(.vertical, 12)
                 } else {
                     tvStatRows
-                }
-
-                if let record = resumableRecord, record.isInProgress {
-                    Button {
-                        if hasConflictingLiveMatch {
-                            showResumeConflictAlert = true
-                        } else {
-                            viewModel.resumeMatch(record)
-                            dismiss()
-                        }
-                    } label: {
-                        Label("Resume this match", systemImage: "play.fill")
-                            .font(.caption.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 4)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.green)
-                    .padding(.top, 8)
                 }
             }
             .padding(.horizontal, 6)
