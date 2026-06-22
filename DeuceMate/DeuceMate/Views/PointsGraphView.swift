@@ -130,6 +130,10 @@ private struct PointsGraphData {
     /// hide phases (and the whole section) that have no ending-shot data.
     let endingWonByPhase: [EndingShot: Int]
     let endingLostByPhase: [EndingShot: Int]
+    /// Total outcome counts for the focal player (Me) across the whole match.
+    let myOutcomeCounts: [OutcomeCategory: Int]
+    /// Total outcome counts attributed to the opponent across the whole match.
+    let oppOutcomeCounts: [OutcomeCategory: Int]
     /// (me, opp) cumulative score at each pointIndex from 0…stats.count.
     /// Pre-computed so the selection summary can look up totals in O(1) per
     /// touch frame without re-walking the line series.
@@ -177,6 +181,8 @@ private struct PointsGraphData {
         var hasOutcome = false
         var endWon: [EndingShot: Int] = [:]
         var endLost: [EndingShot: Int] = [:]
+        var myOutcomes: [OutcomeCategory: Int] = [:]
+        var oppOutcomes: [OutcomeCategory: Int] = [:]
 
         var bands: [SetBand] = []
         var bandStart: Int = 0
@@ -197,6 +203,15 @@ private struct PointsGraphData {
             if let es = stat.endingShot {
                 if stat.winner == .me { endWon[es, default: 0] += 1 }
                 else                  { endLost[es, default: 0] += 1 }
+            }
+
+            for category in OutcomeCategory.allCases {
+                if Self.matchesOutcome(category, stat: stat, focal: .me) {
+                    myOutcomes[category, default: 0] += 1
+                }
+                if Self.matchesOutcome(category, stat: stat, focal: .opponent) {
+                    oppOutcomes[category, default: 0] += 1
+                }
             }
 
             let x = i + 1
@@ -306,6 +321,8 @@ private struct PointsGraphData {
         self.hasOutcomeData = hasOutcome
         self.endingWonByPhase = endWon
         self.endingLostByPhase = endLost
+        self.myOutcomeCounts = myOutcomes
+        self.oppOutcomeCounts = oppOutcomes
 
         if hr.isEmpty {
             self.hrDomain = 50...200
@@ -735,6 +752,8 @@ private struct PointsGraphScatterControls: View {
     @Binding var selectedLostEndingShots: Set<EndingShot>
     let wonByPhase: [EndingShot: Int]
     let lostByPhase: [EndingShot: Int]
+    let myOutcomeCounts: [OutcomeCategory: Int]
+    let oppOutcomeCounts: [OutcomeCategory: Int]
 
     private var isPointsWonActive: Bool {
         selectedMyOutcomes == [.winner] &&
@@ -828,7 +847,7 @@ private struct PointsGraphScatterControls: View {
                     items: OutcomeCategory.allCases,
                     isSelected: { selectedMyOutcomes.contains($0) },
                     toggle: { selectedMyOutcomes.formSymmetricDifference([$0]) },
-                    label: { $0.label },
+                    label: { "\($0.label) \(myOutcomeCounts[$0] ?? 0)" },
                     color: { $0.color }
                 )
                 chipRow(
@@ -836,7 +855,7 @@ private struct PointsGraphScatterControls: View {
                     items: OutcomeCategory.allCases,
                     isSelected: { selectedOpponentOutcomes.contains($0) },
                     toggle: { selectedOpponentOutcomes.formSymmetricDifference([$0]) },
-                    label: { $0.label },
+                    label: { "\($0.label) \(oppOutcomeCounts[$0] ?? 0)" },
                     color: { $0.color }
                 )
             }
@@ -1456,7 +1475,9 @@ struct ExpandedPointsGraphView: View {
                         selectedWonEndingShots: $selectedWonEndingShots,
                         selectedLostEndingShots: $selectedLostEndingShots,
                         wonByPhase: data.endingWonByPhase,
-                        lostByPhase: data.endingLostByPhase
+                        lostByPhase: data.endingLostByPhase,
+                        myOutcomeCounts: data.myOutcomeCounts,
+                        oppOutcomeCounts: data.oppOutcomeCounts
                     )
                 }
 
