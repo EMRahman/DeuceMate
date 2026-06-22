@@ -43,7 +43,7 @@ matches; it does not score them (except by sending validated commands to the wat
 | File | ~Lines | What it does | Feature(s) |
 |---|---:|---|---|
 | `Views/PointsGraphView.swift` | 1,525 | The interactive match chart: points momentum over time with optional overlays for point outcomes, heart rate and steps; pinch-zoom, fullscreen, touch-to-inspect. | Stats & graphs |
-| `Views/MatchDetailView.swift` | 1,015 | One match's detail page: score summary, stats tabs, the graph, coaching sections, storage-location and iCloud badges, and the export / AI-coach actions. | Stats, AI export, archive |
+| `Views/MatchDetailView.swift` | ~1,055 | One match's detail page: score summary, stats tabs, the graph, coaching sections, storage-location and iCloud badges, and the export / AI-coach actions — including "Share Interactive Web Page", a self-contained `.html` file (built off-thread, shared via the system share sheet) the opponent can open in any browser. | Stats, AI export, web export, archive |
 | `Views/PastMatchesView.swift` | 705 | The archive list: all matches newest-first, live-match row, badges showing whether a match lives on the watch, the phone, or both; swipe-to-delete; pull a watch-only match to the phone; free up watch space. | Archive, sync |
 | `Views/LiveScoreboardView.swift` | 490 | Full-screen landscape scoreboard for spectators, fed live from the watch. With "iPhone Input" on, swipes here send score commands to the watch. | Live scoreboard, iPhone input |
 | `Views/SettingsView.swift` | 752 | Settings screen: watch pairing/sync status, announcements, theme, outcome tracking, changeover compass, heart-rate settings, player name, skill level (NTRP), manual archive export/import, iCloud backup, About (version + tappable privacy-policy / support / contact links). | Settings, manual archive backup |
@@ -62,7 +62,7 @@ matches; it does not score them (except by sending validated commands to the wat
 | `DeuceMateApp.swift` | 50 | The iPhone app's entry point: wires up the archive store, sync service and announcer; resumes initial restore or backup push whenever the app returns to the foreground. | App plumbing |
 | `ContentView.swift` | 15 | The navigation root — essentially just opens the archive list. | App plumbing |
 
-## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (22 files)
+## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (27 files)
 
 The rulebook both apps use. No screens; pure logic — which makes it the cheapest
 place to test and the safest place to change.
@@ -91,6 +91,11 @@ place to test and the safest place to change.
 | `Settings/SettingsCopy.swift` | 40 | The one-line description under every setting, written once so the watch and phone settings screens can't show different wording. | Settings |
 | `Settings/ICloudBackupCopy.swift` | ~95 | The iCloud backup status line and the rule for choosing it. Six cases: `backedUp`, `notBackedUp`, `unavailable`, `restoring`, `pendingRestore` (backup found, user prompt pending), `pendingUpload` (pushed but daemon upload not yet confirmed). `current(isEnabled:isAvailable:isRestoring:hasPendingRestore:isUploaded:)`. | iCloud backup |
 | `Persistence/StatsStoring.swift` | 25 | The tiny storage contract (load/save/append/remove) that the watch's and phone's stores both implement. | Archive, match history |
+| `WebExport/MatchWebViewModel.swift` | ~290 | The clean, `Encodable`, perspective-flattened JSON shape the self-contained HTML match export renders from: meta, both me/opponent stat perspectives, a perspective-neutral point list, set bands, and the recorder-only HR/steps blocks. All derivation stays in tested Swift. | Web export |
+| `WebExport/MatchWebViewModel+Build.swift` | ~330 | The pure builder behind `MatchWebViewModel.make` — mirrors `MatchExporter`'s section structure and recorder-only-HR rule but emits structured rows; also score/format/duration/game-score helpers. | Web export |
+| `WebExport/WebExportColors.swift` | ~110 | Single source of the export's colours/symbols (outcome scatter, ending-shot scatter, set bands, me/opponent lines, HR/steps), kept in step with `PointsGraphView`'s palette so the browser viewer never re-encodes it. | Web export |
+| `WebExport/MatchWebTemplate.swift` | ~430 | The viewer itself as Swift raw-string constants (HTML skeleton + CSS + dependency-free SVG/JS): momentum step lines, set bands, outcome/ending-shot scatter with toggle chips, recorder-only HR/steps overlays, point selection, me⇄opponent toggle, stat cards. No chart library, no CDN, no network. | Web export |
+| `WebExport/MatchHTMLExporter.swift` | ~55 | Assembles ONE self-contained, offline HTML document for a match: encodes the view model and injects it (script-safely) into the template. Pure and unit-testable. | Web export |
 
 Plus `Package.swift` (~25 lines) — the package manifest (name, platforms, test target). No logic.
 
@@ -100,7 +105,7 @@ Tests are the correctness record. The interesting ones all live against the shar
 package (no simulator needed). Red flags in any PR: tests deleted, skipped, or
 expected values rewritten to make a failure pass — that requires explicit approval.
 
-**Package tests — `DeuceMate/Packages/DeuceMateCore/Tests/DeuceMateCoreTests/` (22 files):**
+**Package tests — `DeuceMate/Packages/DeuceMateCore/Tests/DeuceMateCoreTests/` (23 files):**
 
 | File | Covers |
 |---|---|
@@ -118,6 +123,7 @@ expected values rewritten to make a failure pass — that requires explicit appr
 | `HRZoneTests.swift` / `SetActivitySplitTests.swift` | HR zone boundaries; per-set splits. |
 | `SettingsCopyTests.swift` / `ICloudBackupCopyTests.swift` | Settings blurbs and the iCloud status rule. |
 | `SimulatedGameStatsTests.swift` | Simulates realistic whole matches to exercise stats end-to-end. |
+| `MatchWebExportTests.swift` | The interactive HTML export: view-model shape, both-perspective consistency, the recorder-only-HR rule, and that the produced HTML is self-contained (no external resource loads). |
 
 **App-target tests (6 files):** `DeuceMate Watch AppTests/DeuceMate_Watch_AppTests.swift`
 (~1,140 lines — watch-specific behaviour: tiebreak serve rotation, changeover events,
@@ -148,6 +154,7 @@ touched. A PR for feature X that edits files far outside its row deserves a ques
 | **Rec Coach insights** | — | `Views/Coaching/RecCoachSection` | `RecCoachInsights` |
 | **Pulse Coach (heart-rate) insights** | `ScoreViewModel` (settings) | `Views/PulseCoach/PulseCoachSection` | `PulseCoachInsights`, `HRZone` |
 | **AI coaching export** | — | `Export/MatchExporter`, `AICoachSheet`, `AICoachLauncher` | `MatchStatsSummary` |
+| **Interactive web (HTML) export** | — | `MatchDetailView` (share action) | `WebExport/MatchHTMLExporter`, `MatchWebViewModel` (+`Build`), `MatchWebTemplate`, `WebExportColors`, `MatchStatsSummary` |
 | **Compass changeover** | `ScoreViewModel`, `ContentView`, `HomeView` | `SettingsView` (toggle) | — |
 | **Health / workout tracking** | `WorkoutManager` | `HealthKitHRFetcher` | `HRZone` |
 | **Theming** | `AppTheme` | `AppTheme` | — |
