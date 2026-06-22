@@ -289,18 +289,23 @@ extension MatchWebViewModel {
 
     // MARK: - Shared formatting (parity with MatchExporter)
 
-    static let isoFormatter: ISO8601DateFormatter = {
+    // Computed (fresh instance per access) rather than shared `static let`:
+    // `make` is `nonisolated static` and runs off the main actor, and
+    // `DateFormatter`/`ISO8601DateFormatter` are not `Sendable`. A new instance
+    // per export (a one-time user action, not a hot path) sidesteps any
+    // shared-mutable-state data race.
+    static var isoFormatter: ISO8601DateFormatter {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
         return f
-    }()
+    }
 
-    static let displayFormatter: DateFormatter = {
+    static var displayFormatter: DateFormatter {
         let f = DateFormatter()
         f.dateStyle = .long
         f.timeStyle = .short
         return f
-    }()
+    }
 
     static func durationSeconds(_ record: MatchRecord) -> TimeInterval {
         if record.matchElapsedSeconds > 0 { return record.matchElapsedSeconds }

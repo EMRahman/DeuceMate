@@ -354,23 +354,13 @@ struct MatchDetailView: View {
     }
 
     /// Filename for the interactive HTML export (single file, both perspectives).
+    /// Includes the match start time so same-day matches don't collide in the
+    /// temporary directory. POSIX locale keeps the format deterministic.
     private var htmlExportFilename: String {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withFullDate]
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd_HHmm"
         return "deuce_mate_\(f.string(from: record.startTime)).html"
-    }
-
-    /// Write the generated HTML to a temp file so it can be shared as a real
-    /// `.html` file (ShareLink infers the type from the extension). Returns the
-    /// URL, or nil if the write failed.
-    private func writeInteractiveHTML(_ html: String) -> URL? {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(htmlExportFilename)
-        do {
-            try Data(html.utf8).write(to: url, options: .atomic)
-            return url
-        } catch {
-            return nil
-        }
     }
 
     var body: some View {
@@ -613,14 +603,22 @@ struct MatchDetailView: View {
             guard exportSummary.isEmpty else { return }
             let record = record
             let maxHR = resolvedMaxHR
+            let filename = htmlExportFilename
             async let summary    = Task.detached { MatchExporter.summaryExport(for: record, maxHR: maxHR, focal: .me)       }.value
             async let full       = Task.detached { MatchExporter.fullExport(for: record,    maxHR: maxHR, focal: .me)       }.value
             async let summaryOpp = Task.detached { MatchExporter.summaryExport(for: record, maxHR: maxHR, focal: .opponent) }.value
             async let fullOpp    = Task.detached { MatchExporter.fullExport(for: record,    maxHR: maxHR, focal: .opponent) }.value
-            async let html       = Task.detached { MatchHTMLExporter.html(for: record, maxHR: maxHR) }.value
-            let (s, f, so, fo, h) = await (summary, full, summaryOpp, fullOpp, html)
+            // Generate AND write the interactive HTML off the main thread so the
+            // ~30–80 KB file write never stutters the UI.
+            async let htmlURL    = Task.detached { () -> URL? in
+                let h = MatchHTMLExporter.html(for: record, maxHR: maxHR)
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+                do { try Data(h.utf8).write(to: url, options: .atomic); return url }
+                catch { return nil }
+            }.value
+            let (s, f, so, fo, url) = await (summary, full, summaryOpp, fullOpp, htmlURL)
             exportSummary = s; exportFull = f; exportSummaryOpp = so; exportFullOpp = fo
-            htmlExportURL = writeInteractiveHTML(h)
+            htmlExportURL = url
         }
         .task(id: "\(playerNTRP)-\(resolvedMaxHR)") {
             let record = record

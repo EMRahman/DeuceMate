@@ -212,6 +212,14 @@ public enum MatchWebTemplate {
 
       function focalCum(p) { return isMe() ? p.cumulativeMe : p.cumulativeOpp; }
       function otherCum(p) { return isMe() ? p.cumulativeOpp : p.cumulativeMe; }
+      // Which player a scatter mark belongs to (mirrors PointsGraphView): a double
+      // fault is the server's, a winner is the striker's, and an unforced/forced
+      // error belongs to the player who erred — i.e. the one who lost the point.
+      function outcomeOwner(p) {
+        if (p.outcome === "doubleFault") return p.server;
+        if (p.outcome === "winner") return p.winner;
+        return p.winner === "me" ? "opp" : "me";
+      }
 
       function buildSVG() {
         const svg = s("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
@@ -246,13 +254,18 @@ public enum MatchWebTemplate {
         if (isMe() && state.layers.steps && DATA.steps) overlay(svg, DATA.steps.timeline,
           p => p.cumulative, P.stepsLineHex, true, "Steps", true);
 
-        // scatter
+        // scatter — each mark sits on the line of the player it belongs to, so the
+        // marker's line tells you who (mirrors PointsGraphView): an outcome on its
+        // owner's line, a shot-phase mark on the point winner's line. Absolute
+        // (me/opp) cumulative, so placement is stable across the perspective toggle.
+        const lineY = (who) => p => yP(who(p) === "me" ? p.cumulativeMe : p.cumulativeOpp);
+        const yOwner = lineY(outcomeOwner);
+        const yWinner = lineY(p => p.winner);
         pts.forEach(p => {
-          const y = yP(focalCum(p));
           if (state.layers.outcome && p.outcome !== "uncategorized")
-            svg.appendChild(symbol(p.outcomeSymbol, xAt(p.index), y, p.outcomeColorHex));
+            svg.appendChild(symbol(p.outcomeSymbol, xAt(p.index), yOwner(p), p.outcomeColorHex));
           if (state.layers.shot && p.endingShot)
-            svg.appendChild(symbol(p.endingShotSymbol, xAt(p.index), y, p.endingShotColorHex));
+            svg.appendChild(symbol(p.endingShotSymbol, xAt(p.index), yWinner(p), p.endingShotColorHex));
         });
 
         // selection rule
