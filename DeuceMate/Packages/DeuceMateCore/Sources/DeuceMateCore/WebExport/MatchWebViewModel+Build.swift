@@ -76,6 +76,16 @@ extension MatchWebViewModel {
         // PulseCoach (HR-derived) insights are recorder-only.
         let pulse: [String]? = (focal == .me && !full.autoInsights.isEmpty) ? full.autoInsights : nil
 
+        // Per-outcome counts attributed to this perspective's player. The `my…`
+        // fields are already focal-attributed (winner = focal struck it; UE/FE =
+        // focal erred; DF = focal served it), matching PointsGraphView's pills.
+        let outcomeCounts: [String: Int] = [
+            PointOutcome.winner.rawValue:        categorized.myWinners,
+            PointOutcome.unforcedError.rawValue: categorized.myUnforcedErrors,
+            PointOutcome.forcedError.rawValue:   categorized.myForcedErrors,
+            PointOutcome.doubleFault.rawValue:   categorized.myDoubleFaults
+        ]
+
         return PerspectiveVM(
             result: result(record: record, focal: focal),
             scoreDisplay: scoreString(record: record, focal: focal) ?? "—",
@@ -84,6 +94,7 @@ extension MatchWebViewModel {
             pointsLost: full.lostPoints,
             hasOutcomes: hasOutcomes,
             sections: sections,
+            outcomeCounts: outcomeCounts,
             pulseInsights: pulse
         )
     }

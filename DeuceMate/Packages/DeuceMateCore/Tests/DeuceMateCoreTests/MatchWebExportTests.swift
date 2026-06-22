@@ -108,6 +108,20 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertEqual(opp.result, "lost")
     }
 
+    func test_outcomeCounts_attributedPerPerspective() {
+        let vm = MatchWebViewModel.make(from: makeRecord())
+        // Me: winners at 0/3/5, one double fault (1), one unforced error (2).
+        let me = vm.perspectives.me.outcomeCounts
+        XCTAssertEqual(me["winner"], 3)
+        XCTAssertEqual(me["doubleFault"], 1)
+        XCTAssertEqual(me["unforcedError"], 1)
+        XCTAssertEqual(me["forcedError"], 0)
+        // Opponent owns the single forced error (point 4, which I won).
+        let opp = vm.perspectives.opponent.outcomeCounts
+        XCTAssertEqual(opp["forcedError"], 1)
+        XCTAssertEqual(opp["winner"], 0)
+    }
+
     // MARK: - 3. Recorder-only HR rule
 
     func test_hr_isRecorderOnly() throws {

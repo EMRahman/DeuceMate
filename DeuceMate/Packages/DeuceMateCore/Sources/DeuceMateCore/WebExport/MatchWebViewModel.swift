@@ -70,6 +70,10 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public let pointsLost: Int
         public let hasOutcomes: Bool
         public let sections: [StatSection]
+        /// Per-outcome occurrence counts attributed to this perspective's player
+        /// (keyed by `PointOutcome` raw value), shown on the chart legend pills —
+        /// mirrors the outcome-frequency counts on `PointsGraphView`'s pills.
+        public let outcomeCounts: [String: Int]
         /// PulseCoach (HR-derived) insights — recorder-only; nil on opponent.
         public let pulseInsights: [String]?
     }

@@ -345,7 +345,11 @@ public enum MatchWebTemplate {
         const wrap = el("div", { class: "chips", style: "margin-top:10px" });
         wrap.appendChild(legItem(P.meLineHex, isMe() ? "You" : "You (opponent)"));
         wrap.appendChild(legItem(P.opponentLineHex, "Opponent"));
-        if (state.layers.outcome) P.outcomes.forEach(o => wrap.appendChild(legItem(o.colorHex, o.label)));
+        // Outcome legend pills carry the focal player's per-outcome frequency
+        // count (e.g. "W 8", "UE 5") — mirrors PointsGraphView's outcome pills.
+        const counts = focalP().outcomeCounts || {};
+        if (state.layers.outcome) P.outcomes.forEach(o =>
+          wrap.appendChild(legItem(o.colorHex, o.label + " " + (counts[o.key] || 0))));
         if (state.layers.shot) P.endingShots.forEach(o => wrap.appendChild(legItem(o.colorHex, o.label)));
         return wrap;
       }
