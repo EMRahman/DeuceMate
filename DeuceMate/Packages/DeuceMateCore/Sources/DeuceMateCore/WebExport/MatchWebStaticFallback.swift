@@ -21,7 +21,8 @@ enum StaticChartScatter { case pointsWon, pointsLost, allWon, allLost }
 extension MatchHTMLExporter {
 
     /// A real, styled HTML summary placed inside `#root`: banner, header, the
-    /// momentum charts (one per preset selection), and the Me/Opp stat tables.
+    /// momentum charts (one per preset selection), and the TV-style Me/Opp
+    /// split-bar comparison — whole match, plus a per-set breakdown.
     static func staticFallback(_ vm: MatchWebViewModel) -> String {
         let me = vm.perspectives.me
         let resultLabel = ["won": "Won", "lost": "Lost", "draw": "Draw", "inProgress": "In Progress"][me.result] ?? ""
@@ -70,28 +71,33 @@ extension MatchHTMLExporter {
             }
         }
 
-        // Whole-match (All filter) stats as plain Me / Opp tables.
-        if let all = vm.filters.first(where: { $0.key == "all" }) {
-            let pw = all.pointsWon
-            if pw.total > 0 {
-                html += """
-                <div class="card"><h2>Points Won</h2><table>\
-                <tr><td class="l">Me</td><td class="v">\(pw.meWon) (\(pw.mePct)%)</td></tr>\
-                <tr><td class="l">Opponent</td><td class="v">\(pw.oppWon) (\(pw.oppPct)%)</td></tr></table></div>
-                """
+        // Me/Opp stats as TV-style split bars (mirrors MatchDetailView and the
+        // interactive viewer). Always show the whole match; add a per-set
+        // breakdown when the match has more than one set — the viewer hides its
+        // set picker at ≤ 2 filters, and the static page can't toggle, so it
+        // simply stacks each scope under a labelled divider.
+        let scopes: [MatchWebViewModel.FilterVM]
+        if vm.filters.count > 2 {
+            scopes = vm.filters                                              // All + each set
+        } else if let all = vm.filters.first(where: { $0.key == "all" }) {
+            scopes = [all]                                                   // whole match only
+        } else {
+            scopes = []
+        }
+        if !scopes.isEmpty {
+            html += "<h2 style=\"margin:18px 4px 8px\">Match Statistics</h2>"
+        }
+        let labelScopes = scopes.count > 1
+        for f in scopes {
+            if labelScopes {
+                html += "<div style=\"font-size:16px;font-weight:700;color:var(--text);margin:22px 4px 4px\">\(esc(f.label))</div>"
             }
-            for sec in all.comparison.sections {
-                html += "<div class=\"card\"><h2>\(esc(sec.title)) <span class=\"sub\">(Me / Opp)</span></h2>"
-                if let placeholder = sec.placeholder {
-                    html += "<p class=\"note\">\(esc(placeholder))</p>"
-                } else {
-                    html += "<table>"
-                    for row in sec.rows {
-                        html += "<tr><td class=\"l\">\(esc(row.label))</td><td class=\"v\">\(esc(row.meValue)) / \(esc(row.oppValue))</td></tr>"
-                    }
-                    html += "</table>"
-                }
-                html += "</div>"
+            html += pointsWonBar(f.pointsWon, vm)
+            for sec in f.comparison.sections {
+                html += comparisonCard(sec, vm)
+            }
+            if let note = f.comparison.note {
+                html += "<p class=\"note\" style=\"padding:0 4px\">\(esc(note))</p>"
             }
         }
         return html
@@ -123,6 +129,87 @@ extension MatchHTMLExporter {
             s += "<span class=\"schip\" style=\"color:\(p.color);border-color:\(tint(p.color, 0.45));background:\(tint(p.color, 0.15))\">"
                 + "<span class=\"dot\" style=\"background:\(p.color)\"></span>\(esc(p.label)) \(p.count)</span>"
         }
+        return s + "</div>"
+    }
+
+    // MARK: - TV-style Me-vs-Opp comparison bars (mirror MatchWebTemplate's JS)
+
+    /// Points-won header bar (mirrors the viewer's `pointsWonBar`): Me / "Points
+    /// Won" + total / Opp, over a two-segment proportional bar. Empty string
+    /// when this filter scope has no points.
+    private static func pointsWonBar(_ pw: MatchWebViewModel.PointsWonVM, _ vm: MatchWebViewModel) -> String {
+        guard pw.total > 0 else { return "" }
+        let me = vm.palette.meLineHex, opp = vm.palette.opponentLineHex
+        let meW = Double(pw.meWon) / Double(pw.total) * 100
+        let oppW = Double(pw.oppWon) / Double(pw.total) * 100
+        return "<div class=\"card pw-card\"><div class=\"pw-head\">"
+            + "<div class=\"pw-side\"><div class=\"pw-lbl\" style=\"color:\(me)\">Me</div>"
+            + "<div class=\"pw-val\" style=\"color:\(me)\">\(pw.meWon) pts · \(pw.mePct)%</div></div>"
+            + "<div class=\"pw-mid\"><div class=\"pw-t\">Points Won</div>"
+            + "<div class=\"pw-tt\">\(pw.total) total</div></div>"
+            + "<div class=\"pw-side r\"><div class=\"pw-lbl\" style=\"color:\(opp)\">Opp</div>"
+            + "<div class=\"pw-val\" style=\"color:\(opp)\">\(pw.oppWon) pts · \(pw.oppPct)%</div></div></div>"
+            + "<div class=\"pw-bar\"><div style=\"width:\(fmt(meW))%;background:\(me)\"></div>"
+            + "<div style=\"width:\(fmt(oppW))%;background:\(opp)\"></div></div></div>"
+    }
+
+    /// One comparison section card (mirrors the viewer's `comparisonCard`): a
+    /// Me/Opp-capped header, then either the placeholder note or the stat rows.
+    private static func comparisonCard(_ sec: MatchWebViewModel.CmpSection, _ vm: MatchWebViewModel) -> String {
+        var s = "<div class=\"card\"><div class=\"cmp-head\">"
+            + cmpCap("Me", vm.palette.meLineHex)
+            + "<span class=\"cmp-title\">\(esc(sec.title))</span>"
+            + cmpCap("Opp", vm.palette.opponentLineHex)
+            + "</div>"
+        if let placeholder = sec.placeholder {
+            s += "<p class=\"note\">\(esc(placeholder))</p>"
+        } else {
+            for row in sec.rows { s += comparisonRow(row, vm) }
+        }
+        return s + "</div>"
+    }
+
+    private static func cmpCap(_ label: String, _ color: String) -> String {
+        "<span class=\"cap\" style=\"color:\(color);background:\(tint(color, 0.15))\">\(esc(label))</span>"
+    }
+
+    /// One comparison row (mirrors the viewer's `comparisonRow`): a centred label
+    /// (+ optional subtitle), then either a bare me/opp ratio or the split bar
+    /// flanked by the me/opp values.
+    private static func comparisonRow(_ r: MatchWebViewModel.CmpRow, _ vm: MatchWebViewModel) -> String {
+        let me = vm.palette.meLineHex, opp = vm.palette.opponentLineHex
+        var s = "<div class=\"cmp-row\"><div class=\"cmp-rl\">\(esc(r.label))</div>"
+        if let sub = r.subtitle { s += "<div class=\"cmp-rs\">\(esc(sub))</div>" }
+        if r.kind == .ratio {
+            s += "<div class=\"cmp-ratio\">"
+                + "<span style=\"color:\(me)\">\(esc(r.meValue))</span>"
+                + "<span class=\"sep\">/</span>"
+                + "<span style=\"color:\(opp)\">\(esc(r.oppValue))</span></div>"
+        } else {
+            s += "<div class=\"cmp-body\">"
+                + "<span class=\"mev\" style=\"color:\(me)\">\(esc(r.meValue))</span>"
+                + splitBar(r, vm)
+                + "<span class=\"oppv\" style=\"color:\(opp)\">\(esc(r.oppValue))</span></div>"
+        }
+        return s + "</div>"
+    }
+
+    /// Centre-anchored split bar (mirrors the viewer's `splitBar`/`cmpHalf`): the
+    /// Me half fills from the centre leftward, the Opp half from the centre
+    /// rightward, each carrying its raw count.
+    private static func splitBar(_ r: MatchWebViewModel.CmpRow, _ vm: MatchWebViewModel) -> String {
+        "<div class=\"splitbar\">"
+            + cmpHalf("right", r.meFraction, r.meBarLabel, vm.palette.meLineHex)
+            + "<div class=\"cmp-sep\"></div>"
+            + cmpHalf("left", r.oppFraction, r.oppBarLabel, vm.palette.opponentLineHex)
+            + "</div>"
+    }
+
+    private static func cmpHalf(_ side: String, _ frac: Double, _ label: String?, _ color: String) -> String {
+        let pct = max(0, min(1, frac)) * 100
+        var s = "<div class=\"cmp-half\" style=\"background:\(tint(color, 0.15))\">"
+            + "<div style=\"position:absolute;top:0;bottom:0;\(side):0;width:\(fmt(pct))%;background:\(color)\"></div>"
+        if let label = label { s += "<span class=\"cmp-blab\">\(esc(label))</span>" }
         return s + "</div>"
     }
 
