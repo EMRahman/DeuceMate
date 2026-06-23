@@ -480,6 +480,63 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertTrue(html.contains("Outcome tracking not collected for this match."))
     }
 
+    /// The static fallback renders the Me-vs-Opp stats as the same TV-style
+    /// split bars the iOS app and interactive viewer use — not plain tables —
+    /// reusing the shared `.pw-*` / `.cmp-*` CSS classes (no external resources).
+    func test_staticFallback_rendersTVStyleComparisonBars() {
+        let html = MatchHTMLExporter.html(for: makeRecord())
+        // Points-won header bar (mirrors the viewer's pointsWonBar).
+        XCTAssertTrue(html.contains("class=\"pw-head\""))
+        XCTAssertTrue(html.contains("class=\"pw-bar\""))
+        XCTAssertTrue(html.contains("Points Won"))
+        XCTAssertTrue(html.contains("total"))
+        // Split-bar comparison rows with Me/Opp caps + inner count labels.
+        XCTAssertTrue(html.contains("class=\"cmp-head\""))
+        XCTAssertTrue(html.contains("class=\"cap\""))
+        XCTAssertTrue(html.contains("class=\"cmp-row\""))
+        XCTAssertTrue(html.contains("class=\"splitbar\""))
+        XCTAssertTrue(html.contains("class=\"cmp-half\""))
+        XCTAssertTrue(html.contains("class=\"cmp-blab\""), "percent rows carry an inner count label")
+        XCTAssertTrue(html.contains("class=\"cmp-ratio\""), "the W:UE ratio row renders as a bare ratio")
+        // The old plain Me/Opp table header is gone.
+        XCTAssertFalse(html.contains("(Me / Opp)"))
+        // Still self-contained — the bars add no external resources.
+        XCTAssertFalse(html.contains("https://"))
+        XCTAssertFalse(html.contains("src="))
+        XCTAssertFalse(html.contains("<link"))
+    }
+
+    /// With more than one set the static page stacks a per-set breakdown (it
+    /// can't toggle like the viewer): the whole match plus one labelled scope
+    /// per set, each with its own recomputed points-won bar.
+    func test_staticFallback_rendersPerSetBreakdown() {
+        let html = MatchHTMLExporter.html(for: makeRecord())   // two sets
+        XCTAssertTrue(html.contains("Match Statistics"))
+        // Labelled scope dividers: All + Set 1 + Set 2.
+        XCTAssertTrue(html.contains(">All</div>"))
+        XCTAssertTrue(html.contains(">Set 1</div>"))
+        XCTAssertTrue(html.contains(">Set 2</div>"))
+        // One points-won bar per scope (All, Set 1, Set 2), each recomputed:
+        // All = 6 points, Set 1 = 5, Set 2 = 1.
+        XCTAssertEqual(occurrences(of: "class=\"pw-bar\"", in: html), 3)
+        XCTAssertTrue(html.contains("6 total"))
+        XCTAssertTrue(html.contains("5 total"))
+        XCTAssertTrue(html.contains("1 total"))
+    }
+
+    /// A single-set match shows just the whole-match scope — no redundant
+    /// per-set duplicate, and no scope dividers (mirrors the viewer hiding its
+    /// set picker at ≤ 2 filters).
+    func test_staticFallback_singleSet_omitsScopeBreakdown() {
+        let html = MatchHTMLExporter.html(for: makeScoreOnlyRecord())   // one set
+        // No labelled scope divider (its inline style is the marker).
+        XCTAssertFalse(html.contains("font-size:16px;font-weight:700"))
+        // Exactly one points-won bar (the whole match).
+        XCTAssertEqual(occurrences(of: "class=\"pw-bar\"", in: html), 1)
+        // The uncategorised footer note now renders statically too.
+        XCTAssertTrue(html.contains("uncategorized point(s) excluded"))
+    }
+
     /// The no-JS fallback renders the momentum chart once per preset selection —
     /// Points Won/Lost (outcome scatter) and Ending Shots All Won/Lost (shot
     /// scatter) — each with its scatter overlay + pills, mirroring the interactive

@@ -84,7 +84,9 @@ MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
   preset (Points Won/Lost outcome scatter, Ending Shots All Won/Lost shot
   scatter), each with its scatter overlay + colour/label/count pills, via
   `staticChartSVG(_:scatter:)` mirroring the JS `buildSVG`/`stepPath`/`symbol`
-  geometry — and the Me/Opp stat tables). Environments that don't run scripts —
+  geometry — and the **TV-style Me/Opp split-bar comparison** for the whole match
+  plus a per-set breakdown, via `pointsWonBar`/`comparisonCard`/`splitBar`
+  mirroring the JS bars). Environments that don't run scripts —
   notably the **iOS Quick Look file preview** and many local `file://` opens —
   show that near-complete report instead of a blank page. When the viewer JS runs
   it does `root.innerHTML = ""` and rebuilds, so the fallback is replaced
@@ -108,7 +110,7 @@ MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
 | `…/WebExport/MatchWebViewModel+Build.swift` | Pure derivation (per-perspective sections, scatter-pill counts, points, set bands, HR/steps, formatting). |
 | `…/WebExport/MatchWebViewModel+Comparison.swift` | Pure builder for the per-set `filters` + TV-style Me-vs-Opp `comparison` block (mirrors `MatchDetailView`'s split bars). |
 | `…/WebExport/MatchWebViewModel+AICoach.swift` | Pure builder for the optional `aiCoach` block (intro copy + AI-app launch list) wrapped around the injected prompt(s). |
-| `…/WebExport/MatchWebStaticFallback.swift` | The no-JS `#root` fallback: header + server-rendered SVG momentum chart (`staticChartSVG`) + Me/Opp stat tables, so file previews that can't run scripts still show the match. |
+| `…/WebExport/MatchWebStaticFallback.swift` | The no-JS `#root` fallback: header + server-rendered SVG momentum charts (`staticChartSVG`) + the TV-style Me/Opp split-bar comparison (`pointsWonBar`/`comparisonCard`/`splitBar`) for the whole match plus a per-set breakdown, so file previews that can't run scripts still show the match. |
 | `…/WebExport/WebExportColors.swift` | Palette/symbol single source of truth. |
 | `…/WebExport/MatchWebTemplate.swift` | The viewer (HTML/CSS/SVG-JS) as raw-string constants. |
 | `…/WebExport/MatchHTMLExporter.swift` | Assembles + script-safely injects the JSON; pure entry point. |
