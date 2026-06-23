@@ -82,6 +82,12 @@ public enum MatchWebTemplate {
     td.l { color: var(--muted); }
     td.v { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
     td .hint { display: block; color: var(--muted); font-weight: 400; font-size: 11px; }
+    .statbar { position: relative; display: inline-block; width: 130px; max-width: 100%; height: 18px;
+      background: var(--surface2); border: 1px solid var(--line); border-radius: 5px; overflow: hidden;
+      vertical-align: middle; }
+    .statbar .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); opacity: .55; }
+    .statbar .txt { position: relative; z-index: 1; display: block; text-align: center; line-height: 18px;
+      font-size: 11px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
     .note { color: var(--muted); font-size: 13px; margin: 0 0 6px; }
     ul.bul { margin: 2px 0 0; padding-left: 18px; }
     ul.bul li { margin: 3px 0; }
@@ -400,10 +406,22 @@ public enum MatchWebTemplate {
         }
         if (sec.rows && sec.rows.length) {
           const tbl = el("table");
-          sec.rows.forEach(r => tbl.appendChild(el("tr", null, [
-            el("td", { class: "l", text: r.label }),
-            el("td", { class: "v" }, [r.value, r.hint ? el("span", { class: "hint", text: r.hint }) : null])
-          ])));
+          sec.rows.forEach(r => {
+            let valCell;
+            if (typeof r.fraction === "number") {
+              const pct = Math.max(0, Math.min(100, r.fraction * 100));
+              const fill = el("div", { class: "fill" });
+              fill.style.width = pct + "%";
+              const bar = el("div", { class: "statbar" }, [
+                fill,
+                el("span", { class: "txt", text: r.value })
+              ]);
+              valCell = el("td", { class: "v" }, [bar, r.hint ? el("span", { class: "hint", text: r.hint }) : null]);
+            } else {
+              valCell = el("td", { class: "v" }, [r.value, r.hint ? el("span", { class: "hint", text: r.hint }) : null]);
+            }
+            tbl.appendChild(el("tr", null, [el("td", { class: "l", text: r.label }), valCell]));
+          });
           c.appendChild(tbl);
         }
         return c;

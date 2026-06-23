@@ -319,7 +319,10 @@ struct MatchStatsView: View {
     // MARK: - TV-style comparison primitives
 
     @ViewBuilder
-    private func splitBar(meFrac: Double, oppFrac: Double) -> some View {
+    private func splitBar(
+        meFrac: Double, oppFrac: Double,
+        meLabel: String? = nil, oppLabel: String? = nil
+    ) -> some View {
         GeometryReader { geo in
             let halfW = max(0, (geo.size.width - 1) / 2)
             HStack(spacing: 0) {
@@ -331,6 +334,7 @@ struct MatchStatsView: View {
                             .fill(meColor)
                             .frame(width: halfW * meFrac)
                     }
+                    .overlay { barLabel(meLabel) }
                 Rectangle()
                     .fill(Color.gray.opacity(0.3))
                     .frame(width: 1)
@@ -342,10 +346,25 @@ struct MatchStatsView: View {
                             .fill(oppColor)
                             .frame(width: halfW * oppFrac)
                     }
+                    .overlay { barLabel(oppLabel) }
             }
         }
-        .frame(height: 6)
-        .clipShape(RoundedRectangle(cornerRadius: 2))
+        .frame(height: 14)
+        .clipShape(RoundedRectangle(cornerRadius: 3))
+    }
+
+    /// Raw count (e.g. "12/15") centered inside a bar half. `.primary` keeps it
+    /// legible over both the pale track and the saturated fill.
+    @ViewBuilder
+    private func barLabel(_ text: String?) -> some View {
+        if let text {
+            Text(text)
+                .font(.system(size: 8, weight: .semibold).monospacedDigit())
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .padding(.horizontal, 1)
+        }
     }
 
     @ViewBuilder
@@ -359,6 +378,8 @@ struct MatchStatsView: View {
         let oppFrac = oppDen > 0 ? Double(oppNum) / Double(oppDen) : 0.0
         let meText  = meDen  > 0 ? "\(Int((meFrac  * 100).rounded()))%" : "—"
         let oppText = oppDen > 0 ? "\(Int((oppFrac * 100).rounded()))%" : "—"
+        let meLabel  = meDen  > 0 ? "\(meNum)/\(meDen)"  : nil
+        let oppLabel = oppDen > 0 ? "\(oppNum)/\(oppDen)" : nil
 
         VStack(spacing: 2) {
             Text(label)
@@ -376,7 +397,7 @@ struct MatchStatsView: View {
                     .font(.system(size: 10, weight: .semibold).monospacedDigit())
                     .foregroundStyle(meColor)
                     .frame(width: 26, alignment: .trailing)
-                splitBar(meFrac: meFrac, oppFrac: oppFrac)
+                splitBar(meFrac: meFrac, oppFrac: oppFrac, meLabel: meLabel, oppLabel: oppLabel)
                 Text(oppText)
                     .font(.system(size: 10, weight: .semibold).monospacedDigit())
                     .foregroundStyle(oppColor)

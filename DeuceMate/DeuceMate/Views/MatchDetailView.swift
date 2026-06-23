@@ -958,6 +958,8 @@ struct MatchDetailView: View {
         let oppFrac = oppDen > 0 ? Double(oppNum) / Double(oppDen) : 0.0
         let meText  = meDen  > 0 ? "\(Int((meFrac  * 100).rounded()))%" : "—"
         let oppText = oppDen > 0 ? "\(Int((oppFrac * 100).rounded()))%" : "—"
+        let meLabel  = meDen  > 0 ? "\(meNum)/\(meDen)"  : nil
+        let oppLabel = oppDen > 0 ? "\(oppNum)/\(oppDen)" : nil
 
         VStack(spacing: 3) {
             Text(label)
@@ -975,7 +977,7 @@ struct MatchDetailView: View {
                     .font(.subheadline.monospacedDigit().weight(.semibold))
                     .foregroundStyle(meColor)
                     .frame(width: 44, alignment: .trailing)
-                splitBar(meFrac: meFrac, oppFrac: oppFrac)
+                splitBar(meFrac: meFrac, oppFrac: oppFrac, meLabel: meLabel, oppLabel: oppLabel)
                 Text(oppText)
                     .font(.subheadline.monospacedDigit().weight(.semibold))
                     .foregroundStyle(oppColor)
@@ -1012,7 +1014,10 @@ struct MatchDetailView: View {
     }
 
     @ViewBuilder
-    private func splitBar(meFrac: Double, oppFrac: Double) -> some View {
+    private func splitBar(
+        meFrac: Double, oppFrac: Double,
+        meLabel: String? = nil, oppLabel: String? = nil
+    ) -> some View {
         GeometryReader { geo in
             let halfW = max(0, (geo.size.width - 1) / 2)
             HStack(spacing: 0) {
@@ -1024,6 +1029,7 @@ struct MatchDetailView: View {
                             .fill(meColor)
                             .frame(width: halfW * meFrac)
                     }
+                    .overlay { barLabel(meLabel) }
                 Rectangle()
                     .fill(Color(.separator))
                     .frame(width: 1)
@@ -1035,10 +1041,25 @@ struct MatchDetailView: View {
                             .fill(oppColor)
                             .frame(width: halfW * oppFrac)
                     }
+                    .overlay { barLabel(oppLabel) }
             }
         }
-        .frame(height: 14)
+        .frame(height: 18)
         .clipShape(RoundedRectangle(cornerRadius: 5))
+    }
+
+    /// Raw count (e.g. "12/15") centered inside a bar half. `.primary` keeps it
+    /// legible over both the pale track and the saturated fill in light/dark.
+    @ViewBuilder
+    private func barLabel(_ text: String?) -> some View {
+        if let text {
+            Text(text)
+                .font(.caption2.monospacedDigit().weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, 2)
+        }
     }
 
     // MARK: - Helpers
