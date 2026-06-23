@@ -87,6 +87,27 @@ extension MatchWebViewModel {
             PointOutcome.forcedError.rawValue:   categorized.myForcedErrors,
             PointOutcome.doubleFault.rawValue:   categorized.myDoubleFaults
         ]
+        // The mirror set for the *other* player — drives the "Opp" outcome pills.
+        let outcomeCountsOpponent: [String: Int] = [
+            PointOutcome.winner.rawValue:        categorized.opponentWinners,
+            PointOutcome.unforcedError.rawValue: categorized.opponentUnforcedErrors,
+            PointOutcome.forcedError.rawValue:   categorized.opponentForcedErrors,
+            PointOutcome.doubleFault.rawValue:   categorized.opponentDoubleFaults
+        ]
+
+        // Ending-shot phases split into points the focal player won vs. lost.
+        // Computed over *all* stats (an ending shot can sit on an uncategorised
+        // point), keyed/ordered by EndingShot — mirrors PointsGraphData.
+        var endingWonByPhase: [String: Int] = [:]
+        var endingLostByPhase: [String: Int] = [:]
+        for stat in record.stats {
+            guard let es = stat.endingShot else { continue }
+            if stat.winner == focal { endingWonByPhase[es.rawValue, default: 0] += 1 }
+            else                    { endingLostByPhase[es.rawValue, default: 0] += 1 }
+        }
+        let presentEndingPhases = EndingShot.allCases
+            .filter { (endingWonByPhase[$0.rawValue] ?? 0) + (endingLostByPhase[$0.rawValue] ?? 0) > 0 }
+            .map { $0.rawValue }
 
         return PerspectiveVM(
             result: result(record: record, focal: focal),
@@ -97,6 +118,10 @@ extension MatchWebViewModel {
             hasOutcomes: hasOutcomes,
             sections: sections,
             outcomeCounts: outcomeCounts,
+            outcomeCountsOpponent: outcomeCountsOpponent,
+            endingWonByPhase: endingWonByPhase,
+            endingLostByPhase: endingLostByPhase,
+            presentEndingPhases: presentEndingPhases,
             pulseInsights: pulse
         )
     }
@@ -207,6 +232,7 @@ extension MatchWebViewModel {
         return stats.enumerated().map { idx, pt in
             if pt.winner == .me { cumMe += 1 } else { cumOpp += 1 }
             let shot = pt.endingShot
+            let chip = pointChip(pt)
             return PointVM(
                 index: idx,
                 setIndex: pt.setIndex,
@@ -216,6 +242,10 @@ extension MatchWebViewModel {
                 outcomeLabel: pt.outcome.displayLabel,
                 outcomeColorHex: WebExportColors.outcomeColorHex(pt.outcome),
                 outcomeSymbol: WebExportColors.outcomeSymbol(pt.outcome),
+                chipText: chip.text,
+                chipColorHex: chip.colorHex,
+                outcomeText: pointOutcomeText(pt),
+                pointScoreLabel: pointScoreLabel(pt),
                 endingShot: shot?.rawValue,
                 endingShotLabel: shot?.displayLabel,
                 endingShotColorHex: shot.map { WebExportColors.endingShotColorHex($0) },
@@ -441,6 +471,51 @@ extension MatchWebViewModel {
         case 3: return theirs >= 3 ? (mine > theirs ? "Ad" : "40") : "40"
         default: return mine > theirs ? "Ad" : "40"
         }
+    }
+
+    // MARK: - Points-tab display (mirror MatchDetailView.pointRow)
+
+    /// Short outcome chip text + its colour, attributed exactly like
+    /// `MatchDetailView.outcomeChip` (DF coloured by the server who served it,
+    /// UE/FE by the player who erred, W by the striker).
+    static func pointChip(_ pt: PointStat) -> (text: String, colorHex: String) {
+        let isWin = pt.winner == .me
+        let me = WebExportColors.meLineHex, opp = WebExportColors.opponentLineHex
+        switch pt.outcome {
+        case .winner:        return (isWin ? "W" : "Opp W", isWin ? me : opp)
+        case .doubleFault:   return ("DF", pt.server == .me ? me : opp)
+        case .unforcedError: return ("UE", isWin ? opp : me)
+        case .forcedError:   return ("FE", isWin ? opp : me)
+        case .uncategorized: return (isWin ? "+" : "−", isWin ? me : opp)
+        }
+    }
+
+    /// The longer outcome line ("Winner — Me", "Unforced Err — Opp").
+    static func pointOutcomeText(_ pt: PointStat) -> String {
+        let winnerName = pt.winner == .me ? "Me" : "Opp"
+        switch pt.outcome {
+        case .winner:        return "Winner — \(winnerName)"
+        case .doubleFault:   return "Double Fault — \(pt.server == .me ? "Me" : "Opp")"
+        case .unforcedError: return "Unforced Err — \(pt.winner == .me ? "Opp" : "Me")"
+        case .forcedError:   return "Forced Err — \(pt.winner == .me ? "Opp" : "Me")"
+        case .uncategorized: return "Point — \(winnerName)"
+        }
+    }
+
+    /// Server-relative game score in recorder frame ("0–15", "Deuce", "Ad Me").
+    static func pointScoreLabel(_ pt: PointStat) -> String {
+        guard let snap = pt.gameScoreAtStart else { return "" }
+        let s = snap.server, r = snap.returner, server = pt.server
+        if snap.isTiebreak { return server == .me ? "\(s)–\(r)" : "\(r)–\(s)" }
+        let labels = ["0", "15", "30", "40"]
+        if s >= 3 && r >= 3 {
+            if s == r { return "Deuce" }
+            if s > r  { return "Ad \(server == .me ? "Me" : "Opp")" }
+            return "Ad \(server == .me ? "Opp" : "Me")"
+        }
+        let sLabel = s < labels.count ? labels[s] : "\(s)"
+        let rLabel = r < labels.count ? labels[r] : "\(r)"
+        return server == .me ? "\(sLabel)–\(rLabel)" : "\(rLabel)–\(sLabel)"
     }
 
     static func hrZoneColorHex(_ zone: HRZone) -> String {

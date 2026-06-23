@@ -53,6 +53,7 @@ This project also showcases my ability to ship production-quality native iOS/wat
 - **Point outcome tracking** — tag every point with a cause and ending shot to unlock serve, return, break-point, pressure, rally-depth, and score-state analytics, filterable per set or whole match.
 - **Coaching insights** — RecCoach (eight data-driven observations per match) and PulseCoach (heart-rate-correlated insights), plus an interactive points-momentum graph with HR and steps overlays.
 - **AI coaching exports** — one tap builds a structured coaching prompt (including the raw point-by-point table) for ChatGPT, Claude, Gemini, and others, with a dual perspective mode so your opponent gets coached too.
+- **Shareable interactive web report** — export any match as a single self-contained HTML page (momentum chart with toggleable outcome/shot scatter, the full Me-vs-opponent stats with Stats/Points tabs and per-set filters, and a built-in AI-coach launcher) that opens in any browser, fully offline — no app, account, or server.
 - **Health & fitness** — optional HealthKit workout with live heart rate, calories, steps, distance, and per-set timers.
 - **Five court-inspired themes**, momentum strip, and point-confirm highlight — all synced between watch and iPhone.
 
