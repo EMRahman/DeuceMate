@@ -410,11 +410,12 @@ public enum MatchWebTemplate {
             let valCell;
             if (typeof r.fraction === "number") {
               const pct = Math.max(0, Math.min(100, r.fraction * 100));
+              const fill = el("div", { class: "fill" });
+              fill.style.width = pct + "%";
               const bar = el("div", { class: "statbar" }, [
-                el("div", { class: "fill" }),
+                fill,
                 el("span", { class: "txt", text: r.value })
               ]);
-              bar.querySelector(".fill").style.width = pct + "%";
               valCell = el("td", { class: "v" }, [bar, r.hint ? el("span", { class: "hint", text: r.hint }) : null]);
             } else {
               valCell = el("td", { class: "v" }, [r.value, r.hint ? el("span", { class: "hint", text: r.hint }) : null]);
