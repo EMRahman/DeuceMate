@@ -123,8 +123,10 @@ extension MatchWebViewModel {
                     fraction: frac(s.secondServeIn, s.secondServeTotal)),
             StatRow(label: "2nd Serve Win", value: MatchStatsSummary.pct(num: s.secondServeWins, den: s.secondServeIn), hint: nil,
                     fraction: frac(s.secondServeWins, s.secondServeIn)),
-            StatRow(label: "Double Faults", value: dfNote, hint: nil,
-                    fraction: frac(s.doubleFaults, s.secondServeTotal))
+            // Plain text, not a bar: dfNote ("12 (100% of 2nd serves)") is too
+            // long for the fixed-width statbar, and a fuller bar would wrongly
+            // read as "better".
+            StatRow(label: "Double Faults", value: dfNote, hint: nil)
         ], note: nil, bullets: nil)
     }
 
