@@ -64,8 +64,8 @@ extension MatchWebViewModel {
             if let secs = record.setElapsedSeconds[i] {
                 rows.append(LabeledValue(label: lbl, value: "\(Int(secs) / 60) min"))
             } else {
-                let pts = record.stats.filter { $0.setIndex == i }
-                if let first = pts.map(\.timestamp).min(), let last = pts.map(\.timestamp).max() {
+                let timestamps = record.stats.filter { $0.setIndex == i }.map(\.timestamp)
+                if let first = timestamps.min(), let last = timestamps.max() {
                     rows.append(LabeledValue(label: lbl, value: "\(Int(last.timeIntervalSince(first)) / 60) min"))
                 }
             }

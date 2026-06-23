@@ -392,10 +392,11 @@ public enum MatchWebTemplate {
 
       function controls() {
         const wrap = el("div", { class: "controls" });
-        if (focalP().hasOutcomes) {
-          wrap.appendChild(outcomesSection());
-          const es = endingShotsSection(); if (es) wrap.appendChild(es);
-        }
+        // Outcome controls need categorised points; ending-shot controls only
+        // need ending-shot data (which can exist on uncategorised points), so
+        // they're gated independently — matching the static fallback + view model.
+        if (focalP().hasOutcomes) wrap.appendChild(outcomesSection());
+        const es = endingShotsSection(); if (es) wrap.appendChild(es);
         const ov = overlayToggles(); if (ov) wrap.appendChild(ov);
         return wrap;
       }
