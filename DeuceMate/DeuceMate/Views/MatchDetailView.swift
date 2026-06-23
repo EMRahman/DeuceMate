@@ -604,14 +604,21 @@ struct MatchDetailView: View {
             let record = record
             let maxHR = resolvedMaxHR
             let filename = htmlExportFilename
+            let ntrp = playerNTRP
             async let summary    = Task.detached { MatchExporter.summaryExport(for: record, maxHR: maxHR, focal: .me)       }.value
             async let full       = Task.detached { MatchExporter.fullExport(for: record,    maxHR: maxHR, focal: .me)       }.value
             async let summaryOpp = Task.detached { MatchExporter.summaryExport(for: record, maxHR: maxHR, focal: .opponent) }.value
             async let fullOpp    = Task.detached { MatchExporter.fullExport(for: record,    maxHR: maxHR, focal: .opponent) }.value
             // Generate AND write the interactive HTML off the main thread so the
-            // ~30–80 KB file write never stutters the UI.
+            // ~30–80 KB file write never stutters the UI. The AI coaching prompts
+            // (same builder as the AI Coach sheet) are embedded so the shared page
+            // offers the same one-tap coaching launch.
             async let htmlURL    = Task.detached { () -> URL? in
-                let h = MatchHTMLExporter.html(for: record, maxHR: maxHR)
+                let aiMe  = MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .me, playerNTRP: ntrp)
+                let aiOpp = record.stats.isEmpty
+                    ? nil
+                    : MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .opponent, playerNTRP: ntrp)
+                let h = MatchHTMLExporter.html(for: record, maxHR: maxHR, aiPromptMe: aiMe, aiPromptOpponent: aiOpp)
                 let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
                 do { try Data(h.utf8).write(to: url, options: .atomic); return url }
                 catch { return nil }

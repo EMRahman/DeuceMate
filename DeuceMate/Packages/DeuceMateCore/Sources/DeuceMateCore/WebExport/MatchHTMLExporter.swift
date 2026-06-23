@@ -9,11 +9,16 @@ import Foundation
 
 public enum MatchHTMLExporter {
 
-    /// The complete self-contained HTML page for `record`.
-    public nonisolated static func html(for record: MatchRecord, maxHR: Int = 190) -> String {
-        let vm = MatchWebViewModel.make(from: record, maxHR: maxHR)
+    /// The complete self-contained HTML page for `record`. Pass the pre-generated
+    /// AI coaching prompts (`MatchExporter.aiPromptExport`) to surface the AI
+    /// Coach card; omit them for a prompt-free page.
+    public nonisolated static func html(for record: MatchRecord, maxHR: Int = 190,
+                                        aiPromptMe: String? = nil,
+                                        aiPromptOpponent: String? = nil) -> String {
+        let vm = MatchWebViewModel.make(from: record, maxHR: maxHR,
+                                        aiPromptMe: aiPromptMe, aiPromptOpponent: aiPromptOpponent)
         let json = encode(vm)
-        return MatchWebTemplate.page(jsonLiteral: json)
+        return MatchWebTemplate.page(jsonLiteral: json, fallbackHTML: staticFallback(vm))
     }
 
     /// Encode the view model to a JSON literal safe to inline inside a `<script>`.
@@ -25,6 +30,9 @@ public enum MatchHTMLExporter {
         let raw = String(decoding: data, as: UTF8.self)
         return scriptSafe(raw)
     }
+
+    // The static (no-JavaScript) `#root` fallback lives in
+    // `MatchWebStaticFallback.swift` (`staticFallback`, `staticChartSVG`, `esc`).
 
     /// Neutralise sequences that would prematurely close the host `<script>` or
     /// open an HTML comment, and escape the JS line separators. The result is

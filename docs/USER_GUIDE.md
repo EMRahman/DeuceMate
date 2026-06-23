@@ -247,13 +247,56 @@ An interactive timeline view on iPhone plots cumulative points for both players 
 
 ---
 
+## Sharing a match as an interactive web page
+
+From the match detail view's Share menu, **Interactive Web Page** exports the whole
+match as a single, self-contained `.html` file. It opens in any browser — on a
+phone, tablet, or computer — and needs **no app, no account, no link, and no
+server**. The file works **fully offline**: it makes no network requests when
+opened, so it's ideal for sending to an opponent who doesn't use DeuceMate.
+
+The page mirrors the iPhone match detail, recorder-framed (you vs. your opponent):
+
+- **Points Momentum chart** — cumulative points for both players with set-boundary
+  bands and tap-to-inspect. Toggle scatter pills to overlay markers, each showing
+  its colour, label, and **count**:
+  - **Outcomes** — Winner / Unforced / Forced / Double Fault for both you and your
+    opponent, with one-tap **Points Won** / **Points Lost** presets.
+  - **Ending Shots** — Serve / Return / S+1 / Rally, with **All Won** / **All Lost**
+    presets.
+  - **Heart Rate** and **Steps** overlays when you recorded them (yours only).
+- **Stats / Points tabs**
+  - **Stats** — the same Me-vs-opponent split-bar comparison as the app (serve,
+    return, break points, outcome breakdown, pressure, rally depth, score states),
+    filterable by **All / Set 1 / Set 2 …**, with a points-won bar and per-set
+    durations and activity.
+  - **Points** — the full point-by-point list, grouped by set.
+- **AI Coach card** — copy the coaching prompt (My Stats or Opponent's perspective)
+  and one-tap launch links to ChatGPT, Claude, Gemini, Perplexity, Copilot, Poe,
+  and Grok (see [AI Coaching Prompts](#ai-coaching-prompts--further-analysis) below
+  for what the prompt contains).
+
+**Privacy.** The page loads nothing from the network when opened. The only external
+links are the AI-app launch buttons, and they open only if the viewer taps one —
+nothing is uploaded automatically.
+
+**Previews.** Some file previews can't run scripts (for example, the iPhone's
+Quick Look when you tap the file). In that case the page still shows a full static
+report — the header, the momentum charts with their scatter markers and pills, and
+the Me-vs-opponent stat tables. For the fully interactive version (filters, tabs,
+AI launcher), open the file in a web browser.
+
+---
+
 ## AI Coaching Prompts & Further Analysis
 
 DeuceMate exports match data in a format built for feeding directly into any large-language-model AI tool for deeper, conversational coaching analysis that goes beyond the automated insights.
 
 ### Export formats
 
-Three export modes are available from the match detail view:
+Alongside the [interactive web page](#sharing-a-match-as-an-interactive-web-page)
+above, three plain-text/AI export modes are available from the match detail view's
+Share menu:
 
 | Mode | Contents | Best for |
 |------|----------|----------|

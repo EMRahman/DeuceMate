@@ -13,7 +13,12 @@ import Foundation
 public struct MatchWebViewModel: Encodable, Sendable {
 
     /// Wire-contract version for the viewer JS. Bump when the shape changes.
-    public static let currentSchemaVersion = 1
+    /// v2 added the TV-style `comparison` block + dropped the viewer's
+    /// perspective toggle in favour of a fixed recorder-framed page. v3 replaced
+    /// the single `comparison` with per-set-filter `filters` (All / Set N) and
+    /// added the Stats/Points tabs + point-display fields. v4 added the optional
+    /// `aiCoach` block (AI coaching prompt + launch links).
+    public static let currentSchemaVersion = 4
 
     public let schemaVersion: Int
     public let generatedAt: String
@@ -26,6 +31,18 @@ public struct MatchWebViewModel: Encodable, Sendable {
     /// Recorder-only. Present only when per-point cumulative step data exists.
     public let steps: StepsBlock?
     public let palette: Palette
+    /// Per-set-filter stat views (`All`, `Set 1`, `Set 2`, …) — each carries the
+    /// TV-style Me-vs-Opponent `comparison` (mirrors `MatchDetailView`'s split
+    /// bars), the points-won header, and the duration/activity rows for that
+    /// filter. `filters[0]` is always `All`; the viewer's set picker appears only
+    /// when there is more than one set (i.e. `filters.count > 2`).
+    public let filters: [FilterVM]
+    /// Label per set index (`Set 1` / `TB`), for the Points-tab group headers.
+    public let setLabels: [String]
+    /// AI coaching prompt + launch links (mirrors the iOS `AICoachSheet`).
+    /// Present only when the caller supplies a prompt (the iOS share path does);
+    /// `nil` for a bare `MatchHTMLExporter.html(for:)` with no prompt injected.
+    public let aiCoach: AICoach?
 
     // MARK: - Nested types
 
@@ -71,9 +88,23 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public let hasOutcomes: Bool
         public let sections: [StatSection]
         /// Per-outcome occurrence counts attributed to this perspective's player
-        /// (keyed by `PointOutcome` raw value), shown on the chart legend pills —
-        /// mirrors the outcome-frequency counts on `PointsGraphView`'s pills.
+        /// (keyed by `PointOutcome` raw value), shown on the chart's "Me" outcome
+        /// pills — mirrors the focal-player counts on `PointsGraphView`'s pills.
         public let outcomeCounts: [String: Int]
+        /// Per-outcome counts attributed to the *other* player, shown on the
+        /// chart's "Opp" outcome pills (mirrors PointsGraphView's `oppOutcomeCounts`).
+        public let outcomeCountsOpponent: [String: Int]
+        /// Points this perspective's player *won*, bucketed by the ending shot
+        /// phase (keyed by `EndingShot` raw value) — drives the "Won" ending-shot
+        /// pills. Mirrors PointsGraphView's `endingWonByPhase`.
+        public let endingWonByPhase: [String: Int]
+        /// Points this perspective's player *lost*, bucketed by ending shot phase —
+        /// drives the "Lost" ending-shot pills. Mirrors `endingLostByPhase`.
+        public let endingLostByPhase: [String: Int]
+        /// Ending-shot phases that actually occurred this match (won + lost > 0),
+        /// in rally order (`EndingShot.allCases`). Empty hides the ending-shot
+        /// controls, mirroring PointsGraphView's `presentEndingPhases`.
+        public let presentEndingPhases: [String]
         /// PulseCoach (HR-derived) insights — recorder-only; nil on opponent.
         public let pulseInsights: [String]?
     }
@@ -113,6 +144,15 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public let outcomeLabel: String
         public let outcomeColorHex: String
         public let outcomeSymbol: String
+        // Points-tab display (mirrors MatchDetailView.pointRow): the short chip
+        // (W / Opp W / DF / UE / FE / + / −) coloured by attribution, the longer
+        // outcome line ("Winner — Me"), and the server-relative game-score label
+        // ("0–15", "Deuce", "Ad Me"). Distinct from `gameScoreLabel`, which is the
+        // server–returner notation the chart popup uses.
+        public let chipText: String
+        public let chipColorHex: String
+        public let outcomeText: String
+        public let pointScoreLabel: String
         public let endingShot: String?   // EndingShot raw value
         public let endingShotLabel: String?
         public let endingShotColorHex: String?
@@ -179,11 +219,91 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public let endingShots: [Legend]
     }
 
+    // MARK: - Set-filtered stat views (mirrors MatchDetailView's set picker)
+
+    public struct FilterVM: Encodable, Sendable {
+        public let key: String        // "all" | "set-0" | "set-1" …
+        public let label: String      // "All" | "Set 1" | "TB"
+        public let pointsWon: PointsWonVM
+        /// Duration + Steps/Calories rows for this filter (recorder activity).
+        public let durationRows: [LabeledValue]
+        public let comparison: Comparison
+    }
+
+    public struct PointsWonVM: Encodable, Sendable {
+        public let meWon: Int
+        public let oppWon: Int
+        public let total: Int
+        public let mePct: Int
+        public let oppPct: Int
+    }
+
+    public struct LabeledValue: Encodable, Sendable {
+        public let label: String
+        public let value: String
+    }
+
+    // MARK: - AI coaching (mirrors the iOS AICoachSheet)
+
+    public struct AICoach: Encodable, Sendable {
+        public let title: String          // "Get AI Coaching Tips"
+        public let intro: String          // one-line explanation
+        public let mePrompt: String
+        /// Opponent-perspective prompt; `nil` hides the My/Opponent toggle.
+        public let opponentPrompt: String?
+        /// The AI apps the viewer offers a one-tap launch link to.
+        public let apps: [App]
+
+        public struct App: Encodable, Sendable {
+            public let name: String
+            public let url: String        // launch URL (https://…)
+            public let colorHex: String
+            /// When true the viewer appends `?q=<prompt>` to pre-fill the chat.
+            public let supportsPromptParam: Bool
+        }
+    }
+
+    // MARK: - TV-style comparison (mirrors MatchDetailView's split-bar stats)
+
+    public struct Comparison: Encodable, Sendable {
+        /// At least one categorised point exists (gates the Outcome Breakdown).
+        public let hasAnyOutcomeData: Bool
+        public let sections: [CmpSection]
+        /// Footer note about uncategorised points excluded from outcome stats.
+        public let note: String?
+    }
+
+    public struct CmpSection: Encodable, Sendable {
+        public let title: String
+        public let rows: [CmpRow]
+        /// Rendered in place of rows (e.g. the "not collected" placeholder).
+        public let placeholder: String?
+    }
+
+    public struct CmpRow: Encodable, Sendable {
+        /// `percent` → split bars + inner count; `count` → bars scaled to the
+        /// larger side; `ratio` → bare me/opp values, no bar (W:UE).
+        public enum Kind: String, Encodable, Sendable { case percent, count, ratio }
+        public let label: String
+        public let subtitle: String?
+        public let kind: Kind
+        public let meValue: String       // "67%", "3", or "1.5 : 1"
+        public let oppValue: String
+        public let meFraction: Double    // 0…1 bar fill
+        public let oppFraction: Double
+        public let meBarLabel: String?   // inner count, e.g. "12/15" (percent rows)
+        public let oppBarLabel: String?
+    }
+
     // MARK: - Builder
 
     /// Build the view model for one match. `maxHR` is used for HR-zone bucketing
     /// (recorder-only). Both `me` and `opponent` perspectives are computed.
-    public nonisolated static func make(from record: MatchRecord, maxHR: Int = 190) -> MatchWebViewModel {
+    /// `aiPromptMe` / `aiPromptOpponent` are the pre-generated AI coaching prompts
+    /// (from `MatchExporter`); supply them to surface the AI Coach card.
+    public nonisolated static func make(from record: MatchRecord, maxHR: Int = 190,
+                                        aiPromptMe: String? = nil,
+                                        aiPromptOpponent: String? = nil) -> MatchWebViewModel {
         let allStats = record.stats
         let hasStats = !allStats.isEmpty
         let categorized = allStats.filter { $0.outcome != .uncategorized }
@@ -254,6 +374,14 @@ public struct MatchWebViewModel: Encodable, Sendable {
             }
         )
 
+        // Per-set-filter stat views (All + one per set), each with its own
+        // TV-style comparison, points-won header, and duration/activity rows —
+        // matches MatchDetailView's set picker recomputing meSummary/oppSummary
+        // over the filtered stats.
+        let filters = Self.buildFilters(record, maxHR: maxHR)
+        let setLabels = record.setScores.indices.map { Self.setLabel(record, $0) }
+        let aiCoach = Self.buildAICoach(mePrompt: aiPromptMe, opponentPrompt: aiPromptOpponent)
+
         return MatchWebViewModel(
             schemaVersion: currentSchemaVersion,
             generatedAt: Self.isoFormatter.string(from: Date()),
@@ -263,7 +391,10 @@ public struct MatchWebViewModel: Encodable, Sendable {
             setBands: setBands,
             hr: hrBlock,
             steps: stepsBlock,
-            palette: palette
+            palette: palette,
+            filters: filters,
+            setLabels: setLabels,
+            aiCoach: aiCoach
         )
     }
 }

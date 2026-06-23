@@ -6,16 +6,21 @@
 //
 // The JS renders entirely from the global `DATA` object (a `MatchWebViewModel`).
 // It hand-draws SVG — NO chart library, NO CDN, NO network — mirroring the
-// SwiftUI `PointsGraphView`: momentum step lines, set bands, outcome/ending-shot
-// scatter with toggle chips, recorder-only HR/steps overlays, point selection,
-// a me⇄opponent perspective toggle, and the per-perspective stat cards.
+// SwiftUI archive detail: momentum step lines, set bands, `PointsGraphView`-style
+// outcome/ending-shot scatter pills, recorder-only HR/steps overlays, point
+// selection, and `MatchDetailView`'s TV-style Me-vs-Opp split-bar comparison.
+// The page is recorder-framed throughout — no perspective toggle.
 import Foundation
 
 public enum MatchWebTemplate {
 
     /// Assemble the complete, offline HTML page around an embedded JSON literal.
-    public static func page(jsonLiteral: String) -> String {
-        head + "\n<style>\n" + css + "\n</style>\n</head>\n<body>\n<div id=\"root\"></div>\n"
+    /// `fallbackHTML` is pre-rendered, static match content placed inside `#root`
+    /// so previews that don't run JavaScript (e.g. iOS Quick Look) still show the
+    /// match; the viewer JS clears `#root` and rebuilds the interactive UI on load.
+    public static func page(jsonLiteral: String, fallbackHTML: String = "") -> String {
+        head + "\n<style>\n" + css + "\n</style>\n</head>\n<body>\n"
+            + "<div id=\"root\">" + fallbackHTML + "</div>\n"
             + "<script>\nconst DATA = " + jsonLiteral + ";\n</script>\n"
             + "<script>\n" + js + "\n</script>\n</body>\n</html>\n"
     }
@@ -49,7 +54,6 @@ public enum MatchWebTemplate {
     h2 { font-size: 14px; margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
     .sub { color: var(--muted); font-size: 13px; }
     .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin: 14px 0; }
-    .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .spread { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
     .score { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
     .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
@@ -58,16 +62,107 @@ public enum MatchWebTemplate {
     .badge.draw { background: rgba(255,149,0,.16); color: #FF9F0A; }
     .badge.inProgress { background: rgba(142,142,147,.16); color: #aeb2ba; }
     .setline { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; margin-top: 4px; }
-    .toggle { display: inline-flex; background: var(--surface2); border-radius: 10px; padding: 3px; gap: 2px; }
-    .toggle button { border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 600;
-      padding: 6px 16px; border-radius: 8px; cursor: pointer; }
-    .toggle button.on { background: var(--accent); color: #06210f; }
     .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
     .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line);
       background: var(--surface2); color: var(--muted); border-radius: 999px; padding: 5px 11px; font-size: 13px;
       cursor: pointer; user-select: none; }
     .chip.on { color: var(--text); border-color: transparent; }
     .chip .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    /* iOS-style scatter controls (mirrors PointsGraphScatterControls). */
+    .legendline { display: flex; justify-content: center; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
+    .legendline .li { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+    .legendline .ln { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+    .legendline .dash { width: 14px; display: inline-flex; gap: 3px; }
+    .legendline .dash i { width: 5px; height: 2px; border-radius: 1px; display: inline-block; }
+    .controls { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+    .ctrl-sec { display: flex; flex-direction: column; gap: 6px; }
+    .ctrl-title { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .6px; padding: 0 2px; }
+    .ctrl-row { display: flex; align-items: center; gap: 8px; }
+    .ctrl-row .rl { color: var(--muted); font-size: 12px; font-weight: 500; min-width: 30px; }
+    .ctrl-row .rc { display: flex; flex-wrap: wrap; gap: 6px; }
+    .qrow { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 2px; }
+    .schip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid transparent;
+      background: var(--surface2); color: var(--muted); border-radius: 999px; padding: 4px 10px;
+      font-size: 12px; font-weight: 500; cursor: pointer; user-select: none; }
+    .schip .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .qchip { border: 1px solid transparent; background: var(--surface2); color: var(--muted);
+      border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600;
+      cursor: pointer; user-select: none; }
+    /* TV-style Me-vs-Opp comparison (mirrors MatchDetailView's split bars). */
+    .cmp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .cmp-head .cmp-title { flex: 1; text-align: center; color: var(--muted); font-size: 13px; font-weight: 600; }
+    .cmp-head .cap { font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; }
+    .cmp-row { padding: 7px 0; border-bottom: 1px solid var(--line); }
+    .cmp-row:last-child { border-bottom: 0; }
+    .cmp-rl { text-align: center; color: var(--muted); font-size: 12px; }
+    .cmp-rs { text-align: center; color: var(--muted); opacity: .7; font-size: 11px; }
+    .cmp-body { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+    .cmp-body .mev, .cmp-body .oppv { width: 46px; font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .cmp-body .mev { text-align: right; }
+    .cmp-body .oppv { text-align: left; }
+    .splitbar { flex: 1; display: flex; height: 18px; border-radius: 5px; overflow: hidden; }
+    .cmp-half { position: relative; flex: 1; height: 100%; }
+    .cmp-sep { width: 1px; background: var(--line); }
+    .cmp-blab { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+    .cmp-ratio { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 4px;
+      font-weight: 600; font-variant-numeric: tabular-nums; }
+    .cmp-ratio .sep { color: var(--muted); }
+    /* Stats/Points + set-filter segmented controls (mirror MatchDetailView). */
+    .seg { display: flex; background: var(--surface2); border: 1px solid var(--line); border-radius: 9px; padding: 2px; gap: 2px; }
+    .seg .segb { flex: 1; border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 600;
+      font-size: 13px; padding: 6px 12px; border-radius: 7px; cursor: pointer; }
+    .seg .segb.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+    /* Points-won header bar. */
+    .pw-card { margin-top: 0; }
+    .pw-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .pw-side { display: flex; flex-direction: column; gap: 1px; }
+    .pw-side.r { align-items: flex-end; }
+    .pw-mid { text-align: center; }
+    .pw-lbl { font-size: 11px; font-weight: 600; }
+    .pw-val { font-size: 13px; font-variant-numeric: tabular-nums; }
+    .pw-t { font-size: 11px; color: var(--muted); }
+    .pw-tt { font-size: 11px; color: var(--muted); opacity: .7; font-variant-numeric: tabular-nums; }
+    .pw-bar { display: flex; gap: 3px; height: 16px; margin-top: 8px; }
+    .pw-bar div { border-radius: 5px; }
+    /* Point-by-point list. */
+    .pt-row { display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+    .pt-row:last-child { border-bottom: 0; }
+    .pt-num { min-width: 22px; text-align: right; color: var(--muted); opacity: .7; font-size: 12px;
+      font-variant-numeric: tabular-nums; padding-top: 2px; }
+    .pt-body { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+    .pt-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .pt-score { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .pt-bp { color: #FF9F0A; font-size: 11px; font-weight: 700; }
+    .pt-2nd { color: var(--muted); font-size: 11px; }
+    .pt-outcome { display: flex; align-items: center; gap: 6px; }
+    .pt-otext { font-size: 14px; }
+    .pt-chip { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+    .pt-right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; white-space: nowrap; }
+    .pt-shot { color: var(--muted); opacity: .85; font-size: 11px; }
+    .pt-hr { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+    /* AI Coach card (mirrors the iOS AICoachSheet). */
+    .ai-head { display: flex; align-items: center; gap: 8px; }
+    .ai-spark { font-size: 18px; }
+    .ai-title { font-size: 16px; font-weight: 700; }
+    .ai-intro { color: var(--muted); font-size: 13px; margin: 4px 0 10px; }
+    .ai-sub { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 6px; }
+    .ai-apps { display: flex; flex-wrap: wrap; gap: 8px; }
+    .ai-app { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; border: 1px solid transparent;
+      border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 600; }
+    .ai-app .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    .ai-controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .ai-btn { border: 1px solid var(--line); background: var(--surface2); color: var(--text); border-radius: 9px;
+      padding: 8px 14px; font: inherit; font-weight: 600; font-size: 13px; cursor: pointer; }
+    .ai-btn.ghost { background: transparent; color: var(--muted); }
+    .ai-pre { white-space: pre-wrap; word-break: break-word; background: var(--bg); border: 1px solid var(--line);
+      border-radius: 9px; padding: 10px; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      max-height: 320px; overflow: auto; margin-top: 10px; color: var(--text); }
+    .ai-foot { color: var(--muted); font-size: 12px; margin-top: 10px; }
+    .ai-toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--surface2);
+      border: 1px solid var(--line); color: var(--text); border-radius: 999px; padding: 9px 16px; font-size: 13px;
+      font-weight: 600; opacity: 0; transition: opacity .2s; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
     svg { width: 100%; height: auto; display: block; touch-action: manipulation; }
     .axislabel { fill: var(--muted); font-size: 11px; }
     .gridline { stroke: var(--line); stroke-width: 1; }
@@ -75,7 +170,6 @@ public enum MatchWebTemplate {
       padding: 10px 12px; font-size: 13px; min-height: 20px; }
     .popup .k { color: var(--muted); }
     .popup b { font-variant-numeric: tabular-nums; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
     table { width: 100%; border-collapse: collapse; }
     td { padding: 5px 0; border-bottom: 1px solid var(--line); vertical-align: baseline; }
     tr:last-child td { border-bottom: 0; }
@@ -91,9 +185,6 @@ public enum MatchWebTemplate {
     .note { color: var(--muted); font-size: 13px; margin: 0 0 6px; }
     ul.bul { margin: 2px 0 0; padding-left: 18px; }
     ul.bul li { margin: 3px 0; }
-    .totals { display: flex; gap: 22px; flex-wrap: wrap; }
-    .totals .t { font-size: 18px; font-weight: 700; }
-    .totals .tl { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
     .foot { color: var(--muted); font-size: 12px; text-align: center; margin-top: 24px; }
     """#
 
@@ -103,11 +194,20 @@ public enum MatchWebTemplate {
       const NS = "http://www.w3.org/2000/svg";
       const root = document.getElementById("root");
       const P = DATA.palette;
+      // Selection model mirrors PointsGraphView's expanded controls: four
+      // independent sets of toggled scatter categories, plus the HR/Steps
+      // overlay flags. All four start empty (clean chart) exactly like the app.
       const state = {
         focal: "me",
-        layers: { outcome: true, shot: false, hr: false, steps: false },
-        selected: null
+        sel: { myOut: new Set(), oppOut: new Set(), wonShot: new Set(), lostShot: new Set() },
+        hr: false, steps: false,
+        selected: null,
+        tab: "stats",     // "stats" | "points" (mirrors MatchDetailView's tabs)
+        filter: "all",    // FilterVM key — the selected set filter
+        aiPersp: "me",    // AI Coach perspective: "me" | "opponent"
+        aiShow: false     // AI Coach: prompt preview expanded?
       };
+      const curFilter = () => DATA.filters.find(f => f.key === state.filter) || DATA.filters[0];
 
       // ---- tiny DOM helpers ----
       function el(tag, attrs, kids) {
@@ -158,52 +258,145 @@ public enum MatchWebTemplate {
         return el("div", { class: "setline", text: parts.join("   ·   ") });
       }
 
-      // ---- perspective toggle ----
-      function perspectiveToggle() {
-        function btn(key, label) {
-          return el("button", {
-            class: state.focal === key ? "on" : "",
-            text: label,
-            onclick: () => { if (state.focal !== key) { state.focal = key; if (!isMe()) { state.layers.hr = false; state.layers.steps = false; } render(); } }
-          });
-        }
-        return el("div", { class: "row", style: "margin:4px 0 0" }, [
-          el("h2", { text: "Viewing", style: "margin:0 8px 0 0" }),
-          el("div", { class: "toggle" }, [btn("me", "My Stats"), btn("opponent", "Opponent")])
-        ]);
-      }
-
       // ---- chart card ----
       function chartCard() {
         const card = el("div", { class: "card" }, [el("h2", { text: "Points Momentum" })]);
-        card.appendChild(chips());
-        const svg = buildSVG();
-        card.appendChild(svg);
-        card.appendChild(legend());
+        card.appendChild(buildSVG());
         const pop = el("div", { class: "popup" });
         card.appendChild(pop);
         renderPopup(pop);
+        card.appendChild(legend());
+        card.appendChild(controls());
         return card;
       }
 
-      function chip(label, color, on, toggle) {
-        const c = el("div", { class: "chip" + (on ? " on" : ""), onclick: toggle }, [
-          el("span", { class: "dot", style: "background:" + color }), label
+      // ---- iOS-style scatter controls (mirror PointsGraphScatterControls) ----
+      // Per-outcome chip metadata keyed by PointOutcome raw value, and the iOS
+      // chip order (DF · W · UE · FE) so the rows read exactly like the app.
+      const OUT_META = {}; P.outcomes.forEach(o => OUT_META[o.key] = o);
+      const SHOT_META = {}; P.endingShots.forEach(o => SHOT_META[o.key] = o);
+      const OUTCOME_ORDER = ["doubleFault", "winner", "unforcedError", "forcedError"];
+      const LOSS_OUTCOMES = ["unforcedError", "forcedError", "doubleFault"];
+      const GREEN = "#34C759", RED = "#FF3B30";
+
+      function tint(hex, a) {
+        const h = hex.replace("#", "");
+        return "rgba(" + parseInt(h.substr(0, 2), 16) + "," + parseInt(h.substr(2, 2), 16)
+          + "," + parseInt(h.substr(4, 2), 16) + "," + a + ")";
+      }
+      function eqSet(set, arr) {
+        if (set.size !== arr.length) return false;
+        return arr.every(v => set.has(v));
+      }
+      function presentPhases() { return focalP().presentEndingPhases || []; }
+
+      // A point matches outcome category `cat` for the absolute player `who`
+      // (mirrors PointsGraphData.matchesOutcome): DF = who served it, W = who
+      // struck it, UE/FE = who erred (i.e. the player who lost the point).
+      function matchesOutcome(cat, p, who) {
+        const other = who === "me" ? "opp" : "me";
+        if (cat === "doubleFault")   return p.server === who && p.outcome === "doubleFault";
+        if (cat === "winner")        return p.winner === who && p.outcome === "winner";
+        if (cat === "unforcedError") return p.winner === other && p.outcome === "unforcedError";
+        if (cat === "forcedError")   return p.winner === other && p.outcome === "forcedError";
+        return false;
+      }
+
+      function scatterChip(meta, count, on, toggle) {
+        const c = el("div", { class: "schip", onclick: toggle }, [
+          el("span", { class: "dot", style: "background:" + meta.colorHex }),
+          meta.label + " " + count
         ]);
+        if (on) { c.style.color = meta.colorHex; c.style.borderColor = tint(meta.colorHex, .45);
+          c.style.background = tint(meta.colorHex, .15); }
         return c;
       }
-      function chips() {
-        const wrap = el("div", { class: "chips" });
-        wrap.appendChild(chip("Outcomes", "#FFCC00", state.layers.outcome,
-          () => { state.layers.outcome = !state.layers.outcome; render(); }));
-        wrap.appendChild(chip("Shot Phase", "#30B0C7", state.layers.shot,
-          () => { state.layers.shot = !state.layers.shot; render(); }));
-        if (isMe() && DATA.points.some(p => p.heartRateBPM != null))
-          wrap.appendChild(chip("Heart Rate", P.hrLineHex, state.layers.hr,
-            () => { state.layers.hr = !state.layers.hr; render(); }));
-        if (isMe() && DATA.steps)
-          wrap.appendChild(chip("Steps", P.stepsLineHex, state.layers.steps,
-            () => { state.layers.steps = !state.layers.steps; render(); }));
+      function quickChip(label, color, on, toggle) {
+        const c = el("div", { class: "qchip", text: label, onclick: toggle });
+        if (on) { c.style.color = color; c.style.borderColor = tint(color, .45);
+          c.style.background = tint(color, .15); }
+        return c;
+      }
+      function chipRow(label, content) {
+        return el("div", { class: "ctrl-row" }, [
+          el("span", { class: "rl", text: label }), el("div", { class: "rc" }, content)
+        ]);
+      }
+
+      function outcomesSection() {
+        const c = focalP().outcomeCounts || {}, co = focalP().outcomeCountsOpponent || {};
+        const pointsWonOn = eqSet(state.sel.myOut, ["winner"]) && eqSet(state.sel.oppOut, LOSS_OUTCOMES);
+        const pointsLostOn = eqSet(state.sel.myOut, LOSS_OUTCOMES) && eqSet(state.sel.oppOut, ["winner"]);
+        const quick = el("div", { class: "qrow" }, [
+          quickChip("Points Won", GREEN, pointsWonOn, () => {
+            if (pointsWonOn) { state.sel.myOut = new Set(); state.sel.oppOut = new Set(); }
+            else { state.sel.myOut = new Set(["winner"]); state.sel.oppOut = new Set(LOSS_OUTCOMES); }
+            render();
+          }),
+          quickChip("Points Lost", RED, pointsLostOn, () => {
+            if (pointsLostOn) { state.sel.myOut = new Set(); state.sel.oppOut = new Set(); }
+            else { state.sel.myOut = new Set(LOSS_OUTCOMES); state.sel.oppOut = new Set(["winner"]); }
+            render();
+          })
+        ]);
+        const meRow = chipRow("Me", OUTCOME_ORDER.map(k =>
+          scatterChip(OUT_META[k], c[k] || 0, state.sel.myOut.has(k), () => { toggleIn(state.sel.myOut, k); render(); })));
+        const oppRow = chipRow("Opp", OUTCOME_ORDER.map(k =>
+          scatterChip(OUT_META[k], co[k] || 0, state.sel.oppOut.has(k), () => { toggleIn(state.sel.oppOut, k); render(); })));
+        return el("div", { class: "ctrl-sec" }, [el("div", { class: "ctrl-title", text: "Outcomes" }), quick, meRow, oppRow]);
+      }
+
+      function endingShotsSection() {
+        const present = presentPhases();
+        if (!present.length) return null;
+        const won = focalP().endingWonByPhase || {}, lost = focalP().endingLostByPhase || {};
+        const allWonOn = eqSet(state.sel.wonShot, present);
+        const allLostOn = eqSet(state.sel.lostShot, present);
+        const quick = el("div", { class: "qrow" }, [
+          quickChip("All Won", GREEN, allWonOn, () => {
+            if (allWonOn) { state.sel.wonShot = new Set(); }
+            else { state.sel.wonShot = new Set(present); state.sel.lostShot = new Set(); }
+            render();
+          }),
+          quickChip("All Lost", RED, allLostOn, () => {
+            if (allLostOn) { state.sel.lostShot = new Set(); }
+            else { state.sel.lostShot = new Set(present); state.sel.wonShot = new Set(); }
+            render();
+          })
+        ]);
+        const wonRow = chipRow("Won", present.map(k =>
+          scatterChip(SHOT_META[k], won[k] || 0, state.sel.wonShot.has(k), () => { toggleIn(state.sel.wonShot, k); render(); })));
+        const lostRow = chipRow("Lost", present.map(k =>
+          scatterChip(SHOT_META[k], lost[k] || 0, state.sel.lostShot.has(k), () => { toggleIn(state.sel.lostShot, k); render(); })));
+        return el("div", { class: "ctrl-sec" }, [el("div", { class: "ctrl-title", text: "Ending Shots" }), quick, wonRow, lostRow]);
+      }
+
+      function overlayToggles() {
+        const hasHR = isMe() && DATA.points.some(p => p.heartRateBPM != null);
+        const hasSteps = isMe() && !!DATA.steps;
+        if (!hasHR && !hasSteps) return null;
+        const wrap = el("div", { class: "chips", style: "margin:0" });
+        if (hasHR) wrap.appendChild(toggleChip("Heart Rate", P.hrLineHex, state.hr,
+          () => { state.hr = !state.hr; render(); }));
+        if (hasSteps) wrap.appendChild(toggleChip("Steps", P.stepsLineHex, state.steps,
+          () => { state.steps = !state.steps; render(); }));
+        return wrap;
+      }
+      function toggleChip(label, color, on, toggle) {
+        return el("div", { class: "chip" + (on ? " on" : ""), onclick: toggle }, [
+          el("span", { class: "dot", style: "background:" + color }), label
+        ]);
+      }
+
+      function toggleIn(set, k) { set.has(k) ? set.delete(k) : set.add(k); }
+
+      function controls() {
+        const wrap = el("div", { class: "controls" });
+        if (focalP().hasOutcomes) {
+          wrap.appendChild(outcomesSection());
+          const es = endingShotsSection(); if (es) wrap.appendChild(es);
+        }
+        const ov = overlayToggles(); if (ov) wrap.appendChild(ov);
         return wrap;
       }
 
@@ -218,14 +411,11 @@ public enum MatchWebTemplate {
 
       function focalCum(p) { return isMe() ? p.cumulativeMe : p.cumulativeOpp; }
       function otherCum(p) { return isMe() ? p.cumulativeOpp : p.cumulativeMe; }
-      // Which player a scatter mark belongs to (mirrors PointsGraphView): a double
-      // fault is the server's, a winner is the striker's, and an unforced/forced
-      // error belongs to the player who erred — i.e. the one who lost the point.
-      function outcomeOwner(p) {
-        if (p.outcome === "doubleFault") return p.server;
-        if (p.outcome === "winner") return p.winner;
-        return p.winner === "me" ? "opp" : "me";
-      }
+      // Absolute (recorder-frame) identity of the focal / other player, so the
+      // perspective toggle relabels the "Me"/"Opp" rows without moving the marks.
+      function meAbs() { return isMe() ? "me" : "opp"; }
+      function oppAbs() { return isMe() ? "opp" : "me"; }
+      function cumOf(p, who) { return who === "me" ? p.cumulativeMe : p.cumulativeOpp; }
 
       function buildSVG() {
         const svg = s("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
@@ -255,23 +445,30 @@ public enum MatchWebTemplate {
         svg.appendChild(stepPath(pts.map(p => [xAt(p.index), yP(focalCum(p))]), P.meLineHex, 2.5, false));
 
         // overlays (recorder-only)
-        if (isMe() && state.layers.hr) overlay(svg, pts.filter(p => p.heartRateBPM != null),
+        if (isMe() && state.hr) overlay(svg, pts.filter(p => p.heartRateBPM != null),
           p => p.heartRateBPM, P.hrLineHex, false, "HR");
-        if (isMe() && state.layers.steps && DATA.steps) overlay(svg, DATA.steps.timeline,
+        if (isMe() && state.steps && DATA.steps) overlay(svg, DATA.steps.timeline,
           p => p.cumulative, P.stepsLineHex, true, "Steps", true);
 
-        // scatter — each mark sits on the line of the player it belongs to, so the
-        // marker's line tells you who (mirrors PointsGraphView): an outcome on its
-        // owner's line, a shot-phase mark on the point winner's line. Absolute
-        // (me/opp) cumulative, so placement is stable across the perspective toggle.
-        const lineY = (who) => p => yP(who(p) === "me" ? p.cumulativeMe : p.cumulativeOpp);
-        const yOwner = lineY(outcomeOwner);
-        const yWinner = lineY(p => p.winner);
+        // scatter — driven by the toggled control pills (mirrors PointsGraphView).
+        // Each mark sits on the absolute line of the player it belongs to, so a
+        // "Me" outcome / a "Won" shot rides the focal line and an "Opp" outcome /
+        // a "Lost" shot rides the other line. Absolute cumulative keeps placement
+        // stable across the perspective toggle; only the row labels relabel.
+        const me = meAbs(), opp = oppAbs();
         pts.forEach(p => {
-          if (state.layers.outcome && p.outcome !== "uncategorized")
-            svg.appendChild(symbol(p.outcomeSymbol, xAt(p.index), yOwner(p), p.outcomeColorHex));
-          if (state.layers.shot && p.endingShot)
-            svg.appendChild(symbol(p.endingShotSymbol, xAt(p.index), yWinner(p), p.endingShotColorHex));
+          if (p.outcome !== "uncategorized") {
+            state.sel.myOut.forEach(cat => { if (matchesOutcome(cat, p, me))
+              svg.appendChild(symbol(OUT_META[cat].symbol, xAt(p.index), yP(cumOf(p, me)), OUT_META[cat].colorHex)); });
+            state.sel.oppOut.forEach(cat => { if (matchesOutcome(cat, p, opp))
+              svg.appendChild(symbol(OUT_META[cat].symbol, xAt(p.index), yP(cumOf(p, opp)), OUT_META[cat].colorHex)); });
+          }
+          if (p.endingShot) {
+            if (p.winner === me && state.sel.wonShot.has(p.endingShot))
+              svg.appendChild(symbol(p.endingShotSymbol, xAt(p.index), yP(cumOf(p, me)), p.endingShotColorHex));
+            if (p.winner === opp && state.sel.lostShot.has(p.endingShot))
+              svg.appendChild(symbol(p.endingShotSymbol, xAt(p.index), yP(cumOf(p, opp)), p.endingShotColorHex));
+          }
         });
 
         // selection rule
@@ -347,22 +544,24 @@ public enum MatchWebTemplate {
         return poly(p);
       }
 
+      // Line legend only (Me / Opponent + active overlays) — the outcome and
+      // ending-shot frequency counts now live on the control pills below, exactly
+      // like PointsGraphView's split between its legend and scatter controls.
       function legend() {
-        const wrap = el("div", { class: "chips", style: "margin-top:10px" });
-        wrap.appendChild(legItem(P.meLineHex, isMe() ? "You" : "You (opponent)"));
-        wrap.appendChild(legItem(P.opponentLineHex, "Opponent"));
-        // Outcome legend pills carry the focal player's per-outcome frequency
-        // count (e.g. "W 8", "UE 5") — mirrors PointsGraphView's outcome pills.
-        const counts = focalP().outcomeCounts || {};
-        if (state.layers.outcome) P.outcomes.forEach(o =>
-          wrap.appendChild(legItem(o.colorHex, o.label + " " + (counts[o.key] || 0))));
-        if (state.layers.shot) P.endingShots.forEach(o => wrap.appendChild(legItem(o.colorHex, o.label)));
+        const wrap = el("div", { class: "legendline" });
+        wrap.appendChild(lineItem(P.meLineHex, "Me", false));
+        wrap.appendChild(lineItem(P.opponentLineHex, "Opponent", false));
+        if (isMe() && state.hr && DATA.points.some(p => p.heartRateBPM != null))
+          wrap.appendChild(lineItem(P.hrLineHex, "Heart Rate", false));
+        if (isMe() && state.steps && DATA.steps)
+          wrap.appendChild(lineItem(P.stepsLineHex, "Steps", true));
         return wrap;
       }
-      function legItem(color, label) {
-        return el("span", { class: "chip on", style: "cursor:default" }, [
-          el("span", { class: "dot", style: "background:" + color }), label
-        ]);
+      function lineItem(color, label, dashed) {
+        const swatch = dashed
+          ? el("span", { class: "dash" }, [el("i", { style: "background:" + color }), el("i", { style: "background:" + color })])
+          : el("span", { class: "ln", style: "background:" + color });
+        return el("span", { class: "li" }, [swatch, label]);
       }
 
       function renderPopup(pop) {
@@ -388,16 +587,160 @@ public enum MatchWebTemplate {
         ])));
       }
 
-      // ---- stats cards ----
-      function statsSection() {
-        const wrap = el("div", null, [el("h2", { text: "Match Statistics", style: "margin:18px 0 8px" })]);
-        const grid = el("div", { class: "grid" });
-        focalP().sections.forEach(sec => grid.appendChild(card(sec)));
-        if (isMe() && focalP().pulseInsights && focalP().pulseInsights.length)
-          grid.appendChild(card({ title: "PulseCoach Insights", bullets: focalP().pulseInsights, rows: [], note: null }));
-        wrap.appendChild(grid);
+      // ---- Stats / Points tab toggle (mirrors MatchDetailView's segmented picker) ----
+      function segBtn(label, on, onclick) {
+        return el("button", { class: "segb" + (on ? " on" : ""), text: label, onclick: onclick });
+      }
+      function tabToggle() {
+        return el("div", { class: "seg", style: "margin-top:14px" }, [
+          segBtn("Stats",  state.tab === "stats",  () => { state.tab = "stats";  render(); }),
+          segBtn("Points", state.tab === "points", () => { state.tab = "points"; render(); })
+        ]);
+      }
+      // Set filter (All / Set 1 / Set 2 …) — shown only with more than one set.
+      function setFilterToggle() {
+        return el("div", { class: "seg", style: "margin-top:14px" },
+          DATA.filters.map(f => segBtn(f.label, state.filter === f.key, () => { state.filter = f.key; render(); })));
+      }
+
+      // ---- Stats tab: per-filter Me-vs-Opp comparison (mirrors MatchDetailView) ----
+      function statsTab() {
+        const f = curFilter();
+        const wrap = el("div");
+        if (DATA.filters.length > 2) wrap.appendChild(setFilterToggle());
+        wrap.appendChild(el("h2", { text: "Match Statistics", style: "margin:18px 0 8px" }));
+        const pw = pointsWonBar(f.pointsWon); if (pw) wrap.appendChild(pw);
+        if (f.durationRows && f.durationRows.length) wrap.appendChild(durationCard(f.durationRows));
+        f.comparison.sections.forEach(sec => wrap.appendChild(comparisonCard(sec)));
+        if (f.comparison.note)
+          wrap.appendChild(el("p", { class: "note", style: "padding:0 4px", text: f.comparison.note }));
+        // Whole-match recorder coaching / PulseCoach / HR-zone cards (not set-filtered).
+        (focalP().sections || []).filter(s => s.bullets && s.bullets.length)
+          .forEach(sec => wrap.appendChild(card(sec)));
+        const pulse = focalP().pulseInsights;
+        if (pulse && pulse.length)
+          wrap.appendChild(card({ title: "PulseCoach Insights", bullets: pulse, rows: [], note: null }));
+        const hz = hrZonesSection(); if (hz) wrap.appendChild(hz);
         return wrap;
       }
+
+      // Me/Opp points-won header bar (mirrors MatchDetailView.pointsWonHeader).
+      function pointsWonBar(pw) {
+        if (!pw || pw.total <= 0) return null;
+        const head = el("div", { class: "pw-head" }, [
+          el("div", { class: "pw-side" }, [
+            el("div", { class: "pw-lbl", text: "Me", style: "color:" + P.meLineHex }),
+            el("div", { class: "pw-val", text: pw.meWon + " pts · " + pw.mePct + "%", style: "color:" + P.meLineHex })
+          ]),
+          el("div", { class: "pw-mid" }, [
+            el("div", { class: "pw-t", text: "Points Won" }),
+            el("div", { class: "pw-tt", text: pw.total + " total" })
+          ]),
+          el("div", { class: "pw-side r" }, [
+            el("div", { class: "pw-lbl", text: "Opp", style: "color:" + P.opponentLineHex }),
+            el("div", { class: "pw-val", text: pw.oppWon + " pts · " + pw.oppPct + "%", style: "color:" + P.opponentLineHex })
+          ])
+        ]);
+        const bar = el("div", { class: "pw-bar" }, [
+          el("div", { style: "width:" + (pw.meWon / pw.total * 100) + "%;background:" + P.meLineHex }),
+          el("div", { style: "width:" + (pw.oppWon / pw.total * 100) + "%;background:" + P.opponentLineHex })
+        ]);
+        return el("div", { class: "card pw-card" }, [head, bar]);
+      }
+
+      function durationCard(rows) {
+        const tbl = el("table");
+        rows.forEach(r => tbl.appendChild(el("tr", null, [
+          el("td", { class: "l", text: r.label }), el("td", { class: "v", text: r.value })
+        ])));
+        return el("div", { class: "card" }, [el("h2", { text: "Duration" }), tbl]);
+      }
+
+      // ---- Points tab: point-by-point list grouped by set ----
+      function pointsTab() {
+        const wrap = el("div", null, [el("h2", { text: "Points", style: "margin:18px 0 8px" })]);
+        let cur = null;
+        const groups = [];
+        DATA.points.forEach(p => {
+          if (!cur || cur.setIndex !== p.setIndex) { cur = { setIndex: p.setIndex, pts: [] }; groups.push(cur); }
+          cur.pts.push(p);
+        });
+        groups.forEach(g => {
+          const c = el("div", { class: "card" }, [
+            el("h2", { text: DATA.setLabels[g.setIndex] || ("Set " + (g.setIndex + 1)) })
+          ]);
+          g.pts.forEach((p, i) => c.appendChild(pointRow(i + 1, p)));
+          wrap.appendChild(c);
+        });
+        return wrap;
+      }
+      function chipPill(text, color) {
+        return el("span", { class: "pt-chip", text: text, style: "color:" + color + ";background:" + tint(color, .15) });
+      }
+      function pointRow(number, p) {
+        const meta = el("div", { class: "pt-meta" });
+        if (p.pointScoreLabel) meta.appendChild(el("span", { class: "pt-score", text: p.pointScoreLabel }));
+        if (p.isBreakPoint) meta.appendChild(el("span", { class: "pt-bp", text: "BP" }));
+        if (p.isSecondServe) meta.appendChild(el("span", { class: "pt-2nd", text: "2nd" }));
+        const body = el("div", { class: "pt-body" }, [
+          meta,
+          el("div", { class: "pt-outcome" }, [chipPill(p.chipText, p.chipColorHex), el("span", { class: "pt-otext", text: p.outcomeText })])
+        ]);
+        const right = el("div", { class: "pt-right" });
+        if (p.endingShotLabel) right.appendChild(el("span", { class: "pt-shot", text: p.endingShotLabel }));
+        if (p.heartRateBPM != null) right.appendChild(el("span", { class: "pt-hr", text: "My HR: " + p.heartRateBPM + " bpm" }));
+        return el("div", { class: "pt-row" }, [el("div", { class: "pt-num", text: String(number) }), body, right]);
+      }
+
+      function cmpCap(label, color) {
+        return el("span", { class: "cap", text: label, style: "color:" + color + ";background:" + tint(color, .15) });
+      }
+      function comparisonCard(sec) {
+        const c = el("div", { class: "card" }, [
+          el("div", { class: "cmp-head" }, [
+            cmpCap("Me", P.meLineHex),
+            el("span", { class: "cmp-title", text: sec.title }),
+            cmpCap("Opp", P.opponentLineHex)
+          ])
+        ]);
+        if (sec.placeholder) { c.appendChild(el("p", { class: "note", text: sec.placeholder })); return c; }
+        sec.rows.forEach(r => c.appendChild(comparisonRow(r)));
+        return c;
+      }
+      function comparisonRow(r) {
+        const kids = [el("div", { class: "cmp-rl", text: r.label })];
+        if (r.subtitle) kids.push(el("div", { class: "cmp-rs", text: r.subtitle }));
+        if (r.kind === "ratio") {
+          kids.push(el("div", { class: "cmp-ratio" }, [
+            el("span", { text: r.meValue, style: "color:" + P.meLineHex }),
+            el("span", { class: "sep", text: "/" }),
+            el("span", { text: r.oppValue, style: "color:" + P.opponentLineHex })
+          ]));
+        } else {
+          kids.push(el("div", { class: "cmp-body" }, [
+            el("span", { class: "mev", text: r.meValue, style: "color:" + P.meLineHex }),
+            splitBar(r),
+            el("span", { class: "oppv", text: r.oppValue, style: "color:" + P.opponentLineHex })
+          ]));
+        }
+        return el("div", { class: "cmp-row" }, kids);
+      }
+      // Centre-anchored split bar: the Me half fills from the centre leftward,
+      // the Opp half from the centre rightward; the raw count rides each half.
+      function splitBar(r) {
+        return el("div", { class: "splitbar" }, [
+          cmpHalf("right", r.meFraction, r.meBarLabel, P.meLineHex),
+          el("div", { class: "cmp-sep" }),
+          cmpHalf("left", r.oppFraction, r.oppBarLabel, P.opponentLineHex)
+        ]);
+      }
+      function cmpHalf(side, frac, label, color) {
+        const pct = Math.max(0, Math.min(1, frac || 0)) * 100;
+        const fill = el("div", { style: "position:absolute;top:0;bottom:0;" + side + ":0;width:" + pct + "%;background:" + color });
+        return el("div", { class: "cmp-half", style: "background:" + tint(color, .15) },
+          [fill, label ? el("span", { class: "cmp-blab", text: label }) : null]);
+      }
+
       function card(sec) {
         const c = el("div", { class: "card" }, [el("h2", { text: sec.title })]);
         if (sec.note) c.appendChild(el("p", { class: "note", text: sec.note }));
@@ -427,21 +770,6 @@ public enum MatchWebTemplate {
         return c;
       }
 
-      function totalsSection() {
-        if (!isMe() || !DATA.meta.totals) return null;
-        const t = DATA.meta.totals, items = [];
-        if (t.stepsDisplay) items.push(["Steps", t.stepsDisplay]);
-        if (t.distanceDisplay) items.push(["Distance", t.distanceDisplay]);
-        if (t.caloriesDisplay) items.push(["Calories", t.caloriesDisplay]);
-        if (!items.length) return null;
-        return el("div", { class: "card" }, [
-          el("h2", { text: "Activity (recorder only)" }),
-          el("div", { class: "totals" }, items.map(i => el("div", null, [
-            el("div", { class: "t", text: i[1] }), el("div", { class: "tl", text: i[0] })
-          ])))
-        ]);
-      }
-
       function hrZonesSection() {
         if (!isMe() || !DATA.hr || !DATA.hr.zones.length) return null;
         return card({ title: "Heart Rate Win Rate by Zone", rows: DATA.hr.zones.map(z => ({
@@ -449,16 +777,88 @@ public enum MatchWebTemplate {
         })), note: null, bullets: null });
       }
 
+      // ---- AI Coach card (mirrors the iOS AICoachSheet) ----
+      function aiActivePrompt() {
+        const ai = DATA.aiCoach;
+        return (state.aiPersp === "opponent" && ai.opponentPrompt) ? ai.opponentPrompt : ai.mePrompt;
+      }
+      function aiAppLink(a, prompt) {
+        const href = a.supportsPromptParam ? (a.url + "?q=" + encodeURIComponent(prompt.slice(0, 1500))) : a.url;
+        const link = el("a", { class: "ai-app", href: href, target: "_blank", rel: "noopener",
+          onclick: () => copyText(prompt) }, [el("span", { class: "dot", style: "background:" + a.colorHex }), a.name]);
+        link.style.color = a.colorHex;
+        link.style.borderColor = tint(a.colorHex, .5);
+        link.style.background = tint(a.colorHex, .12);
+        return link;
+      }
+      function aiCoachCard() {
+        const ai = DATA.aiCoach;
+        const c = el("div", { class: "card" }, [
+          el("div", { class: "ai-head" }, [el("span", { class: "ai-spark", text: "✨" }), el("span", { class: "ai-title", text: ai.title })]),
+          el("div", { class: "ai-intro", text: ai.intro })
+        ]);
+        if (ai.opponentPrompt) {
+          c.appendChild(el("div", { class: "seg", style: "max-width:300px" }, [
+            segBtn("My Stats", state.aiPersp === "me", () => { state.aiPersp = "me"; render(); }),
+            segBtn("Opponent", state.aiPersp === "opponent", () => { state.aiPersp = "opponent"; render(); })
+          ]));
+        }
+        const prompt = aiActivePrompt();
+        c.appendChild(el("div", { class: "ai-sub", text: "Open in AI app" }));
+        c.appendChild(el("div", { class: "ai-apps" }, ai.apps.map(a => aiAppLink(a, prompt))));
+        c.appendChild(el("div", { class: "ai-controls" }, [
+          el("button", { class: "ai-btn", text: "Copy Prompt", onclick: () => copyText(prompt) }),
+          el("button", { class: "ai-btn ghost", text: state.aiShow ? "Hide prompt" : "Show prompt",
+            onclick: () => { state.aiShow = !state.aiShow; render(); } })
+        ]));
+        if (state.aiShow) c.appendChild(el("pre", { class: "ai-pre", text: prompt }));
+        c.appendChild(el("div", { class: "ai-foot",
+          text: "Copies the prompt to your clipboard and opens the app — paste it into a new chat." }));
+        return c;
+      }
+
+      // Clipboard + ephemeral toast (offline-safe: no external calls).
+      function copyText(t) {
+        try {
+          if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(t).then(() => toast("Prompt copied to clipboard"), () => fallbackCopy(t));
+            return;
+          }
+        } catch (e) {}
+        fallbackCopy(t);
+      }
+      function fallbackCopy(t) {
+        try {
+          const ta = el("textarea", { style: "position:fixed;top:-1000px;opacity:0" });
+          ta.value = t; root.appendChild(ta);
+          if (ta.select) ta.select();
+          if (typeof document.execCommand === "function") document.execCommand("copy");
+          if (ta.remove) ta.remove();
+          toast("Prompt copied to clipboard");
+        } catch (e) {}
+      }
+      let toastEl = null, toastTimer = null;
+      function toast(msg) {
+        if (!toastEl) { toastEl = el("div", { class: "ai-toast" }); root.appendChild(toastEl); }
+        toastEl.textContent = msg; toastEl.style.opacity = "1";
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { if (toastEl) toastEl.style.opacity = "0"; }, 2000);
+      }
+
       // ---- render ----
+      // Recorder-framed throughout (no perspective toggle), exactly like the iOS
+      // archive detail: header, Me/Opp momentum chart, a Stats/Points tab toggle,
+      // then either the set-filtered Me-vs-Opp comparison or the point-by-point
+      // list, and finally the AI Coach card.
       function render() {
         root.innerHTML = "";
+        toastEl = null;
         root.appendChild(header());
-        root.appendChild(perspectiveToggle());
-        root.appendChild(chartCard());
-        const totals = totalsSection(); if (totals) root.appendChild(totals);
-        const stats = statsSection();
-        const hz = hrZonesSection(); if (hz) stats.querySelector(".grid").appendChild(hz);
-        root.appendChild(stats);
+        const hasPoints = DATA.points.length > 0;
+        if (hasPoints) root.appendChild(chartCard());
+        if (hasPoints) root.appendChild(tabToggle());
+        root.appendChild(hasPoints && state.tab === "points" ? pointsTab() : statsTab());
+        if (DATA.aiCoach) root.appendChild(aiCoachCard());
         root.appendChild(el("div", { class: "foot", text: "Generated by DeuceMate · open offline in any browser" }));
       }
 
