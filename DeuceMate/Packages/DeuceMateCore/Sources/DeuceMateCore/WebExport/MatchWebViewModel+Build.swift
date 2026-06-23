@@ -26,8 +26,10 @@ extension MatchWebViewModel {
                 title: "Points",
                 rows: [
                     StatRow(label: "Total Played", value: "\(full.totalPoints)", hint: nil),
-                    StatRow(label: "Won", value: countAndPct(full.pointsWon, full.totalPoints), hint: nil),
-                    StatRow(label: "Lost", value: countAndPct(full.lostPoints, full.totalPoints), hint: nil)
+                    StatRow(label: "Won", value: countAndPct(full.pointsWon, full.totalPoints), hint: nil,
+                            fraction: frac(full.pointsWon, full.totalPoints)),
+                    StatRow(label: "Lost", value: countAndPct(full.lostPoints, full.totalPoints), hint: nil,
+                            fraction: frac(full.lostPoints, full.totalPoints))
                 ],
                 note: nil, bullets: nil
             ))
@@ -111,26 +113,36 @@ extension MatchWebViewModel {
         }
         let servicePointsWon = s.firstServeWins + s.secondServeWins
         return StatSection(title: "Serve", rows: [
-            StatRow(label: "Service Points Win", value: MatchStatsSummary.pct(num: servicePointsWon, den: s.firstServeTotal), hint: nil),
-            StatRow(label: "1st Serve In", value: MatchStatsSummary.pct(num: s.firstServeIn, den: s.firstServeTotal), hint: nil),
-            StatRow(label: "1st Serve Win", value: MatchStatsSummary.pct(num: s.firstServeWins, den: s.firstServeIn), hint: nil),
-            StatRow(label: "2nd Serve In", value: MatchStatsSummary.pct(num: s.secondServeIn, den: s.secondServeTotal), hint: nil),
-            StatRow(label: "2nd Serve Win", value: MatchStatsSummary.pct(num: s.secondServeWins, den: s.secondServeIn), hint: nil),
-            StatRow(label: "Double Faults", value: dfNote, hint: nil)
+            StatRow(label: "Service Points Win", value: MatchStatsSummary.pct(num: servicePointsWon, den: s.firstServeTotal), hint: nil,
+                    fraction: frac(servicePointsWon, s.firstServeTotal)),
+            StatRow(label: "1st Serve In", value: MatchStatsSummary.pct(num: s.firstServeIn, den: s.firstServeTotal), hint: nil,
+                    fraction: frac(s.firstServeIn, s.firstServeTotal)),
+            StatRow(label: "1st Serve Win", value: MatchStatsSummary.pct(num: s.firstServeWins, den: s.firstServeIn), hint: nil,
+                    fraction: frac(s.firstServeWins, s.firstServeIn)),
+            StatRow(label: "2nd Serve In", value: MatchStatsSummary.pct(num: s.secondServeIn, den: s.secondServeTotal), hint: nil,
+                    fraction: frac(s.secondServeIn, s.secondServeTotal)),
+            StatRow(label: "2nd Serve Win", value: MatchStatsSummary.pct(num: s.secondServeWins, den: s.secondServeIn), hint: nil,
+                    fraction: frac(s.secondServeWins, s.secondServeIn)),
+            StatRow(label: "Double Faults", value: dfNote, hint: nil,
+                    fraction: frac(s.doubleFaults, s.secondServeTotal))
         ], note: nil, bullets: nil)
     }
 
     private static func returnSection(_ s: MatchStatsSummary) -> StatSection {
         StatSection(title: "Return", rows: [
-            StatRow(label: "Win vs. 1st Serve", value: MatchStatsSummary.pct(num: s.returnWinsOnFirst, den: s.returnOppsOnFirst), hint: nil),
-            StatRow(label: "Win vs. 2nd Serve", value: MatchStatsSummary.pct(num: s.returnWinsOnSecond, den: s.returnOppsOnSecond), hint: nil)
+            StatRow(label: "Win vs. 1st Serve", value: MatchStatsSummary.pct(num: s.returnWinsOnFirst, den: s.returnOppsOnFirst), hint: nil,
+                    fraction: frac(s.returnWinsOnFirst, s.returnOppsOnFirst)),
+            StatRow(label: "Win vs. 2nd Serve", value: MatchStatsSummary.pct(num: s.returnWinsOnSecond, den: s.returnOppsOnSecond), hint: nil,
+                    fraction: frac(s.returnWinsOnSecond, s.returnOppsOnSecond))
         ], note: nil, bullets: nil)
     }
 
     private static func breakPointSection(_ s: MatchStatsSummary) -> StatSection {
         StatSection(title: "Break Points", rows: [
-            StatRow(label: "Converted (as returner)", value: fractionAndPct(s.breakPointWins, s.breakPointOpps), hint: nil),
-            StatRow(label: "Saved (as server)", value: fractionAndPct(s.breakPointsFaced - s.breakPointsLost, s.breakPointsFaced), hint: nil)
+            StatRow(label: "Converted (as returner)", value: fractionAndPct(s.breakPointWins, s.breakPointOpps), hint: nil,
+                    fraction: frac(s.breakPointWins, s.breakPointOpps)),
+            StatRow(label: "Saved (as server)", value: fractionAndPct(s.breakPointsFaced - s.breakPointsLost, s.breakPointsFaced), hint: nil,
+                    fraction: frac(s.breakPointsFaced - s.breakPointsLost, s.breakPointsFaced))
         ], note: nil, bullets: nil)
     }
 
@@ -141,9 +153,11 @@ extension MatchWebViewModel {
             StatRow(label: "Unforced Errors", value: "\(s.myUnforcedErrors)", hint: nil),
             StatRow(label: "Forced Errors", value: "\(s.myForcedErrors)", hint: nil),
             StatRow(label: "Double Faults", value: "\(s.myDoubleFaults)", hint: nil),
-            StatRow(label: "Self-Inflicted Losses", value: s.ownErrorsPct, hint: "own errors / points lost"),
+            StatRow(label: "Self-Inflicted Losses", value: s.ownErrorsPct, hint: "own errors / points lost",
+                    fraction: frac(s.myDoubleFaults + s.myUnforcedErrors, s.lostPoints)),
             StatRow(label: "W:UE Ratio", value: s.wueRatio, hint: "aim for > 1.0"),
-            StatRow(label: "Aggression Index", value: s.aggressionIndex, hint: "winners / (winners + UE)")
+            StatRow(label: "Aggression Index", value: s.aggressionIndex, hint: "winners / (winners + UE)",
+                    fraction: frac(s.myWinners, s.myWinners + s.myUnforcedErrors))
         ], note: nil, bullets: nil)
     }
 
@@ -160,21 +174,25 @@ extension MatchWebViewModel {
     private static func rallyDepthSection(_ s: MatchStatsSummary) -> StatSection {
         let rows = s.rallyDepth.map {
             StatRow(label: rallyDepthLabel($0.shot),
-                    value: "Win " + MatchStatsSummary.pct(num: $0.wins, den: $0.total), hint: nil)
+                    value: "Win " + MatchStatsSummary.pct(num: $0.wins, den: $0.total), hint: nil,
+                    fraction: frac($0.wins, $0.total))
         }
         return StatSection(title: "Rally Depth", rows: rows, note: nil, bullets: nil)
     }
 
     private static func pressureSection(_ s: MatchStatsSummary) -> StatSection {
         StatSection(title: "Pressure vs. Normal Points", rows: [
-            StatRow(label: "Big Points (BP / Deuce / TB)", value: MatchStatsSummary.pct(num: s.bigPointWins, den: s.bigPointTotal), hint: nil),
-            StatRow(label: "Normal Points", value: MatchStatsSummary.pct(num: s.normalPointWins, den: s.normalPointTotal), hint: nil)
+            StatRow(label: "Big Points (BP / Deuce / TB)", value: MatchStatsSummary.pct(num: s.bigPointWins, den: s.bigPointTotal), hint: nil,
+                    fraction: frac(s.bigPointWins, s.bigPointTotal)),
+            StatRow(label: "Normal Points", value: MatchStatsSummary.pct(num: s.normalPointWins, den: s.normalPointTotal), hint: nil,
+                    fraction: frac(s.normalPointWins, s.normalPointTotal))
         ], note: nil, bullets: nil)
     }
 
     private static func scoreStatesSection(_ s: MatchStatsSummary) -> StatSection {
         let rows = s.scoreStates.map {
-            StatRow(label: $0.label, value: MatchStatsSummary.pct(num: $0.wins, den: $0.total), hint: nil)
+            StatRow(label: $0.label, value: MatchStatsSummary.pct(num: $0.wins, den: $0.total), hint: nil,
+                    fraction: frac($0.wins, $0.total))
         }
         return StatSection(title: "Score State Win Rates", rows: rows, note: nil, bullets: nil)
     }
@@ -336,6 +354,12 @@ extension MatchWebViewModel {
         guard den > 0 else { return "0/0" }
         let p = Int((Double(num) / Double(den)) * 100.0)
         return "\(num)/\(den) (\(p)%)"
+    }
+
+    /// Bar fill fraction (0…1) for a percentage row, or `nil` when there is no
+    /// meaningful denominator (so the row renders as plain text, no bar).
+    static func frac(_ num: Int, _ den: Int) -> Double? {
+        den > 0 ? Double(num) / Double(den) : nil
     }
 
     static func result(record: MatchRecord, focal: Player) -> String {

@@ -91,6 +91,17 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public let label: String
         public let value: String
         public let hint: String?
+        /// Fill fraction (0…1) driving the percentage bar; `nil` for plain-count
+        /// rows that have no meaningful percentage. The `value` string still
+        /// carries the raw counts (e.g. "67% (12/15)").
+        public let fraction: Double?
+
+        public init(label: String, value: String, hint: String? = nil, fraction: Double? = nil) {
+            self.label = label
+            self.value = value
+            self.hint = hint
+            self.fraction = fraction
+        }
     }
 
     public struct PointVM: Encodable, Sendable {

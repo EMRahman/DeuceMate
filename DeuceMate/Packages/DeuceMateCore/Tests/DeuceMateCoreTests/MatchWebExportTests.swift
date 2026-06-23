@@ -196,6 +196,48 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertEqual(httpCount, nsCount)
     }
 
+    // MARK: - 6. Percentage rows carry a bar fraction + keep their counts
+
+    /// First matching row by label across all of a perspective's sections.
+    private func row(_ vm: MatchWebViewModel, _ player: KeyPath<MatchWebViewModel.Perspectives, MatchWebViewModel.PerspectiveVM>, label: String) -> MatchWebViewModel.StatRow? {
+        vm.perspectives[keyPath: player].sections
+            .flatMap { $0.rows }
+            .first { $0.label == label }
+    }
+
+    func test_percentageRows_carryFraction_andKeepCounts() throws {
+        let vm = MatchWebViewModel.make(from: makeRecord())
+
+        // A percentage row exposes a 0…1 fraction AND still shows the raw counts.
+        let firstIn = try XCTUnwrap(row(vm, \.me, label: "1st Serve In"))
+        let f = try XCTUnwrap(firstIn.fraction)
+        XCTAssertGreaterThanOrEqual(f, 0)
+        XCTAssertLessThanOrEqual(f, 1)
+        XCTAssertTrue(firstIn.value.contains("("), "value should still carry the count, got: \(firstIn.value)")
+
+        // Break-point conversion is a fraction row too.
+        let conv = try XCTUnwrap(row(vm, \.me, label: "Converted (as returner)"))
+        XCTAssertNotNil(conv.fraction)
+        XCTAssertTrue(conv.value.contains("/"))
+
+        // Plain-count rows have no bar.
+        XCTAssertNil(try XCTUnwrap(row(vm, \.me, label: "Total Played")).fraction)
+        XCTAssertNil(try XCTUnwrap(row(vm, \.me, label: "Winners")).fraction)
+        // W:UE Ratio is a ratio, not a 0…1 percentage — no bar.
+        XCTAssertNil(try XCTUnwrap(row(vm, \.me, label: "W:UE Ratio")).fraction)
+    }
+
+    func test_fraction_roundTripsThroughJSON() throws {
+        let vm = MatchWebViewModel.make(from: makeRecord())
+        let obj = try jsonObject(vm)
+        let persp = try XCTUnwrap(obj["perspectives"] as? [String: Any])
+        let me = try XCTUnwrap(persp["me"] as? [String: Any])
+        let sections = try XCTUnwrap(me["sections"] as? [[String: Any]])
+        let rows = sections.flatMap { ($0["rows"] as? [[String: Any]]) ?? [] }
+        let firstIn = try XCTUnwrap(rows.first { ($0["label"] as? String) == "1st Serve In" })
+        XCTAssertNotNil(firstIn["fraction"] as? Double, "fraction must survive JSON encoding")
+    }
+
     // MARK: - script-safety of the embedded JSON
 
     func test_scriptSafe_neutralisesClosingTags() {
