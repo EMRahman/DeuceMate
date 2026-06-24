@@ -382,4 +382,86 @@ final class SyncIncomingPayloadTests: XCTestCase {
             endingShot: nil
         )])
     }
+
+    // MARK: - Input bounds (defense against corrupt/buggy peers)
+
+    func test_decode_playerName_atCap_isUnchanged() {
+        let name = String(repeating: "a", count: SyncIncomingPayload.maxPlayerNameLength)
+        let events = SyncIncomingPayload.decode([MatchSyncKey.playerName: name])
+        XCTAssertEqual(events, [.playerName(name)])
+    }
+
+    func test_decode_playerName_overCap_isTruncated() {
+        let name = String(repeating: "a", count: SyncIncomingPayload.maxPlayerNameLength + 50)
+        let events = SyncIncomingPayload.decode([MatchSyncKey.playerName: name])
+        let expected = String(repeating: "a", count: SyncIncomingPayload.maxPlayerNameLength)
+        XCTAssertEqual(events, [.playerName(expected)])
+    }
+
+    func test_decode_announcement_atCap_isKept() {
+        let text = String(repeating: "x", count: SyncIncomingPayload.maxAnnouncementLength)
+        let events = SyncIncomingPayload.decode([MatchSyncKey.liveAnnouncement: text])
+        XCTAssertEqual(events, [.announcement(text)])
+    }
+
+    func test_decode_announcement_overCap_isDropped() {
+        let text = String(repeating: "x", count: SyncIncomingPayload.maxAnnouncementLength + 1)
+        let events = SyncIncomingPayload.decode([MatchSyncKey.liveAnnouncement: text])
+        XCTAssertTrue(events.isEmpty)
+    }
+
+    func test_decode_pulseCoachMaxHR_outOfRange_isDropped() {
+        XCTAssertTrue(SyncIncomingPayload.decode([MatchSyncKey.pulseCoachMaxHR: 99_999]).isEmpty)
+        XCTAssertTrue(SyncIncomingPayload.decode([MatchSyncKey.pulseCoachMaxHR: -5]).isEmpty)
+    }
+
+    func test_decode_pulseCoachMaxHR_atCeiling_isKept() {
+        let events = SyncIncomingPayload.decode([MatchSyncKey.pulseCoachMaxHR: SyncIncomingPayload.maxHeartRate])
+        XCTAssertEqual(events, [.pulseCoachMaxHR(SyncIncomingPayload.maxHeartRate)])
+    }
+
+    func test_decode_userMaxHROverride_outOfRange_isDropped() {
+        XCTAssertTrue(SyncIncomingPayload.decode([MatchSyncKey.userMaxHROverride: 5_000]).isEmpty)
+    }
+
+    func test_decode_userMaxHROverride_zeroSentinel_isKept() {
+        // 0 means "auto" — a valid value, not garbage.
+        let events = SyncIncomingPayload.decode([MatchSyncKey.userMaxHROverride: 0])
+        XCTAssertEqual(events, [.userMaxHROverride(0)])
+    }
+
+    func test_decode_userBirthYear_outOfRange_isDropped() {
+        XCTAssertTrue(SyncIncomingPayload.decode([MatchSyncKey.userBirthYear: 3_000]).isEmpty)
+        XCTAssertTrue(SyncIncomingPayload.decode([MatchSyncKey.userBirthYear: 1_800]).isEmpty)
+    }
+
+    func test_decode_userBirthYear_zeroSentinel_isKept() {
+        // 0 means "unset" / "Skip" — a valid value.
+        let events = SyncIncomingPayload.decode([MatchSyncKey.userBirthYear: 0])
+        XCTAssertEqual(events, [.userBirthYear(0)])
+    }
+
+    func test_decode_watchManifest_overCap_emitsDecodeError() throws {
+        let ids = (0..<(SyncIncomingPayload.maxManifestEntries + 1)).map { _ in UUID().uuidString }
+        let data = try JSONEncoder().encode(ids)
+        let events = SyncIncomingPayload.decode([MatchSyncKey.watchManifest: data])
+        XCTAssertEqual(events.count, 1)
+        if case .decodeError(let key, _) = events[0] {
+            XCTAssertEqual(key, MatchSyncKey.watchManifest)
+        } else {
+            XCTFail("expected decodeError, got \(events)")
+        }
+    }
+
+    func test_decode_watchManifest_atCap_isKept() throws {
+        let ids = (0..<SyncIncomingPayload.maxManifestEntries).map { _ in UUID().uuidString }
+        let data = try JSONEncoder().encode(ids)
+        let events = SyncIncomingPayload.decode([MatchSyncKey.watchManifest: data])
+        XCTAssertEqual(events.count, 1)
+        if case .watchManifest(let set) = events[0] {
+            XCTAssertEqual(set.count, SyncIncomingPayload.maxManifestEntries)
+        } else {
+            XCTFail("expected watchManifest, got \(events)")
+        }
+    }
 }
