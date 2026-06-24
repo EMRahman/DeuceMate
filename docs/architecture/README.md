@@ -52,7 +52,7 @@ flowchart TB
         PSTORE["Phone match archive<br/>JSON file, unlimited"]
         PUI["Archive, stats, graphs,<br/>live scoreboard, settings"]
         TTS["Score announcer<br/>text-to-speech, foreground only"]
-        EXPORT["Match exporter<br/>and AI coach prompt"]
+        EXPORT["Match exporter<br/>text, AI coach prompt,<br/>interactive HTML page"]
         PSYNC --> PSTORE
         PSYNC --> TTS
         PSTORE --> PUI

@@ -15,7 +15,7 @@ flowchart TD
     SYNC["5 · Sync to iPhone<br/>record + manifest over the bridge"]
     ARCHIVE["6 · Permanent archive on iPhone<br/>(unlimited, on-device; iCloud backup in background)"]
     INSIGHT["7 · Stats, graphs & coaching<br/>serve/return/error stats, momentum chart,<br/>Rec Coach & Pulse Coach observations"]
-    EXPORT["8 · Export & AI coaching<br/>text report or coaching prompt<br/>handed to ChatGPT, Claude, Gemini, ..."]
+    EXPORT["8 · Export & AI coaching<br/>text report, coaching prompt, or<br/>interactive HTML page · handed to<br/>ChatGPT, Claude, Gemini, ... or shared"]
     MANAGE["9 · Housekeeping<br/>free watch space (keep phone copy)<br/>or delete permanently (tombstoned)"]
 
     SETUP --> SCORE
@@ -100,8 +100,16 @@ HR-tagged points). *Files: `MatchDetailView`, `PointsGraphView`,
 **8 · Export & AI coaching (phone).** The player can export a text summary, a full
 point-by-point report, or an AI coaching prompt tuned to their skill level, and
 hand it straight to an installed AI chat app (ChatGPT, Claude, Gemini, Perplexity,
-Copilot, Poe, Grok) or the share sheet. *Files: `MatchExporter`, `AICoachSheet`,
-`AICoachLauncher`.*
+Copilot, Poe, Grok) or the share sheet. They can also share a self-contained
+interactive HTML page of the match — built off-thread and shared as a `.html` file —
+with the momentum chart and set bands, a Stats/Points tab toggle, All/Set N filters, a
+TV-style Me-vs-Opp comparison, a point-by-point list, and an optional AI Coach card.
+The page loads zero external resources and is recorder-framed; progressive enhancement
+ships a static, no-JS report so even iOS Quick Look shows a readable preview.
+*Files: text/AI export — `MatchExporter`, `AICoachSheet`, `AICoachLauncher`; HTML export —
+`MatchDetailView` (share action) + Core `WebExport/` (`MatchWebViewModel`(+`Build`/`Comparison`/`AICoach`),
+`MatchHTMLExporter`, `MatchWebTemplate`, `MatchWebStaticFallback`, `WebExportColors`);
+see [INTERACTIVE_HTML_EXPORT_PLAN.md](../features/INTERACTIVE_HTML_EXPORT_PLAN.md).*
 
 **9 · Housekeeping.** From the phone the user can free up watch space (delete from
 the watch, keep the archive copy — the badge flips to "phone only") or delete a
