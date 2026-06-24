@@ -188,6 +188,43 @@ final class ManualMatchArchiveBackupTests: XCTestCase {
         XCTAssertThrowsError(try ManualMatchArchiveBackup.decode(Data("{".utf8)))
     }
 
+    func test_decode_rejectsOversizedFileBeforeParsing() {
+        // One byte over the ceiling, non-empty and not valid JSON — the size guard
+        // must fire before the decoder is ever handed the blob.
+        let data = Data(count: ManualMatchArchiveBackup.maxArchiveBytes + 1)
+
+        XCTAssertThrowsError(try ManualMatchArchiveBackup.decode(data)) { error in
+            XCTAssertEqual(error as? ManualMatchArchiveBackup.ArchiveError, .fileTooLarge)
+        }
+    }
+
+    func test_decode_rejectsTooManyRecords() throws {
+        let count = ManualMatchArchiveBackup.maxArchiveRecords + 1
+        let records = (0..<count).map { _ in
+            MatchRecord(startTime: Date(timeIntervalSince1970: 1_700_000_000), setScores: [], stats: [])
+        }
+        let archive = ManualMatchArchiveBackup.Archive(exportedAt: exportedAt, records: records)
+        let data = try JSONEncoder.iso8601ManualArchiveTestEncoder.encode(archive)
+
+        XCTAssertThrowsError(try ManualMatchArchiveBackup.decode(data)) { error in
+            XCTAssertEqual(error as? ManualMatchArchiveBackup.ArchiveError, .tooManyRecords(count))
+        }
+    }
+
+    func test_decode_acceptsArchiveAtRecordLimit() throws {
+        // A full archive at the record ceiling still imports — the cap is defensive
+        // headroom, not a product limit a real user would hit.
+        let records = (0..<ManualMatchArchiveBackup.maxArchiveRecords).map { _ in
+            MatchRecord(startTime: Date(timeIntervalSince1970: 1_700_000_000), setScores: [], stats: [])
+        }
+        let archive = ManualMatchArchiveBackup.Archive(exportedAt: exportedAt, records: records)
+        let data = try JSONEncoder.iso8601ManualArchiveTestEncoder.encode(archive)
+
+        let decoded = try ManualMatchArchiveBackup.decode(data)
+
+        XCTAssertEqual(decoded.records.count, ManualMatchArchiveBackup.maxArchiveRecords)
+    }
+
     func test_importSnapshot_mergeAddsMissingRecordsAndClearsImportedTombstones() {
         let existing = makeRecord(startTime: Date(timeIntervalSince1970: 1_000))
         let imported = makeRecord(startTime: Date(timeIntervalSince1970: 2_000))

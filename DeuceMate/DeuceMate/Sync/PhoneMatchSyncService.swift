@@ -318,7 +318,21 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
 
     func session(_ session: WCSession, didReceive file: WCSessionFile) {
         guard let key = file.metadata?["key"] as? String else { return }
+        // Only history/single-match payloads arrive as files; reject any other key
+        // before touching the contents.
+        guard key == MatchSyncKey.matchHistory || key == MatchSyncKey.singleMatch else {
+            logger.error("ignoring incoming file with unexpected key: \(key, privacy: .public)")
+            return
+        }
         do {
+            // Bound the read before buffering the file into memory, reusing the
+            // manual-import ceiling so an oversized transfer can't OOM the reader.
+            let attrs = try FileManager.default.attributesOfItem(atPath: file.fileURL.path)
+            if let size = (attrs[.size] as? NSNumber)?.intValue,
+               size > ManualMatchArchiveBackup.maxArchiveBytes {
+                logger.error("ignoring oversized incoming file: \(size) bytes")
+                return
+            }
             let data = try Data(contentsOf: file.fileURL)
             handle([SyncIncomingPayload.decodeFile(data: data, key: key)])
         } catch {

@@ -9,6 +9,21 @@ public enum ManualMatchArchiveBackup {
     public static let format = "deucemate.matchArchive"
     public static let supportedSchemaVersion = 1
 
+    /// Upper bound on the raw bytes of an imported archive file. An imported file
+    /// is the only genuinely externally-sourced input in the app (it may have been
+    /// shared from another device or edited by hand), so we reject an absurdly
+    /// large blob before handing it to the JSON decoder, which would otherwise
+    /// buffer the whole thing into memory. 50 MB leaves ample headroom for a
+    /// multi-season archive of full-fidelity records while still bounding worst
+    /// case allocation.
+    public static let maxArchiveBytes = 50_000_000
+
+    /// Upper bound on the number of records a single import may contain. Caps
+    /// post-decode work (merge/sort/persist) and UserDefaults/archive bloat from a
+    /// hand-crafted file. A heavy real-world user records hundreds of matches, so
+    /// 10,000 is generous defensive headroom, not a product limit.
+    public static let maxArchiveRecords = 10_000
+
     public struct Archive: Codable, Equatable, Sendable {
         public let format: String
         public let schemaVersion: Int
@@ -60,17 +75,23 @@ public enum ManualMatchArchiveBackup {
 
     public enum ArchiveError: Error, Equatable, LocalizedError, Sendable {
         case emptyFile
+        case fileTooLarge
         case wrongFormat(String)
         case unsupportedSchemaVersion(Int)
+        case tooManyRecords(Int)
 
         public var errorDescription: String? {
             switch self {
             case .emptyFile:
                 return "The archive file is empty."
+            case .fileTooLarge:
+                return "This archive file is too large to import."
             case .wrongFormat:
                 return "This file is not a DeuceMate match archive."
             case .unsupportedSchemaVersion(let version):
                 return "This DeuceMate archive version is not supported: \(version)."
+            case .tooManyRecords(let count):
+                return "This archive contains too many matches to import: \(count)."
             }
         }
     }
@@ -85,6 +106,8 @@ public enum ManualMatchArchiveBackup {
 
     public static func decode(_ data: Data) throws -> Archive {
         guard !data.isEmpty else { throw ArchiveError.emptyFile }
+        // Reject an oversized blob before the decoder buffers it into memory.
+        guard data.count <= maxArchiveBytes else { throw ArchiveError.fileTooLarge }
         let archive = try makeDecoder().decode(Archive.self, from: data)
         try validate(archive)
         return archive
@@ -132,6 +155,9 @@ public enum ManualMatchArchiveBackup {
         guard archive.format == format else { throw ArchiveError.wrongFormat(archive.format) }
         guard archive.schemaVersion == supportedSchemaVersion else {
             throw ArchiveError.unsupportedSchemaVersion(archive.schemaVersion)
+        }
+        guard archive.records.count <= maxArchiveRecords else {
+            throw ArchiveError.tooManyRecords(archive.records.count)
         }
     }
 

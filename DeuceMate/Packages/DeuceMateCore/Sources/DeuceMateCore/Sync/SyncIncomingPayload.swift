@@ -100,6 +100,29 @@ extension SyncIncomingEvent {
 }
 
 public enum SyncIncomingPayload {
+    // MARK: - Input bounds
+    //
+    // WatchConnectivity peers are the user's own Apple-paired devices, so these
+    // bounds defend against corrupt state and buggy/old peers rather than a
+    // network attacker. They keep a single malformed field from exhausting
+    // resources (TTS lockup, oversized Set allocation, UserDefaults bloat) or
+    // persisting nonsense numeric settings.
+
+    /// Player display name is interpolated into spoken announcements and persisted.
+    /// Truncate rather than drop so an oversized value degrades gracefully.
+    static let maxPlayerNameLength = 128
+    /// Spoken announcement text. An over-long utterance can wedge the TTS engine,
+    /// so a too-long string is dropped entirely.
+    static let maxAnnouncementLength = 2_000
+    /// Watch → phone id manifest. The watch hard-caps its rolling history at
+    /// `WatchHistory.cap` (25); this is a loose phone-side ceiling so a corrupt
+    /// blob can't expand into a giant Set.
+    static let maxManifestEntries = 200
+    /// Plausible human heart-rate ceiling (bpm) for max-HR settings.
+    static let maxHeartRate = 300
+    /// Plausible birth-year window for the age-derived max-HR default.
+    static let birthYearRange = 1900...2100
+
     /// Decodes every recognised key in the payload into a typed event. Order is
     /// stable so callers can reason about side-effect ordering (announcements
     /// before the records that triggered them, active-match-id updates before
@@ -116,7 +139,8 @@ public enum SyncIncomingPayload {
         if let rawValue = payload[MatchSyncKey.selectedTheme] as? String {
             events.append(.selectedTheme(rawValue))
         }
-        if let text = payload[MatchSyncKey.liveAnnouncement] as? String {
+        if let text = payload[MatchSyncKey.liveAnnouncement] as? String,
+           text.count <= maxAnnouncementLength {
             events.append(.announcement(text))
         }
         if payload[MatchSyncKey.clearActiveMatch] != nil {
@@ -128,6 +152,12 @@ public enum SyncIncomingPayload {
         if let data = payload[MatchSyncKey.watchManifest] as? Data {
             do {
                 let ids = try JSONDecoder().decode([String].self, from: data)
+                guard ids.count <= maxManifestEntries else {
+                    throw DecodingError.dataCorrupted(
+                        .init(codingPath: [],
+                              debugDescription: "Manifest has \(ids.count) ids, exceeds cap of \(maxManifestEntries)")
+                    )
+                }
                 events.append(.watchManifest(Set(ids.compactMap(UUID.init(uuidString:)))))
             } catch {
                 events.append(.decodeError(key: MatchSyncKey.watchManifest, error: error))
@@ -138,16 +168,22 @@ public enum SyncIncomingPayload {
            let id = UUID(uuidString: idString) {
             events.append(.deleteMatchOnWatch(id))
         }
-        if let maxHR = payload[MatchSyncKey.pulseCoachMaxHR] as? Int {
+        // Numeric settings are range-checked so a corrupt peer can't persist a
+        // nonsense value. 0 is a valid sentinel ("unset" / "auto") for the
+        // birth-year and max-HR-override fields, so the lower bound is 0 there.
+        if let maxHR = payload[MatchSyncKey.pulseCoachMaxHR] as? Int,
+           (0...maxHeartRate).contains(maxHR) {
             events.append(.pulseCoachMaxHR(maxHR))
         }
-        if let year = payload[MatchSyncKey.userBirthYear] as? Int {
+        if let year = payload[MatchSyncKey.userBirthYear] as? Int,
+           year == 0 || birthYearRange.contains(year) {
             events.append(.userBirthYear(year))
         }
         if let fromHealth = payload[MatchSyncKey.userBirthYearFromHealth] as? Bool {
             events.append(.userBirthYearFromHealth(fromHealth))
         }
-        if let override_ = payload[MatchSyncKey.userMaxHROverride] as? Int {
+        if let override_ = payload[MatchSyncKey.userMaxHROverride] as? Int,
+           (0...maxHeartRate).contains(override_) {
             events.append(.userMaxHROverride(override_))
         }
         if let v = payload[MatchSyncKey.statsTrackingEnabled] as? Bool { events.append(.statsTrackingEnabled(v)) }
@@ -155,7 +191,9 @@ public enum SyncIncomingPayload {
         if let v = payload[MatchSyncKey.checkChangeover] as? Bool { events.append(.checkChangeover(v)) }
         if let v = payload[MatchSyncKey.announcementsEnabled] as? Bool { events.append(.announcementsEnabled(v)) }
         if let v = payload[MatchSyncKey.iPhoneInputEnabled] as? Bool { events.append(.iPhoneInputEnabled(v)) }
-        if let v = payload[MatchSyncKey.playerName] as? String { events.append(.playerName(v)) }
+        if let v = payload[MatchSyncKey.playerName] as? String {
+            events.append(.playerName(String(v.prefix(maxPlayerNameLength))))
+        }
         if let v = payload[MatchSyncKey.scoreCommand] as? String {
             let matchID = (payload[MatchSyncKey.scoreCommandMatchID] as? String).flatMap(UUID.init(uuidString:))
             events.append(.scoreCommand(command: v, matchID: matchID))
