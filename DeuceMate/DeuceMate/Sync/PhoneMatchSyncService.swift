@@ -327,8 +327,8 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         do {
             // Bound the read before buffering the file into memory, reusing the
             // manual-import ceiling so an oversized transfer can't OOM the reader.
-            let attrs = try FileManager.default.attributesOfItem(atPath: file.fileURL.path)
-            if let size = (attrs[.size] as? NSNumber)?.intValue,
+            let values = try file.fileURL.resourceValues(forKeys: [.fileSizeKey])
+            if let size = values.fileSize,
                size > ManualMatchArchiveBackup.maxArchiveBytes {
                 logger.error("ignoring oversized incoming file: \(size) bytes")
                 return
