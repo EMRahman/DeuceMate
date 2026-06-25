@@ -110,6 +110,22 @@ public struct MatchStatsSummary: Sendable {
     public let resolvedMaxHR: Int
     public let autoInsights: [String]
 
+    // MARK: - Steps / movement (optional — empty if no stepsCumulative data)
+
+    /// One sample per point that carried a `stepsCumulative` reading, ordered
+    /// chronologically. `perPointSteps` is that point's movement load (steps
+    /// taken during the point); `cumulative` is the match-start running total.
+    public struct StepPoint: Sendable {
+        public let pointIndex: Int
+        public let perPointSteps: Int
+        public let cumulative: Int
+        public let setIndex: Int
+        public let wonByFocal: Bool
+    }
+
+    public let stepsTimeline: [StepPoint]
+    public let stepsInsights: [String]
+
     // MARK: - Recreational-player coaching (HR-independent)
 
     public let recCoachInsights: [String]
@@ -311,11 +327,51 @@ public struct MatchStatsSummary: Sendable {
             focal: focal,
             maxHR: maxHR
         )
+
+        // Step (movement) aggregations — per-point load + cumulative timeline.
+        let stepDeltas = Self.perPointStepDeltas(stats)
+        let sampledSteps = stats
+            .filter { stepDeltas[$0.id] != nil }
+            .sorted { $0.timestamp < $1.timestamp }
+        stepsTimeline = sampledSteps.enumerated().map { idx, pt in
+            StepPoint(
+                pointIndex: idx,
+                perPointSteps: stepDeltas[pt.id] ?? 0,
+                cumulative: pt.stepsCumulative ?? 0,
+                setIndex: pt.setIndex,
+                wonByFocal: pt.winner == focal
+            )
+        }
+        stepsInsights = StepsCoachInsights.generate(stats: stats, focal: focal)
+
         recCoachInsights = RecCoachInsights.generate(
             stats: stats,
             focal: focal,
             setElapsedSeconds: setElapsedSeconds
         )
+    }
+
+    // MARK: - Steps helper
+
+    /// Per-point movement load: steps taken during each point, derived from the
+    /// monotonic `stepsCumulative` samples. Keyed by `PointStat.id`; only points
+    /// carrying a sample appear. The first sampled point's delta is its
+    /// cumulative value (steps from match start to that point); later deltas are
+    /// clamped non-negative so any sample jitter can't produce a negative load.
+    /// Single source of the per-point step figure, reused by the timeline,
+    /// `StepsCoachInsights`, and the text exporter's raw point table.
+    public static func perPointStepDeltas(_ stats: [PointStat]) -> [UUID: Int] {
+        let sampled = stats
+            .filter { $0.stepsCumulative != nil }
+            .sorted { $0.timestamp < $1.timestamp }
+        var result: [UUID: Int] = [:]
+        var prev = 0
+        for pt in sampled {
+            guard let cum = pt.stepsCumulative else { continue }
+            result[pt.id] = max(0, cum - prev)
+            prev = max(prev, cum)
+        }
+        return result
     }
 
     // MARK: - Formatting helpers
