@@ -355,15 +355,13 @@ struct MatchExporter {
         if let steps = record.totalSteps, steps > 0 {
             lines.append(row("Total Steps:", steps.formatted()))
         }
-        let perPoint = timeline.map(\.perPointSteps)
-        if !perPoint.isEmpty {
-            let avg = Int((Double(perPoint.reduce(0, +)) / Double(perPoint.count)).rounded())
-            lines.append(row("Avg Steps / Point:", "\(avg)"))
+        if !timeline.isEmpty {
+            lines.append(row("Avg Steps / Point:", "\(MatchStatsSummary.averageSteps(timeline))"))
         }
         if timeline.count >= 4 {
             let half = timeline.count / 2
-            let firstAvg = averageSteps(Array(timeline.prefix(half)))
-            let secondAvg = averageSteps(Array(timeline.suffix(timeline.count - half)))
+            let firstAvg = MatchStatsSummary.averageSteps(Array(timeline.prefix(half)))
+            let secondAvg = MatchStatsSummary.averageSteps(Array(timeline.suffix(timeline.count - half)))
             let trend = secondAvg > firstAvg ? "↑" : (secondAvg < firstAvg ? "↓" : "→")
             lines.append(row("Steps/Point by Half:", "\(firstAvg) → \(secondAvg)  \(trend)"))
         }
@@ -371,12 +369,6 @@ struct MatchExporter {
             lines.append("- \(insight)")
         }
         return lines.joined(separator: "\n")
-    }
-
-    private static func averageSteps(_ points: [MatchStatsSummary.StepPoint]) -> Int {
-        guard !points.isEmpty else { return 0 }
-        let total = points.reduce(0) { $0 + $1.perPointSteps }
-        return Int((Double(total) / Double(points.count)).rounded())
     }
 
     private static func recCoachSection(summary: MatchStatsSummary) -> String {

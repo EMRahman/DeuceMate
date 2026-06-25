@@ -1,32 +1,28 @@
-// StepsCoachInsights.swift — deterministic rule engine that converts per-point
-// step (movement) data into ≤3 short, fatigue-oriented coaching observations.
-// Mirrors PulseCoachInsights, which does the same for heart rate.
+// StepsCoachInsights.swift — deterministic rule engine that converts a
+// per-point step (movement) timeline into ≤3 short, fatigue-oriented coaching
+// observations. Mirrors PulseCoachInsights, which does the same for heart rate.
+//
+// Operates on a pre-built `[MatchStatsSummary.StepPoint]` timeline (already
+// filtered to sampled points, chronologically ordered, and carrying each
+// point's `wonByFocal` flag) so the engine stays decoupled from the raw models
+// and does no sorting/filtering of its own.
 import Foundation
 
 public enum StepsCoachInsights {
 
-    /// Returns up to three short coaching sentences derived from per-point
-    /// cumulative step data. Always returns an empty array when there is
-    /// insufficient data so callers can safely treat empty as "hide the
-    /// section."
+    /// Returns up to three short coaching sentences derived from a per-point
+    /// step timeline. Always returns an empty array when there is insufficient
+    /// data so callers can safely treat empty as "hide the section."
     public static func generate(
-        stats: [PointStat],
-        focal: Player
+        timeline: [MatchStatsSummary.StepPoint]
     ) -> [String] {
-        // Per-point movement load (steps taken during each point), paired with
-        // its point and timestamp-sorted so "first/second half" is chronological.
-        let deltas = MatchStatsSummary.perPointStepDeltas(stats)
-        let moved = stats
-            .filter { deltas[$0.id] != nil }
-            .sorted { $0.timestamp < $1.timestamp }
-            .map { (pt: $0, steps: deltas[$0.id] ?? 0) }
-        guard moved.count >= 10 else { return [] }
+        guard timeline.count >= 10 else { return [] }
 
         var insights: [String] = []
-        if let fatigue = fatigueDeclineInsight(moved: moved, focal: focal) {
+        if let fatigue = fatigueDeclineInsight(timeline: timeline) {
             insights.append(fatigue)
         }
-        if let movement = highMovementInsight(moved: moved, focal: focal) {
+        if let movement = highMovementInsight(timeline: timeline) {
             insights.append(movement)
         }
         return Array(insights.prefix(3))
@@ -38,21 +34,20 @@ public enum StepsCoachInsights {
     /// drops by ≥15 points from first to second half, ties that decline to the
     /// step burden already accumulated by the midpoint.
     private static func fatigueDeclineInsight(
-        moved: [(pt: PointStat, steps: Int)],
-        focal: Player
+        timeline: [MatchStatsSummary.StepPoint]
     ) -> String? {
-        guard moved.count >= 20 else { return nil }
-        let half = moved.count / 2
-        let firstHalf = Array(moved.prefix(half))
-        let secondHalf = Array(moved.suffix(moved.count - half))
-        let firstWinRate = winRate(firstHalf.map(\.pt), focal: focal)
-        let secondWinRate = winRate(secondHalf.map(\.pt), focal: focal)
+        guard timeline.count >= 20 else { return nil }
+        let half = timeline.count / 2
+        let firstHalf = Array(timeline.prefix(half))
+        let secondHalf = Array(timeline.suffix(timeline.count - half))
+        let firstWinRate = winRate(firstHalf)
+        let secondWinRate = winRate(secondHalf)
         guard firstWinRate - secondWinRate >= 0.15 else { return nil }
         // Cumulative steps already covered by the midpoint — the load the
         // player was carrying as the decline set in. Fall back to summing the
-        // first-half deltas if the midpoint sample lacks a cumulative value.
-        let coveredByMidpoint = firstHalf.last?.pt.stepsCumulative
-            ?? firstHalf.reduce(0) { $0 + $1.steps }
+        // first-half deltas if the midpoint sample is somehow missing.
+        let coveredByMidpoint = firstHalf.last?.cumulative
+            ?? firstHalf.reduce(0) { $0 + $1.perPointSteps }
         let firstPct = Int((firstWinRate * 100).rounded())
         let secondPct = Int((secondWinRate * 100).rounded())
         return "Your win rate fell from \(firstPct)% to \(secondPct)% in the second half, " +
@@ -64,16 +59,15 @@ public enum StepsCoachInsights {
     /// Compares win rate on the points where you ran the most (per-point steps
     /// above the median) against the points where you ran less.
     private static func highMovementInsight(
-        moved: [(pt: PointStat, steps: Int)],
-        focal: Player
+        timeline: [MatchStatsSummary.StepPoint]
     ) -> String? {
-        let med = median(moved.map(\.steps))
+        let med = median(timeline.map(\.perPointSteps))
         guard med > 0 else { return nil }
-        let high = moved.filter { $0.steps > med }
-        let low = moved.filter { $0.steps <= med }
+        let high = timeline.filter { $0.perPointSteps > med }
+        let low = timeline.filter { $0.perPointSteps <= med }
         guard high.count >= 3, low.count >= 3 else { return nil }
-        let highRate = winRate(high.map(\.pt), focal: focal)
-        let lowRate = winRate(low.map(\.pt), focal: focal)
+        let highRate = winRate(high)
+        let lowRate = winRate(low)
         guard lowRate - highRate >= 0.15 else { return nil }
         let highPct = Int((highRate * 100).rounded())
         let lowPct = Int((lowRate * 100).rounded())
@@ -83,9 +77,9 @@ public enum StepsCoachInsights {
 
     // MARK: - Helpers
 
-    private static func winRate(_ points: [PointStat], focal: Player) -> Double {
+    private static func winRate(_ points: [MatchStatsSummary.StepPoint]) -> Double {
         guard !points.isEmpty else { return 0 }
-        let wins = points.filter { $0.winner == focal }.count
+        let wins = points.filter { $0.wonByFocal }.count
         return Double(wins) / Double(points.count)
     }
 

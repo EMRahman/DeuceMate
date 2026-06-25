@@ -328,21 +328,19 @@ public struct MatchStatsSummary: Sendable {
             maxHR: maxHR
         )
 
-        // Step (movement) aggregations — per-point load + cumulative timeline.
-        let stepDeltas = Self.perPointStepDeltas(stats)
-        let sampledSteps = stats
-            .filter { stepDeltas[$0.id] != nil }
-            .sorted { $0.timestamp < $1.timestamp }
-        stepsTimeline = sampledSteps.enumerated().map { idx, pt in
+        // Step (movement) aggregations — one sampled-and-sorted pass produces
+        // the per-point loads; feed the timeline straight to the rule engine.
+        let stepLoads = Self.sampledStepLoads(stats)
+        stepsTimeline = stepLoads.enumerated().map { idx, entry in
             StepPoint(
                 pointIndex: idx,
-                perPointSteps: stepDeltas[pt.id] ?? 0,
-                cumulative: pt.stepsCumulative ?? 0,
-                setIndex: pt.setIndex,
-                wonByFocal: pt.winner == focal
+                perPointSteps: entry.perPointSteps,
+                cumulative: entry.point.stepsCumulative ?? 0,
+                setIndex: entry.point.setIndex,
+                wonByFocal: entry.point.winner == focal
             )
         }
-        stepsInsights = StepsCoachInsights.generate(stats: stats, focal: focal)
+        stepsInsights = StepsCoachInsights.generate(timeline: stepsTimeline)
 
         recCoachInsights = RecCoachInsights.generate(
             stats: stats,
@@ -351,27 +349,46 @@ public struct MatchStatsSummary: Sendable {
         )
     }
 
-    // MARK: - Steps helper
+    // MARK: - Steps helpers
 
-    /// Per-point movement load: steps taken during each point, derived from the
-    /// monotonic `stepsCumulative` samples. Keyed by `PointStat.id`; only points
-    /// carrying a sample appear. The first sampled point's delta is its
-    /// cumulative value (steps from match start to that point); later deltas are
-    /// clamped non-negative so any sample jitter can't produce a negative load.
-    /// Single source of the per-point step figure, reused by the timeline,
-    /// `StepsCoachInsights`, and the text exporter's raw point table.
-    public static func perPointStepDeltas(_ stats: [PointStat]) -> [UUID: Int] {
+    /// Sampled points (those carrying a `stepsCumulative` reading), ordered
+    /// chronologically, each paired with its per-point step load — the steps
+    /// taken since the previous sample. The first sample is the **baseline**
+    /// and carries a load of 0: we measure movement *since the previous
+    /// sample*, and the first has no predecessor, so its accumulated steps are
+    /// never dumped onto a single point (which would skew the table, averages,
+    /// and insights when step sampling starts a few points into the match).
+    /// Later deltas are clamped non-negative so sample jitter can't go below 0.
+    /// Single source of the per-point figure, reused by `perPointStepDeltas`
+    /// (id-keyed, for the exporter table) and `stepsTimeline` (ordered).
+    private static func sampledStepLoads(_ stats: [PointStat]) -> [(point: PointStat, perPointSteps: Int)] {
         let sampled = stats
             .filter { $0.stepsCumulative != nil }
             .sorted { $0.timestamp < $1.timestamp }
-        var result: [UUID: Int] = [:]
-        var prev = 0
-        for pt in sampled {
-            guard let cum = pt.stepsCumulative else { continue }
-            result[pt.id] = max(0, cum - prev)
-            prev = max(prev, cum)
+        var prev: Int?
+        return sampled.map { pt in
+            let cum = pt.stepsCumulative ?? 0
+            let load = prev.map { max(0, cum - $0) } ?? 0
+            prev = max(prev ?? cum, cum)
+            return (pt, load)
         }
-        return result
+    }
+
+    /// Per-point movement load keyed by `PointStat.id` so the text exporter's
+    /// raw point table can show a per-point figure on each row in match order;
+    /// `stepsTimeline` carries the same values in chronological order for the
+    /// stats/insights path.
+    public static func perPointStepDeltas(_ stats: [PointStat]) -> [UUID: Int] {
+        Dictionary(uniqueKeysWithValues: sampledStepLoads(stats).map { ($0.point.id, $0.perPointSteps) })
+    }
+
+    /// Mean per-point step load over a slice of the step timeline, rounded to
+    /// the nearest whole step. Lives in Core so every surface (text export, and
+    /// any future view) reports the same figure. Returns 0 for an empty slice.
+    public static func averageSteps(_ points: [StepPoint]) -> Int {
+        guard !points.isEmpty else { return 0 }
+        let total = points.reduce(0) { $0 + $1.perPointSteps }
+        return Int((Double(total) / Double(points.count)).rounded())
     }
 
     // MARK: - Formatting helpers

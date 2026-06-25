@@ -70,10 +70,10 @@ place to test and the safest place to change.
 | File | ~Lines | What it does | Feature(s) |
 |---|---:|---|---|
 | `Scoring/ScoringEngine.swift` | 555 | The tennis rules, as a pure function: given a state and "player X won the point", returns the new state plus events (game/set won, changeover due, announcement text). No side effects — fully unit-testable. | Live scoring |
-| `Stats/MatchStatsSummary.swift` | 384 | The statistics math: serve/return percentages, break points, error counts, winner-to-error ratio, pressure-point performance, rally depth, HR-zone splits, per-point step deltas + movement timeline. Both apps display numbers computed here, so they can never disagree. | Stats |
+| `Stats/MatchStatsSummary.swift` | 401 | The statistics math: serve/return percentages, break points, error counts, winner-to-error ratio, pressure-point performance, rally depth, HR-zone splits, per-point step deltas + movement timeline. Both apps display numbers computed here, so they can never disagree. | Stats |
 | `Stats/RecCoachInsights.swift` | 310 | The Rec Coach rule set: eight coaching rules (e.g. self-inflicted losses, double-fault leakage, pressure-point drop-off) that fire from point stats and rank the top observations. | Rec Coach |
 | `Stats/PulseCoachInsights.swift` | 125 | The Pulse Coach rule set: three heart-rate rules (zone-vs-results delta, break-point HR spike, late-match decline). | Pulse Coach |
-| `Stats/StepsCoachInsights.swift` | 101 | The steps movement/fatigue rule set: two rules (accumulated-step late-match decline, high-movement-point win rate) derived from per-point step deltas. Recorder-only; surfaced in the AI/stats export's Movement & Fatigue section. | Stats, health |
+| `Stats/StepsCoachInsights.swift` | 95 | The steps movement/fatigue rule set: two rules (accumulated-step late-match decline, high-movement-point win rate) over the `MatchStatsSummary.StepPoint` timeline. Recorder-only; surfaced in the AI/stats export's Movement & Fatigue section. | Stats, health |
 | `Stats/SetActivitySplit.swift` | 115 | Per-set breakdowns (duration, points, games) used by the set filters in stats views. | Stats |
 | `Stats/HRZone.swift` | 80 | Heart-rate zone maths: zones 1–5 from a max heart rate (age-derived or manually overridden). | Pulse Coach, health |
 | `Models/ScoreTypes.swift` | 185 | The shared vocabulary: players, singles/doubles, the six match formats and their rules (data-driven), set scores, doubles serve order. | Live scoring, match setup |
