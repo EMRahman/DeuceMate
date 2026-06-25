@@ -122,6 +122,9 @@ struct MatchExporter {
             if !fullSummary.autoInsights.isEmpty {
                 sections.append(pulseCoachSection(summary: fullSummary))
             }
+            if !fullSummary.stepsTimeline.isEmpty {
+                sections.append(movementSection(record: record, summary: fullSummary))
+            }
         }
 
         sections.append(setBySetScores(record: record, focal: focal))
@@ -342,6 +345,32 @@ struct MatchExporter {
         return lines.joined(separator: "\n")
     }
 
+    /// Recorder-only movement/fatigue summary derived from per-point step data:
+    /// the match step total, average steps per point, the first- vs second-half
+    /// movement trend, and the accumulated-step fatigue insights. Gated on
+    /// `focal == .me` by the caller — like HR, steps belong to the recorder.
+    private static func movementSection(record: MatchRecord, summary: MatchStatsSummary) -> String {
+        let timeline = summary.stepsTimeline
+        var lines = ["## Movement & Fatigue"]
+        if let steps = record.totalSteps, steps > 0 {
+            lines.append(row("Total Steps:", steps.formatted()))
+        }
+        if !timeline.isEmpty {
+            lines.append(row("Avg Steps / Point:", "\(MatchStatsSummary.averageSteps(timeline))"))
+        }
+        if timeline.count >= 4 {
+            let half = timeline.count / 2
+            let firstAvg = MatchStatsSummary.averageSteps(Array(timeline.prefix(half)))
+            let secondAvg = MatchStatsSummary.averageSteps(Array(timeline.suffix(timeline.count - half)))
+            let trend = secondAvg > firstAvg ? "↑" : (secondAvg < firstAvg ? "↓" : "→")
+            lines.append(row("Steps/Point by Half:", "\(firstAvg) → \(secondAvg)  \(trend)"))
+        }
+        for insight in summary.stepsInsights {
+            lines.append("- \(insight)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     private static func recCoachSection(summary: MatchStatsSummary) -> String {
         var lines = ["## Coaching Insights"]
         for insight in summary.recCoachInsights {
@@ -353,27 +382,33 @@ struct MatchExporter {
     // MARK: - Raw point data table
 
     private static func rawPointData(stats: [PointStat], focal: Player) -> String {
-        // HR data is always the recorder's. From the recorder's reading it's
-        // "My HR"; from the opponent's reading the recorder is their opponent,
-        // so label it "Opponent HR".
+        // HR and steps are always the recorder's. From the recorder's reading
+        // they're "My …"; from the opponent's reading the recorder is their
+        // opponent, so prefix "Opp …".
         let hrLabel = focal == .opponent ? "Opponent HR" : "My HR"
+        let stepLabel = focal == .opponent ? "Opp Steps/Pt" : "Steps/Pt"
+        let totalStepLabel = focal == .opponent ? "Opp Total Steps" : "Total Steps"
+
+        // Per-point movement load (steps during each point), keyed by point id.
+        let stepDeltas = MatchStatsSummary.perPointStepDeltas(stats)
 
         var lines = ["## Raw Point Data"]
-        lines.append("Each row is one point in match order.")
+        lines.append("Each row is one point in match order. " +
+                     "\"Steps/Pt\" is steps taken during that point; \"Total Steps\" is the running match total.")
         if focal == .opponent {
             // The table is generated from the recorder's perspective, so
             // "Me"/"Opp" in Server/Winner refer to the recorder (your
-            // opponent) and the focal player (you) respectively. The HR
-            // column is also the recorder's heart rate — i.e. your
-            // opponent's HR, hence the "Opponent HR" header.
+            // opponent) and the focal player (you) respectively. The HR and
+            // step columns are also the recorder's — i.e. your opponent's —
+            // since they're only available from the recording device.
             lines.append("Note: \"Me\" = your opponent (the recorder), \"Opp\" = you. " +
-                         "\"Opponent HR\" is your opponent's heart rate (HR is only available from the recording device).")
+                         "The HR and step columns are your opponent's (only available from the recording device).")
         }
         lines.append("")
 
         // Header
-        lines.append("| # | Set | Game Score | Server | Winner | 2nd Srv | Break Pt | Outcome | Shot | \(hrLabel) |")
-        lines.append("|---|-----|------------|--------|--------|---------|----------|---------|------|---------|")
+        lines.append("| # | Set | Game Score | Server | Winner | 2nd Srv | Break Pt | Outcome | Shot | \(hrLabel) | \(stepLabel) | \(totalStepLabel) |")
+        lines.append("|---|-----|------------|--------|--------|---------|----------|---------|------|---------|---------|---------|")
 
         for (i, pt) in stats.enumerated() {
             let num = "\(i + 1)"
@@ -386,8 +421,10 @@ struct MatchExporter {
             let outcome = outcomeLabel(pt.outcome)
             let shot = pt.endingShot.map { endingShotLabel($0) } ?? "—"
             let hr = pt.heartRateBPM.map { "\($0) bpm" } ?? "—"
+            let perPointSteps = stepDeltas[pt.id].map { "\($0)" } ?? "—"
+            let totalSteps = pt.stepsCumulative.map { $0.formatted() } ?? "—"
 
-            lines.append("| \(num) | \(setNum) | \(gameScore) | \(server) | \(winner) | \(secondSrv) | \(bp) | \(outcome) | \(shot) | \(hr) |")
+            lines.append("| \(num) | \(setNum) | \(gameScore) | \(server) | \(winner) | \(secondSrv) | \(bp) | \(outcome) | \(shot) | \(hr) | \(perPointSteps) | \(totalSteps) |")
         }
 
         return lines.joined(separator: "\n")
@@ -425,9 +462,9 @@ struct MatchExporter {
         Exactly one drill targeting the biggest weakness.
         Keep it simple — doable on a public court without a coach.
 
-        **5. Movement & Fitness** (only include this section when Heart Rate zone data or Steps/Calories/Distance appear below)
-        One sentence on physical effort — HR zone distribution, set-to-set movement trend, or recovery pattern. \
-        One actionable off-court habit if the data supports it. Skip this section entirely if none of those fields appear.
+        **5. Movement & Fitness** (only include this section when Heart Rate zone data, a Movement & Fatigue section, or Steps/Calories/Distance appear below)
+        One or two sentences on physical effort and fatigue — HR zone distribution, per-point step load (Steps/Pt), how win rate changed as total steps accumulated, or set-to-set movement trend. \
+        One actionable off-court conditioning habit if the data supports it. Skip this section entirely if none of those fields appear.
 
         Tone: Direct and specific. Use the numbers. Skip any section where the data shows "—" or is missing.
         """
