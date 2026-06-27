@@ -21,6 +21,22 @@ private struct StepEntry: Identifiable {
     let id: Int       // point index (0-based seed + 1-based points)
     let pointIndex: Int
     let cumulativeSteps: Int
+    let perPointSteps: Int  // steps during this point (cumulative − previous cumulative)
+}
+
+/// Which steps series to render in the chart. Mirrors `HRSeriesMode`'s small
+/// mode picker: cumulative running total (default) vs steps taken per point.
+private enum StepsSeriesMode: String, CaseIterable, Identifiable {
+    case cumulative
+    case perPoint
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .cumulative: return String(localized: "Total")
+        case .perPoint:   return String(localized: "Per point")
+        }
+    }
 }
 
 // MARK: - Scatter overlay categories
@@ -143,11 +159,6 @@ private struct PointsGraphData {
     /// look up the dots at a touched point in O(1) without re-filtering the
     /// flat array each frame.
     let scatterByPoint: [Int: [ScatterEntry]]
-    /// Upper bound for the steps overlay Y-axis. Tracks the actual top of
-    /// the plotted line so it fills the available height (real-data path
-    /// normalizes to a match-specific delta, which can be smaller than
-    /// `totalSteps` when the workout started before the first point).
-    let stepsYMax: Int
 
     var hasHeartRateData: Bool { !hrEntries.isEmpty }
     var hasStepsData: Bool { !stepEntries.isEmpty }
@@ -340,29 +351,36 @@ private struct PointsGraphData {
             // Normalize to the first sample so the line starts at 0 even
             // when step collection began mid-match.
             let base = realSteps[0].cumulative
-            var out: [StepEntry] = [StepEntry(id: 0, pointIndex: 0, cumulativeSteps: 0)]
+            var out: [StepEntry] = [StepEntry(id: 0, pointIndex: 0, cumulativeSteps: 0, perPointSteps: 0)]
             out.reserveCapacity(realSteps.count + 1)
+            var prevCumulative = 0
             for p in realSteps {
+                let cumulative = max(0, p.cumulative - base)
                 out.append(StepEntry(id: p.pointIndex,
                                      pointIndex: p.pointIndex,
-                                     cumulativeSteps: max(0, p.cumulative - base)))
+                                     cumulativeSteps: cumulative,
+                                     perPointSteps: max(0, cumulative - prevCumulative)))
+                prevCumulative = cumulative
             }
             resolvedSteps = out
         } else if let total = totalSteps, total > 0, !stats.isEmpty {
             let n = stats.count
             var steps: [StepEntry] = []
             steps.reserveCapacity(n + 1)
-            steps.append(StepEntry(id: 0, pointIndex: 0, cumulativeSteps: 0))
+            steps.append(StepEntry(id: 0, pointIndex: 0, cumulativeSteps: 0, perPointSteps: 0))
+            var prevCumulative = 0
             for i in 1...n {
+                let cumulative = Int(Double(i) / Double(n) * Double(total))
                 steps.append(StepEntry(id: i, pointIndex: i,
-                                       cumulativeSteps: Int(Double(i) / Double(n) * Double(total))))
+                                       cumulativeSteps: cumulative,
+                                       perPointSteps: max(0, cumulative - prevCumulative)))
+                prevCumulative = cumulative
             }
             resolvedSteps = steps
         } else {
             resolvedSteps = []
         }
         self.stepEntries = resolvedSteps
-        self.stepsYMax = max(resolvedSteps.last?.cumulativeSteps ?? 1, 1)
     }
 
     /// Outcome attribution rules (from MatchStatsSummary):
@@ -464,6 +482,8 @@ private struct PointsChartCore: View {
     let scrollPositionX: Binding<Int>?
     let showHeartRate: Bool
     let showSteps: Bool
+    /// Active steps series to render (cumulative total / per-point).
+    let stepsSeriesMode: StepsSeriesMode
     let showXAxis: Bool
     /// Currently selected x value driven by touch / drag on the chart. The
     /// parent renders a summary view next to the chart using this index.
@@ -478,6 +498,16 @@ private struct PointsChartCore: View {
         let lo = max(40, minBPM - 10)
         let hi = maxBPM + 10
         return lo...max(hi, lo + 20)
+    }
+
+    /// Steps value to plot for the active mode.
+    private func stepsValue(_ e: StepEntry) -> Int {
+        stepsSeriesMode == .cumulative ? e.cumulativeSteps : e.perPointSteps
+    }
+
+    /// Upper bound for the steps Y-axis, derived from the active series.
+    private var activeStepsYMax: Int {
+        max(data.stepEntries.map(stepsValue).max() ?? 1, 1)
     }
 
     var body: some View {
@@ -599,11 +629,12 @@ private struct PointsChartCore: View {
     // MARK: - Steps overlay (line, secondary Y-axis on right)
 
     private var stepsOverlayChart: some View {
-        Chart {
+        let yMax = activeStepsYMax
+        return Chart {
             ForEach(data.stepEntries) { s in
                 LineMark(
                     x: .value("Point", s.pointIndex),
-                    y: .value("Steps", s.cumulativeSteps)
+                    y: .value("Steps", stepsValue(s))
                 )
                 .foregroundStyle(Color.green.opacity(0.75))
                 .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 3]))
@@ -611,10 +642,10 @@ private struct PointsChartCore: View {
         }
         .chartXScale(domain: data.xDomain)
         .applyOverlayXAxis(showXAxis)
-        .chartYScale(domain: 0...data.stepsYMax)
+        .chartYScale(domain: 0...yMax)
         .chartYAxis {
             // Invisible leading placeholder matches primary chart's leading axis width.
-            AxisMarks(position: .leading, values: [data.stepsYMax]) { _ in
+            AxisMarks(position: .leading, values: [yMax]) { _ in
                 AxisValueLabel { Text("000").font(.caption2).opacity(0) }
             }
             // Suppress steps labels when HR overlay is also active to avoid overlap.
@@ -1039,12 +1070,19 @@ private struct PointsGraphToggleRow: View {
     @Binding var showHeartRate: Bool
     @Binding var showSteps: Bool
     @Binding var hrSeriesMode: HRSeriesMode
+    @Binding var stepsSeriesMode: StepsSeriesMode
     @ObservedObject var fetcher: HealthKitHRFetcher
 
     var body: some View {
         VStack(alignment: .center, spacing: 6) {
             if hasStepsData {
-                toggleChip(label: "Steps", systemImage: "figure.walk", color: .green, isOn: $showSteps)
+                VStack(alignment: .center, spacing: 4) {
+                    toggleChip(label: "Steps", systemImage: "figure.walk", color: .green, isOn: $showSteps)
+                    if showSteps {
+                        stepsModePicker
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
             }
             if hasHeartRateData {
                 VStack(alignment: .center, spacing: 4) {
@@ -1063,6 +1101,27 @@ private struct PointsGraphToggleRow: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .animation(.easeInOut(duration: 0.2), value: showHeartRate)
         .animation(.easeInOut(duration: 0.15), value: hrSeriesMode)
+        .animation(.easeInOut(duration: 0.2), value: showSteps)
+        .animation(.easeInOut(duration: 0.15), value: stepsSeriesMode)
+    }
+
+    private var stepsModePicker: some View {
+        HStack(spacing: 6) {
+            ForEach(StepsSeriesMode.allCases) { mode in
+                Button {
+                    stepsSeriesMode = mode
+                } label: {
+                    Text(mode.label)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(stepsSeriesMode == mode ? Color.green : .secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(stepsSeriesMode == mode ? Color.green.opacity(0.12) : Color(.systemFill)))
+                        .overlay(Capsule().strokeBorder(stepsSeriesMode == mode ? Color.green.opacity(0.35) : Color.clear, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     private var hrModePicker: some View {
@@ -1160,6 +1219,7 @@ struct PointsGraphView: View {
     @State private var showHeartRate = false
     @State private var showSteps = false
     @State private var hrSeriesMode: HRSeriesMode = .snapshot
+    @State private var stepsSeriesMode: StepsSeriesMode = .cumulative
 
     @State private var isExpanded = false
     @State private var selectedX: Int?
@@ -1191,6 +1251,7 @@ struct PointsGraphView: View {
                 scrollPositionX: nil,
                 showHeartRate: false,
                 showSteps: false,
+                stepsSeriesMode: .cumulative,
                 showXAxis: false,
                 selectedX: stats.isEmpty ? nil : $selectedX,
                 activeHREntries: []
@@ -1240,6 +1301,7 @@ struct PointsGraphView: View {
                 showHeartRate: $showHeartRate,
                 showSteps: $showSteps,
                 hrSeriesMode: $hrSeriesMode,
+                stepsSeriesMode: $stepsSeriesMode,
                 fetcher: fetcher
             )
         }
@@ -1318,6 +1380,7 @@ struct ExpandedPointsGraphView: View {
     @Binding private var showHeartRate: Bool
     @Binding private var showSteps: Bool
     @Binding private var hrSeriesMode: HRSeriesMode
+    @Binding private var stepsSeriesMode: StepsSeriesMode
 
     @State private var visibleDomainLength: Int
     @State private var scrollPositionX: Int = 0
@@ -1339,6 +1402,7 @@ struct ExpandedPointsGraphView: View {
                      showHeartRate: Binding<Bool>,
                      showSteps: Binding<Bool>,
                      hrSeriesMode: Binding<HRSeriesMode>,
+                     stepsSeriesMode: Binding<StepsSeriesMode>,
                      fetcher: HealthKitHRFetcher) {
         self.record = record
         _fetcher                  = ObservedObject(wrappedValue: fetcher)
@@ -1349,6 +1413,7 @@ struct ExpandedPointsGraphView: View {
         _showHeartRate            = showHeartRate
         _showSteps                = showSteps
         _hrSeriesMode             = hrSeriesMode
+        _stepsSeriesMode          = stepsSeriesMode
         let stats = record.stats
         _visibleDomainLength      = State(initialValue: max(stats.count, 1))
         _data = State(initialValue: PointsGraphData(
@@ -1441,6 +1506,7 @@ struct ExpandedPointsGraphView: View {
                 scrollPositionX: zoomEnabled ? $scrollPositionX : nil,
                 showHeartRate: showHeartRate,
                 showSteps: showSteps,
+                stepsSeriesMode: stepsSeriesMode,
                 showXAxis: true,
                 selectedX: $selectedX,
                 activeHREntries: activeHR
@@ -1488,6 +1554,7 @@ struct ExpandedPointsGraphView: View {
                         showHeartRate: $showHeartRate,
                         showSteps: $showSteps,
                         hrSeriesMode: $hrSeriesMode,
+                        stepsSeriesMode: $stepsSeriesMode,
                         fetcher: fetcher
                     )
                 }
