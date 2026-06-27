@@ -201,6 +201,7 @@ public enum MatchWebTemplate {
         focal: "me",
         sel: { myOut: new Set(), oppOut: new Set(), wonShot: new Set(), lostShot: new Set() },
         hr: false, steps: false,
+        stepsMode: "cumulative",  // "cumulative" | "perPoint" — mirrors iOS StepsSeriesMode
         selected: null,
         tab: "stats",     // "stats" | "points" (mirrors MatchDetailView's tabs)
         filter: "all",    // FilterVM key — the selected set filter
@@ -380,7 +381,20 @@ public enum MatchWebTemplate {
           () => { state.hr = !state.hr; render(); }));
         if (hasSteps) wrap.appendChild(toggleChip("Steps", P.stepsLineHex, state.steps,
           () => { state.steps = !state.steps; render(); }));
+        // Steps mode picker (Total / Per point) — mirrors the iOS StepsSeriesMode
+        // sub-control shown beneath the Steps toggle. Only when Steps is on.
+        if (hasSteps && state.steps) {
+          wrap.appendChild(stepsModeChip("Total", "cumulative"));
+          wrap.appendChild(stepsModeChip("Per point", "perPoint"));
+        }
         return wrap;
+      }
+      function stepsModeChip(label, mode) {
+        const on = state.stepsMode === mode;
+        return el("div", { class: "chip" + (on ? " on" : ""),
+          onclick: () => { state.stepsMode = mode; render(); } }, [
+          el("span", { class: "dot", style: "background:" + (on ? P.stepsLineHex : "transparent") + ";border:1px solid " + P.stepsLineHex }), label
+        ]);
       }
       function toggleChip(label, color, on, toggle) {
         return el("div", { class: "chip" + (on ? " on" : ""), onclick: toggle }, [
@@ -448,8 +462,13 @@ public enum MatchWebTemplate {
         // overlays (recorder-only)
         if (isMe() && state.hr) overlay(svg, pts.filter(p => p.heartRateBPM != null),
           p => p.heartRateBPM, P.hrLineHex, false, "HR");
-        if (isMe() && state.steps && DATA.steps) overlay(svg, DATA.steps.timeline,
-          p => p.cumulative, P.stepsLineHex, true, "Steps", true);
+        if (isMe() && state.steps && DATA.steps) {
+          // Core ships both cumulative + perPoint per sample (StepsSeries); the
+          // viewer only paints whichever mode is toggled.
+          const valFn = state.stepsMode === "perPoint" ? (p => p.perPoint) : (p => p.cumulative);
+          overlay(svg, DATA.steps.timeline, valFn, P.stepsLineHex, true,
+            state.stepsMode === "perPoint" ? "Steps/pt" : "Steps", true);
+        }
 
         // scatter — driven by the toggled control pills (mirrors PointsGraphView).
         // Each mark sits on the absolute line of the player it belongs to, so a
@@ -555,7 +574,7 @@ public enum MatchWebTemplate {
         if (isMe() && state.hr && DATA.points.some(p => p.heartRateBPM != null))
           wrap.appendChild(lineItem(P.hrLineHex, "Heart Rate", false));
         if (isMe() && state.steps && DATA.steps)
-          wrap.appendChild(lineItem(P.stepsLineHex, "Steps", true));
+          wrap.appendChild(lineItem(P.stepsLineHex, state.stepsMode === "perPoint" ? "Steps (per point)" : "Steps", true));
         return wrap;
       }
       function lineItem(color, label, dashed) {

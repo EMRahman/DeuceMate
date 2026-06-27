@@ -311,13 +311,15 @@ extension MatchWebViewModel {
         return HRBlock(timeline: timeline, zones: zones, resolvedMaxHR: meFull.resolvedMaxHR)
     }
 
-    static func stepsBlock(_ points: [PointVM]) -> StepsBlock? {
-        let samples = points.compactMap { p -> StepsBlock.Sample? in
-            guard let c = p.stepsCumulative, c > 0 else { return nil }
-            return StepsBlock.Sample(pointIndex: p.index, cumulative: c)
-        }
-        guard !samples.isEmpty else { return nil }
-        return StepsBlock(timeline: samples)
+    static func stepsBlock(stats: [PointStat], totalSteps: Int?) -> StepsBlock? {
+        // Derivation lives in Core's StepsSeries so the iOS chart and this export
+        // can't diverge; the JSON ships both the cumulative total and per-point
+        // delta and the viewer only paints whichever the user toggles.
+        let series = StepsSeries.make(stats: stats, totalSteps: totalSteps)
+        guard !series.isEmpty else { return nil }
+        return StepsBlock(timeline: series.map {
+            StepsBlock.Sample(pointIndex: $0.pointIndex, cumulative: $0.cumulative, perPoint: $0.perPoint)
+        })
     }
 
     // MARK: - Meta helpers

@@ -17,8 +17,9 @@ public struct MatchWebViewModel: Encodable, Sendable {
     /// perspective toggle in favour of a fixed recorder-framed page. v3 replaced
     /// the single `comparison` with per-set-filter `filters` (All / Set N) and
     /// added the Stats/Points tabs + point-display fields. v4 added the optional
-    /// `aiCoach` block (AI coaching prompt + launch links).
-    public static let currentSchemaVersion = 4
+    /// `aiCoach` block (AI coaching prompt + launch links). v5 added the
+    /// `perPoint` field to each steps sample (Total vs Per-point overlay mode).
+    public static let currentSchemaVersion = 5
 
     public let schemaVersion: Int
     public let generatedAt: String
@@ -200,6 +201,7 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public struct Sample: Encodable, Sendable {
             public let pointIndex: Int
             public let cumulative: Int
+            public let perPoint: Int
         }
         public let timeline: [Sample]
     }
@@ -353,7 +355,7 @@ public struct MatchWebViewModel: Encodable, Sendable {
 
         // Recorder-only HR / steps blocks (from the `me` full summary).
         let hrBlock = Self.hrBlock(fullMe)
-        let stepsBlock = Self.stepsBlock(points)
+        let stepsBlock = Self.stepsBlock(stats: allStats, totalSteps: record.totalSteps)
 
         let palette = Palette(
             meLineHex: WebExportColors.meLineHex,
