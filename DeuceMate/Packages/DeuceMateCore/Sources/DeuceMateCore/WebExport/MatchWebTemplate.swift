@@ -381,10 +381,10 @@ public enum MatchWebTemplate {
           () => { state.hr = !state.hr; render(); }));
         if (hasSteps) wrap.appendChild(toggleChip("Steps", P.stepsLineHex, state.steps,
           () => { state.steps = !state.steps; render(); }));
-        // Steps mode picker (Total / Per point) — mirrors the iOS StepsSeriesMode
+        // Steps mode picker (Cumulative / Per point) — mirrors the iOS StepsSeriesMode
         // sub-control shown beneath the Steps toggle. Only when Steps is on.
         if (hasSteps && state.steps) {
-          wrap.appendChild(stepsModeChip("Total", "cumulative"));
+          wrap.appendChild(stepsModeChip("Cumulative", "cumulative"));
           wrap.appendChild(stepsModeChip("Per point", "perPoint"));
         }
         return wrap;
