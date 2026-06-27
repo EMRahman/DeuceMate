@@ -463,8 +463,10 @@ public enum MatchWebTemplate {
         if (isMe() && state.hr) overlay(svg, pts.filter(p => p.heartRateBPM != null),
           p => p.heartRateBPM, P.hrLineHex, false, "HR");
         if (isMe() && state.steps && DATA.steps) {
-          const series = stepsSeries();  // {cumulative|perPoint} → [{pointIndex, value}]
-          overlay(svg, series, p => p.value, P.stepsLineHex, true,
+          // Core ships both cumulative + perPoint per sample (StepsSeries); the
+          // viewer only paints whichever mode is toggled.
+          const valFn = state.stepsMode === "perPoint" ? (p => p.perPoint) : (p => p.cumulative);
+          overlay(svg, DATA.steps.timeline, valFn, P.stepsLineHex, true,
             state.stepsMode === "perPoint" ? "Steps/pt" : "Steps", true);
         }
 
@@ -504,19 +506,6 @@ public enum MatchWebTemplate {
         });
 
         return svg;
-      }
-
-      // Steps overlay series for the active mode. Cumulative uses the shipped
-      // running total; per-point derives the delta between consecutive samples
-      // (first sample = 0), mirroring iOS PointsGraphData's seed-at-0 convention.
-      function stepsSeries() {
-        const tl = DATA.steps.timeline;
-        if (state.stepsMode !== "perPoint")
-          return tl.map(p => ({ pointIndex: p.pointIndex, value: p.cumulative }));
-        return tl.map((p, i) => ({
-          pointIndex: p.pointIndex,
-          value: i ? Math.max(0, p.cumulative - tl[i - 1].cumulative) : 0
-        }));
       }
 
       function overlay(svg, arr, valFn, color, dashed, label, fromZero) {

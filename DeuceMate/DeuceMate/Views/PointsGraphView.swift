@@ -186,7 +186,6 @@ private struct PointsGraphData {
         var scatter: [ScatterEntry] = []
         var hr: [HREntry] = []
         var hrMin = Int.max, hrMax = Int.min
-        var realSteps: [(pointIndex: Int, cumulative: Int)] = []
 
         var m = 0, o = 0
         var hasOutcome = false
@@ -253,10 +252,6 @@ private struct PointsGraphData {
                 hr.append(HREntry(id: x, pointIndex: x, bpm: bpm))
                 if bpm < hrMin { hrMin = bpm }
                 if bpm > hrMax { hrMax = bpm }
-            }
-
-            if let cumulative = stat.stepsCumulative {
-                realSteps.append((x, cumulative))
             }
 
             if scatterEnabled {
@@ -343,44 +338,24 @@ private struct PointsGraphData {
             self.hrDomain = lo...max(hi, lo + 20)
         }
 
-        // Steps series: prefer real per-point cumulative samples captured on
-        // the watch when ≥2 points carry data. Legacy matches with no
-        // per-point data fall back to a linear estimate from `totalSteps`.
-        let resolvedSteps: [StepEntry]
-        if realSteps.count >= 2 {
-            // Normalize to the first sample so the line starts at 0 even
-            // when step collection began mid-match.
-            let base = realSteps[0].cumulative
-            var out: [StepEntry] = [StepEntry(id: 0, pointIndex: 0, cumulativeSteps: 0, perPointSteps: 0)]
-            out.reserveCapacity(realSteps.count + 1)
-            var prevCumulative = 0
-            for p in realSteps {
-                let cumulative = max(0, p.cumulative - base)
-                out.append(StepEntry(id: p.pointIndex,
-                                     pointIndex: p.pointIndex,
-                                     cumulativeSteps: cumulative,
-                                     perPointSteps: max(0, cumulative - prevCumulative)))
-                prevCumulative = cumulative
-            }
-            resolvedSteps = out
-        } else if let total = totalSteps, total > 0, !stats.isEmpty {
-            let n = stats.count
-            var steps: [StepEntry] = []
-            steps.reserveCapacity(n + 1)
-            steps.append(StepEntry(id: 0, pointIndex: 0, cumulativeSteps: 0, perPointSteps: 0))
-            var prevCumulative = 0
-            for i in 1...n {
-                let cumulative = Int(Double(i) / Double(n) * Double(total))
-                steps.append(StepEntry(id: i, pointIndex: i,
-                                       cumulativeSteps: cumulative,
-                                       perPointSteps: max(0, cumulative - prevCumulative)))
-                prevCumulative = cumulative
-            }
-            resolvedSteps = steps
+        // Steps series derivation is shared with the HTML export via Core's
+        // StepsSeries (single source of truth). Core uses 0-based point indices;
+        // map them onto the graph's 1-based x-axis and prepend a seed at x=0 so
+        // the line starts at the chart origin.
+        let coreSteps = StepsSeries.make(stats: stats, totalSteps: totalSteps)
+        if coreSteps.isEmpty {
+            self.stepEntries = []
         } else {
-            resolvedSteps = []
+            var out: [StepEntry] = [StepEntry(id: 0, pointIndex: 0, cumulativeSteps: 0, perPointSteps: 0)]
+            out.reserveCapacity(coreSteps.count + 1)
+            for p in coreSteps {
+                let x = p.pointIndex + 1
+                out.append(StepEntry(id: x, pointIndex: x,
+                                     cumulativeSteps: p.cumulative,
+                                     perPointSteps: p.perPoint))
+            }
+            self.stepEntries = out
         }
-        self.stepEntries = resolvedSteps
     }
 
     /// Outcome attribution rules (from MatchStatsSummary):

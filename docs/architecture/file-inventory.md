@@ -74,6 +74,7 @@ place to test and the safest place to change.
 | `Stats/RecCoachInsights.swift` | 310 | The Rec Coach rule set: eight coaching rules (e.g. self-inflicted losses, double-fault leakage, pressure-point drop-off) that fire from point stats and rank the top observations. | Rec Coach |
 | `Stats/PulseCoachInsights.swift` | 125 | The Pulse Coach rule set: three heart-rate rules (zone-vs-results delta, break-point HR spike, late-match decline). | Pulse Coach |
 | `Stats/StepsCoachInsights.swift` | 95 | The steps movement/fatigue rule set: two rules (accumulated-step late-match decline, high-movement-point win rate) over the `MatchStatsSummary.StepPoint` timeline. Recorder-only; surfaced in the AI/stats export's Movement & Fatigue section. | Stats, health |
+| `Stats/StepsSeries.swift` | 75 | Single source of truth for the steps **overlay** series shared by the iOS Points Graph and the HTML export: original 0-based point indices, base-normalized cumulative (starts at 0), per-point deltas, and the legacy `totalSteps` linear-estimate fallback. Distinct from `MatchStatsSummary`'s chronological insights timeline. | Stats, health |
 | `Stats/SetActivitySplit.swift` | 115 | Per-set breakdowns (duration, points, games) used by the set filters in stats views. | Stats |
 | `Stats/HRZone.swift` | 80 | Heart-rate zone maths: zones 1–5 from a max heart rate (age-derived or manually overridden). | Pulse Coach, health |
 | `Models/ScoreTypes.swift` | 185 | The shared vocabulary: players, singles/doubles, the six match formats and their rules (data-driven), set scores, doubles serve order. | Live scoring, match setup |
@@ -115,6 +116,7 @@ expected values rewritten to make a failure pass — that requires explicit appr
 |---|---|
 | `ScoringEngineTests.swift` | The tennis rules: deuce cycles, serve rotation, tiebreaks, changeovers, all match formats, match completion. |
 | `MatchStatsSummaryTests.swift` / `MatchStatsSummaryHRTests.swift` / `MatchStatsSummaryStepsTests.swift` | The statistics math, including heart-rate splits and per-point step deltas / timeline. |
+| `StepsSeriesTests.swift` | The shared steps overlay series: base-normalization, per-point deltas, sparse-sample indices, and the `totalSteps` linear-estimate fallback. |
 | `RecCoachInsightsTests.swift` / `PulseCoachInsightsTests.swift` / `StepsCoachInsightsTests.swift` | Every coaching rule firing (and not firing) on fixture matches. |
 | `MatchRecordCodingTests.swift` | Saved matches decode forever — round-trips plus old JSON without newer fields. |
 | `MatchRecordFormattingTests.swift` | Score display notation. |
