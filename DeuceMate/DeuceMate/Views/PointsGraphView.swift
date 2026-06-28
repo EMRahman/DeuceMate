@@ -33,7 +33,7 @@ private enum StepsSeriesMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .cumulative: return String(localized: "Total")
+        case .cumulative: return String(localized: "Cumulative")
         case .perPoint:   return String(localized: "Per point")
         }
     }
@@ -623,10 +623,18 @@ private struct PointsChartCore: View {
             AxisMarks(position: .leading, values: [yMax]) { _ in
                 AxisValueLabel { Text("000").font(.caption2).opacity(0) }
             }
-            // Suppress steps labels when HR overlay is also active to avoid overlap.
+            // Always render a trailing label so the steps plot area reserves the
+            // same right-axis width as the primary/HR charts (otherwise an empty
+            // label collapses the axis and the line spills over the x-axis
+            // baseline and into the label gutter). When the HR overlay owns the
+            // visible right axis, render the same fixed-width invisible "000"
+            // placeholder used on the leading edge (and the primary chart) so the
+            // reserved width is constant regardless of the formatted step values.
             AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { value in
                 AxisValueLabel {
-                    if !showHeartRate, let v = value.as(Int.self) {
+                    if showHeartRate {
+                        Text("000").font(.caption2).opacity(0)
+                    } else if let v = value.as(Int.self) {
                         Text(v >= 1000 ? "\(v / 1000)k" : "\(v)")
                             .font(.caption2)
                             .foregroundStyle(Color.green.opacity(0.85))
