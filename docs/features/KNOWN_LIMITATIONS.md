@@ -41,13 +41,19 @@ unlike `sendRecordReliable` (`:102-121`) and `sendHistory` (`:133-147`), which b
 check `matchSyncUserInfoSizeLimit` and fall back to `transferFile` for oversized
 payloads. Only the live path was never given that guard.
 
-**Why it's bounded (no data loss):** the impact is confined to the **watch → phone
-*live* channel**. The watch is the source of truth and is unaffected — the scorer
-sees nothing wrong. And **no data is lost**: the finalized record and every
-full-history sync already fall back to `transferFile`, so the phone's durable
-archive still receives the complete match with full stats when the match ends or on
-the next history sync. This is a real-time-only outage, not a stored-data bug —
-hence "known limitation" rather than a P0/P1 fix.
+**Why it's bounded (no permanent data loss):** the impact is confined to the
+**watch → phone *live* channel**. The watch is the source of truth and is unaffected
+— the scorer sees nothing wrong. And **no data is permanently lost**, though with one
+subtlety worth stating precisely: the end-of-match send is *not* itself protected.
+Finalizing routes through `sendMatch` → `sendRecord` — the same no-fallback
+`sendMessage` path as the checkpoints — so an oversized *final* record can also fail
+to deliver at match-end. What guarantees the archive still converges is the watch's
+**full-history sync** (`sendHistory`, which *does* fall back to `transferFile` above
+the size limit): it runs on the next activation / reachability change and carries the
+completed match with full stats. So the phone's durable archive catches up on the
+**next sync** rather than necessarily at the instant the match ends. This is a
+real-time convergence delay, not a stored-data bug — hence "known limitation" rather
+than a P0/P1 fix.
 
 **Candidate fixes (already reasoned about):**
 - **Strip stats + receive-side graft (leading option).** When a checkpoint exceeds
