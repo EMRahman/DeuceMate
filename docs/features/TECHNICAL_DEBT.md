@@ -25,7 +25,7 @@ accurate docs, navigable files, and text-level checks are its substitutes.
 | 2 | Sync | Add `lastModified` to `MatchRecord` for merge policy | Medium | Backlog |
 | 3 | Settings | Replace stringly-typed settings keys with typed keys | **High (next up)** | Backlog |
 | 4a | Persistence | Silent save-failure handling (watch + phone) | Low | Backlog |
-| 4b | Persistence | File-protection level on watch saves | — | **Parked** |
+| 4b | Persistence | File-protection level on watch saves | Low | **Done** |
 | 5 | UX | Simplify first-run and match-start flow | — | **Parked (product, not code)** |
 | 6 | Concurrency | `PhoneStatsStore` actor / `@MainActor` migration | Low | Backlog |
 | 7 | Stats | Convert formatted string stats to typed `RatioStat` | Medium | Backlog |
@@ -166,23 +166,46 @@ than a fix for an active bug.
 
 ---
 
-### 4b — File-protection level on watch saves (Parked)
+### 4b — File-protection level on watch saves (Done)
 
 **Original concern:** `.completeFileProtection` encrypts files and makes them
 inaccessible when the device is locked. The suggestion was to switch to
 `.completeFileProtectionUntilFirstUserAuthentication` so background writes
 during screen-off periods succeed.
 
-**Why parked:** On Apple Watch, "screen off" and "device locked" are distinct
-states. The device only locks when removed from the wrist (wrist detection +
-passcode) or manually locked via the side button. A dimmed display between
-points does not lock the device, so `.completeFileProtection` files remain
-fully readable throughout a match. With an active `HKWorkoutSession` the device
-is essentially guaranteed to stay unlocked for the session's duration.
+**Why it was parked (and why the park no longer holds).** The park assumed the
+watch stays unlocked throughout use: "screen off" and "device locked" are distinct
+states, a dimmed display between points does not lock the device, and an active
+`HKWorkoutSession` keeps the device unlocked for the session's duration. That is
+still true for **live scoring**. But the park named its own un-park trigger —
+"watch-side background processing that runs after the watch has been taken off the
+wrist" — and that path exists and is exercised by the companion flows: the phone
+sends **"Sync to Watch"** / manual-entry records via `sendRecordReliable` and
+**delete-from-watch** commands via `sendControl(queueOnFailure: true)`, both of
+which fall back to `transferUserInfo` / `transferFile` when the watch is
+unreachable (`MatchSyncTransport.swift`). Those are **background-queued** deliveries
+("survives the peer being asleep") — WatchConnectivity can launch the watch app in
+the background to receive them **while it is off-wrist and locked** (e.g. charging
+on a nightstand), where it runs `StatsStore.appendMatch` / `removeMatch`. A Class A
+write there fails silently, and a Class A *read* there returns nothing — which,
+before the read-failure guard (item below), was mis-read as an empty archive and
+could clobber stored matches.
 
-The concern is real for iPhone background tasks but does not apply to the watch
-in normal wear. No action needed unless the app adds watch-side background
-processing that runs after the watch has been taken off the wrist.
+**Resolved.** Switched both watch writers to
+`.completeFileProtectionUntilFirstUserAuthentication` (Class B), matching
+`PhoneStatsStore`:
+- `StatsStore._writeUnsafe` (`StatsStore.swift`) — the writer actually reached by
+  the off-wrist background deliveries above; this is the load-bearing change.
+- `ScoreViewModel.saveState()` (`ScoreViewModel.swift`) — only reached during live
+  scoring (device unlocked), so not strictly required; switched too for consistency
+  across the three persistence writers and as defense-in-depth against any future
+  off-wrist save path.
+
+Self-migrating: both files are rewritten atomically on the next save, so existing
+Class A files pick up Class B without a migration step. Shipped together with the
+watch `StatsStore` read-failure guard (a failed/corrupt read now returns `nil`, and
+`appendMatch` / `removeMatch` refuse to overwrite rather than persisting the
+emptiness) as one watch-store-reliability change.
 
 ---
 
