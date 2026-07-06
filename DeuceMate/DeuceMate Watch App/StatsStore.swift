@@ -85,14 +85,18 @@ final class StatsStore: StatsStoring {
     /// Returns `[]` only when the file is genuinely absent (no history yet), and
     /// `nil` when the file exists but can't be read or decoded. The distinction
     /// matters: callers that write a derived history back must never treat an
-    /// unreadable archive as empty (see `loadHistoryOrNil`).
+    /// unreadable archive as empty (see `loadHistoryOrNil`). Reading directly and
+    /// keying "absent" off `CocoaError.fileReadNoSuchFile` (rather than a separate
+    /// `fileExists` probe) avoids a check-then-read race and the deprecated
+    /// `URL.path`; a locked/unreadable file throws a different error → `nil`.
     private func _loadHistoryUnsafe() -> [MatchRecord]? {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
-        guard let data = try? Data(contentsOf: fileURL) else { return nil }
         do {
+            let data = try Data(contentsOf: fileURL)
             return try JSONDecoder().decode([MatchRecord].self, from: data)
+        } catch CocoaError.fileReadNoSuchFile {
+            return []
         } catch {
-            statsStoreLogger.error("Failed to decode match history: \(error.localizedDescription, privacy: .public)")
+            statsStoreLogger.error("Failed to read or decode match history: \(error.localizedDescription, privacy: .public)")
             return nil
         }
     }

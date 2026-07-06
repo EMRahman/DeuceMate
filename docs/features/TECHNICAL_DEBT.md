@@ -207,6 +207,19 @@ watch `StatsStore` read-failure guard (a failed/corrupt read now returns `nil`, 
 `appendMatch` / `removeMatch` refuse to overwrite rather than persisting the
 emptiness) as one watch-store-reliability change.
 
+**Residual gap (accepted, documented).** For a watch that upgraded with an existing
+`matchHistory.json` still written under Class A, the Class B benefit only lands after
+the next *unlocked* save migrates that file. In the window before that — an off-wrist,
+locked background delivery (Sync-to-Watch / manual-entry / delete via
+`transferUserInfo`/`transferFile`) — the read still fails, so the read-failure guard
+drops the delivery *without a retry path* rather than storing it. This is **not a
+regression** (pre-guard, the subsequent Class A *write* failed too, so the delivery was
+already lost), and it self-heals once any unlocked save migrates the file. Fully closing
+it would need either an explicit unlocked protection-class migration on launch (only
+narrows the window — a locked first-launch still can't migrate) or a
+pending-operation retry queue for dropped background deliveries (larger). Deferred by
+choice; recorded here so the tradeoff is visible.
+
 ---
 
 ### 5 — Simplify first-run and match-start UX (Parked)
