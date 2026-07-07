@@ -80,7 +80,11 @@ Data-flow invariants — **internalise these before touching sync or persistence
   (fresh install / first canonical initialization), via Core's
   `ArchiveBackupPolicy`; once initialized, match data continues one way:
   watch → phone → iCloud. Tombstones back up too. Never gate the UI on iCloud,
-  and never treat a failed read as an empty archive.
+  and never treat a failed read as an empty archive. **This "read failure ≠ empty
+  archive" rule holds on _both_ stores:** the watch `StatsStore` also returns
+  `nil` (not `[]`) from an unreadable/corrupt read via `loadHistoryOrNil()`, and
+  its `appendMatch`/`removeMatch` and the sync manifest/full-history pushes bail
+  rather than overwriting or broadcasting the emptiness.
 - **Settings sync bidirectionally, last-write-wins.** Match data does not.
 - **Persisted match JSON must stay backward-compatible forever** (see §4).
 
@@ -166,8 +170,10 @@ execution and verify statically instead (§0).
 
 ```bash
 # Shared package (pure logic — where new tests usually belong).
+# The package exposes a single auto-generated scheme, `DeuceMateCore`, whose
+# test action runs DeuceMateCoreTests. `swift test` in the same directory works too.
 cd DeuceMate/Packages/DeuceMateCore && \
-  xcodebuild test -scheme DeuceMateCoreTests \
+  xcodebuild test -scheme DeuceMateCore \
   -destination "platform=macOS" CODE_SIGNING_ALLOWED=NO
 
 # Watch app tests

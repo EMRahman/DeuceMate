@@ -1619,7 +1619,10 @@ class ScoreViewModel: ObservableObject {
         )
         do {
             let data = try JSONEncoder().encode(state)
-            try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+            // Class B (until-first-unlock): the live-match state must stay writable
+            // when the watch is locked/off-wrist during a match. Matches StatsStore
+            // and PhoneStatsStore; Class A would silently drop the write.
+            try data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         } catch {
             #if DEBUG
             print("Critical: Failed to save state")

@@ -31,7 +31,7 @@ The scorer. Everything about running a live match happens here.
 | `AppTheme.swift` | 220 | The watch's five court-inspired colour themes; the chosen theme syncs to the phone. | Theming |
 | `WorkoutManager.swift` | 200 | Runs the HealthKit workout session during a match: live heart rate, calories, steps, distance per set. | Health/workout tracking |
 | `Sync/WatchMatchSyncService.swift` | 290 | The watch's end of the watch↔phone bridge: sends match checkpoints, full history, manifests and announcements; receives settings, score commands and delete commands from the phone. | Sync |
-| `StatsStore.swift` | 80 | Saves match history to a JSON file on the watch; trims to the newest 25 matches; thread-safe. | Match history (persistence) |
+| `StatsStore.swift` | 95 | Saves match history to a JSON file on the watch; trims to the newest 25 matches; thread-safe. Distinguishes a genuinely-empty archive from an unreadable/corrupt one and refuses to overwrite (or broadcast) the latter, so a transient read failure can't erase stored matches. | Match history (persistence) |
 | `DeuceMateApp.swift` | 55 | The watch app's entry point: wires up the scoring engine, workout manager and sync service; restores an in-progress match on launch. | App plumbing |
 | `MatchStats.swift` | 50 | Small compatibility shim: re-exports shared types under old names, plus watch-only display labels and colours for match formats and point outcomes. | App plumbing, theming |
 
@@ -104,7 +104,7 @@ place to test and the safest place to change.
 
 Plus `Package.swift` (~25 lines) — the package manifest (name, platforms, test target). No logic.
 
-## 4. Tests (28 files)
+## 4. Tests (29 files)
 
 Tests are the correctness record. The interesting ones all live against the shared
 package (no simulator needed). Red flags in any PR: tests deleted, skipped, or
@@ -131,10 +131,12 @@ expected values rewritten to make a failure pass — that requires explicit appr
 | `SimulatedGameStatsTests.swift` | Simulates realistic whole matches to exercise stats end-to-end. |
 | `MatchWebExportTests.swift` | The interactive HTML export: view-model shape, both-perspective consistency, the recorder-only-HR rule, and that the produced HTML is self-contained (no external resource loads). |
 
-**App-target tests (6 files):** `DeuceMate Watch AppTests/DeuceMate_Watch_AppTests.swift`
+**App-target tests (7 files):** `DeuceMate Watch AppTests/DeuceMate_Watch_AppTests.swift`
 (~1,140 lines — watch-specific behaviour: tiebreak serve rotation, changeover events,
-compass bearings), the near-empty `DeuceMateTests/DeuceMateTests.swift`, and four
-UI-test placeholders: `DeuceMate Watch AppUITests/DeuceMate_Watch_AppUITests.swift`,
+compass bearings), `DeuceMate Watch AppTests/StatsStoreTests.swift` (exercises the real
+watch `StatsStore` against a temp file: absent-file vs. corrupt-file semantics, the
+refuse-to-overwrite-on-unreadable guard, and valid round-trips), the near-empty
+`DeuceMateTests/DeuceMateTests.swift`, and four UI-test placeholders: `DeuceMate Watch AppUITests/DeuceMate_Watch_AppUITests.swift`,
 `DeuceMate Watch AppUITests/DeuceMate_Watch_AppUITestsLaunchTests.swift`,
 `DeuceMateUITests/DeuceMateUITests.swift`,
 `DeuceMateUITests/DeuceMateUITestsLaunchTests.swift`.

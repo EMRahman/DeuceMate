@@ -70,7 +70,10 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     /// phone's cached manifest eventually catches up even if the watch is
     /// unreachable when the local history changes.
     func sendManifest() {
-        let ids = StatsStore.shared.loadHistory().map(\.id)
+        // A failed/corrupt read must not broadcast an empty manifest: the phone
+        // would prune its watch mirror and mis-badge storage locations. Bail
+        // instead — `loadHistoryOrNil() == nil` means unreadable, not empty.
+        guard let ids = StatsStore.shared.loadHistoryOrNil()?.map(\.id) else { return }
         guard let payload = try? MatchSyncPayloadBuilder.watchManifest(ids) else { return }
         transport.sendControl(payload, queueOnFailure: true)
     }
@@ -92,6 +95,18 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     func sendFullHistory(_ records: [MatchRecord]) {
         transport.sendHistory(records)
         sendManifest()
+    }
+
+    /// Load the watch's history and push it to the phone, but only when it could
+    /// actually be read. A read/decode failure must never send an empty history:
+    /// the phone would merge it and prune its watch mirror. `loadHistoryOrNil()`
+    /// returns `nil` (not `[]`) on an unreadable/corrupt archive — bail then.
+    private func pushFullHistory() {
+        guard let history = StatsStore.shared.loadHistoryOrNil() else {
+            logger.error("full-history push skipped: watch history unreadable")
+            return
+        }
+        sendFullHistory(history)
     }
 
     // MARK: - Watch → phone setting pushes
@@ -175,12 +190,12 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
             logger.error("activation error: \(error.localizedDescription, privacy: .public)")
         }
         guard activationState == .activated else { return }
-        sendFullHistory(StatsStore.shared.loadHistory())
+        pushFullHistory()
     }
 
     func sessionReachabilityDidChange(_ session: WCSession) {
         guard session.isReachable else { return }
-        sendFullHistory(StatsStore.shared.loadHistory())
+        pushFullHistory()
     }
 
     // MARK: - Receive requests from phone
@@ -208,7 +223,7 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
         for event in SyncIncomingPayload.decode(payload) {
             switch event {
             case .requestFullHistory, .ping:
-                sendFullHistory(StatsStore.shared.loadHistory())
+                pushFullHistory()
             case .pulseCoachMaxHR(let bpm):
                 DispatchQueue.main.async {
                     UserDefaults.standard.set(bpm, forKey: "pulseCoachMaxHR")
