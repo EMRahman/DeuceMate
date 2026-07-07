@@ -1,9 +1,27 @@
-# Principal-engineer audit — 2026-07-04
+# Principal-Engineer Audit — DeuceMate (2026-07-04)
 
 Single-pass audit. Scope: persistence, sync, live-match hot paths on both targets +
 Core. Static analysis only (no Swift toolchain in this environment — nothing was
-built or run). Execute top-to-bottom; each item is independently shippable as its
-own PR per `CONTRIBUTING.md` (one concern per PR, logic change ⇒ Core tests).
+built or run). Each item was written to be independently shippable as its own PR per
+`CONTRIBUTING.md` (one concern per PR, logic change ⇒ Core tests).
+
+> **Disposition (as of 2026-07).** Most of this audit has since been actioned; it is
+> kept here as the historical record of the review. The findings below are preserved
+> verbatim as originally written.
+> - **P0 #1 (watch `StatsStore` treats a failed read as empty)** — **Done.** The
+>   loader now distinguishes absent (`[]`) from unreadable/corrupt (`nil`), and the
+>   write/broadcast paths bail on `nil`. Covered by `StatsStoreTests`.
+> - **P0 #2 (Class A file protection on watch stores)** — **Done.** Both watch
+>   writers moved to `.completeFileProtectionUntilFirstUserAuthentication`, which
+>   un-parked `docs/features/TECHNICAL_DEBT.md` #4b (see its "Residual gap" note).
+> - **P1 #3 (live-checkpoint payload size guard)** — **Deferred, documented** as a
+>   design-bound limitation in `docs/features/KNOWN_LIMITATIONS.md` #1 (not fixed —
+>   reliability was prioritised over the live-view robustness gap).
+> - **P2 #4 & #5 (performance: synchronous disk I/O, duplicate history syncs)** —
+>   **Not done, deferred by choice** (reliability over performance).
+> - **P3 hygiene** — the history-cap doc-rot is **fixed** (comments now cite
+>   `WatchHistory.cap`); the settings-key and `MatchRecord`/`PointStat` decoding
+>   audits confirmed no action needed.
 
 ---
 
