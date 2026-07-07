@@ -16,16 +16,16 @@ public enum MatchSyncKey {
     /// Sent by the watch when a match ends (completed or abandoned) to clear the active match on the phone.
     public static let clearActiveMatch = "clearActiveMatch"
     /// Watch → phone manifest of the match-id UUID strings the watch currently
-    /// holds, JSON-encoded as `[String]`. The watch caps its history at 10, so
-    /// this is small. The phone uses it to badge each match as stored on both
-    /// devices, the phone only, or the watch only. Sent alongside every full
-    /// history push and record checkpoint, and after a watch-side delete.
+    /// holds, JSON-encoded as `[String]`. The watch caps its history at
+    /// `WatchHistory.cap`, so this is small. The phone uses it to badge each match
+    /// as stored on both devices, the phone only, or the watch only. Sent alongside
+    /// every full history push and record checkpoint, and after a watch-side delete.
     public static let watchManifest = "watchManifest"
     /// Phone → watch command to delete a single match from the watch only (the
     /// phone keeps its own archive copy). Carries `deleteMatchID`. Mirrors the
     /// `scoreCommand` / `scoreCommandMatchID` pattern. There is no resync key —
     /// pulling a watch-only match down reuses `requestFullHistory`, since the
-    /// watch holds ≤10 matches and already replies with its full history.
+    /// watch holds ≤`WatchHistory.cap` matches and already replies with its full history.
     public static let deleteMatchOnWatch = "deleteMatchOnWatch"
     /// UUID string of the match a `deleteMatchOnWatch` command targets.
     public static let deleteMatchID = "deleteMatchID"
