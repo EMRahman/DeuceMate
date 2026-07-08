@@ -19,9 +19,9 @@ HealthKit apps), Support URL, and Marketing URL previously pointed at
 return 404 to Apple's reviewers.
 
 - [x] **[fixed in this PR]** Added a public site under `/docs`
-  (`docs/index.html` = support, `docs/privacy.html` = privacy policy), with
-  `docs/_config.yml` excluding the internal `docs/features/` plans from the
-  published build.
+  (`docs/index.html` = marketing landing page, `docs/support.html` = support,
+  `docs/privacy.html` = privacy policy), with `docs/_config.yml` excluding the
+  internal `docs/features/` plans from the published build.
 - [x] **[fixed in this PR]** Updated the URLs in `APP_STORE_METADATA.md` to the
   GitHub Pages site.
 - [x] **MANUAL — enable GitHub Pages:** repo **Settings → Pages → Build and
@@ -30,8 +30,13 @@ return 404 to Apple's reviewers.
   be **public** for Pages to publish.
   - Alternative: host `index.html` + `privacy.html` on `ehsanrahman.com` and use
     those URLs instead — Apple only needs the two URLs to resolve publicly.
-- [x] **MANUAL — verify** both URLs load in a private/logged-out browser window
-  before submitting.
+- [~] **MANUAL — verify** all three URLs load in a private/logged-out browser
+  window before submitting: privacy policy, **Support URL (`support.html` —
+  the actual URL App Store Connect will show, not `index.html`)**, and the
+  marketing root. Re-audited 2026-07-08: this session's egress proxy blocks
+  `github.io`, so `https://emrahman.github.io/DeuceMate/{privacy,support,index}.html`
+  could not be re-checked here — confirm directly in a logged-out browser
+  before submitting. This is the one hard rejection trigger for a HealthKit app.
 
 ---
 
@@ -101,10 +106,34 @@ live scoreboard, announcements) need one. The testable no-watch surface is
 - [x] **[fixed in this PR]** Corrected the privacy policy's iCloud claim. Match
   data lives in the Documents directory and is therefore eligible for the user's
   own encrypted iCloud Backup; the policy previously claimed "not backed up to
-  iCloud." It now accurately states the App never uploads data and does not use
-  iCloud itself, while the OS-level device backup is under the user's control.
-  (`.completeFileProtection` is encryption-at-rest, not backup exclusion.)
+  iCloud." It now accurately states the App never uploads data to any
+  third-party server, while the OS-level device backup is under the user's
+  control. (`.completeFileProtection` is encryption-at-rest, not backup
+  exclusion.) **Superseded note (re-audited 2026-07-08):** the app has since
+  gained an intentional "iCloud Sync" feature (`ArchiveBackupPolicy` in Core,
+  `com.apple.developer.icloud-services: CloudDocuments` + the
+  `iCloud.ehsan.DeuceMate` container in `DeuceMate.entitlements`) that
+  automatically backs up the match archive to the user's own iCloud Drive,
+  documented in the privacy policy's "iCloud Sync" section. The line above's
+  "does not use iCloud itself" phrasing predates that feature and is no
+  longer accurate — the app *does* use iCloud (Drive, not a third-party
+  server), by design. Don't read this as license to strip the iCloud
+  entitlement/capability; it backs a real, documented feature.
 - [x] Privacy policy effective date aligned (June 11, 2026).
+- [ ] **AccentColor colorset is empty** on both targets (`Contents.json` has no
+  color defined) while `ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME =
+  AccentColor` — falls back to system blue. Either populate the colorset or
+  note this is intentional (theming is handled by `AppTheme`).
+- [ ] **Watch target pins `CODE_SIGN_IDENTITY = "Apple Development"`** in
+  *both* the Debug and Release configurations (`project.pbxproj` — Watch App
+  target, lines ~697 and ~735), under `CODE_SIGN_STYLE = Automatic`. Re-audit
+  flag (2026-07-08, prompted by PR review): this is **not confirmed harmless**
+  — an explicit dev-identity pin alongside automatic signing on a watchOS
+  target has a known history of causing archive/export to sign with the
+  wrong certificate ("Invalid watch kit signature" / distribution-signature
+  mismatch). If archive validation fails on the Watch target, remove both
+  `CODE_SIGN_IDENTITY` lines and let automatic signing pick the identity —
+  don't just re-run the archive.
 
 ---
 
@@ -125,7 +154,9 @@ live scoreboard, announcements) need one. The testable no-watch surface is
   (UserDefaults `CA92.1`, System Boot Time `35F9.1`).
 - [x] **Location is heading-only** — `startUpdatingHeading` only, never
   `startUpdatingLocation`/`requestLocation`; "no GPS" claim holds. When-in-use
-  usage string present on the watch.
+  usage string present on the watch, and justified by a real feature (compass
+  heading, `HomeView.swift` / `ContentView.swift` `CompassBadgeView`) — not
+  unused permission scope.
 - [x] **App icons** are 1024×1024, **RGB with no alpha channel** (transparent
   icons are auto-rejected at upload), with light/dark/tinted iOS variants.
 - [x] **Export compliance** declared (`ITSAppUsesNonExemptEncryption = false`) on
@@ -136,6 +167,16 @@ live scoreboard, announcements) need one. The testable no-watch surface is
   GitHub Actions was removed to cut macOS runner costs — no automated CI;
   run tests locally (`xcodebuild`, see `CLAUDE.md` §3).
 - [x] Age 4+, Free, no IAP — the simplest review lane.
+- [x] **No required-reason API gaps** — grep confirms no
+  `contentModificationDate` / `fileModificationDate` / `attributesOfItem` /
+  `creationDate` anywhere in Swift, so the existing privacy-manifest entries
+  (UserDefaults `CA92.1`, System Boot Time `35F9.1`) are complete. Both
+  `.xcprivacy` files sit inside file-system-synchronized target folders, so
+  they're bundled automatically (no `project.pbxproj` edit needed).
+- [x] iOS correctly **omits** `NSHealthUpdateUsageDescription` (it only reads
+  HR data, never writes); app version/build (`1.0.0` / `1`) is consistent
+  across both targets; the Release build configuration is clean (no debug
+  leakage).
 
 ---
 
@@ -188,8 +229,9 @@ Use one theme across all shots (e.g. Hard Court Night for contrast).
 
 ## Final pre-submit checklist
 
-- [x] GitHub Pages enabled (or URLs hosted elsewhere) and both URLs verified
-      logged-out — **Blocker #1**.
+- [~] GitHub Pages enabled (or URLs hosted elsewhere); both URLs still need a
+      **logged-out browser confirmation** — this environment's egress proxy
+      blocks `github.io` and couldn't re-verify it this session — **Blocker #1**.
 - [ ] Build archived from Xcode and tested on a **real** iPhone + Apple Watch.
 - [ ] App Review notes updated: manual-entry-first test path + demo video
       attached — **Item #3**.
@@ -199,3 +241,6 @@ Use one theme across all shots (e.g. Hard Court Night for contrast).
 - [ ] Screenshots prepared (iPhone 6.9"; Apple Watch 41mm + 45mm) — see the
       screenshot & demo-video plan above.
 - [ ] Bundle ID confirmed as final — **low-risk item**.
+- [ ] Developer-portal capability/container check: the App ID has HealthKit +
+      iCloud capabilities enabled and the `iCloud.ehsan.DeuceMate` container
+      exists — otherwise archive validation fails.
