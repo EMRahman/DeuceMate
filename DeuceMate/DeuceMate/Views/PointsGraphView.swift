@@ -793,12 +793,34 @@ private struct PointsGraphScatterControls: View {
         !presentEndingPhases.isEmpty && selectedLostEndingShots == Set(presentEndingPhases)
     }
 
+    /// Total points I won: my winners + the opponent's errors. Mirrors the
+    /// selection `isPointsWonActive` toggles on.
+    private var pointsWonCount: Int {
+        (myOutcomeCounts[.winner] ?? 0)
+            + (oppOutcomeCounts[.unforcedError] ?? 0)
+            + (oppOutcomeCounts[.forcedError] ?? 0)
+            + (oppOutcomeCounts[.doubleFault] ?? 0)
+    }
+    /// Total points I lost: the opponent's winners + my own errors.
+    private var pointsLostCount: Int {
+        (oppOutcomeCounts[.winner] ?? 0)
+            + (myOutcomeCounts[.unforcedError] ?? 0)
+            + (myOutcomeCounts[.forcedError] ?? 0)
+            + (myOutcomeCounts[.doubleFault] ?? 0)
+    }
+    private var allWonPhasesCount: Int {
+        presentEndingPhases.reduce(0) { $0 + (wonByPhase[$1] ?? 0) }
+    }
+    private var allLostPhasesCount: Int {
+        presentEndingPhases.reduce(0) { $0 + (lostByPhase[$1] ?? 0) }
+    }
+
     private var endingQuickSelectRow: some View {
         // Mirrors the Points Won/Lost radio: the two quick-selects are mutually
         // exclusive, so activating one clears the other. Individual Won/Lost
         // pills can still be toggled manually to show both sides at once.
         HStack(spacing: 6) {
-            quickSelectChip(label: "All Won", color: .green, isOn: isAllWonPhasesActive) {
+            quickSelectChip(label: "All Won \(allWonPhasesCount)", color: .green, isOn: isAllWonPhasesActive) {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     if isAllWonPhasesActive {
                         selectedWonEndingShots = []
@@ -808,7 +830,7 @@ private struct PointsGraphScatterControls: View {
                     }
                 }
             }
-            quickSelectChip(label: "All Lost", color: .red, isOn: isAllLostPhasesActive) {
+            quickSelectChip(label: "All Lost \(allLostPhasesCount)", color: .red, isOn: isAllLostPhasesActive) {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     if isAllLostPhasesActive {
                         selectedLostEndingShots = []
@@ -825,7 +847,7 @@ private struct PointsGraphScatterControls: View {
 
     private var quickSelectRow: some View {
         HStack(spacing: 6) {
-            quickSelectChip(label: "Points Won", color: .green, isOn: isPointsWonActive) {
+            quickSelectChip(label: "Points Won \(pointsWonCount)", color: .green, isOn: isPointsWonActive) {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     if isPointsWonActive {
                         selectedMyOutcomes = []
@@ -836,7 +858,7 @@ private struct PointsGraphScatterControls: View {
                     }
                 }
             }
-            quickSelectChip(label: "Points Lost", color: .red, isOn: isPointsLostActive) {
+            quickSelectChip(label: "Points Lost \(pointsLostCount)", color: .red, isOn: isPointsLostActive) {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     if isPointsLostActive {
                         selectedMyOutcomes = []

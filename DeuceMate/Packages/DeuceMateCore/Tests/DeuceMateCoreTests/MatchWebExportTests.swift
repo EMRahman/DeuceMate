@@ -599,6 +599,20 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(occurrences(of: "class=\"schip\"", in: html), 4 * 4 - 4) // ≥ outcome+phase pills across charts
     }
 
+    /// Each static momentum chart leads its pill row with the preset's own
+    /// total (mirrors the interactive quick-select chips, which the static
+    /// page can't render as toggles) — e.g. "Points Won 4" ahead of the W/UE/
+    /// FE/DF breakdown pills.
+    func test_staticPills_presetTotalLeadsEachChart() {
+        let html = MatchHTMLExporter.html(for: makeRecord())
+        // Points Won: my 3 winners + opp's 1 forced error = 4. Points Lost: my
+        // DF + my UE = 2. Ending shots: 4 points I won carry a shot, 2 lost.
+        XCTAssertTrue(html.contains(">Points Won 4<"), "Points Won preset total pill")
+        XCTAssertTrue(html.contains(">Points Lost 2<"), "Points Lost preset total pill")
+        XCTAssertTrue(html.contains(">All Won 4<"), "All Won preset total pill")
+        XCTAssertTrue(html.contains(">All Lost 2<"), "All Lost preset total pill")
+    }
+
     func test_staticChartSVG_yAxisFromCumulative() {
         let svg = MatchHTMLExporter.staticChartSVG(MatchWebViewModel.make(from: makeRecord()))
         XCTAssertTrue(svg.hasPrefix("<svg viewBox=\"0 0 920 380\""))

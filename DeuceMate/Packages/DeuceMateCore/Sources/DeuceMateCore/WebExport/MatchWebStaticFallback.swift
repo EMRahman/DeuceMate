@@ -105,13 +105,31 @@ extension MatchHTMLExporter {
 
     // MARK: - Momentum chart cards
 
+    /// Preset-total pill colours — system green/red, mirroring the SwiftUI
+    /// quick-select chips (`PointsGraphView`) and the viewer JS `GREEN`/`RED`.
+    private static let presetWonColor = "#34C759"
+    private static let presetLostColor = "#FF3B30"
+
     private static func momentumCard(_ vm: MatchWebViewModel, _ title: String,
                                      _ scatter: StaticChartScatter,
                                      _ pills: [(label: String, count: Int, color: String)]) -> String {
-        "<div class=\"card\"><h2>\(esc(title))</h2>"
+        // A leading pill for the preset's own total, mirroring the interactive
+        // quick-select chips ("Points Won 14") which the static page can't show
+        // as an interactive control — the sum of this chart's own pills IS the
+        // preset total, since each chart's pills are exactly its category split.
+        let total = pills.reduce(0) { $0 + $1.count }
+        let (presetLabel, presetColor): (String, String)
+        switch scatter {
+        case .pointsWon:  (presetLabel, presetColor) = ("Points Won", presetWonColor)
+        case .pointsLost: (presetLabel, presetColor) = ("Points Lost", presetLostColor)
+        case .allWon:     (presetLabel, presetColor) = ("All Won", presetWonColor)
+        case .allLost:    (presetLabel, presetColor) = ("All Lost", presetLostColor)
+        }
+        let allPills = [(label: presetLabel, count: total, color: presetColor)] + pills
+        return "<div class=\"card\"><h2>\(esc(title))</h2>"
             + staticChartSVG(vm, scatter: scatter)
             + lineLegend(vm)
-            + pillsHTML(pills)
+            + pillsHTML(allPills)
             + "</div>"
     }
 
