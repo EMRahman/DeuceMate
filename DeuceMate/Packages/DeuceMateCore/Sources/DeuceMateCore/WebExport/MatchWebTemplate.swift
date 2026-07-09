@@ -324,17 +324,21 @@ public enum MatchWebTemplate {
         ]);
       }
 
+      function sumCounts(counts, keys) { return keys.reduce((s, k) => s + (counts[k] || 0), 0); }
+
       function outcomesSection() {
         const c = focalP().outcomeCounts || {}, co = focalP().outcomeCountsOpponent || {};
         const pointsWonOn = eqSet(state.sel.myOut, ["winner"]) && eqSet(state.sel.oppOut, LOSS_OUTCOMES);
         const pointsLostOn = eqSet(state.sel.myOut, LOSS_OUTCOMES) && eqSet(state.sel.oppOut, ["winner"]);
+        const pointsWonTotal = (c["winner"] || 0) + sumCounts(co, LOSS_OUTCOMES);
+        const pointsLostTotal = (co["winner"] || 0) + sumCounts(c, LOSS_OUTCOMES);
         const quick = el("div", { class: "qrow" }, [
-          quickChip("Points Won", GREEN, pointsWonOn, () => {
+          quickChip("Points Won " + pointsWonTotal, GREEN, pointsWonOn, () => {
             if (pointsWonOn) { state.sel.myOut = new Set(); state.sel.oppOut = new Set(); }
             else { state.sel.myOut = new Set(["winner"]); state.sel.oppOut = new Set(LOSS_OUTCOMES); }
             render();
           }),
-          quickChip("Points Lost", RED, pointsLostOn, () => {
+          quickChip("Points Lost " + pointsLostTotal, RED, pointsLostOn, () => {
             if (pointsLostOn) { state.sel.myOut = new Set(); state.sel.oppOut = new Set(); }
             else { state.sel.myOut = new Set(LOSS_OUTCOMES); state.sel.oppOut = new Set(["winner"]); }
             render();
@@ -353,13 +357,15 @@ public enum MatchWebTemplate {
         const won = focalP().endingWonByPhase || {}, lost = focalP().endingLostByPhase || {};
         const allWonOn = eqSet(state.sel.wonShot, present);
         const allLostOn = eqSet(state.sel.lostShot, present);
+        const allWonTotal = sumCounts(won, present);
+        const allLostTotal = sumCounts(lost, present);
         const quick = el("div", { class: "qrow" }, [
-          quickChip("All Won", GREEN, allWonOn, () => {
+          quickChip("All Won " + allWonTotal, GREEN, allWonOn, () => {
             if (allWonOn) { state.sel.wonShot = new Set(); }
             else { state.sel.wonShot = new Set(present); state.sel.lostShot = new Set(); }
             render();
           }),
-          quickChip("All Lost", RED, allLostOn, () => {
+          quickChip("All Lost " + allLostTotal, RED, allLostOn, () => {
             if (allLostOn) { state.sel.lostShot = new Set(); }
             else { state.sel.lostShot = new Set(present); state.sel.wonShot = new Set(); }
             render();
