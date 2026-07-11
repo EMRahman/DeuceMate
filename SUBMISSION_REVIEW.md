@@ -1,246 +1,357 @@
-# DeuceMate — App Store Submission Review
+# DeuceMate - App Store Submission Review
 
-A pre-flight review of DeuceMate against the [App Store Review
-Guidelines](https://developer.apple.com/app-store/review/guidelines/), focused
-on blockers and likely rejection reasons. Items fixed in the branch that
-introduced this file are marked **[fixed in this PR]**; everything else is a
-manual step for the submitter.
+Current pre-flight review of DeuceMate against the
+[App Store Review Guidelines](https://developer.apple.com/app-store/review/guidelines/),
+focused on upload blockers, likely rejection reasons, and the manual work needed
+in App Store Connect.
 
-Legend: `[ ]` to do · `[x]` done · `[~]` partially done / needs a manual switch.
+## Codex codebase audit - 11 July 2026
 
----
+Items marked **CODEX FINDING** were found by Codex during a fresh review of the
+source, Xcode project and scheme, entitlements, privacy and store metadata,
+compiled products, tests, and a generated archive. They are current repository
+findings, not historical notes copied from an earlier PR.
 
-## 🛑 Blockers (must be resolved before/at submission)
+**Current status: not ready to submit.** Resolve Blockers 1-4, reconcile the
+public claims in Item 5, and complete a signed Organizer validation before
+uploading a build.
 
-### 1. Privacy Policy & Support URLs must resolve publicly — Guideline 5.1.1 / 1.5
-The submission's Privacy Policy URL (required, and strictly enforced for
-HealthKit apps), Support URL, and Marketing URL previously pointed at
-`github.com/EMRahman/DeuceMate`, which is a **private** repository — those URLs
-return 404 to Apple's reviewers.
-
-- [x] **[fixed in this PR]** Added a public site under `/docs`
-  (`docs/index.html` = marketing landing page, `docs/support.html` = support,
-  `docs/privacy.html` = privacy policy), with `docs/_config.yml` excluding the
-  internal `docs/features/` plans from the published build.
-- [x] **[fixed in this PR]** Updated the URLs in `APP_STORE_METADATA.md` to the
-  GitHub Pages site.
-- [x] **MANUAL — enable GitHub Pages:** repo **Settings → Pages → Build and
-  deployment → Deploy from a branch → `main` / `/docs`**. Note: Pages on a
-  **private** repo requires GitHub Pro or higher; on the free plan the repo must
-  be **public** for Pages to publish.
-  - Alternative: host `index.html` + `privacy.html` on `ehsanrahman.com` and use
-    those URLs instead — Apple only needs the two URLs to resolve publicly.
-- [~] **MANUAL — verify** all three URLs load in a private/logged-out browser
-  window before submitting: privacy policy, **Support URL (`support.html` —
-  the actual URL App Store Connect will show, not `index.html`)**, and the
-  marketing root. Re-audited 2026-07-08: this session's egress proxy blocks
-  `github.io`, so `https://emrahman.github.io/DeuceMate/{privacy,support,index}.html`
-  could not be re-checked here — confirm directly in a logged-out browser
-  before submitting. This is the one hard rejection trigger for a HealthKit app.
+Legend: `[ ]` to do, `[x]` verified, `[~]` partly verified or awaiting a product
+decision.
 
 ---
 
-## ⚠️ High-risk items (likely to draw a rejection)
+## Blockers
 
-### 2. Background-audio keep-alive — Guideline 2.5.4
-The iPhone announcement feature previously used the `audio` background mode plus
-a silent looping buffer (`outputVolume = 0.0`) to stay alive between
-announcements — the textbook pattern reviewers reject under 2.5.4.
+### 1. Archive has two top-level apps
 
-- [x] **[fixed in this PR]** Reworked announcements to be **foreground-only**:
-  removed the `audio` background mode from `Info.plist`, removed the silent-loop
-  keep-alive (`AVAudioEngine`/`AVAudioPlayerNode`) and the inactivity watchdog
-  from `LiveAnnouncementService.swift`. A score is spoken only while the app is
-  on screen; it is skipped (not queued) when backgrounded/locked.
-- [x] **[fixed in this PR]** Updated the Settings copy, README, and the App
-  Review notes so no doc still claims "works with the screen locked / in the
-  background."
-- [ ] **MANUAL — verify on device:** with the iPhone app foreground, scoring on
-  the watch produces spoken announcements; locking the phone stops them; no
-  audio background mode appears in the built app's capabilities.
+**CODEX FINDING:** An unsigned Release archive produced this layout:
 
----
+```text
+Products/Applications/DeuceMate.app
+Products/Applications/DeuceMate Watch App.app
+Products/Applications/DeuceMate.app/Watch/DeuceMate Watch App.app
+```
 
-## 🟡 Medium-risk items
+The Watch app is correctly embedded in the iPhone app, but it is also installed
+as a second top-level product. This produces the generic archive shape described
+in [TN3110](https://developer.apple.com/documentation/technotes/tn3110-resolving-generic-xcode-archive-issue),
+which cannot be distributed as an iOS app archive.
 
-### 3. iPhone app must be reviewable without a paired Apple Watch — Guideline 4.2 / 2.1
-Reviewers usually don't pair an Apple Watch, yet the headline features (scoring,
-live scoreboard, announcements) need one. The testable no-watch surface is
-**Manual Match Entry → history → statistics → points graph → export**.
+Evidence:
 
-- [ ] **MANUAL** — In the App Review notes, make the **Manual Match Entry** flow
-  step 1 of "How to test" so a reviewer without a watch has a clear path.
-- [ ] **MANUAL** — Attach a **demo video** in App Review Information showing the
-  watch scoring + iPhone live scoreboard + announcements (Apple explicitly
-  recommends a demo video for hardware-dependent features).
-- [x] **[fixed in this PR]** Manual Match Entry is now reachable from the
-  "No Apple Watch Paired" empty state — the first screen a reviewer without
-  a watch sees. `PastMatchesView.swift` — `emptyStateView`.
+- `DeuceMate/DeuceMate.xcodeproj/project.pbxproj`: the Watch target has
+  `SKIP_INSTALL = NO` in Debug and Release (currently around lines 720 and 758).
+- `DeuceMate/DeuceMate.xcodeproj/xcshareddata/xcschemes/DeuceMate.xcscheme`:
+  both the iPhone app and Watch app are independently enabled for archiving,
+  even though the iPhone target already depends on and embeds the Watch app.
+- The Watch Release configuration explicitly pins
+  `CODE_SIGN_IDENTITY = "Apple Development"` while using automatic signing.
+  That can also cause a distribution-signature mismatch.
 
-### 4. HealthKit specifics — Guideline 5.1.3
-- [x] HealthKit usage strings present (read + write on watch via
-  `INFOPLIST_KEY_NSHealthShareUsageDescription` /
-  `…NSHealthUpdateUsageDescription`; read on iOS via `Info.plist`).
-- [x] HealthKit entitlement present on both targets; privacy policy has a
-  dedicated Health & Fitness section (tie-in to Blocker #1 — must be reachable).
-- [ ] **MANUAL — verify** the app degrades gracefully if Health access is
-  **denied** and if **date of birth** is unavailable (fall back to an age-based
-  max-HR estimate). Two authorization surfaces (watch + iPhone) is allowed but
-  means two permission prompts.
-- [x] HealthKit integration is described in the App Store description/metadata.
+Required work:
 
----
+- [ ] Set the embedded Watch target to `SKIP_INSTALL = YES` for archive builds.
+- [ ] Remove the redundant Watch app archive entry from the iPhone scheme, or
+  at minimum disable `buildForArchiving` for that separate entry.
+- [ ] Remove the explicit `Apple Development` identity from the Watch Release
+  configuration and let automatic distribution signing choose the identity.
+- [ ] Create a signed archive in Xcode Organizer and confirm it is classified as
+  an iOS app archive with only `DeuceMate.app` at `Products/Applications`.
+- [ ] Run **Distribute App -> App Store Connect -> Validate App** successfully.
 
-## 🔵 Low-risk / polish
+### 2. iCloud Documents entitlement is incomplete
 
-- [ ] **Bundle ID** is `ehsan.DeuceMate` (non-reverse-DNS). Apple accepts it, but
-  it is effectively permanent after the first submission — confirm it's the
-  desired final ID (vs. e.g. `com.ehsanrahman.deucemate`).
-- [x] Keyword `padel` is borderline-relevant but defensible (the description
-  explains scoring compatibility). Keep the explanation in the description.
-- [x] App Store description says "your favourite AI app" rather than naming
-  ChatGPT/Claude/etc. — **keep it that way** (naming third-party trademarks in
-  metadata invites scrutiny; the in-app launch buttons are fine).
-- [x] **[fixed in this PR]** Corrected stale `SUPPORT_PAGE.md` answers that said
-  the app was watch-only and a "one-time purchase" (it's a free iPhone+watch app).
-- [x] **[fixed in this PR]** Corrected the privacy policy's iCloud claim. Match
-  data lives in the Documents directory and is therefore eligible for the user's
-  own encrypted iCloud Backup; the policy previously claimed "not backed up to
-  iCloud." It now accurately states the App never uploads data to any
-  third-party server, while the OS-level device backup is under the user's
-  control. (`.completeFileProtection` is encryption-at-rest, not backup
-  exclusion.) **Superseded note (re-audited 2026-07-08):** the app has since
-  gained an intentional "iCloud Sync" feature (`ArchiveBackupPolicy` in Core,
-  `com.apple.developer.icloud-services: CloudDocuments` + the
-  `iCloud.ehsan.DeuceMate` container in `DeuceMate.entitlements`) that
-  automatically backs up the match archive to the user's own iCloud Drive,
-  documented in the privacy policy's "iCloud Sync" section. The line above's
-  "does not use iCloud itself" phrasing predates that feature and is no
-  longer accurate — the app *does* use iCloud (Drive, not a third-party
-  server), by design. Don't read this as license to strip the iCloud
-  entitlement/capability; it backs a real, documented feature.
-- [x] Privacy policy effective date aligned (June 11, 2026).
-- [ ] **AccentColor colorset is empty** on both targets (`Contents.json` has no
-  color defined) while `ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME =
-  AccentColor` — falls back to system blue. Either populate the colorset or
-  note this is intentional (theming is handled by `AppTheme`).
-- [ ] **Watch target pins `CODE_SIGN_IDENTITY = "Apple Development"`** in
-  *both* the Debug and Release configurations (`project.pbxproj` — Watch App
-  target, lines ~697 and ~735), under `CODE_SIGN_STYLE = Automatic`. Re-audit
-  flag (2026-07-08, prompted by PR review): this is **not confirmed harmless**
-  — an explicit dev-identity pin alongside automatic signing on a watchOS
-  target has a known history of causing archive/export to sign with the
-  wrong certificate ("Invalid watch kit signature" / distribution-signature
-  mismatch). If archive validation fails on the Watch target, remove both
-  `CODE_SIGN_IDENTITY` lines and let automatic signing pick the identity —
-  don't just re-run the archive.
+**CODEX FINDING:** `DeuceMate/DeuceMate/DeuceMate.entitlements` declares
+`CloudDocuments` and `com.apple.developer.icloud-container-identifiers`, but not
+`com.apple.developer.ubiquity-container-identifiers`. The app calls
+`FileManager.url(forUbiquityContainerIdentifier:)` in `PhoneStatsStore.swift`,
+so the current source entitlements do not fully configure the advertised iCloud
+Documents feature. Apple's
+[iCloud configuration guide](https://developer.apple.com/documentation/Xcode/configuring-icloud-services)
+states that enabling iCloud Documents adds both container entitlement arrays.
 
----
+The in-app guide in `PastMatchesView.swift` also tells users to enable
+**iCloud Backup**. This feature uses **iCloud Drive/Documents**, which is a
+different setting and should be named accurately.
 
-## ✅ Verified clean (no action needed)
+Required work:
 
-- [x] **[fixed in this PR]** One force-unwrap (`realSteps.first!` in
-  `PointsGraphView.swift:325`) replaced with `realSteps[0]` (guarded by the
-  surrounding `count >= 2` check). Zero force-unwraps remain in the codebase.
-- [x] **No data collection / no network** — verified in source: no `URLSession`
-  and no networking APIs anywhere in Swift. The only `http(s)` URL literals are
-  the public privacy-policy / support-site links in Settings → About, opened by
-  the system browser via SwiftUI `Link` (plus a `mailto:` support link) — the
-  app itself still makes no network requests. The "Data Not Collected"
-  nutrition label and privacy claims are accurate. Note: those About links
-  point at the GitHub Pages site, so they resolve once Blocker #1's manual
-  Pages setup is done.
-- [x] **Privacy manifests** present on both targets with valid API reason codes
-  (UserDefaults `CA92.1`, System Boot Time `35F9.1`).
-- [x] **Location is heading-only** — `startUpdatingHeading` only, never
-  `startUpdatingLocation`/`requestLocation`; "no GPS" claim holds. When-in-use
-  usage string present on the watch, and justified by a real feature (compass
-  heading, `HomeView.swift` / `ContentView.swift` `CompassBadgeView`) — not
-  unused permission scope.
-- [x] **App icons** are 1024×1024, **RGB with no alpha channel** (transparent
-  icons are auto-rejected at upload), with light/dark/tinted iOS variants.
-- [x] **Export compliance** declared (`ITSAppUsesNonExemptEncryption = false`) on
-  both targets — skips the encryption questionnaire.
-- [x] **`LSApplicationQueriesSchemes`** lists 7 AI-app schemes (well under the
-  50-scheme limit); AI launch uses `canOpenURL` + `open` (permitted).
-- [x] **Test suites** (Core + watch) run locally via Xcode before submission.
-  GitHub Actions was removed to cut macOS runner costs — no automated CI;
-  run tests locally (`xcodebuild`, see `CLAUDE.md` §3).
-- [x] Age 4+, Free, no IAP — the simplest review lane.
-- [x] **No required-reason API gaps** — grep confirms no
-  `contentModificationDate` / `fileModificationDate` / `attributesOfItem` /
-  `creationDate` anywhere in Swift, so the existing privacy-manifest entries
-  (UserDefaults `CA92.1`, System Boot Time `35F9.1`) are complete. Both
-  `.xcprivacy` files sit inside file-system-synchronized target folders, so
-  they're bundled automatically (no `project.pbxproj` edit needed).
-- [x] iOS correctly **omits** `NSHealthUpdateUsageDescription` (it only reads
-  HR data, never writes); app version/build (`1.0.0` / `1`) is consistent
-  across both targets; the Release build configuration is clean (no debug
-  leakage).
+- [ ] Configure iCloud Documents through Xcode Signing & Capabilities for the
+  iPhone target and `iCloud.ehsan.DeuceMate` container.
+- [ ] Verify the source and signed-product entitlements contain both
+  `com.apple.developer.icloud-container-identifiers` and
+  `com.apple.developer.ubiquity-container-identifiers`.
+- [ ] Change the in-app recovery instructions from iCloud Backup to iCloud
+  Drive, including the correct Settings path.
+- [ ] Test upload, update, deletion, signed-out/Drive-disabled handling, and
+  first-install restore on a physical iPhone using the production container.
+
+### 3. HealthKit permission is not opt-in as documented
+
+**CODEX FINDING:** The privacy policy and App Review notes describe HealthKit
+fitness features as off by default and enabled by the user. The Watch app
+instead calls `requestAuthorization` unconditionally from `DeuceMateApp.swift`
+on first appearance, and every match attempts to start or resume a workout.
+There is a `workoutSessionEnabled` preference key, but it does not currently
+gate the authorization or workout paths.
+
+The Watch authorization request reads workout, heart rate, active and basal
+energy, steps, walking/running distance, and date of birth. Its current
+`NSHealthShareUsageDescription` mentions only heart rate, calories, and date of
+birth. Apple recommends asking for HealthKit access in context and only when the
+user invokes the relevant feature; see the
+[HealthKit HIG](https://developer.apple.com/design/human-interface-guidelines/healthkit/).
+
+Required work:
+
+- [ ] Add or restore an explicit **Record Apple Health workout** control,
+  defaulted off for a fresh install.
+- [ ] Request HealthKit authorization only after the user enables that feature
+  or starts a match with it enabled.
+- [ ] Gate all start, resume, and recovery workout paths on that setting.
+- [ ] Expand the Watch read-purpose string to accurately mention steps and
+  walking/running distance, or stop requesting data the feature does not need.
+- [ ] Test fresh-install grant, denial, partial authorization, revocation, no
+  date of birth, and HealthKit-unavailable behavior.
+- [ ] Update `PRIVACY_POLICY.md`, `docs/privacy.html`, `APP_STORE_METADATA.md`,
+  and App Review notes only after the implemented behavior is settled.
+
+### 4. Health-derived data needs an iCloud and sharing compliance decision
+
+**CODEX FINDING:** `ArchiveBackupPolicy` correctly strips the match's five
+HealthKit-derived metrics from the app-managed iCloud archive. Other paths still
+need resolution before the document can claim Health data stays on-device:
+
+- Full records containing health-derived values are stored in Documents or
+  Application Support on iPhone and Watch, and are not marked as excluded from
+  normal device backup.
+- Health-derived preferences such as birth-year provenance and Pulse Coach max
+  heart rate are stored in `UserDefaults`, which is also part of device backup.
+- Full-fidelity manual archive export can be saved to iCloud Drive.
+- Normal text, HTML, and AI exports can contain heart rate, zones, steps,
+  calories, and distance. The opponent summary still receives match-level
+  movement/energy totals, and the AI hand-off has no health-specific consent.
+
+Guideline 5.1.3 says apps may not store personal health information in iCloud.
+Apple's
+[HealthKit privacy guidance](https://developer.apple.com/documentation/healthkit/protecting-user-privacy)
+also limits disclosure to third parties and requires prior express consent.
+Treat these paths as unresolved rather than assuming user-controlled backup or
+the generic Share sheet makes every transfer compliant.
+
+Safest resolution before submission:
+
+- [ ] Exclude health-bearing local archive files and related preferences from
+  device backup, or remove the HealthKit-derived values from those stores.
+- [ ] Strip HealthKit-derived values from every file that can be saved to iCloud
+  Drive, including full-fidelity manual archives.
+- [ ] Strip HealthKit-derived values from normal, opponent, HTML, and AI exports
+  by default. If any health sharing remains, review whether the recipient and
+  purpose are permitted, then add specific informed consent for the exact data.
+- [ ] Add focused tests proving every cloud/export representation omits the
+  protected fields.
+- [ ] Re-audit the privacy policy and App Privacy answers after this product
+  decision. Do not submit while the policy and behavior disagree.
 
 ---
 
-## 📸 Screenshot & demo-video plan (one session, ~2 hours)
+## High-risk review items
 
-### 1. Confirm required sizes (5 min)
-- [ ] Open App Store Connect → version → screenshot panel and note the device
-  classes it actually asks for (Apple shuffles these periodically). Expected:
-  **iPhone 6.9"** (one set covers all smaller iPhones; iPhone-only device
-  family ⇒ no iPad set) and **Apple Watch** (largest size required; smaller
-  sizes optional / auto-scaled).
+### 5. Privacy and store metadata contain contradictory absolute claims
 
-### 2. Seed good-looking data (20–30 min)
-- [ ] Real matches on the physical devices for authentic stats — and for every
-  HR-dependent panel (PulseCoach, HR/steps overlays): **simulators have no
-  HealthKit**, so those screens must come from a real match.
-- [ ] Staged simulator match for everything else: boot the paired
-  watch+iPhone simulators, enable outcome tracking, swipe through a 2-set
-  match on the watch sim (~10 min) to fill the stats views, category sheet,
-  and points graph. WatchConnectivity between paired sims can be flaky — if
-  the live scoreboard won't mirror, capture that one screen on real devices.
+**CODEX FINDING:** The codebase has no developer-controlled web service and no
+`URLSession` networking stack. However, the current documents go further and
+claim that the app makes no network requests, never transmits HealthKit data,
+and only contains the privacy/support URL literals. Those statements are no
+longer accurate because the app:
 
-### 3. Shot list (5–6 per platform; the first 3 show in search results)
-Use one theme across all shots (e.g. Hard Court Night for contrast).
-- **Watch:** ① live scoreboard mid-match (server badge + momentum strip),
-  ② match setup, ③ live stats, ④ point-category sheet, ⑤ history.
-- **iPhone:** ① live scoreboard with LIVE badge, ② match detail stats,
-  ③ points graph with overlays on, ④ AI Coach sheet, ⑤ archive list,
-  ⑥ manual match entry (doubles as the reviewer test path, Item #3).
+- automatically writes its stripped archive to the user's iCloud Documents
+  container;
+- sends match data between Watch and iPhone;
+- creates user-initiated exports and AI-app hand-offs; and
+- generates seven external AI-service links in the HTML match experience.
 
-### 4. Capture mechanics (30–40 min)
-- [ ] Run each scheme on the size-exact simulator (6.9"-class iPhone; largest
-  watch). **Cmd+S** in Simulator saves a pixel-perfect PNG at native
-  resolution — no resolution math, which is why sims beat physical devices here.
-- [ ] Polish the iPhone status bar before capturing:
-  `xcrun simctl status_bar booted override --time "9:41" --batteryLevel 100
-  --cellularBars 4 --wifiBars 3` (watch sims don't support the override — fine).
-- Raw screens are acceptable for v1; skip marketing frames/captions.
+The public policy also describes an obsolete iPhone Documents storage path and
+`.completeFileProtection`, while the canonical phone archive now uses
+Application Support and the stores use
+`.completeFileProtectionUntilFirstUserAuthentication`.
 
-### 5. Demo video in the same session (feeds Item #3)
-- [ ] Shoot watch scoring → iPhone live scoreboard → announcements on real
-  devices (phone propped up), or `xcrun simctl io booted recordVideo demo.mp4`
-  if sim pairing cooperates. Attach in App Review Information.
+Required work:
 
-### 6. Upload
-- [ ] Drag the sets into App Store Connect, confirm the dimensions are
-  accepted, then tick the screenshots line in the checklist below.
+- [ ] Replace "no network" / "never transmitted" with the narrower and accurate
+  claim: no developer-controlled backend and no data collected by the developer;
+  system-managed personal iCloud storage and explicit user sharing are separate.
+- [ ] Reconcile `APP_STORE_METADATA.md`, `PRIVACY_POLICY.md`,
+  `docs/privacy.html`, `docs/support.html`, README, App Review notes, and in-app
+  copy from one agreed description of the implemented behavior.
+- [ ] Update the policy's storage locations, file-protection class, and date.
+- [ ] Point Settings -> Support & FAQ directly to `docs/support.html` rather
+  than the marketing root.
+- [~] "Data Not Collected" may remain the correct App Privacy answer under
+  Apple's developer-access definition, but do not justify it by claiming that
+  no information ever leaves either device.
+
+### 6. The iPhone experience must be reviewable without a Watch
+
+Reviewers may not pair an Apple Watch. The no-Watch review path is
+**Manual Match Entry -> history -> statistics -> points graph -> export**.
+
+- [x] Manual Match Entry is reachable from the "No Apple Watch Paired" empty
+  state in `PastMatchesView.swift`.
+- [ ] Put Manual Match Entry first in the App Review notes' test instructions.
+- [ ] Attach a demo video showing Watch scoring, iPhone live scoreboard, and
+  foreground announcements. Apple recommends a video when hardware-specific
+  features are difficult to reproduce during review.
+- [ ] Confirm every central iPhone screen has a useful no-Watch state and no
+  indefinite connectivity loading state.
+
+### 7. Age rating needs the current questionnaire
+
+**CODEX FINDING:** The existing checklist assumes age 4+. Apple's current age
+rating questionnaire includes **Health or Wellness Topics**, including exercise
+recommendations and calorie tracking. DeuceMate's heart-rate zones, fitness
+coaching, and calorie display mean the calculated rating is likely 9+ on newer
+OS versions, subject to App Store Connect's regional result.
+
+- [ ] Complete the current questionnaire accurately instead of forcing the old
+  4+ assumption. See Apple's
+  [age-rating definitions](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions).
+- [ ] Update `APP_STORE_METADATA.md` to the rating App Store Connect calculates.
+- [ ] Do not describe DeuceMate as diagnosing or treating a medical condition.
 
 ---
 
-## Final pre-submit checklist
+## Build and test evidence
 
-- [~] GitHub Pages enabled (or URLs hosted elsewhere); both URLs still need a
-      **logged-out browser confirmation** — this environment's egress proxy
-      blocks `github.io` and couldn't re-verify it this session — **Blocker #1**.
-- [ ] Build archived from Xcode and tested on a **real** iPhone + Apple Watch.
-- [ ] App Review notes updated: manual-entry-first test path + demo video
-      attached — **Item #3**.
-- [ ] HealthKit denied/again-no-DOB paths verified — **Item #4**.
-- [ ] App Privacy questionnaire = "Data Not Collected"; HealthKit declared as
-      on-device only.
-- [ ] Screenshots prepared (iPhone 6.9"; Apple Watch 41mm + 45mm) — see the
-      screenshot & demo-video plan above.
-- [ ] Bundle ID confirmed as final — **low-risk item**.
-- [ ] Developer-portal capability/container check: the App ID has HealthKit +
-      iCloud capabilities enabled and the `iCloud.ehsan.DeuceMate` container
-      exists — otherwise archive validation fails.
+Codex ran the following checks on 11 July 2026:
+
+- [x] `swift test`: 345 DeuceMateCore tests passed with zero failures.
+- [x] Watch unit tests, including the StatsStore tests, passed on a Series 11
+  46 mm watchOS 26.2 simulator.
+- [x] iOS Release generic-simulator build succeeded and embedded the Watch app.
+- [x] Watch Release simulator build succeeded.
+- [x] An unsigned Release archive completed, but exposed Blocker 1's duplicate
+  top-level Watch app. This is not a successful distribution validation.
+- [x] Privacy, Support, and Marketing URLs all returned HTTP 200 on 11 July 2026:
+  `https://emrahman.github.io/DeuceMate/privacy.html`,
+  `https://emrahman.github.io/DeuceMate/support.html`, and
+  `https://emrahman.github.io/DeuceMate/`.
+
+Remaining gaps:
+
+- [ ] The iOS unit-test target contains no assertions; the UI tests are launch
+  and performance templates. Add coverage for important iPhone persistence,
+  iCloud, export, and no-Watch flows.
+- [ ] A signed App Store archive has not passed Organizer validation.
+- [ ] HealthKit, iCloud restore, WatchConnectivity, foreground announcements,
+  and backup exclusion have not been verified on a real iPhone and Watch.
+- [ ] Run the full manual matrix on a TestFlight build: fresh install, upgrade,
+  paired/unpaired Watch, signed-in/out of iCloud, iCloud Drive disabled, all
+  HealthKit authorization states, and foreground/background transitions.
+
+Non-blocking Release build warnings to clean up:
+
+- [ ] `MatchExporter.swift` calls main-actor-isolated helpers from
+  `nonisolated` synchronous functions. Resolve these before Swift language-mode
+  changes turn the warnings into errors.
+- [ ] Replace deprecated iOS 17 `onChange(of:perform:)` uses in Settings and the
+  app entry point.
+
+---
+
+## Verified implementation details
+
+- [x] The prior background-audio keep-alive was removed. Announcements are
+  foreground-only and scores received while backgrounded are skipped.
+- [x] Both app icons are 1024 x 1024 RGB images with no alpha channel, including
+  the iOS light/dark/tinted variants.
+- [x] Privacy manifests are bundled for both targets with current UserDefaults
+  `CA92.1` and System Boot Time `35F9.1` reason codes.
+- [x] Location use is heading-only; the code does not request GPS location.
+- [x] `ITSAppUsesNonExemptEncryption = false` is declared on both targets.
+- [x] The iPhone target correctly omits `NSHealthUpdateUsageDescription`; it
+  reads HealthKit but does not write workouts.
+- [x] App version/build is consistently `1.0.0` / `1` across both targets.
+- [x] No third-party package dependencies or developer-controlled backend were
+  found.
+- [x] No production force-unwraps were found in the source audit.
+- [x] The empty AccentColor asset falls back to system blue; this is polish, not
+  an App Store blocker, because runtime theming is handled by `AppTheme`.
+
+---
+
+## Screenshot and demo-video plan
+
+### Required formats
+
+- [ ] Upload an accepted iPhone 6.9-inch portrait set: 1260 x 2736,
+  1290 x 2796, or 1320 x 2868 pixels. A separate 6.5-inch set is only required
+  when no 6.9-inch set is supplied.
+- [ ] Upload one consistent accepted Watch size across every localization. Both
+  416 x 496 (Series 10/11) and the existing 396 x 484 size are accepted; a
+  separate 41 mm plus 45 mm set is not required.
+- [ ] Confirm the accepted dimensions in Apple's current
+  [screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/)
+  immediately before capture.
+
+### Recommended shot list
+
+Use one theme across the set. The first three images carry the most weight in
+search results.
+
+- **Watch:** live scoreboard mid-match, match setup, live stats,
+  point-category sheet, and history.
+- **iPhone:** live scoreboard, match detail stats, points graph with overlays,
+  AI Coach sheet, archive list, and Manual Match Entry.
+- Capture HealthKit-dependent screens on real hardware; simulators cannot
+  provide authentic HealthKit workout data.
+- Record the demo video on real devices where possible: Watch scoring -> iPhone
+  live scoreboard -> foreground announcements.
+
+---
+
+## App Store Connect checklist
+
+### Build and compliance
+
+- [ ] Blockers 1-4 resolved in code, configuration, tests, and public copy.
+- [ ] Archive and validate with Xcode 26 / the iOS 26 SDK or newer. Submissions
+  have required this toolchain since 28 April 2026; see
+  [Upcoming Requirements](https://developer.apple.com/news/upcoming-requirements/).
+- [ ] Test the validated build on a real iPhone and Apple Watch, then TestFlight.
+- [ ] HealthKit and iCloud production capabilities/container verified for the
+  App ID and signed products.
+- [ ] Final bundle ID `ehsan.DeuceMate` explicitly accepted as permanent.
+
+### Store record
+
+- [ ] App Review notes start with the no-Watch Manual Match Entry path and include
+  the hardware demo video.
+- [ ] App Privacy answers are based on final behavior, not the old absolute
+  "on-device only" wording.
+- [ ] Current age-rating questionnaire completed and metadata updated to match.
+- [ ] EU Digital Services Act trader/non-trader status supplied. See Apple's
+  [DSA guidance](https://developer.apple.com/help/app-store-connect/manage-compliance-information/manage-european-union-digital-services-act-trader-requirements/).
+- [ ] Content Rights question, support contact, copyright, app availability
+  (including Mac/Vision compatibility), and manual/automatic release mode set.
+- [ ] Accessibility Nutrition Labels claimed only after auditing the supported
+  common tasks on both iPhone and Watch.
+- [ ] Privacy, Support, and Marketing URLs rechecked while logged out immediately
+  before submission.
+- [ ] Correct iPhone and Watch screenshot sets uploaded and accepted.
+
+### Final smoke test
+
+- [ ] Fresh install without a paired Watch can create, inspect, and export a
+  manually entered match.
+- [ ] Paired Watch can create a match, live-sync it, finish it, and recover it on
+  iPhone without duplicates.
+- [ ] HealthKit off means no permission request, workout, or health values.
+- [ ] HealthKit denial/revocation never blocks scoring or corrupts a match.
+- [ ] iCloud disabled/signed out never blocks local history; a later sign-in
+  backs up and restores the stripped archive correctly.
+- [ ] No HealthKit-derived values appear in iCloud or third-party exports after
+  the chosen compliance fix.
+- [ ] Foreground announcements work; locking/backgrounding the iPhone stops them
+  without a background-audio entitlement.
