@@ -342,6 +342,7 @@ with this overlay, using the watch strings (symbols from `ScoringEngine.swift`
 |---|---|
 | `🔁 👥` | "Odd games – players change ends" / "Set complete – players change ends" |
 | `🔁 🎾` | "Even games – balls change ends" / "Set complete – balls change ends" |
+| `🔁 🎾` | "Odd tiebreak point – balls change ends" — after every tiebreak point where `pointCountInTiebreak % 2 == 1`, unless the 6-point branch below fired (`ScoringEngine.swift` ~L339–349, reason `.tiebreakOddPoint`) |
 | `🔁 🎾 👥` | "Every 6 tiebreak points – players & balls change ends" / "Set complete – players & balls change ends" |
 | `Tiebreak 🔁 🎾` | "Games at 6-6 – tiebreak begins" (or "Games at 2-2 – sudden death point" for Quick 4) |
 
@@ -349,7 +350,13 @@ The demo engine's changeover events currently carry demo-invented text
 ("Change ends", "New balls soon", "Tiebreak!", "Sudden death!") — map each
 event to the watch symbol/reason pair instead (the engine already knows game
 totals and tiebreak boundaries; extend the emitted event payload, don't rework
-the reducer). Game/set-won toasts ("Game — you", "Set — opponent") are a
+the reducer). One event is **missing entirely** from the JS reducer and must
+be added: the odd-tiebreak-point row above (the JS `updateTiebreak` only
+emits a changeover at the 6-point boundary today). Watch the branch order:
+the 6-point check wins, and it is skipped for `fixedDeuceSide` formats — so
+in Perpetual Points every odd point emits the odd-point prompt (the watch
+really does show it there; the engine has no format guard on the odd-point
+branch). Game/set-won toasts ("Game — you", "Set — opponent") are a
 demo-only aid the watch doesn't have; keeping them is fine.
 
 ### G. Fit & finish parity (small items)
@@ -405,10 +412,11 @@ empty-state copy.
 §E, §F and §G.
 **Accept when:** match end shows the watch-style panel with a working stats
 button; changeovers show the blocking symbol/reason overlay with the exact
-watch strings (odd game, even game, set complete, 6-point tiebreak boundary,
-6–6 tiebreak start, Quick-4 sudden death) and block scoring until OK'd; the
-first-game hint appears only before the first completed game; drag-preview
-tints the correct row; momentum strip hides at match end.
+watch strings (odd game, even game, set complete, odd tiebreak point,
+6-point tiebreak boundary, 6–6 tiebreak start, Quick-4 sudden death) and
+block scoring until OK'd; the first-game hint appears only before the first
+completed game; drag-preview tints the correct row; momentum strip hides at
+match end.
 
 ### Phase 5 — Copy refresh
 Update `try.html` hints/lede (and the index.html demo blurb if it undersells
@@ -468,9 +476,10 @@ Quick scripted checks (browser console, after Phase 3):
    the empty state. `quick4Games`: sudden-death point at 2–2 still sheets.
 6. **Changeovers** (after Phase 4) — game 1 shows `🔁 👥` "Odd games – players
    change ends" and blocks scoring until OK; game 2 shows `🔁 🎾` "Even games –
-   balls change ends"; at 6–6 the tiebreak-begins prompt appears, and every 6
-   tiebreak points the `🔁 🎾 👥` prompt; with a sheet pending, the prompt waits
-   until the sheet commits.
+   balls change ends"; at 6–6 the tiebreak-begins prompt appears; inside the
+   tiebreak, points 1, 3 and 5 each show `🔁 🎾` "Odd tiebreak point – balls
+   change ends" and point 6 shows the `🔁 🎾 👥` six-point prompt; with a sheet
+   pending, the prompt waits until the sheet commits.
 
 ---
 
