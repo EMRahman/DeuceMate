@@ -574,6 +574,9 @@
   }
 
   function render() {
+    // Guards the setup-card toggle, which can call render() before any
+    // match has started (state is only set by startMatch()).
+    if (!state) return;
     var cfg = state.cfg;
 
     // Server: a tennis ball on the serving row, a faint circle otherwise.
