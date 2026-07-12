@@ -92,6 +92,13 @@
               <button type="button" class="opt" data-server="opponent">Opponent</button>
             </div>
 
+            <h3>Point tracking</h3>
+            <div class="opt-grid" style="grid-template-columns:1fr;">
+              <button type="button" class="opt" data-track-toggle aria-pressed="true">Track point outcomes
+                <small>Adds the post-point Double Fault / Winner / Forced / Unforced flow, like the watch app.</small>
+              </button>
+            </div>
+
             <div class="setup-actions">
               <button type="button" class="btn btn-primary btn-block" data-start>Start match</button>
             </div>
@@ -138,6 +145,7 @@
               </div>
               <div class="util-buttons">
                 <button type="button" class="util-btn" data-undo>↶ Undo</button>
+                <button type="button" class="util-btn" data-secondserve>2nd serve</button>
                 <button type="button" class="util-btn" data-reset>↻ New match</button>
               </div>
             </div>
@@ -148,9 +156,14 @@
 
       <p class="demo-hint">
         On the watch face: <strong>tap the top half</strong> (or swipe up) for your point,
-        <strong>bottom half</strong> (or swipe down) for the opponent. Swipe left to undo.<br>
+        <strong>bottom half</strong> (or swipe down) for the opponent — the scoreboard card
+        itself doesn't score. Swipe left to undo.<br>
+        <strong>Double-tap the scoreboard</strong> (or press <span class="kbd">2</span>, or the
+        "2nd serve" button) to flag a second serve before scoring the point — a yellow
+        "2" badge marks the server and clears automatically after the next point.<br>
         Keyboard: <span class="kbd">↑</span> your point · <span class="kbd">↓</span> opponent ·
-        <span class="kbd">U</span> undo · <span class="kbd">R</span> new match.<br>
+        <span class="kbd">U</span> undo · <span class="kbd">R</span> new match ·
+        <span class="kbd">2</span> 2nd serve.<br>
         The tennis ball marks the server; the strip shows the last 8 points.
       </p>
 
@@ -178,6 +191,7 @@
 </footer>
 
 <script src="assets/site.js" defer></script>
+<script src="assets/watch-demo-tracking.js" defer></script>
 <script src="assets/watch-demo.js" defer></script>
 </body>
 </html>
