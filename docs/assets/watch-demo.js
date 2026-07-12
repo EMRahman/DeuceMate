@@ -364,6 +364,7 @@
     oppServer: root.querySelector("[data-opp-server]"),
     meRow: root.querySelector("[data-me-row]"),
     oppRow: root.querySelector("[data-opp-row]"),
+    card: root.querySelector(".w-card"),
     momentum: root.querySelector("[data-momentum]"),
     foot: root.querySelector("[data-foot]"),
     banner: root.querySelector("[data-banner]"),
@@ -372,15 +373,23 @@
     reset: root.querySelector("[data-reset]"),
     again: root.querySelector("[data-again]"),
     ptMe: root.querySelector("[data-pt-me]"),
-    ptOpp: root.querySelector("[data-pt-opp]")
+    ptOpp: root.querySelector("[data-pt-opp]"),
+    trackToggle: root.querySelector("[data-track-toggle]"),
+    secondServe: root.querySelector("[data-secondserve]")
   };
 
   var chosenFormat = root.getAttribute("data-format") || "standard";
   var chosenServer = root.getAttribute("data-server") || "me";
   var state = null;
-  var history = [];   // undo stack of prior states
+  var history = [];   // undo stack of prior states: {snapshot, momentum, secondServe, statsLen}
   var momentum = [];  // last point winners
   var toastTimer = null;
+  // Point-outcome tracking (plan §A/§C). Default ON — the demo exists to show
+  // this feature off, deliberately differing from the watch's off-default.
+  var trackingEnabled = true;
+  var isOnSecondServe = false;
+  var stats = [];     // PointStat-shaped records (see watch-demo-tracking.js)
+  var lastCardTapAt = 0;
 
   function select(btns, attr, value) {
     btns.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute(attr) === value ? "true" : "false"); });
@@ -410,8 +419,33 @@
   if (el.ptMe) el.ptMe.addEventListener("click", function () { award("me"); });
   if (el.ptOpp) el.ptOpp.addEventListener("click", function () { award("opponent"); });
 
+  if (el.trackToggle) {
+    el.trackToggle.setAttribute("aria-pressed", "true");
+    el.trackToggle.addEventListener("click", function () {
+      trackingEnabled = !trackingEnabled;
+      el.trackToggle.setAttribute("aria-pressed", trackingEnabled ? "true" : "false");
+      render();
+    });
+  }
+  if (el.secondServe) el.secondServe.addEventListener("click", toggleSecondServe);
+
+  /* Second-serve gesture (plan §A, mirrors toggleSecondServe/ContentView
+     ~L163-169): scoped to the scoreboard card, not the whole watch face, so
+     the tap-to-score zone stays the screen area outside it. A manual
+     double-tap window (rather than the native `dblclick` event) matches
+     mouse and touch identically. */
+  if (el.card) {
+    el.card.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var now = Date.now();
+      if (now - lastCardTapAt < 350) { lastCardTapAt = 0; toggleSecondServe(); }
+      else { lastCardTapAt = now; }
+    });
+  }
+
   if (el.screen) {
-    /* Tap zones on the watch face: top half = you, bottom half = opponent. */
+    /* Tap zones on the watch face: top half = you, bottom half = opponent.
+       Taps inside the scoreboard card are handled above and never score. */
     el.screen.addEventListener("click", function (e) {
       if (el.banner && !el.banner.hidden) return;
       var rect = el.screen.getBoundingClientRect();
@@ -437,12 +471,27 @@
     else if (e.key === "ArrowDown") { award("opponent"); e.preventDefault(); }
     else if (e.key === "Backspace" || e.key.toLowerCase() === "u") { undo(); e.preventDefault(); }
     else if (e.key.toLowerCase() === "r") { startMatch(); e.preventDefault(); }
+    else if (e.key === "2") { toggleSecondServe(); e.preventDefault(); }
   });
+
+  /* Guards mirror ScoreViewModel.toggleSecondServe: no-op when tracking is
+     off, in Perpetual Points (disablesPointTracking), or once the match is
+     complete. (A pending categorisation sheet will extend this in Phase 2.) */
+  function canToggleSecondServe() {
+    return !!state && !isMatchComplete(state) && trackingEnabled && !state.cfg.disablesPointTracking;
+  }
+  function toggleSecondServe() {
+    if (!canToggleSecondServe()) return;
+    isOnSecondServe = !isOnSecondServe;
+    render();
+  }
 
   function startMatch() {
     state = freshState(chosenFormat, chosenServer);
     history = [];
     momentum = [];
+    isOnSecondServe = false;
+    stats = [];
     if (el.banner) el.banner.hidden = true;
     if (el.setup) el.setup.hidden = true;
     el.play.hidden = false;
@@ -452,10 +501,20 @@
 
   function award(player) {
     if (!state || isMatchComplete(state)) return;
-    history.push({ snapshot: clone(state), momentum: momentum.slice() });
+    history.push({ snapshot: clone(state), momentum: momentum.slice(), secondServe: isOnSecondServe, statsLen: stats.length });
     if (history.length > 200) history.shift();
+
+    // Silent point recording (plan §C, mirrors autoRecordPointStat): until
+    // Phase 2's categorisation sheet lands, every tracked point is recorded
+    // uncategorized. `state` here is still the pre-reducer snapshot.
+    if (!state.cfg.disablesPointTracking) {
+      var pending = window.DeuceMateTracking.buildPendingPoint(state, player, isOnSecondServe);
+      stats.push(window.DeuceMateTracking.buildUncategorizedStat(pending));
+    }
+
     var res = pointWon(state, player);
     state = res.state;
+    isOnSecondServe = false;
     momentum.push(player);
     if (momentum.length > 8) momentum.shift();
     applyEvents(res.events);
@@ -476,6 +535,8 @@
     prev.snapshot.cfg = state.cfg;
     state = prev.snapshot;
     momentum = prev.momentum;
+    isOnSecondServe = prev.secondServe;
+    stats = stats.slice(0, prev.statsLen);
     if (el.banner) el.banner.hidden = true;
     showToast("Undo");
     render();
@@ -516,8 +577,10 @@
     var cfg = state.cfg;
 
     // Server: a tennis ball on the serving row, a faint circle otherwise.
-    setServerIcon(el.meServer, state.currentServer === "me");
-    setServerIcon(el.oppServer, state.currentServer === "opponent");
+    // A yellow "2" badge overlays the ball while isOnSecondServe is set
+    // (plan §A, mirrors ContentView.serverIndicator ~L470-479).
+    setServerIcon(el.meServer, state.currentServer === "me", state.currentServer === "me" && isOnSecondServe);
+    setServerIcon(el.oppServer, state.currentServer === "opponent", state.currentServer === "opponent" && isOnSecondServe);
 
     // Per-player score cells (completed sets neutral, current set highlighted).
     buildCells(el.meCells, state, "me");
@@ -551,17 +614,28 @@
     if (el.undo) el.undo.disabled = !history.length;
     if (el.ptMe) el.ptMe.disabled = over;
     if (el.ptOpp) el.ptOpp.disabled = over;
+    if (el.secondServe) {
+      el.secondServe.disabled = !canToggleSecondServe();
+      el.secondServe.classList.toggle("active", isOnSecondServe);
+    }
   }
 
-  function setServerIcon(node, isServer) {
+  function setServerIcon(node, isServer, showSecondBadge) {
     if (!node) return;
+    node.innerHTML = "";
     if (isServer) {
-      node.textContent = "🎾";
-      node.setAttribute("aria-label", "Serving");
+      node.appendChild(document.createTextNode("🎾"));
+      node.setAttribute("aria-label", showSecondBadge ? "Serving, second serve" : "Serving");
       node.removeAttribute("aria-hidden");
       node.classList.remove("idle");
+      if (showSecondBadge) {
+        var badge = document.createElement("span");
+        badge.className = "w-2nd-badge";
+        badge.textContent = "2";
+        badge.setAttribute("aria-hidden", "true");
+        node.appendChild(badge);
+      }
     } else {
-      node.textContent = "";
       node.setAttribute("aria-hidden", "true");
       node.removeAttribute("aria-label");
       node.classList.add("idle");

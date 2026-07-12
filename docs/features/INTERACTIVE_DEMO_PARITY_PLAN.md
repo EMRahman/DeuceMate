@@ -1,6 +1,6 @@
 # Interactive Browser Demo — Watch-App Parity Plan
 
-**Status:** planned, not started.
+**Status:** Phase 1 shipped (tracking foundation + second-serve context, `docs/assets/watch-demo-tracking.js`). Phases 2–6 planned, not started.
 **Audience:** an AI coding agent implementing this incrementally (phase by phase,
 one PR per phase). The plan is deliberately prescriptive — exact strings, colors,
 ordering, and conditional rules are spelled out so the implementer does not need
