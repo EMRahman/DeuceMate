@@ -88,12 +88,12 @@ PERFECT FOR
 PRIVACY FIRST
 • No account required
 • No analytics, no tracking, no ads
-• The app collects no data and has no servers
-• Match data is stored on your own devices
-• Watch ↔ iPhone sync is on-device peer-to-peer via Apple's WatchConnectivity — no cloud, no internet
-• Works completely offline
-• Heart-rate and compass data are used on-device only and are never transmitted
-• You can export or share your own match data if you choose — that data is then handled by the app you send it to
+• The developer collects no data and operates no servers
+• Match data is stored on your devices and in your personal iCloud Drive backup
+• Watch ↔ iPhone sync uses Apple's WatchConnectivity, with no developer server
+• Core scoring and match review work offline
+• DeuceMate's automatic iCloud Drive archive excludes HealthKit measurements
+• You can choose to export match and HealthKit data to another person, a manual backup, or an AI service; the recipient then handles that data
 
 NO SUBSCRIPTION. NO ADS. NO TRACKING.
 Completely free for unlimited match tracking.
@@ -131,7 +131,8 @@ OPTIONAL FITNESS
 • HealthKit workout with live heart rate and heart-rate-zone stats
 
 PRIVACY FOCUSED
-No account, no data collection, no tracking. Your matches stay on your devices.
+No account, no developer data collection, and no tracking. Your automatic
+iCloud Drive archive excludes HealthKit measurements; sharing is your choice.
 
 Ready to play? Start your first match.
 
@@ -218,15 +219,19 @@ needs the Privacy Policy and Support URLs to resolve publicly.
 
 When completing the App Privacy questionnaire in App Store Connect:
 
-- DeuceMate has **no servers, no analytics, and no third-party SDKs**, and
-  transmits no data off the device on its own. "**Data Not Collected**" is the
-  appropriate declaration.
+- DeuceMate has **no developer-controlled servers, analytics, or third-party
+  SDKs**. Its automatic archive uses the user's personal iCloud Drive account,
+  but the developer cannot access that archive. "**Data Not Collected**" may
+  therefore remain appropriate under Apple's developer-access definition;
+  confirm the final answer in App Store Connect.
 - HealthKit data (heart rate, energy, steps, distance, date of birth) is read
-  and used **on-device only** and is never sent to the developer or any third
-  party. It is not "collected" in Apple's sense (no transmission to the
-  developer).
-- The export / AI-coaching feature is **user-initiated**: the user chooses to
-  hand their own match data to another app. The developer does not collect it.
+  and analysed in DeuceMate. HealthKit-derived match fields are excluded from
+  DeuceMate's automatic iCloud Drive archive and are never sent to the
+  developer.
+- Match exports, AI-coaching hand-offs, and manual archive backups are
+  **user-initiated** and may include HealthKit-derived measurements. The user
+  chooses the recipient or service, whose privacy terms then apply; the
+  developer does not receive the export.
 - HealthKit apps must have a privacy policy — see `PRIVACY_POLICY.md`, which
   includes a dedicated Health & Fitness Data section.
 
@@ -267,18 +272,31 @@ live scoreboard, spoken score announcements, match history, and statistics.
 
 HOW TO TEST
 - No account or login is required. The app works fully offline.
+- Without an Apple Watch, tap Manual Match Entry on the iPhone archive screen,
+  save the match, then open it to review statistics, graphs, and export options.
 - On the Apple Watch: start a match, choose the first server, then swipe up to
   score for yourself, swipe down for the opponent, swipe left to undo.
 - On the iPhone: the companion app shows match history and statistics, and (if
   paired with the watch during a live match) a live scoreboard.
 
 HEALTHKIT (OPTIONAL)
-The Apple Watch app can link a HealthKit workout. When enabled, it reads heart
-rate, energy, step count, distance, and date of birth (date of birth is used
-only to estimate maximum heart rate for heart-rate zones), and writes a single
-"Tennis" workout to Health. This data is used on-device for live stats and
-match statistics only. It is never transmitted anywhere. These features are
-optional and the app is fully usable without granting HealthKit access.
+The Apple Watch app requests optional HealthKit access and can link a workout
+to a match. With permission, it reads heart rate, active and resting energy,
+step count, walking/running distance, and date of birth (used only to estimate
+maximum heart rate for heart-rate zones), and writes one "Tennis" workout.
+The app remains fully usable if the reviewer denies or later revokes access.
+
+HealthKit-derived measurements are stored locally so the user can review match
+fitness analysis. DeuceMate strips heart rate, steps, distance, and calories
+from its automatic app-managed iCloud Drive archive. The developer operates no
+backend and cannot access this data.
+
+A user can deliberately export a match to share it with another person or an
+AI/LLM for match analysis, or create a manual archive backup. Those
+user-initiated exports may include HealthKit-derived measurements and are
+handled by the recipient, storage location, or AI service selected by the
+user. Local app data may separately be included in Apple's encrypted,
+system-managed device backup according to the user's device backup settings.
 
 LOCATION (OPTIONAL — Apple Watch)
 The optional "Check Changeover" feature requests "When In Use" location on
@@ -295,9 +313,11 @@ or the app is backgrounded. The audio session is activated only for the duration
 of each spoken score (ducking other audio) and released immediately after.
 
 PRIVACY
-The app collects no user data, has no servers, uses no analytics or
-third-party SDKs, and makes no network requests. Watch ↔ iPhone sync uses
-Apple's WatchConnectivity (on-device peer-to-peer).
+The developer collects no user data and operates no backend. The app uses no
+analytics, advertising, or third-party SDKs. Watch ↔ iPhone sync uses
+Apple's WatchConnectivity; the automatic stripped archive uses the user's
+personal iCloud Drive account; and all other sharing is explicitly initiated
+by the user.
 
 Thank you!
 Ehsan Rahman

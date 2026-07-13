@@ -21,6 +21,29 @@ decision.
 
 ---
 
+## Copy-only follow-up - 13 July 2026
+
+At the owner's direction, this follow-up updates disclosure and configuration
+copy only; it makes no Swift implementation changes:
+
+- [x] The Watch `NSHealthShareUsageDescription` now names heart rate, calories,
+  steps, walking/running distance, and date of birth in both build
+  configurations.
+- [x] App Review notes and the Markdown/HTML privacy policy now distinguish
+  DeuceMate's automatic app-managed iCloud Drive archive (HealthKit-derived
+  fields stripped) from Apple-managed device backups and user-initiated
+  exports.
+- [x] The chosen disclosure says a user may deliberately share HealthKit-derived
+  match data with another person or an AI/LLM for analysis, or include it in a
+  manual archive backup. The developer has no backend and does not receive
+  those exports.
+- [ ] This copy change does **not** exclude local files or preferences from
+  Apple device backups, add health-specific export consent, gate HealthKit
+  authorization/workouts, or change what any export contains. Blockers 3 and 4
+  therefore remain open.
+
+---
+
 ## Blockers
 
 ### 1. Archive has two top-level apps
@@ -110,7 +133,7 @@ Required work:
 - [ ] Request HealthKit authorization only after the user enables that feature
   or starts a match with it enabled.
 - [ ] Gate all start, resume, and recovery workout paths on that setting.
-- [ ] Expand the Watch read-purpose string to accurately mention steps and
+- [x] Expand the Watch read-purpose string to accurately mention steps and
   walking/running distance, or stop requesting data the feature does not need.
 - [ ] Test fresh-install grant, denial, partial authorization, revocation, no
   date of birth, and HealthKit-unavailable behavior.
@@ -140,19 +163,27 @@ also limits disclosure to third parties and requires prior express consent.
 Treat these paths as unresolved rather than assuming user-controlled backup or
 the generic Share sheet makes every transfer compliant.
 
-Safest resolution before submission:
+Chosen disclosure posture and remaining work before submission:
 
 - [ ] Exclude health-bearing local archive files and related preferences from
   device backup, or remove the HealthKit-derived values from those stores.
-- [ ] Strip HealthKit-derived values from every file that can be saved to iCloud
-  Drive, including full-fidelity manual archives.
-- [ ] Strip HealthKit-derived values from normal, opponent, HTML, and AI exports
-  by default. If any health sharing remains, review whether the recipient and
-  purpose are permitted, then add specific informed consent for the exact data.
+- [~] The product copy now permits a user-initiated full-fidelity manual archive,
+  including HealthKit-derived values. This disclosure does not resolve the fact
+  that the Files picker can save it to iCloud Drive; confirm a compliant design
+  before submission.
+- [~] The product copy now permits user-initiated match, HTML, and AI/LLM
+  analysis exports containing HealthKit-derived values. Review whether each
+  recipient and purpose is permitted, then add specific informed consent for
+  the exact data before it leaves DeuceMate.
 - [ ] Add focused tests proving every cloud/export representation omits the
-  protected fields.
-- [ ] Re-audit the privacy policy and App Privacy answers after this product
-  decision. Do not submit while the policy and behavior disagree.
+  protected fields or, for an approved consent-gated representation, contains
+  only the fields the user expressly authorized.
+- [x] Update the privacy policy and App Review notes to describe the current
+  automatic-backup and user-export behavior without the false "never
+  transmitted" claim.
+- [ ] Re-audit the final App Privacy answers after the implementation and
+  consent design are settled. Do not submit while the policy and behavior
+  disagree.
 
 ---
 
@@ -179,13 +210,16 @@ Application Support and the stores use
 
 Required work:
 
-- [ ] Replace "no network" / "never transmitted" with the narrower and accurate
+- [~] Replace "no network" / "never transmitted" with the narrower and accurate
   claim: no developer-controlled backend and no data collected by the developer;
   system-managed personal iCloud storage and explicit user sharing are separate.
+  Completed in `APP_STORE_METADATA.md`, `PRIVACY_POLICY.md`,
+  `docs/privacy.html`, and App Review notes; support, README, and in-app copy
+  still need the same reconciliation.
 - [ ] Reconcile `APP_STORE_METADATA.md`, `PRIVACY_POLICY.md`,
   `docs/privacy.html`, `docs/support.html`, README, App Review notes, and in-app
   copy from one agreed description of the implemented behavior.
-- [ ] Update the policy's storage locations, file-protection class, and date.
+- [x] Update the policy's storage locations, file-protection class, and date.
 - [ ] Point Settings -> Support & FAQ directly to `docs/support.html` rather
   than the marketing root.
 - [~] "Data Not Collected" may remain the correct App Privacy answer under
@@ -199,7 +233,7 @@ Reviewers may not pair an Apple Watch. The no-Watch review path is
 
 - [x] Manual Match Entry is reachable from the "No Apple Watch Paired" empty
   state in `PastMatchesView.swift`.
-- [ ] Put Manual Match Entry first in the App Review notes' test instructions.
+- [x] Put Manual Match Entry first in the App Review notes' test instructions.
 - [ ] Attach a demo video showing Watch scoring, iPhone live scoreboard, and
   foreground announcements. Apple recommends a video when hardware-specific
   features are difficult to reproduce during review.
