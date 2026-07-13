@@ -702,7 +702,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "DeuceMate-Watch-App-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = DeuceMate;
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "DeuceMate reads heart rate and calories during your tennis match, and your date of birth so Pulse Coach can estimate your max heart rate.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "DeuceMate reads heart rate, calories, steps, and walking/running distance during tennis matches, and date of birth to estimate heart-rate zones.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "DeuceMate records your tennis match as a workout.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Ehsan Rahman";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "DeuceMate reads your compass heading to show which direction the court faces.";
@@ -740,7 +740,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "DeuceMate-Watch-App-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = DeuceMate;
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "DeuceMate reads heart rate and calories during your tennis match, and your date of birth so Pulse Coach can estimate your max heart rate.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "DeuceMate reads heart rate, calories, steps, and walking/running distance during tennis matches, and date of birth to estimate heart-rate zones.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "DeuceMate records your tennis match as a workout.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Ehsan Rahman";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "DeuceMate reads your compass heading to show which direction the court faces.";

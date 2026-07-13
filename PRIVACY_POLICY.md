@@ -1,7 +1,7 @@
 # Privacy Policy for DeuceMate
 
 **Effective Date:** June 11, 2026
-**Last Updated:** June 11, 2026
+**Last Updated:** July 13, 2026
 
 ## Overview
 
@@ -9,7 +9,11 @@ DeuceMate is committed to protecting your privacy. This privacy policy explains 
 
 ## Data Collection
 
-**DeuceMate does NOT collect, store, transmit, or share any personal information or user data.**
+**The developer does not collect or receive personal information or user data
+from DeuceMate.** DeuceMate has no developer-controlled backend, analytics,
+advertising, or tracking. The App does store data for you on your devices and,
+as described below, uses your personal iCloud Drive account and supports sharing
+that you explicitly initiate.
 
 Specifically, the App does NOT collect:
 - Personal identification information (name, email, phone number, etc.)
@@ -32,35 +36,36 @@ The optional **Check Changeover** feature uses your Apple Watch's built-in compa
 
 ## Health & Fitness Data (HealthKit)
 
-DeuceMate includes optional fitness features on Apple Watch that use Apple's **HealthKit** framework. These features are off by default and activate only if you turn them on in Settings (the workout session and the Pulse Coach heart-rate features).
+DeuceMate includes fitness features on Apple Watch that use Apple's **HealthKit** framework. Health access is optional: the App may request permission, which you can deny or later revoke, and tennis scoring remains fully usable without it.
 
-If you enable them, the App:
+If you grant access, the App:
 
 - **Reads**, during a match, the following data from the Health app on your Apple Watch: heart rate, active and resting energy, step count, walking/running distance, and your date of birth. Date of birth is used only to estimate your maximum heart rate for Pulse Coach heart-rate zones.
 - **Writes** a single workout of type "Tennis" to the Health app to record the match as a fitness activity.
 
 How this data is handled:
 
-- Heart-rate samples and the derived fitness metrics are used **on-device only** — to show live stats during the match and to compute per-match statistics and coaching insights.
+- Heart-rate samples and derived fitness metrics are analysed in DeuceMate to show live stats during the match and compute per-match statistics and coaching insights.
 - Heart-rate values are saved as part of the match record stored **locally on your devices** (see "Local Data Storage" below), so heart-rate statistics remain available when you review a past match.
-- The iCloud backup copy of your archive (see "iCloud Sync" below) **excludes** heart-rate and fitness measurements (heart rate, steps, distance, and calories); those fields stay on your devices only. A manual archive export from Settings → Backup & Transfer in the iPhone app retains them in full.
-- HealthKit data is **never transmitted** by the App to any server or third party.
-- HealthKit data is **not** used for advertising or marketing, is **not** sold, and is **not** shared with third parties.
-- These features are **entirely optional**. If you do not enable the workout session or Pulse Coach, the App does not request HealthKit access and reads no health data.
+- DeuceMate's automatic app-managed iCloud Drive archive (see "iCloud Sync" below) **excludes** HealthKit-derived heart rate, steps, distance, and calories.
+- HealthKit-derived values may still be included in Apple's system-managed device backup according to your device backup settings.
+- When you deliberately export a match, share match analysis with another person or an AI/LLM, or create a manual archive backup, that user-initiated export may include HealthKit-derived measurements. The recipient, storage location, or AI service you select then handles that data under its own terms.
+- HealthKit data is **not** used for advertising or marketing, is **not** sold, and is never sent to or accessible by the developer.
 - You can review or revoke DeuceMate's Health permissions at any time in the Apple Watch Settings app or the iPhone Health app.
 
 ## Local Data Storage
 
-The App stores the following information **locally on your devices only**:
+The App stores the following information locally on your devices:
 - Current match state (scores, games, sets, server)
 - Match history (completed and in-progress matches, including point-by-point statistics and, when the workout session is enabled, heart-rate values recorded during the match)
 - User preferences (control preferences, appearance settings)
 - Locked court bearing angle (only when Check Changeover is enabled; cleared on match reset)
 
 This data:
-- Is never sent to any server or third party by the App
-- When iCloud Drive is available, the iPhone app stores a backup copy of the match archive in your personal iCloud Drive account — see "iCloud Sync" below for details. No data is ever sent to any third-party server.
+- Is never sent to a developer-controlled server; DeuceMate has no such backend
+- When iCloud Drive is available, the iPhone app stores a stripped backup copy of the match archive in your personal iCloud Drive account — see "iCloud Sync" below for details.
 - May also be included in your device's standard **iCloud Backup** if you have iCloud Backup enabled in iOS/watchOS Settings. That backup is encrypted and tied to your own Apple ID and is managed by iOS — the App does not trigger or control it. You can exclude DeuceMate from iCloud Backup, or turn iCloud Backup off entirely, in your device Settings.
+- May leave your device when you deliberately export or share it, as described in "Sharing, Export & AI Coaching" below
 - Is removed from your device when you uninstall the App
 - Can be cleared by resetting the match or reinstalling the App
 
@@ -69,7 +74,8 @@ This data:
 The iPhone app automatically stores your match archive in **iCloud Drive** when your Apple ID is signed in and iCloud Drive is available on your device. This means:
 
 - Your match archive always lives on your iPhone; a backup copy is kept in your personal **iCloud Drive** container so it can be restored if you reinstall the App or move to a new iPhone.
-- The iCloud backup copy **excludes** HealthKit-derived measurements (heart rate, steps, distance, and calories) to comply with App Store Review Guideline 5.1.3(ii). Match scores, point statistics, and all other match data are included. A manual archive export (Settings → Backup & Transfer) includes health measurements in full.
+- This automatic app-managed iCloud Drive copy **excludes** HealthKit-derived measurements (heart rate, steps, distance, and calories) to comply with App Store Review Guideline 5.1.3(ii). Match scores, point statistics, and all other match data are included.
+- A manual archive export is separate from the automatic iCloud Drive copy. When you explicitly create one, it may include HealthKit-derived match measurements and can be saved to a location you choose, including iCloud Drive.
 - This data lives in **your own Apple ID account** — it is not accessible to the developer and is not shared with any third party.
 - iCloud Drive is Apple's own service, governed by Apple's privacy policy and encrypted using your credentials.
 
@@ -84,7 +90,7 @@ This sync is:
 - **Not a network transmission** — no data passes through any server, the internet, or any third party.
 - **Not iCloud** — the sync does not use Apple's iCloud service and does not require an Apple ID.
 
-The iPhone app stores your complete match history locally in its Documents directory with `.completeFileProtection` file protection, the same protection used on the watch. No match data is shared with any external service.
+The iPhone app stores its canonical match history in Application Support and the watch stores its history in Documents. Both use `.completeFileProtectionUntilFirstUserAuthentication` so background WatchConnectivity delivery can work after the first device unlock.
 
 ## Sharing, Export & AI Coaching
 
@@ -92,25 +98,26 @@ DeuceMate lets you **choose** to share your own match data:
 
 - **Export / Share** — From a match's detail screen you can export a match summary or full point-by-point data and share it through the standard iOS share sheet (for example to Files, Messages, or Mail).
 - **AI Coaching prompt** — You can generate a coaching prompt built from your match statistics and copy it to the clipboard or open it in a third-party AI app you already have installed (such as ChatGPT, Claude, or Gemini).
+- **Manual archive backup** — From Settings → Backup & Transfer you can create a full match-archive file and save or share it using a location you choose.
 
 Important points about these features:
 
 - They are **always initiated by you**. DeuceMate never shares, exports, or uploads match data on its own.
+- These exports may include HealthKit-derived heart rate, heart-rate zones, steps, distance, and calories when recorded. Consider this before choosing a recipient or storage location.
 - When you export, share, or send a prompt to another app, that data **leaves your device** and is then handled by the app or service you chose. Once it reaches a third-party AI tool or another app, **that third party's privacy policy — not this one — governs how the data is used.** Please review their policies before sending data you consider sensitive.
-- DeuceMate itself still makes **no network requests** and has no servers. To show which AI apps are available, the App checks for their app URL schemes locally on your device; no information about your installed apps is collected or transmitted.
+- DeuceMate has no developer-controlled server. To show which AI apps are available, the App checks for their app URL schemes locally on your device; no information about your installed apps is collected or sent to the developer.
 
-## Third-Party Services
+## Services
 
-DeuceMate does NOT use any third-party services, including but not limited to:
-- Analytics services (no Google Analytics, Firebase, etc.)
-- Advertising networks
-- Social media integrations
-- Third-party cloud storage services (the App automatically uses your own Apple iCloud Drive account when available — see "iCloud Sync" above)
-- Crash reporting tools
+DeuceMate contains no third-party SDKs and does not automatically send data to
+analytics, advertising, social-media, or crash-reporting services. Its automatic
+archive uses your personal Apple iCloud Drive account. If you choose an export,
+AI/LLM hand-off, or other sharing destination, the service you select handles
+the shared data under its own privacy terms.
 
 ## Internet Connectivity
 
-DeuceMate does NOT require internet connectivity and functions completely offline. The App makes NO network requests to external servers. The WatchConnectivity sync between the Apple Watch and iPhone companion app uses the local wireless connection between your paired devices — it is not an internet connection.
+Core scoring, local match review, and WatchConnectivity operation do not require internet access. Internet access is needed for the optional automatic iCloud Drive archive and for any online destination or AI/LLM service that you choose when exporting or sharing.
 
 ## Children's Privacy
 
@@ -122,14 +129,10 @@ We may update this Privacy Policy from time to time. Any changes will be reflect
 
 ## Your Rights
 
-Since DeuceMate does not collect any data, there is no data to:
-- Access
-- Delete
-- Modify
-- Export
-- Or manage in any way
-
-All match data is stored locally on your device and is under your complete control.
+Because the developer does not collect or receive your data, the developer has
+no account record to access, modify, or delete. You manage DeuceMate's local
+data on your devices, your app backup through Apple device settings, and any
+exports through the storage location or recipient you select.
 
 ## Contact
 
@@ -146,14 +149,14 @@ By using DeuceMate, you consent to this Privacy Policy.
 ---
 
 **In Summary:**
-- ✅ No data collection by the app — no servers, no analytics, no tracking
+- ✅ No developer data collection — no developer servers, analytics, ads, or tracking
 - ✅ No GPS or location tracking (optional compass reads heading only)
-- ✅ No internet required — the app makes no network requests
-- ✅ Match data stays on your devices unless you choose to export or share it
+- ✅ Core scoring and local match review work without internet access
+- ✅ Match data stays under your control in DeuceMate, your personal iCloud archive, and destinations you explicitly choose
 - ✅ Watch ↔ iPhone sync is on-device peer-to-peer only — no servers, no iCloud
 - ✅ iCloud Sync: match archive is automatically stored in your own iCloud Drive account when available — never accessible to the developer
-- ✅ HealthKit data (heart rate, etc.) is optional, used on-device only, and never transmitted
-- ✅ Export / AI-coaching is always user-initiated; shared data is then governed by the receiving app's policy
+- ✅ DeuceMate's automatic iCloud Drive archive excludes HealthKit-derived measurements
+- ✅ Match, manual-backup, and AI/LLM exports are user-initiated and may include HealthKit-derived measurements; the selected recipient or service then governs that data
 
 ---
 
