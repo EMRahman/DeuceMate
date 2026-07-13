@@ -130,10 +130,10 @@ DeuceMate ships as an **iPhone app with a bundled Apple Watch app** — you inst
 ## Frequently Asked Questions
 
 **Q: Does DeuceMate work offline?**
-A: Yes! DeuceMate works completely offline and requires no internet connection.
+A: Core scoring, match history, and analysis work without an internet connection. Watch ↔ iPhone sync is local. Personal iCloud Drive backup and any sharing or AI hand-off you choose require the relevant Apple or third-party service.
 
 **Q: Is my match data synced to the cloud?**
-A: There's no third-party server. Your watch and iPhone sync directly with each other over Apple's WatchConnectivity. The iPhone app also keeps a backup copy of your match archive in your own iCloud Drive account (when iCloud is available), used only to restore your history after a reinstall or on a new iPhone. Nothing is ever sent to the developer or any third party.
+A: Your watch and iPhone sync directly over Apple's WatchConnectivity, with no developer-controlled server. When iCloud is available, the iPhone app also keeps an automatic archive in your personal iCloud Drive for fresh-install restore, with HealthKit measurements removed; the developer cannot access it. Data may separately leave your devices when you deliberately export or share it, and is then handled by the recipient or service you choose.
 
 **Q: Can I track multiple matches?**
 A: You score one match at a time on the Apple Watch, and every completed match is saved to an unlimited on-device history you can review on the iPhone companion app.
@@ -181,10 +181,10 @@ Please include:
 ## Privacy
 
 DeuceMate respects your privacy:
-- ✅ No data collection
+- ✅ No developer data collection
 - ✅ No analytics or tracking
 - ✅ No account required
-- ✅ Your match data stays on your Apple devices and in your own iCloud — never on third-party servers
+- ✅ No developer-controlled backend; your data uses your Apple devices, your personal iCloud Drive, and only the recipients or services you explicitly choose
 
 Read our full [Privacy Policy](privacy.html).
 
@@ -193,7 +193,7 @@ Read our full [Privacy Policy](privacy.html).
 ## Version
 
 **Current Version:** 1.0.0
-**Last Updated:** June 2026
+**Last Updated:** July 2026
 
 ---
 

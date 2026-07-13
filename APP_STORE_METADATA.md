@@ -271,7 +271,9 @@ app. Scoring is done on the Apple Watch. The iPhone app is a companion for a
 live scoreboard, spoken score announcements, match history, and statistics.
 
 HOW TO TEST
-- No account or login is required. The app works fully offline.
+- No account or login is required. Core scoring and match review work offline;
+  personal iCloud Drive backup and user-initiated sharing use the relevant
+  Apple or third-party service.
 - Without an Apple Watch, tap Manual Match Entry on the iPhone archive screen,
   save the match, then open it to review statistics, graphs, and export options.
 - On the Apple Watch: start a match, choose the first server, then swipe up to

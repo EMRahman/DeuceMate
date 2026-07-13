@@ -355,7 +355,7 @@ false claim in `CLAUDE.md` misleads every future session.
 **What:** `CLAUDE.md` instructs agents to "read only the `MARK:` section you
 need" — but the prescribed navigation is impossible in exactly the files where
 it matters most. Current anchor counts: `ScoreViewModel.swift` **1 MARK in
-1928 lines**, `HomeView.swift` **0 in 900**, `ContentView.swift` **3 in 941**.
+1928 lines**, `HomeView.swift` **0 in 903**, `ContentView.swift` **3 in 941**.
 By contrast `PointsGraphView.swift` (9 MARKs / 1525 lines) shows the target
 state and is pleasant to work in. For an agent this is not cosmetic: without
 anchors it must load the whole file (context cost) and its exact-match `Edit`s

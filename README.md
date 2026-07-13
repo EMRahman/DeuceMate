@@ -28,8 +28,8 @@ DeuceMate is a lightweight, native Apple Watch app for scoring tennis matches in
 ## Why DeuceMate Exists
 
 After trying multiple tennis scoring apps that crashed mid-match, collected unnecessary data, or required subscriptions with intrusive ads, I built DeuceMate to be:
-- **Reliable** - Works offline with optimized battery usage
-- **Private** - Zero data collection, no analytics, no tracking
+- **Reliable** - Core scoring works offline with optimized battery usage
+- **Private** - No developer data collection, analytics, or tracking
 - **Simple** - Clean interface focused on the essentials
 - **Free** - No subscriptions, ads, or in-app purchases
 
@@ -61,7 +61,7 @@ This project also showcases my ability to ship production-quality native iOS/wat
 
 ## Privacy
 
-DeuceMate collects **zero data** — no servers, no analytics, no tracking, and no network requests at all. Match data stays on your devices; export and AI-coaching features share data only when you explicitly choose to. See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) (also published at [emrahman.github.io/DeuceMate/privacy.html](https://emrahman.github.io/DeuceMate/privacy.html)).
+The developer does not collect or receive data from DeuceMate and operates no backend, analytics, advertising, or tracking. Match data is stored on your Apple devices and, when available, in an automatic archive in your personal iCloud Drive that excludes HealthKit measurements. Apart from that archive, data leaves DeuceMate only when you explicitly export or share it, including with an AI service you select. See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) (also published at [emrahman.github.io/DeuceMate/privacy.html](https://emrahman.github.io/DeuceMate/privacy.html)).
 
 ## Requirements & Installation
 
@@ -71,7 +71,7 @@ DeuceMate collects **zero data** — no servers, no analytics, no tracking, and 
 
 ## Support & Feedback
 
-- 🌐 Support site: [emrahman.github.io/DeuceMate](https://emrahman.github.io/DeuceMate/)
+- 🌐 Support site: [emrahman.github.io/DeuceMate/support.html](https://emrahman.github.io/DeuceMate/support.html)
 - 📧 Email: [mail@ehsanrahman.com](mailto:mail@ehsanrahman.com?subject=DeuceMate%20Feedback)
 - 🐛 Report issues: [GitHub Issues](https://github.com/EMRahman/DeuceMate/issues)
 - 📖 Help & FAQs: [SUPPORT_PAGE.md](SUPPORT_PAGE.md)

@@ -699,7 +699,7 @@ struct HomeView: View {
                             }
                         }
 
-                        Text("When Override is on, birth year and resolved value are replaced by your manual entry. Heart-rate stays on your devices and syncs with your iPhone.")
+                        Text("When Override is on, birth year and resolved value are replaced by your manual entry. Heart-rate data syncs with your iPhone. DeuceMate's automatic iCloud archive excludes it, but an iPhone export may include it.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }

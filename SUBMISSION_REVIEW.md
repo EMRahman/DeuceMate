@@ -12,8 +12,8 @@ source, Xcode project and scheme, entitlements, privacy and store metadata,
 compiled products, tests, and a generated archive. They are current repository
 findings, not historical notes copied from an earlier PR.
 
-**Current status: not ready to submit.** Resolve Blockers 1-4, reconcile the
-public claims in Item 5, and complete a signed Organizer validation before
+**Current status: not ready to submit.** Resolve Blockers 1-4, finalize the App
+Privacy answer in Item 5, and complete a signed Organizer validation before
 uploading a build.
 
 Legend: `[ ]` to do, `[x]` verified, `[~]` partly verified or awaiting a product
@@ -219,13 +219,13 @@ Chosen disclosure posture and remaining work before submission:
 
 ## High-risk review items
 
-### 5. Privacy and store metadata contain contradictory absolute claims
+### 5. Privacy copy reconciled; App Privacy answer pending
 
 **CODEX FINDING:** The codebase has no developer-controlled web service and no
-`URLSession` networking stack. However, the current documents go further and
-claim that the app makes no network requests, never transmits HealthKit data,
-and only contains the privacy/support URL literals. Those statements are no
-longer accurate because the app:
+`URLSession` networking stack. Before this reconciliation, README, support,
+marketing, and in-app copy went further and claimed that the app made no network
+requests, never transmitted HealthKit data, and kept all data on the user's
+devices. Those statements were not accurate because the app:
 
 - automatically writes its stripped archive to the user's iCloud Documents
   container;
@@ -233,24 +233,33 @@ longer accurate because the app:
 - creates user-initiated exports and AI-app hand-offs; and
 - generates seven external AI-service links in the HTML match experience.
 
-The public policy also describes an obsolete iPhone Documents storage path and
-`.completeFileProtection`, while the canonical phone archive now uses
-Application Support and the stores use
+The public policy also previously described an obsolete iPhone Documents
+storage path and `.completeFileProtection`, while the canonical phone archive
+uses Application Support and the stores use
 `.completeFileProtectionUntilFirstUserAuthentication`.
+
+**REPOSITORY FIX VERIFIED - 13 July 2026:** Current public, support, and in-app
+copy now uses one description of the implemented behavior: the developer has no
+backend and does not collect or receive DeuceMate data; WatchConnectivity sync
+is local; the automatic archive uses the user's personal iCloud Drive and
+excludes HealthKit measurements; and user-initiated exports or AI hand-offs are
+handled by the recipient or service the user selects. File-specific statements
+that the self-contained HTML export opens without automatic network requests,
+and that compass data stays on-device, remain because those narrower claims are
+accurate. Settings now opens the dedicated Support & FAQ page directly.
 
 Required work:
 
-- [~] Replace "no network" / "never transmitted" with the narrower and accurate
+- [x] Replace "no network" / "never transmitted" with the narrower and accurate
   claim: no developer-controlled backend and no data collected by the developer;
   system-managed personal iCloud storage and explicit user sharing are separate.
-  Completed in `APP_STORE_METADATA.md`, `PRIVACY_POLICY.md`,
-  `docs/privacy.html`, and App Review notes; support, README, and in-app copy
-  still need the same reconciliation.
-- [ ] Reconcile `APP_STORE_METADATA.md`, `PRIVACY_POLICY.md`,
+  Completed across store metadata, privacy, README, marketing, support, user
+  guide, App Review notes, and current iPhone/Watch copy.
+- [x] Reconcile `APP_STORE_METADATA.md`, `PRIVACY_POLICY.md`,
   `docs/privacy.html`, `docs/support.html`, README, App Review notes, and in-app
   copy from one agreed description of the implemented behavior.
 - [x] Update the policy's storage locations, file-protection class, and date.
-- [ ] Point Settings -> Support & FAQ directly to `docs/support.html` rather
+- [x] Point Settings -> Support & FAQ directly to `docs/support.html` rather
   than the marketing root.
 - [~] "Data Not Collected" may remain the correct App Privacy answer under
   Apple's developer-access definition, but do not justify it by claiming that
