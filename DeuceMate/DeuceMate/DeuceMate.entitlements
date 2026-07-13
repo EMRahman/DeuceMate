@@ -12,5 +12,9 @@
 	<array>
 		<string>iCloud.ehsan.DeuceMate</string>
 	</array>
+	<key>com.apple.developer.ubiquity-container-identifiers</key>
+	<array>
+		<string>iCloud.ehsan.DeuceMate</string>
+	</array>
 </dict>
 </plist>

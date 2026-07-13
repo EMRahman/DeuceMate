@@ -85,29 +85,47 @@ Required work:
   an iOS app archive with only `DeuceMate.app` at `Products/Applications`.
 - [ ] Run **Distribute App -> App Store Connect -> Validate App** successfully.
 
-### 2. iCloud Documents entitlement is incomplete
+### 2. iCloud Documents source configuration fixed; signed/device verification pending
 
-**CODEX FINDING:** `DeuceMate/DeuceMate/DeuceMate.entitlements` declares
-`CloudDocuments` and `com.apple.developer.icloud-container-identifiers`, but not
+**CODEX FINDING:** Before this fix,
+`DeuceMate/DeuceMate/DeuceMate.entitlements` declared `CloudDocuments` and
+`com.apple.developer.icloud-container-identifiers`, but not
 `com.apple.developer.ubiquity-container-identifiers`. The app calls
 `FileManager.url(forUbiquityContainerIdentifier:)` in `PhoneStatsStore.swift`,
-so the current source entitlements do not fully configure the advertised iCloud
+so the source entitlements did not fully configure the advertised iCloud
 Documents feature. Apple's
 [iCloud configuration guide](https://developer.apple.com/documentation/Xcode/configuring-icloud-services)
 states that enabling iCloud Documents adds both container entitlement arrays.
 
-The in-app guide in `PastMatchesView.swift` also tells users to enable
+The original in-app guide in `PastMatchesView.swift` also told users to enable
 **iCloud Backup**. This feature uses **iCloud Drive/Documents**, which is a
 different setting and should be named accurately.
 
+**REPOSITORY FIX VERIFIED - 13 July 2026:** The iPhone source entitlements now
+declare `CloudDocuments`, `com.apple.developer.icloud-container-identifiers`,
+and `com.apple.developer.ubiquity-container-identifiers`, with both container
+arrays set to `iCloud.ehsan.DeuceMate`. Debug and Release both use that
+entitlements file. An Xcode 26.2 Release simulator build succeeded, and its
+generated simulated entitlement payload contained all three declarations.
+
+The recovery sheet now says iCloud Drive and directs the user through
+**Settings -> Apple Account -> iCloud -> Drive -> Sync this iPhone**, followed
+by the per-app DeuceMate switch under **Saved to iCloud**. A simulator build
+does not prove production-container assignment or distribution-signed
+entitlements, so those checks remain open.
+
 Required work:
 
-- [ ] Configure iCloud Documents through Xcode Signing & Capabilities for the
-  iPhone target and `iCloud.ehsan.DeuceMate` container.
-- [ ] Verify the source and signed-product entitlements contain both
+- [x] Configure the iPhone target's source entitlements for iCloud Documents and
+  the `iCloud.ehsan.DeuceMate` container.
+- [x] Verify the source and generated simulator entitlements contain both
   `com.apple.developer.icloud-container-identifiers` and
   `com.apple.developer.ubiquity-container-identifiers`.
-- [ ] Change the in-app recovery instructions from iCloud Backup to iCloud
+- [ ] Verify the distribution-signed product entitlements contain both
+  container arrays and use the production `iCloud.ehsan.DeuceMate` container.
+- [ ] Confirm iCloud Documents and the `iCloud.ehsan.DeuceMate` container are
+  enabled for the production App ID in the Apple Developer portal.
+- [x] Change the in-app recovery instructions from iCloud Backup to iCloud
   Drive, including the correct Settings path.
 - [ ] Test upload, update, deletion, signed-out/Drive-disabled handling, and
   first-install restore on a physical iPhone using the production container.
@@ -271,6 +289,9 @@ Codex ran the following checks on 11 and 13 July 2026:
   contained one top-level `DeuceMate.app`, retained the embedded Watch app, and
   included iOS application archive metadata. This is not a signed distribution
   validation.
+- [x] An Xcode 26.2 Release simulator build succeeded after the Blocker 2 source
+  fix; its generated simulated entitlements contained `CloudDocuments` and both
+  iCloud container arrays for `iCloud.ehsan.DeuceMate`.
 - [x] Privacy, Support, and Marketing URLs all returned HTTP 200 on 11 July 2026:
   `https://emrahman.github.io/DeuceMate/privacy.html`,
   `https://emrahman.github.io/DeuceMate/support.html`, and
