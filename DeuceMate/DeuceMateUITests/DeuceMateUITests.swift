@@ -8,25 +8,54 @@ import XCTest
 final class DeuceMateUITests: XCTestCase {
 
     override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
         continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
-    }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testManualMatchCanBeReviewedAndExportedWithoutWatchInteraction() throws {
         let app = XCUIApplication()
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
+        let manualEntry = app.buttons["Manual match entry"]
+        XCTAssertTrue(manualEntry.waitForExistence(timeout: 10))
+        manualEntry.tap()
+
+        let save = app.buttons["Save Match"]
+        for _ in 0..<6 where !save.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(save.isHittable)
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+
+        let newestMatch = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'match-row-'")
+        ).firstMatch
+        XCTAssertTrue(newestMatch.waitForExistence(timeout: 5))
+        newestMatch.tap()
+
+        XCTAssertTrue(
+            app.staticTexts["In Progress — view only on iPhone"]
+                .waitForExistence(timeout: 5)
+        )
+
+        let emptyGraph = app.staticTexts["No Points to Graph"]
+        for _ in 0..<4 where !emptyGraph.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(emptyGraph.isHittable)
+
+        let emptyStats = app.staticTexts["No point-by-point statistics were recorded for this match."]
+        for _ in 0..<4 where !emptyStats.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(emptyStats.isHittable)
+
+        let export = app.buttons["Export match"]
+        XCTAssertTrue(export.waitForExistence(timeout: 10))
+        export.tap()
+        XCTAssertTrue(app.buttons["Interactive Web Page"].waitForExistence(timeout: 5))
     }
 
     @MainActor

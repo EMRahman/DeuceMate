@@ -15,10 +15,16 @@ import DeuceMateCore
 final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate {
     static let shared = PhoneMatchSyncService()
 
+    private let activationTimeout: TimeInterval
+    private let isSessionSupported: () -> Bool
+    private let activateSession: (WCSessionDelegate) -> Void
+    private let scheduleAfter: (TimeInterval, DispatchWorkItem) -> Void
+    private var activationTimeoutWorkItem: DispatchWorkItem?
+
     @Published private(set) var lastSyncDate: Date?
     @Published private(set) var isWatchReachable: Bool = false
     @Published private(set) var isPaired: Bool = false
-    /// True from app launch until WCSession activation completes.
+    /// True while WCSession activation is in progress, for at most 10 seconds.
     @Published private(set) var isActivating: Bool = true
     @Published private(set) var isWatchAppInstalled: Bool = false
     @Published private(set) var pendingTransferCount: Int = 0
@@ -54,6 +60,13 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     /// chosen an outcome and is awaiting an ending-shot selection (phase 2).
     @Published private(set) var pendingPointOutcome: PointOutcome? = nil
 
+    /// True when WatchConnectivity could not start or did not finish activating
+    /// within the bounded launch window. The iPhone archive and manual-entry
+    /// flows remain fully usable in this state.
+    var isActivationUnavailable: Bool {
+        activationState == "Unavailable" || activationState == "Timed Out"
+    }
+
     // Strong reference — incoming WCSession data must never be silently dropped
     // due to a deallocated store.
     private var store: PhoneStatsStore?
@@ -65,13 +78,62 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     )
     private let logger = Logger(subsystem: "com.deucemate.sync", category: "Phone")
 
+    init(
+        activationTimeout: TimeInterval = 10,
+        isSessionSupported: @escaping () -> Bool = { WCSession.isSupported() },
+        activateSession: @escaping (WCSessionDelegate) -> Void = { delegate in
+            let session = WCSession.default
+            session.delegate = delegate
+            session.activate()
+        },
+        scheduleAfter: @escaping (TimeInterval, DispatchWorkItem) -> Void = { delay, workItem in
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+        }
+    ) {
+        self.activationTimeout = activationTimeout
+        self.isSessionSupported = isSessionSupported
+        self.activateSession = activateSession
+        self.scheduleAfter = scheduleAfter
+        super.init()
+    }
+
     // MARK: - Start
 
     func start(store: PhoneStatsStore) {
         self.store = store
-        guard WCSession.isSupported() else { return }
-        WCSession.default.delegate = self
-        WCSession.default.activate()
+        beginSessionActivation()
+    }
+
+    /// Starts WatchConnectivity and guarantees that the launch UI leaves its
+    /// connecting state even when the platform never calls the activation
+    /// delegate. Internal so the iOS target can test the state transition with
+    /// injected session hooks rather than activating a real WCSession.
+    func beginSessionActivation() {
+        activationTimeoutWorkItem?.cancel()
+        isActivating = true
+
+        guard isSessionSupported() else {
+            finishActivation(state: "Unavailable")
+            return
+        }
+
+        activationState = "Activating"
+        let timeoutWorkItem = DispatchWorkItem { [weak self] in
+            guard let self, self.isActivating else { return }
+            self.finishActivation(state: "Timed Out")
+        }
+        activationTimeoutWorkItem = timeoutWorkItem
+        scheduleAfter(activationTimeout, timeoutWorkItem)
+        activateSession(self)
+    }
+
+    /// Resolves the transient connecting state. A late activation callback may
+    /// still replace a timeout label with the session's real state.
+    func finishActivation(state: String) {
+        activationTimeoutWorkItem?.cancel()
+        activationTimeoutWorkItem = nil
+        activationState = state
+        isActivating = false
     }
 
     // MARK: - Outgoing (phone → watch)
@@ -270,8 +332,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
             self.isWatchReachable = session.isReachable
             self.isWatchAppInstalled = session.isWatchAppInstalled
             self.pendingTransferCount = session.outstandingUserInfoTransfers.count
-            self.activationState = Self.activationStateLabel(session.activationState)
-            self.isActivating = false
+            self.finishActivation(state: Self.activationStateLabel(session.activationState))
         }
         if let error {
             logger.error("activation error: \(error.localizedDescription, privacy: .public)")
@@ -284,7 +345,9 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     func sessionDidBecomeInactive(_ session: WCSession) {}
 
     func sessionDidDeactivate(_ session: WCSession) {
-        WCSession.default.activate()
+        DispatchQueue.main.async {
+            self.beginSessionActivation()
+        }
     }
 
     func sessionReachabilityDidChange(_ session: WCSession) {

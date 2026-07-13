@@ -135,10 +135,12 @@ expected values rewritten to make a failure pass — that requires explicit appr
 (~1,140 lines — watch-specific behaviour: tiebreak serve rotation, changeover events,
 compass bearings), `DeuceMate Watch AppTests/StatsStoreTests.swift` (exercises the real
 watch `StatsStore` against a temp file: absent-file vs. corrupt-file semantics, the
-refuse-to-overwrite-on-unreadable guard, and valid round-trips), the near-empty
-`DeuceMateTests/DeuceMateTests.swift`, and four UI-test placeholders: `DeuceMate Watch AppUITests/DeuceMate_Watch_AppUITests.swift`,
+refuse-to-overwrite-on-unreadable guard, and valid round-trips),
+`DeuceMateTests/DeuceMateTests.swift` (iPhone WatchConnectivity activation fallbacks
+and paired/unpaired Manual Entry copy), `DeuceMateUITests/DeuceMateUITests.swift`
+(Manual Entry -> history -> truthful detail empty states -> export), and three
+remaining UI-test placeholders: `DeuceMate Watch AppUITests/DeuceMate_Watch_AppUITests.swift`,
 `DeuceMate Watch AppUITests/DeuceMate_Watch_AppUITestsLaunchTests.swift`,
-`DeuceMateUITests/DeuceMateUITests.swift`,
 `DeuceMateUITests/DeuceMateUITestsLaunchTests.swift`.
 
 ---

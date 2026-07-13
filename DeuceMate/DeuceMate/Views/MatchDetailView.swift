@@ -419,12 +419,13 @@ struct MatchDetailView: View {
                 .padding(.vertical, 6)
             }
 
-            if !record.stats.isEmpty {
-                // Points Graph — featured directly under the main score
-                Section("Points Graph") {
-                    PointsGraphView(record: record)
-                }
+            // Keep the graph route visible for manually entered matches. Its
+            // explicit empty state explains why there is no point-level chart.
+            Section("Points Graph") {
+                PointsGraphView(record: record)
+            }
 
+            if !record.stats.isEmpty {
                 // Stats / Points tab switcher
                 Section {
                     Picker("View", selection: $tab) {
@@ -587,7 +588,7 @@ struct MatchDetailView: View {
                 pointsListSections
             } else if record.stats.isEmpty {
                 Section {
-                    Text("Point outcome tracking was off for this match.")
+                    Text("No point-by-point statistics were recorded for this match.")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -682,6 +683,7 @@ struct MatchDetailView: View {
                     } label: {
                         Image(systemName: "square.and.arrow.up")
                     }
+                    .accessibilityLabel("Export match")
                 }
             }
         }
