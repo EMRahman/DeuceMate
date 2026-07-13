@@ -46,7 +46,7 @@ copy only; it makes no Swift implementation changes:
 
 ## Blockers
 
-### 1. Archive has two top-level apps
+### 1. Archive configuration fixed; signed validation pending
 
 **CODEX FINDING:** An unsigned Release archive produced this layout:
 
@@ -61,23 +61,25 @@ as a second top-level product. This produces the generic archive shape described
 in [TN3110](https://developer.apple.com/documentation/technotes/tn3110-resolving-generic-xcode-archive-issue),
 which cannot be distributed as an iOS app archive.
 
-Evidence:
+**REPOSITORY FIX VERIFIED - 13 July 2026:** The embedded Watch target now uses
+`SKIP_INSTALL = YES` in Debug and Release, its Release configuration no longer
+pins a development signing identity, and the iPhone scheme archives only the
+iPhone target. The existing target dependency and Embed Watch Content phase
+continue to build and embed the Watch app.
 
-- `DeuceMate/DeuceMate.xcodeproj/project.pbxproj`: the Watch target has
-  `SKIP_INSTALL = NO` in Debug and Release (currently around lines 720 and 758).
-- `DeuceMate/DeuceMate.xcodeproj/xcshareddata/xcschemes/DeuceMate.xcscheme`:
-  both the iPhone app and Watch app are independently enabled for archiving,
-  even though the iPhone target already depends on and embeds the Watch app.
-- The Watch Release configuration explicitly pins
-  `CODE_SIGN_IDENTITY = "Apple Development"` while using automatic signing.
-  That can also cause a distribution-signature mismatch.
+An Xcode 26.2 unsigned Release archive completed successfully after the fix.
+`Products/Applications` contained only `DeuceMate.app`, the Watch app remained
+at `DeuceMate.app/Watch/DeuceMate Watch App.app`, and the archive metadata
+identified `Applications/DeuceMate.app` with bundle identifier
+`ehsan.DeuceMate`. No valid code-signing identity is installed on the audit
+machine, so signed Organizer classification and App Store validation remain
+owner steps.
 
 Required work:
 
-- [ ] Set the embedded Watch target to `SKIP_INSTALL = YES` for archive builds.
-- [ ] Remove the redundant Watch app archive entry from the iPhone scheme, or
-  at minimum disable `buildForArchiving` for that separate entry.
-- [ ] Remove the explicit `Apple Development` identity from the Watch Release
+- [x] Set the embedded Watch target to `SKIP_INSTALL = YES` for archive builds.
+- [x] Remove the redundant Watch app archive entry from the iPhone scheme.
+- [x] Remove the explicit `Apple Development` identity from the Watch Release
   configuration and let automatic distribution signing choose the identity.
 - [ ] Create a signed archive in Xcode Organizer and confirm it is classified as
   an iOS app archive with only `DeuceMate.app` at `Products/Applications`.
@@ -258,15 +260,17 @@ OS versions, subject to App Store Connect's regional result.
 
 ## Build and test evidence
 
-Codex ran the following checks on 11 July 2026:
+Codex ran the following checks on 11 and 13 July 2026:
 
 - [x] `swift test`: 345 DeuceMateCore tests passed with zero failures.
 - [x] Watch unit tests, including the StatsStore tests, passed on a Series 11
   46 mm watchOS 26.2 simulator.
 - [x] iOS Release generic-simulator build succeeded and embedded the Watch app.
 - [x] Watch Release simulator build succeeded.
-- [x] An unsigned Release archive completed, but exposed Blocker 1's duplicate
-  top-level Watch app. This is not a successful distribution validation.
+- [x] After the Blocker 1 configuration fix, an unsigned Release archive
+  contained one top-level `DeuceMate.app`, retained the embedded Watch app, and
+  included iOS application archive metadata. This is not a signed distribution
+  validation.
 - [x] Privacy, Support, and Marketing URLs all returned HTTP 200 on 11 July 2026:
   `https://emrahman.github.io/DeuceMate/privacy.html`,
   `https://emrahman.github.io/DeuceMate/support.html`, and
