@@ -36,12 +36,12 @@ The optional **Check Changeover** feature uses your Apple Watch's built-in compa
 
 ## Health & Fitness Data (HealthKit)
 
-DeuceMate includes fitness features on Apple Watch that use Apple's **HealthKit** framework. Health access is optional: the App may request permission, which you can deny or later revoke, and tennis scoring remains fully usable without it.
+DeuceMate includes fitness features on Apple Watch that use Apple's **HealthKit** framework. When the Apple Watch app first launches, it requests optional HealthKit access. You can deny that request or later revoke access, and tennis scoring remains fully usable without it. If you grant access, DeuceMate automatically starts or resumes a Tennis workout for each match.
 
 If you grant access, the App:
 
-- **Reads**, during a match, the following data from the Health app on your Apple Watch: heart rate, active and resting energy, step count, walking/running distance, and your date of birth. Date of birth is used only to estimate your maximum heart rate for Pulse Coach heart-rate zones.
-- **Writes** a single workout of type "Tennis" to the Health app to record the match as a fitness activity.
+- **Reads**, during each match, the following data from the Health app on your Apple Watch: heart rate, active and resting energy, step count, walking/running distance, and your date of birth. Date of birth is used only to estimate your maximum heart rate for Pulse Coach heart-rate zones.
+- **Writes** one workout of type "Tennis" to the Health app for each match you record.
 
 How this data is handled:
 
@@ -57,7 +57,7 @@ How this data is handled:
 
 The App stores the following information locally on your devices:
 - Current match state (scores, games, sets, server)
-- Match history (completed and in-progress matches, including point-by-point statistics and, when the workout session is enabled, heart-rate values recorded during the match)
+- Match history (completed and in-progress matches, including point-by-point statistics and, when HealthKit access is granted, heart-rate values recorded during the match)
 - User preferences (control preferences, appearance settings)
 - Locked court bearing angle (only when Check Changeover is enabled; cleared on match reset)
 

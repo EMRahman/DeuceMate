@@ -280,11 +280,14 @@ HOW TO TEST
   paired with the watch during a live match) a live scoreboard.
 
 HEALTHKIT (OPTIONAL)
-The Apple Watch app requests optional HealthKit access and can link a workout
-to a match. With permission, it reads heart rate, active and resting energy,
-step count, walking/running distance, and date of birth (used only to estimate
-maximum heart rate for heart-rate zones), and writes one "Tennis" workout.
-The app remains fully usable if the reviewer denies or later revokes access.
+On its first launch, the Apple Watch app requests optional HealthKit access.
+The watchOS permission sheet normally appears only until the reviewer makes a
+choice. With permission, every match automatically starts or resumes one
+"Tennis" workout and reads heart rate, active and resting energy, step count,
+walking/running distance, and date of birth (used only to estimate maximum
+heart rate for heart-rate zones). There is no separate in-app HealthKit switch;
+access is controlled through the system Health settings. The app remains fully
+usable if the reviewer denies or later revokes access.
 
 HealthKit-derived measurements are stored locally so the user can review match
 fitness analysis. DeuceMate strips heart rate, steps, distance, and calories
