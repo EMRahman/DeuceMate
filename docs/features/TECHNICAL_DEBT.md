@@ -142,9 +142,9 @@ this lands, item 10's checker script is the only mechanical guard.
 **Dead key to remove:** `MatchSyncKey.workoutSessionEnabled` and its decoded
 event remain from an abandoned in-app workout toggle. No sender emits the key,
 both platform receivers discard the event, and the accepted product behavior
-uses the system-managed watchOS HealthKit permission instead. Remove the unused
-key and event during this cleanup; they are technical debt, not a submission
-blocker.
+uses the system-managed watchOS HealthKit authorization instead. Remove the
+unused key and event during this cleanup; they are technical debt, not a
+submission blocker.
 
 **Key files:** `MatchSyncMessage.swift`, `ScoreViewModel.swift`,
 `WatchMatchSyncService.swift`, `PhoneMatchSyncService.swift`,

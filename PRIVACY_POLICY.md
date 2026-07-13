@@ -51,7 +51,7 @@ How this data is handled:
 - HealthKit-derived values may still be included in Apple's system-managed device backup according to your device backup settings.
 - When you deliberately export a match, share match analysis with another person or an AI/LLM, or create a manual archive backup, that user-initiated export may include HealthKit-derived measurements. The recipient, storage location, or AI service you select then handles that data under its own terms.
 - HealthKit data is **not** used for advertising or marketing, is **not** sold, and is never sent to or accessible by the developer.
-- You can review or revoke DeuceMate's Health permissions at any time in the Apple Watch Settings app or the iPhone Health app.
+- You can review or revoke DeuceMate's HealthKit access at any time in the Apple Watch Settings app or the iPhone Health app.
 
 ## Local Data Storage
 

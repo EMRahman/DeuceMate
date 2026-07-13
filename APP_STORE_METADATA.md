@@ -281,8 +281,8 @@ HOW TO TEST
 
 HEALTHKIT (OPTIONAL)
 On its first launch, the Apple Watch app requests optional HealthKit access.
-The watchOS permission sheet normally appears only until the reviewer makes a
-choice. With permission, every match automatically starts or resumes one
+The watchOS authorization prompt normally appears only until the reviewer makes
+a choice. Once authorized, every match automatically starts or resumes one
 "Tennis" workout and reads heart rate, active and resting energy, step count,
 walking/running distance, and date of birth (used only to estimate maximum
 heart rate for heart-rate zones). There is no separate in-app HealthKit switch;

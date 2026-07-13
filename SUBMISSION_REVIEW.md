@@ -38,9 +38,9 @@ copy only; it makes no Swift implementation changes:
   manual archive backup. The developer has no backend and does not receive
   those exports.
 - [x] The accepted HealthKit posture is now explicit: the Watch requests access
-  on first launch, and permission applies automatically to each match. Scoring
-  remains available when access is denied or revoked; no in-app toggle is
-  planned.
+  on first launch. Once authorized, the HealthKit integration applies
+  automatically to each match. Scoring remains available when access is denied
+  or revoked; no in-app toggle is planned.
 - [ ] This copy change does **not** exclude local files or preferences from
   Apple device backups, add health-specific export consent, or change what any
   export contains. Blocker 4 therefore remains open.
@@ -137,11 +137,12 @@ Required work:
 
 **PRODUCT DECISION - 13 July 2026:** The owner confirmed that the intended
 experience is one optional HealthKit system request when the Watch app first
-launches. watchOS normally presents the permission sheet only until the user
+launches. watchOS normally presents the authorization prompt only until the user
 makes a choice. When access is granted, each match automatically starts or
 resumes a Tennis workout; when access is denied, revoked, partially granted,
 or unavailable, tennis scoring must continue without the unavailable fitness
-measurements. HealthKit permissions remain controllable in system settings.
+measurements. The user can review or revoke HealthKit authorization in system
+settings.
 
 No separate in-app workout toggle is planned. The earlier finding that public
 copy promised an off-by-default toggle was stale: the current policy describes
