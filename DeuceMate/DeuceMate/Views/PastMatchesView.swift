@@ -229,9 +229,15 @@ struct PastMatchesView: View {
         } else if !syncService.isPaired {
             VStack(spacing: 16) {
                 ContentUnavailableView(
-                    "No Apple Watch Paired",
+                    syncService.isActivationUnavailable
+                        ? "Apple Watch Unavailable"
+                        : "No Apple Watch Paired",
                     systemImage: "applewatch.slash",
-                    description: Text("Pair an Apple Watch with DeuceMate installed to sync your match history here.")
+                    description: Text(
+                        syncService.isActivationUnavailable
+                            ? "Watch connectivity couldn't be started. You can still create, review, and export matches on this iPhone."
+                            : "Pair an Apple Watch with DeuceMate installed to sync your match history here."
+                    )
                 )
                 Button {
                     showManualEntry = true
@@ -371,6 +377,7 @@ struct PastMatchesView: View {
             rowView(for: record, location: location)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("match-row-\(record.id.uuidString)")
         // Full-swipe is reserved for the safe, recoverable "Remove from Watch" (only
         // on `.both`). `.phoneOnly` and `.watchOnly` offer only permanent deletion,
         // which must go through the confirmation dialog — so no full-swipe there.

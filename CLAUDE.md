@@ -184,6 +184,10 @@ xcodebuild test -project DeuceMate/DeuceMate.xcodeproj \
 # iPhone app build
 xcodebuild build -project DeuceMate/DeuceMate.xcodeproj \
   -scheme "DeuceMate" -destination "platform=iOS Simulator,name=iPhone 15,OS=latest"
+
+# iPhone unit + UI tests (the shared DeuceMate scheme includes both targets).
+xcodebuild test -project DeuceMate/DeuceMate.xcodeproj \
+  -scheme "DeuceMate" -destination "platform=iOS Simulator,name=iPhone 15,OS=latest"
 ```
 
 **Logic changes require tests** (`CONTRIBUTING.md` rule). Put them in

@@ -107,7 +107,7 @@ struct ManualMatchEntryView: View {
                         .disabled(!isValid)
                         .frame(maxWidth: .infinity, alignment: .center)
                 } footer: {
-                    Text("The match will be added as in-progress and pushed to your Apple Watch so you can resume scoring there.")
+                    Text(Self.saveFooterText(isWatchPaired: syncService.isPaired))
                 }
             }
             .onChange(of: currentGamesMe) { _, _ in resetTiebreakIfLeftSixAll() }
@@ -221,6 +221,13 @@ struct ManualMatchEntryView: View {
     }
 
     // MARK: - Validation
+
+    static func saveFooterText(isWatchPaired: Bool) -> String {
+        if isWatchPaired {
+            return "The match will be added as in progress and sent to your Apple Watch so you can resume scoring there."
+        }
+        return "The match will be saved as in progress on this iPhone. You can review and export it here without an Apple Watch."
+    }
 
     private var isValid: Bool {
         // Game scores can't both be a regular advantage simultaneously.

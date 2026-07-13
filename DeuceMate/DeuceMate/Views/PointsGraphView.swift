@@ -1244,55 +1244,69 @@ struct PointsGraphView: View {
             selectedLostEndingShots: []
         )
 
-        return VStack(spacing: 0) {
-            selectionSummary(data: data)
-
-            PointsChartCore(
-                data: data,
-                meColor: meColor,
-                oppColor: oppColor,
-                height: Self.chartHeight,
-                visibleDomainLength: nil,
-                scrollPositionX: nil,
-                showHeartRate: false,
-                showSteps: false,
-                stepsSeriesMode: .cumulative,
-                showXAxis: false,
-                selectedX: stats.isEmpty ? nil : $selectedX,
-                activeHREntries: []
-            )
-            .overlay(alignment: .topTrailing) {
-                if !stats.isEmpty {
-                    expandButton
+        return Group {
+            if stats.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                    Text("No Points to Graph")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-            }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 12)
+            } else {
+                VStack(spacing: 0) {
+                    selectionSummary(data: data)
 
-            PointsGraphLegend(
-                meColor: meColor,
-                oppColor: oppColor,
-                showHeartRate: false,
-                hasHeartRateData: data.hasHeartRateData,
-                showSteps: false,
-                hasStepsData: data.hasStepsData
-            )
-            .padding(.top, 8)
-
-            // Outcome / ending-shot filters and the HR/Steps overlay toggles now
-            // live only in the full-screen view, where there's room to interact
-            // with them alongside pinch-to-zoom. This hint keeps them discoverable
-            // and doubles as a second tap target for expanding.
-            if let hint = expandHintText(data: data) {
-                Button { isExpanded = true } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        Text(hint)
+                    PointsChartCore(
+                        data: data,
+                        meColor: meColor,
+                        oppColor: oppColor,
+                        height: Self.chartHeight,
+                        visibleDomainLength: nil,
+                        scrollPositionX: nil,
+                        showHeartRate: false,
+                        showSteps: false,
+                        stepsSeriesMode: .cumulative,
+                        showXAxis: false,
+                        selectedX: $selectedX,
+                        activeHREntries: []
+                    )
+                    .overlay(alignment: .topTrailing) {
+                        expandButton
                     }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+
+                    PointsGraphLegend(
+                        meColor: meColor,
+                        oppColor: oppColor,
+                        showHeartRate: false,
+                        hasHeartRateData: data.hasHeartRateData,
+                        showSteps: false,
+                        hasStepsData: data.hasStepsData
+                    )
+                    .padding(.top, 8)
+
+                    // Outcome / ending-shot filters and the HR/Steps overlay toggles now
+                    // live only in the full-screen view, where there's room to interact
+                    // with them alongside pinch-to-zoom. This hint keeps them discoverable
+                    // and doubles as a second tap target for expanding.
+                    if let hint = expandHintText(data: data) {
+                        Button { isExpanded = true } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                Text(hint)
+                            }
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 8)
+                        .accessibilityHint("Opens the full-screen Points Graph")
+                    }
                 }
-                .buttonStyle(.plain)
-                .padding(.top, 8)
-                .accessibilityHint("Opens the full-screen Points Graph")
             }
         }
         .padding(.vertical, 8)

@@ -276,8 +276,13 @@ Reviewers may not pair an Apple Watch. The no-Watch review path is
 - [ ] Attach a demo video showing Watch scoring, iPhone live scoreboard, and
   foreground announcements. Apple recommends a video when hardware-specific
   features are difficult to reproduce during review.
-- [ ] Confirm every central iPhone screen has a useful no-Watch state and no
-  indefinite connectivity loading state.
+- [x] Confirm every central iPhone screen has a useful no-Watch state and no
+  indefinite connectivity loading state. WatchConnectivity activation now
+  leaves the connecting state after at most 10 seconds (and immediately when
+  unsupported); manually entered matches expose truthful statistics and Points
+  Graph empty states plus the normal export menu. Four focused iOS unit tests
+  and the Manual Entry -> history -> detail -> export UI test passed on an
+  unpaired iPhone 17 Pro simulator with Xcode 26.2 on 13 July 2026.
 
 ### 7. Age rating needs the current questionnaire
 
@@ -318,9 +323,10 @@ Codex ran the following checks on 11 and 13 July 2026:
 
 Remaining gaps:
 
-- [ ] The iOS unit-test target contains no assertions; the UI tests are launch
-  and performance templates. Add coverage for important iPhone persistence,
-  iCloud, export, and no-Watch flows.
+- [ ] The iOS targets now cover WatchConnectivity activation fallbacks and the
+  Manual Entry -> history -> detail empty states -> export no-Watch route. Add
+  app-target coverage for `PhoneStatsStore` persistence and iCloud integration;
+  the shared Core target already covers backup policy and export derivation.
 - [ ] A signed App Store archive has not passed Organizer validation.
 - [ ] HealthKit, iCloud restore, WatchConnectivity, foreground announcements,
   and backup exclusion have not been verified on a real iPhone and Watch.
