@@ -89,7 +89,7 @@ PRIVACY FIRST
 • No account required
 • No analytics, no tracking, no ads
 • The developer collects no data and operates no servers
-• Match data is stored on your devices and in your personal iCloud Drive backup
+• Match data is stored on your devices and in your personal iCloud Drive archive
 • Watch ↔ iPhone sync uses Apple's WatchConnectivity, with no developer server
 • Core scoring and match review work offline
 • DeuceMate's automatic iCloud Drive archive excludes HealthKit measurements
