@@ -296,7 +296,7 @@ struct PastMatchesView: View {
                 .foregroundStyle(status == .unavailable ? .orange : .secondary)
             }
             .buttonStyle(.plain)
-            .accessibilityHint("Shows steps to enable iCloud backup")
+            .accessibilityHint("Shows steps to enable iCloud Drive")
         }
     }
 
@@ -309,18 +309,19 @@ struct PastMatchesView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(.orange)
 
-            Text("iCloud Backup Unavailable")
+            Text("iCloud Drive Unavailable")
                 .font(.headline)
 
-            Text("Your matches are stored on this iPhone only. To back them up to iCloud, follow these steps:")
+            Text("Your matches are stored on this iPhone only. To keep DeuceMate's app-managed archive in iCloud Drive, follow these steps:")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             VStack(alignment: .leading, spacing: 12) {
                 iCloudStep(number: "1.circle.fill", text: "Tap **Open Settings** below")
-                iCloudStep(number: "2.circle.fill", text: "Tap your **Apple Account** (your name at the top)")
-                iCloudStep(number: "3.circle.fill", text: "Select **iCloud** → **iCloud Backup**")
+                iCloudStep(number: "2.circle.fill", text: "Return to the main Settings screen, then tap your **Apple Account**")
+                iCloudStep(number: "3.circle.fill", text: "Tap **iCloud** → **Drive**, then turn on **Sync this iPhone**")
+                iCloudStep(number: "4.circle.fill", text: "Under **Saved to iCloud**, tap **See All** and turn on **DeuceMate**")
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
