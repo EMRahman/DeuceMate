@@ -476,7 +476,7 @@ struct SettingsView: View {
             } header: {
                 Text("About")
             } footer: {
-                Text("No developer backend, analytics, or tracking. Matches are stored on your Apple devices and personal iCloud unless you explicitly export or share them.")
+                Text("No developer backend, analytics, or tracking. Matches are stored on your Apple devices; an automatic copy with HealthKit measurements removed is stored in your personal iCloud Drive. Exports or shares may send data to a recipient or service you choose.")
             }
         }
     }
@@ -574,7 +574,7 @@ struct SettingsView: View {
         } header: {
             Text("Pulse Coach (Shared)")
         } footer: {
-            Text("These settings apply to both iPhone and Apple Watch. The last value set on either device wins.\n\nWhen Override Max HR is on, birth year and resolved value are replaced by your manual entry. Heart-rate data is stored on your devices and excluded from the automatic iCloud archive; explicit exports may include it. Pulse Coach analyses your heart rate alongside each point to surface zone-by-zone win rate and recovery trends.")
+            Text("These settings apply to both iPhone and Apple Watch. The last value set on either device wins.\n\nWhen Override Max HR is on, birth year and resolved value are replaced by your manual entry. Heart-rate data is stored on your devices and excluded from the automatic iCloud Drive archive; explicit exports may include it. Pulse Coach analyses your heart rate alongside each point to surface zone-by-zone win rate and recovery trends.")
         }
     }
 
