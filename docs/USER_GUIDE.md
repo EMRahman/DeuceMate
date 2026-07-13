@@ -3,7 +3,7 @@
 The complete reference for everything DeuceMate does — every gesture, match
 format, statistic, coaching rule, and export mode. For a quick overview, see
 the [project README](https://github.com/EMRahman/DeuceMate#readme); for help
-and FAQs, see the [support page](https://emrahman.github.io/DeuceMate/).
+and FAQs, see the [support page](https://emrahman.github.io/DeuceMate/support.html).
 
 **Contents**
 
@@ -115,7 +115,9 @@ Everything needed to run a match from setup through completion, without paper or
 - The match is saved as in-progress in the archive and pushed to the watch so live scoring can resume there
 
 **Match history**
-- Unlimited archive of completed and in-progress matches, stored on-device (no cloud sync)
+- Unlimited local archive of completed and in-progress matches, with an automatic
+  backup copy in your personal iCloud Drive when available; HealthKit measurements
+  are excluded from that copy
 - Pull-to-refresh; swipe-to-delete individual records
 - In-progress matches appear at the top with a live indicator
 - Per-match and per-set filtering throughout all statistics views — Duration, Steps, Calories, Coaching Insights, and every Outcome / Serve / Return / Break-point / Pressure / Rally / Score-state / HR section follow the All / Set 1 / Set 2 / Set 3 picker

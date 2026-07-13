@@ -148,7 +148,7 @@ scenarios; needs `import DeuceMateCore`, see §0).
 | `Views/MatchDetailView.swift` | ~1014 | Per-match detail, stats tabs, share/export. |
 | `Export/MatchExporter.swift` | ~626 | Plain-text + AI-prompt export. `nonisolated static` builders by section. |
 | `Views/PastMatchesView.swift` | ~705 | iPhone archive list (phone-side analogue of the watch `MatchHistoryView`); shows storage-location + iCloud indicators. Growing fast — see TECHNICAL_DEBT #13. |
-| `Views/SettingsView.swift` (~752), `ManualMatchEntryView.swift` (~442), `LiveScoreboardView.swift` (~490), `LivePointCategoryPanel.swift` (~222) | | Settings including Backup & Transfer archive export/import, manual entry, live spectator, phone-side point categorisation (mirrors the watch sheet when iPhone Input is on). |
+| `Views/SettingsView.swift` (~790), `ManualMatchEntryView.swift` (~442), `LiveScoreboardView.swift` (~490), `LivePointCategoryPanel.swift` (~222) | | Settings including Backup & Transfer archive export/import, manual entry, live spectator, phone-side point categorisation (mirrors the watch sheet when iPhone Input is on). |
 | `Views/PulseCoach/PulseCoachSection.swift`, `Views/Coaching/RecCoachSection.swift`, `AICoachLauncher.swift`, `AICoachSheet.swift` | | HR coaching panel, recreational coaching insights, and routing a generated coaching prompt to third-party AI apps. |
 | `Sync/PhoneMatchSyncService.swift` | ~508 | Phone side of `WatchConnectivity`. |
 | `Persistence/PhoneStatsStore.swift`, `Audio/LiveAnnouncementService.swift`, `HealthKitHRFetcher.swift` | | Archive including manual export/import, TTS announcements, HR backfill. |

@@ -476,7 +476,7 @@ struct SettingsView: View {
             } header: {
                 Text("About")
             } footer: {
-                Text("Your matches stay on your Apple devices and in your own iCloud — no servers, no analytics, no tracking.")
+                Text("No developer backend, analytics, or tracking. Matches are stored on your Apple devices; an automatic copy with HealthKit measurements removed is stored in your personal iCloud Drive. Exports or shares may send data to a recipient or service you choose.")
             }
         }
     }
@@ -574,7 +574,7 @@ struct SettingsView: View {
         } header: {
             Text("Pulse Coach (Shared)")
         } footer: {
-            Text("These settings apply to both iPhone and Apple Watch. The last value set on either device wins.\n\nWhen Override Max HR is on, birth year and resolved value are replaced by your manual entry. Heart-rate data stays on your devices. Pulse Coach analyses your heart rate alongside each point to surface zone-by-zone win rate and recovery trends.")
+            Text("These settings apply to both iPhone and Apple Watch. The last value set on either device wins.\n\nWhen Override Max HR is on, birth year and resolved value are replaced by your manual entry. Heart-rate data is stored on your devices and excluded from the automatic iCloud Drive archive; explicit exports may include it. Pulse Coach analyses your heart rate alongside each point to surface zone-by-zone win rate and recovery trends.")
         }
     }
 
@@ -765,7 +765,7 @@ struct SettingsView: View {
     // The same public pages the App Store listing points at — keep in lockstep
     // with APP_STORE_METADATA.md (Apple requires both URLs to resolve publicly).
     private static let privacyPolicyURL = URL(string: "https://emrahman.github.io/DeuceMate/privacy.html")
-    private static let supportSiteURL = URL(string: "https://emrahman.github.io/DeuceMate/")
+    private static let supportSiteURL = URL(string: "https://emrahman.github.io/DeuceMate/support.html")
 
     // Static: the bundle version and support address can't change mid-process,
     // so these are computed once rather than on every body evaluation.
