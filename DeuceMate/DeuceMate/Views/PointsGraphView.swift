@@ -1246,11 +1246,16 @@ struct PointsGraphView: View {
 
         return Group {
             if stats.isEmpty {
-                ContentUnavailableView(
-                    "No Points to Graph",
-                    systemImage: "chart.line.uptrend.xyaxis",
-                    description: Text("This match has no point-by-point data.")
-                )
+                VStack(spacing: 8) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                    Text("No Points to Graph")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 12)
             } else {
                 VStack(spacing: 0) {
