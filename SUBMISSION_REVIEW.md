@@ -37,10 +37,13 @@ copy only; it makes no Swift implementation changes:
   match data with another person or an AI/LLM for analysis, or include it in a
   manual archive backup. The developer has no backend and does not receive
   those exports.
+- [x] The accepted HealthKit posture is now explicit: the Watch requests access
+  on first launch. Once authorized, the HealthKit integration applies
+  automatically to each match. Scoring remains available when access is denied
+  or revoked; no in-app toggle is planned.
 - [ ] This copy change does **not** exclude local files or preferences from
-  Apple device backups, add health-specific export consent, gate HealthKit
-  authorization/workouts, or change what any export contains. Blockers 3 and 4
-  therefore remain open.
+  Apple device backups, add health-specific export consent, or change what any
+  export contains. Blocker 4 therefore remains open.
 
 ---
 
@@ -130,35 +133,42 @@ Required work:
 - [ ] Test upload, update, deletion, signed-out/Drive-disabled handling, and
   first-install restore on a physical iPhone using the production container.
 
-### 3. HealthKit permission is not opt-in as documented
+### 3. HealthKit first-launch posture accepted; device verification pending
 
-**CODEX FINDING:** The privacy policy and App Review notes describe HealthKit
-fitness features as off by default and enabled by the user. The Watch app
-instead calls `requestAuthorization` unconditionally from `DeuceMateApp.swift`
-on first appearance, and every match attempts to start or resume a workout.
-There is a `workoutSessionEnabled` preference key, but it does not currently
-gate the authorization or workout paths.
+**PRODUCT DECISION - 13 July 2026:** The owner confirmed that the intended
+experience is one optional HealthKit system request when the Watch app first
+launches. watchOS normally presents the authorization prompt only until the user
+makes a choice. When access is granted, each match automatically starts or
+resumes a Tennis workout; when access is denied, revoked, partially granted,
+or unavailable, tennis scoring must continue without the unavailable fitness
+measurements. The user can review or revoke HealthKit authorization in system
+settings.
+
+No separate in-app workout toggle is planned. The earlier finding that public
+copy promised an off-by-default toggle was stale: the current policy describes
+HealthKit access as optional and explains denial and revocation. Apple's
+[HealthKit HIG](https://developer.apple.com/design/human-interface-guidelines/healthkit/)
+recommends requesting protected data in context, but the owner accepts the
+first-launch request for this prominently advertised Watch fitness integration.
+The unused `workoutSessionEnabled` wire key is technical debt, not a product
+control or a submission blocker.
 
 The Watch authorization request reads workout, heart rate, active and basal
-energy, steps, walking/running distance, and date of birth. Its current
-`NSHealthShareUsageDescription` mentions only heart rate, calories, and date of
-birth. Apple recommends asking for HealthKit access in context and only when the
-user invokes the relevant feature; see the
-[HealthKit HIG](https://developer.apple.com/design/human-interface-guidelines/healthkit/).
+energy, steps, walking/running distance, and date of birth. The Watch read-purpose
+string now names those requested measurements. The privacy policy and App Review
+notes now also state the first-launch timing and automatic per-match workout
+behavior.
 
 Required work:
 
-- [ ] Add or restore an explicit **Record Apple Health workout** control,
-  defaulted off for a fresh install.
-- [ ] Request HealthKit authorization only after the user enables that feature
-  or starts a match with it enabled.
-- [ ] Gate all start, resume, and recovery workout paths on that setting.
+- [x] Confirm the intended first-launch authorization and automatic per-match
+  workout behavior; no separate in-app toggle is required by the chosen design.
 - [x] Expand the Watch read-purpose string to accurately mention steps and
-  walking/running distance, or stop requesting data the feature does not need.
+  walking/running distance.
+- [x] Update `PRIVACY_POLICY.md`, `docs/privacy.html`, `APP_STORE_METADATA.md`,
+  and App Review notes to describe the implemented behavior.
 - [ ] Test fresh-install grant, denial, partial authorization, revocation, no
   date of birth, and HealthKit-unavailable behavior.
-- [ ] Update `PRIVACY_POLICY.md`, `docs/privacy.html`, `APP_STORE_METADATA.md`,
-  and App Review notes only after the implemented behavior is settled.
 
 ### 4. Health-derived data needs an iCloud and sharing compliance decision
 
@@ -406,11 +416,14 @@ search results.
   manually entered match.
 - [ ] Paired Watch can create a match, live-sync it, finish it, and recover it on
   iPhone without duplicates.
-- [ ] HealthKit off means no permission request, workout, or health values.
+- [ ] A fresh Watch install presents the optional HealthKit request; granting
+  access starts or resumes one Tennis workout per match and records only the
+  measurements the user authorized.
 - [ ] HealthKit denial/revocation never blocks scoring or corrupts a match.
 - [ ] iCloud disabled/signed out never blocks local history; a later sign-in
   backs up and restores the stripped archive correctly.
-- [ ] No HealthKit-derived values appear in iCloud or third-party exports after
-  the chosen compliance fix.
+- [ ] The automatic app-managed iCloud archive contains no HealthKit-derived
+  values; any approved user-initiated export follows the final disclosure and
+  consent design.
 - [ ] Foreground announcements work; locking/backgrounding the iPhone stops them
   without a background-audio entitlement.

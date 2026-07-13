@@ -58,7 +58,7 @@ result. `ScoreViewModel` now delegates to the engine
 **Tests added:** 16 tests in `ScoringEngineTests` covering deuce
 cycling, server rotation, break-point detection, snapshot correctness,
 changeover event reasons, all four non-standard formats, and endless formats.
-Test count across the Core package: 270 (re-counted at the latest audit, 22 test files).
+Test count across the Core package: 345 (re-counted at the latest audit, 26 test files).
 
 **Remaining gap:** The `handleSideChangesAfterTiebreakSetEnd` 4-case switch
 (players change × ball-holder changes; `ScoringEngine.swift:519–553`, called
@@ -138,6 +138,13 @@ than assuming raw value == storage key everywhere.
 AI trap. The fix is mechanical but large — touches both apps and every synced
 setting. Scope one setting category at a time to keep PRs reviewable. Until
 this lands, item 10's checker script is the only mechanical guard.
+
+**Dead key to remove:** `MatchSyncKey.workoutSessionEnabled` and its decoded
+event remain from an abandoned in-app workout toggle. No sender emits the key,
+both platform receivers discard the event, and the accepted product behavior
+uses the system-managed watchOS HealthKit authorization instead. Remove the
+unused key and event during this cleanup; they are technical debt, not a
+submission blocker.
 
 **Key files:** `MatchSyncMessage.swift`, `ScoreViewModel.swift`,
 `WatchMatchSyncService.swift`, `PhoneMatchSyncService.swift`,
@@ -469,7 +476,7 @@ enforce that, so the one counterexample in the codebase weakens the rule
 (`DeuceMateTests/DeuceMateTests.swift`) and both UITest targets contain only
 the Xcode template stubs (`testExample`, `testLaunchPerformance`). They add
 scheme noise and imply coverage that doesn't exist. Meanwhile the watch test
-target is real (36 Swift Testing tests) and Core has 270.
+target is real (36 Swift Testing tests) and Core has 345.
 
 **Proposed fix / status:** (a) ✅ Done — replaced `realSteps.first!`
 with `realSteps[0]`; the count guard at line 322 still applies, no behaviour
