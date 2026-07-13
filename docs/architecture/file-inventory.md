@@ -62,7 +62,7 @@ matches; it does not score them (except by sending validated commands to the wat
 | `DeuceMateApp.swift` | 50 | The iPhone app's entry point: wires up the archive store, sync service and announcer; resumes initial restore or backup push whenever the app returns to the foreground. | App plumbing |
 | `ContentView.swift` | 15 | The navigation root — essentially just opens the archive list. | App plumbing |
 
-## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (27 files)
+## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (28 files)
 
 The rulebook both apps use. No screens; pure logic — which makes it the cheapest
 place to test and the safest place to change.
@@ -76,6 +76,7 @@ place to test and the safest place to change.
 | `Stats/StepsCoachInsights.swift` | 95 | The steps movement/fatigue rule set: two rules (accumulated-step late-match decline, high-movement-point win rate) over the `MatchStatsSummary.StepPoint` timeline. Recorder-only; surfaced in the AI/stats export's Movement & Fatigue section. | Stats, health |
 | `Stats/StepsSeries.swift` | 75 | Single source of truth for the steps **overlay** series shared by the iOS Points Graph and the HTML export: original 0-based point indices, base-normalized cumulative (starts at 0), per-point deltas, and the legacy `totalSteps` linear-estimate fallback. Distinct from `MatchStatsSummary`'s chronological insights timeline. | Stats, health |
 | `Stats/SetActivitySplit.swift` | 115 | Per-set breakdowns (duration, points, games) used by the set filters in stats views. | Stats |
+| `Stats/PointGamesScore.swift` | 45 | Derives the running Me–Opponent games score within a set at the start of each point, purely from `PointStat.gameScoreAtStart` resets (no stored field carries it). Empty for deciding super-tiebreak sets and tiebreak-only/perpetual match formats. Shared by the iOS Points tab and the HTML export's Points tab. | Stats, Web export |
 | `Stats/HRZone.swift` | 80 | Heart-rate zone maths: zones 1–5 from a max heart rate (age-derived or manually overridden). | Pulse Coach, health |
 | `Models/ScoreTypes.swift` | 185 | The shared vocabulary: players, singles/doubles, the six match formats and their rules (data-driven), set scores, doubles serve order. | Live scoring, match setup |
 | `Models/MatchRecord.swift` | 175 | The saved match: scores, points, timing, fitness totals, resume state. Carefully written so that old saved matches always decode, forever. | Archive, match history |
@@ -93,8 +94,8 @@ place to test and the safest place to change.
 | `Settings/SettingsCopy.swift` | 40 | The one-line description under every setting, written once so the watch and phone settings screens can't show different wording. | Settings |
 | `Settings/ICloudBackupCopy.swift` | ~95 | The iCloud backup status line and the rule for choosing it. Six cases: `backedUp`, `notBackedUp`, `unavailable`, `restoring`, `pendingRestore` (backup found, user prompt pending), `pendingUpload` (pushed but daemon upload not yet confirmed). `current(isEnabled:isAvailable:isRestoring:hasPendingRestore:isUploaded:)`. | iCloud backup |
 | `Persistence/StatsStoring.swift` | 25 | The tiny storage contract (load/save/append/remove) that the watch's and phone's stores both implement. | Archive, match history |
-| `WebExport/MatchWebViewModel.swift` | ~400 | The clean, `Encodable`, perspective-flattened JSON shape the self-contained HTML match export renders from: meta, both me/opponent stat perspectives, a point list (with Points-tab display fields), set bands + labels, the recorder-only HR/steps blocks, `filters` — per-set-filter (All / Set N) stat views, each carrying the TV-style Me-vs-Opp `comparison`, points-won header, and duration/activity rows — and an optional `aiCoach` block (prompt + launch links). `schemaVersion` 4. All derivation stays in tested Swift. | Web export |
-| `WebExport/MatchWebViewModel+Build.swift` | ~530 | The pure builder behind `MatchWebViewModel.make` — mirrors `MatchExporter`'s section structure and recorder-only-HR rule but emits structured rows; also derives the per-perspective outcome (Me/Opp) and ending-shot (Won/Lost) pill counts, the Points-tab point-display fields (chip text/colour, outcome line, server-relative score), plus score/format/duration/game-score helpers. | Web export |
+| `WebExport/MatchWebViewModel.swift` | ~400 | The clean, `Encodable`, perspective-flattened JSON shape the self-contained HTML match export renders from: meta, both me/opponent stat perspectives, a point list (with Points-tab display fields), set bands + labels, the recorder-only HR/steps blocks, `filters` — per-set-filter (All / Set N) stat views, each carrying the TV-style Me-vs-Opp `comparison`, points-won header, and duration/activity rows — and an optional `aiCoach` block (prompt + launch links). `schemaVersion` 6. All derivation stays in tested Swift. | Web export |
+| `WebExport/MatchWebViewModel+Build.swift` | ~535 | The pure builder behind `MatchWebViewModel.make` — mirrors `MatchExporter`'s section structure and recorder-only-HR rule but emits structured rows; also derives the per-perspective outcome (Me/Opp) and ending-shot (Won/Lost) pill counts, the Points-tab point-display fields (chip text/colour, outcome line, server-relative score, in-set games score via `PointGamesScore`), plus score/format/duration/game-score helpers. | Web export |
 | `WebExport/MatchWebViewModel+Comparison.swift` | ~225 | Builds the per-set `filters` (All + one per set, mirroring `availableSetFilters`): each recomputes `meSummary`/`oppSummary` over the filtered stats into the TV-style Me-vs-Opp `comparison` (a faithful mirror of `MatchDetailView`'s split-bar stats — same titles, order, gating, percent/count/ratio rows), the points-won header, and the duration/activity rows. | Web export |
 | `WebExport/MatchWebViewModel+AICoach.swift` | ~40 | Builds the optional `aiCoach` block (mirrors the iOS `AICoachSheet`): attaches the explanatory copy + the static AI-app launch list (ChatGPT/Claude/Gemini/Perplexity/Copilot/Poe/Grok, with web URLs + tints) to the injected coaching prompt(s). Prompt TEXT comes from `MatchExporter.aiPromptExport` (passed in); `nil` when no prompt is supplied. | Web export |
 | `WebExport/WebExportColors.swift` | ~110 | Single source of the export's colours/symbols (outcome scatter, ending-shot scatter, set bands, me/opponent lines, HR/steps), kept in step with `PointsGraphView`'s palette so the browser viewer never re-encodes it. | Web export |
@@ -104,13 +105,13 @@ place to test and the safest place to change.
 
 Plus `Package.swift` (~25 lines) — the package manifest (name, platforms, test target). No logic.
 
-## 4. Tests (29 files)
+## 4. Tests (30 files)
 
 Tests are the correctness record. The interesting ones all live against the shared
 package (no simulator needed). Red flags in any PR: tests deleted, skipped, or
 expected values rewritten to make a failure pass — that requires explicit approval.
 
-**Package tests — `DeuceMate/Packages/DeuceMateCore/Tests/DeuceMateCoreTests/` (23 files):**
+**Package tests — `DeuceMate/Packages/DeuceMateCore/Tests/DeuceMateCoreTests/` (24 files):**
 
 | File | Covers |
 |---|---|
@@ -127,6 +128,7 @@ expected values rewritten to make a failure pass — that requires explicit appr
 | `MatchStorageLocationTests.swift` / `WatchMirrorTests.swift` | Storage badges and the phone's mirror of the watch's match set. |
 | `MatchFormatConfigTests.swift` | The data-driven rules of each match format. |
 | `HRZoneTests.swift` / `SetActivitySplitTests.swift` | HR zone boundaries; per-set splits. |
+| `PointGamesScoreTests.swift` | The in-set games score derivation: game-by-game increments, tiebreak freeze, deciding-super-tiebreak/no-games formats, and missing legacy snapshot data. |
 | `SettingsCopyTests.swift` / `ICloudBackupCopyTests.swift` | Settings blurbs and the iCloud status rule. |
 | `SimulatedGameStatsTests.swift` | Simulates realistic whole matches to exercise stats end-to-end. |
 | `MatchWebExportTests.swift` | The interactive HTML export: view-model shape, both-perspective consistency, the recorder-only-HR rule, and that the produced HTML is self-contained (no external resource loads). |
@@ -158,11 +160,11 @@ touched. A PR for feature X that edits files far outside its row deserves a ques
 | **Watch ↔ phone sync** | `Sync/WatchMatchSyncService` | `Sync/PhoneMatchSyncService` | `MatchSyncMessage`, `MatchSyncTransport`, `MatchSyncPayloadBuilder`, `SyncIncomingPayload`, `MatchMergePolicy` |
 | **Live scoreboard & iPhone input** | `ScoreViewModel` (command validation) | `LiveScoreboardView`, `LivePointCategoryPanel`, `PhoneMatchSyncService` | `MatchSyncMessage` |
 | **Announcements (spoken score)** | `ScoreViewModel` (builds the text) | `Audio/LiveAnnouncementService` | `MatchSyncMessage` |
-| **Stats & graphs** | `MatchStatsView` | `MatchDetailView`, `PointsGraphView`, `HealthKitHRFetcher` | `MatchStatsSummary`, `SetActivitySplit`, `PointStat` |
+| **Stats & graphs** | `MatchStatsView` | `MatchDetailView`, `PointsGraphView`, `HealthKitHRFetcher` | `MatchStatsSummary`, `SetActivitySplit`, `PointGamesScore`, `PointStat` |
 | **Rec Coach insights** | — | `Views/Coaching/RecCoachSection` | `RecCoachInsights` |
 | **Pulse Coach (heart-rate) insights** | `ScoreViewModel` (settings) | `Views/PulseCoach/PulseCoachSection` | `PulseCoachInsights`, `HRZone` |
 | **AI coaching export** | — | `Export/MatchExporter`, `AICoachSheet`, `AICoachLauncher` | `MatchStatsSummary` |
-| **Interactive web (HTML) export** | — | `MatchDetailView` (share action) | `WebExport/MatchHTMLExporter`, `MatchWebStaticFallback`, `MatchWebViewModel` (+`Build`, +`Comparison`, +`AICoach`), `MatchWebTemplate`, `WebExportColors`, `MatchStatsSummary`, `MatchExporter` (AI prompt) |
+| **Interactive web (HTML) export** | — | `MatchDetailView` (share action) | `WebExport/MatchHTMLExporter`, `MatchWebStaticFallback`, `MatchWebViewModel` (+`Build`, +`Comparison`, +`AICoach`), `MatchWebTemplate`, `WebExportColors`, `MatchStatsSummary`, `PointGamesScore`, `MatchExporter` (AI prompt) |
 | **Compass changeover** | `ScoreViewModel`, `ContentView`, `HomeView` | `SettingsView` (toggle) | — |
 | **Health / workout tracking** | `WorkoutManager` | `HealthKitHRFetcher` | `HRZone` |
 | **Theming** | `AppTheme` | `AppTheme` | — |

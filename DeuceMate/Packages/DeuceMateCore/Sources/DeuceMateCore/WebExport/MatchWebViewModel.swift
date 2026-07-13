@@ -19,7 +19,8 @@ public struct MatchWebViewModel: Encodable, Sendable {
     /// added the Stats/Points tabs + point-display fields. v4 added the optional
     /// `aiCoach` block (AI coaching prompt + launch links). v5 added the
     /// `perPoint` field to each steps sample (Total vs Per-point overlay mode).
-    public static let currentSchemaVersion = 5
+    /// v6 added `gamesScoreLabel` to each point (in-set games score).
+    public static let currentSchemaVersion = 6
 
     public let schemaVersion: Int
     public let generatedAt: String
@@ -161,6 +162,11 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public let isSecondServe: Bool
         public let isBreakPoint: Bool
         public let gameScoreLabel: String
+        /// Me–Opponent games score in the current set, at the start of this
+        /// point. `nil` when the set has no games concept (a deciding
+        /// super-tiebreak set, or a tiebreak-only/perpetual match format) or
+        /// the match predates per-point score snapshotting.
+        public let gamesScoreLabel: String?
         public let cumulativeMe: Int
         public let cumulativeOpp: Int
         public let heartRateBPM: Int?    // recorder's HR
@@ -350,7 +356,7 @@ public struct MatchWebViewModel: Encodable, Sendable {
         )
 
         // Points + set bands
-        let points = Self.pointRows(allStats)
+        let points = Self.pointRows(allStats, matchFormat: record.matchFormat)
         let setBands = Self.setBands(points)
 
         // Recorder-only HR / steps blocks (from the `me` full summary).

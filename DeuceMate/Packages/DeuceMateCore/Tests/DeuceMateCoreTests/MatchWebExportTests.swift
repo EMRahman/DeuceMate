@@ -186,7 +186,7 @@ final class MatchWebExportTests: XCTestCase {
 
     func test_comparison_sectionsAndGating_fullMatch() throws {
         let vm = MatchWebViewModel.make(from: makeRecord())
-        XCTAssertEqual(vm.schemaVersion, 5)
+        XCTAssertEqual(vm.schemaVersion, 6)
         XCTAssertTrue(allComparison(vm).hasAnyOutcomeData)
         let titles = allComparison(vm).sections.map { $0.title }
         // Outcome Breakdown leads; Serve/Return present (every point categorised).
@@ -326,6 +326,7 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertEqual(p[0].chipColorHex, WebExportColors.meLineHex)
         XCTAssertEqual(p[0].outcomeText, "Winner — Me")
         XCTAssertEqual(p[0].pointScoreLabel, "0–0")
+        XCTAssertEqual(p[0].gamesScoreLabel, "0–0")   // first game of the set
         // Point 1: my double fault.
         XCTAssertEqual(p[1].chipText, "DF")
         XCTAssertEqual(p[1].outcomeText, "Double Fault — Me")
@@ -333,8 +334,13 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertEqual(p[2].chipText, "UE")
         XCTAssertEqual(p[2].outcomeText, "Unforced Err — Me")
         XCTAssertEqual(p[2].chipColorHex, WebExportColors.meLineHex)
+        // Point 3's 0–0 reset means point 2 (opponent's UE won) closed out the
+        // first game, so opponent leads 0–1 games heading into point 3.
+        XCTAssertEqual(p[3].gamesScoreLabel, "0–1")
         // Point 4: deuce game state.
         XCTAssertEqual(p[4].pointScoreLabel, "Deuce")
+        // Point 5 starts set 2 fresh — 0–0 games regardless of set 1's outcome.
+        XCTAssertEqual(p[5].gamesScoreLabel, "0–0")
     }
 
     // MARK: - AI Coach (mirrors AICoachSheet)
