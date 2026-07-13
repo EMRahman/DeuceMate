@@ -375,7 +375,8 @@
     ptMe: root.querySelector("[data-pt-me]"),
     ptOpp: root.querySelector("[data-pt-opp]"),
     trackToggle: root.querySelector("[data-track-toggle]"),
-    secondServe: root.querySelector("[data-secondserve]")
+    secondServe: root.querySelector("[data-secondserve]"),
+    sheet: root.querySelector("[data-sheet]")
   };
 
   var chosenFormat = root.getAttribute("data-format") || "standard";
@@ -390,6 +391,17 @@
   var isOnSecondServe = false;
   var stats = [];     // PointStat-shaped records (see watch-demo-tracking.js)
   var lastCardTapAt = 0;
+
+  // Categorisation sheet (plan §B/§C, mirrors PointCategorySheet.swift).
+  // sheetStep is 1|2|null; null means the sheet is closed and all normal
+  // scoring input is live again.
+  var pendingStat = null;      // PendingPointInfo-shaped, from buildPendingPoint()
+  var sheetStep = null;
+  var sheetOutcome = null;     // stashed step-1 choice, carried into step 2
+  var sheetBusy = false;       // true during the 0.4s commit beat (ignore taps)
+  var sheetCommitTimer = null; // the commit-beat timeout, cancellable by New match
+  var deferredEvents = null;   // pointWon() events, applied 0.4s after the sheet commits
+  var deferredToastTimer = null;
 
   function select(btns, attr, value) {
     btns.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute(attr) === value ? "true" : "false"); });
@@ -409,7 +421,11 @@
   }
 
   if (el.start) el.start.addEventListener("click", startMatch);
-  if (el.again) el.again.addEventListener("click", function () {
+  if (el.again) el.again.addEventListener("click", function (e) {
+    // Without this, the click bubbles to el.screen's tap-to-score listener
+    // *after* banner.hidden is already true (set below), so its guard no
+    // longer blocks and the same click also scores a point.
+    e.stopPropagation();
     el.banner.hidden = true;
     if (compact || !el.setup) { startMatch(); return; }
     el.play.hidden = true; el.setup.hidden = false;
@@ -443,11 +459,17 @@
     });
   }
 
+  /* The sheet's own buttons (Undo point, outcome/ending-shot choices, back)
+     clear sheetStep synchronously before the click finishes bubbling, so
+     without this el.screen's guard below would miss it and also score a
+     point on the same click — same class of bug as el.card above. */
+  if (el.sheet) el.sheet.addEventListener("click", function (e) { e.stopPropagation(); });
+
   if (el.screen) {
     /* Tap zones on the watch face: top half = you, bottom half = opponent.
        Taps inside the scoreboard card are handled above and never score. */
     el.screen.addEventListener("click", function (e) {
-      if (el.banner && !el.banner.hidden) return;
+      if ((el.banner && !el.banner.hidden) || sheetStep) return;
       var rect = el.screen.getBoundingClientRect();
       award((e.clientY - rect.top) < rect.height / 2 ? "me" : "opponent");
     });
@@ -464,21 +486,25 @@
     }, { passive: false });
   }
 
-  /* Keyboard shortcuts (only on instances that opt in via data-keyboard). */
+  /* Keyboard shortcuts (only on instances that opt in via data-keyboard).
+     "R" (new match) is the sheet's one bypass — plan's Undo model: "'New
+     match' / R likewise clears sheet + pending + stats." Everything else is
+     blocked while a sheet is open (plan §UI state machine). */
   if (useKeyboard) document.addEventListener("keydown", function (e) {
     if (!el.play || el.play.hidden) return;
+    if (e.key.toLowerCase() === "r") { startMatch(); e.preventDefault(); return; }
+    if (sheetStep) return;
     if (e.key === "ArrowUp") { award("me"); e.preventDefault(); }
     else if (e.key === "ArrowDown") { award("opponent"); e.preventDefault(); }
     else if (e.key === "Backspace" || e.key.toLowerCase() === "u") { undo(); e.preventDefault(); }
-    else if (e.key.toLowerCase() === "r") { startMatch(); e.preventDefault(); }
     else if (e.key === "2") { toggleSecondServe(); e.preventDefault(); }
   });
 
   /* Guards mirror ScoreViewModel.toggleSecondServe: no-op when tracking is
-     off, in Perpetual Points (disablesPointTracking), or once the match is
-     complete. (A pending categorisation sheet will extend this in Phase 2.) */
+     off, in Perpetual Points (disablesPointTracking), while the
+     categorisation sheet is open, or once the match is complete. */
   function canToggleSecondServe() {
-    return !!state && !isMatchComplete(state) && trackingEnabled && !state.cfg.disablesPointTracking;
+    return !!state && !isMatchComplete(state) && trackingEnabled && !state.cfg.disablesPointTracking && !sheetStep;
   }
   function toggleSecondServe() {
     if (!canToggleSecondServe()) return;
@@ -492,6 +518,13 @@
     momentum = [];
     isOnSecondServe = false;
     stats = [];
+    pendingStat = null;
+    sheetStep = null;
+    sheetOutcome = null;
+    sheetBusy = false;
+    deferredEvents = null;
+    if (sheetCommitTimer) { clearTimeout(sheetCommitTimer); sheetCommitTimer = null; }
+    if (deferredToastTimer) { clearTimeout(deferredToastTimer); deferredToastTimer = null; }
     if (el.banner) el.banner.hidden = true;
     if (el.setup) el.setup.hidden = true;
     el.play.hidden = false;
@@ -500,26 +533,41 @@
   }
 
   function award(player) {
-    if (!state || isMatchComplete(state)) return;
-    history.push({ snapshot: clone(state), momentum: momentum.slice(), secondServe: isOnSecondServe, statsLen: stats.length });
+    if (!state || isMatchComplete(state) || sheetStep) return;
+    var prevState = state;
+    history.push({ snapshot: clone(prevState), momentum: momentum.slice(), secondServe: isOnSecondServe, statsLen: stats.length });
     if (history.length > 200) history.shift();
 
-    // Silent point recording (plan §C, mirrors autoRecordPointStat): until
-    // Phase 2's categorisation sheet lands, every tracked point is recorded
-    // uncategorized. `state` here is still the pre-reducer snapshot.
-    if (!state.cfg.disablesPointTracking) {
-      var pending = window.DeuceMateTracking.buildPendingPoint(state, player, isOnSecondServe);
-      stats.push(window.DeuceMateTracking.buildUncategorizedStat(pending));
-    }
+    // `prevState` is the pre-reducer snapshot the pending point is built
+    // from (plan §data model) — perpetualPoints never builds one (§C).
+    var pending = prevState.cfg.disablesPointTracking ? null
+      : window.DeuceMateTracking.buildPendingPoint(prevState, player, isOnSecondServe);
 
-    var res = pointWon(state, player);
+    var res = pointWon(prevState, player);
     state = res.state;
     isOnSecondServe = false;
     momentum.push(player);
     if (momentum.length > 8) momentum.shift();
+    flashPoint(player);
+
+    if (pending && trackingEnabled) {
+      // Open the categorisation sheet (plan §B). Toasts/changeover/banner
+      // for this point are deferred until the sheet commits.
+      pendingStat = pending;
+      deferredEvents = res.events;
+      sheetStep = 1;
+      sheetOutcome = null;
+      sheetBusy = false;
+      render();
+      return;
+    }
+
+    if (pending) {
+      // Tracking off: silent uncategorized record, mirrors autoRecordPointStat.
+      stats.push(window.DeuceMateTracking.buildUncategorizedStat(pending));
+    }
     applyEvents(res.events);
     render();
-    flashPoint(player);
   }
 
   function flashPoint(player) {
@@ -529,17 +577,243 @@
     setTimeout(function () { pts.classList.remove("flash"); }, 260);
   }
 
-  function undo() {
-    if (!history.length) return;
+  // Shared by the main Undo button and the sheet's own "Undo point" button.
+  function rollbackLastPoint() {
+    if (!history.length) return false;
     var prev = history.pop();
     prev.snapshot.cfg = state.cfg;
     state = prev.snapshot;
     momentum = prev.momentum;
     isOnSecondServe = prev.secondServe;
     stats = stats.slice(0, prev.statsLen);
+    return true;
+  }
+
+  function undo() {
+    // Blocked while a sheet is open (plan §UI state machine) — use the
+    // sheet's own "Undo point" button instead.
+    if (!history.length || sheetStep) return;
+    rollbackLastPoint();
+    if (deferredToastTimer) { clearTimeout(deferredToastTimer); deferredToastTimer = null; }
     if (el.banner) el.banner.hidden = true;
     showToast("Undo");
     render();
+  }
+
+  // "Undo point" inside the sheet: rolls back the whole point (score +
+  // pending categorisation) and closes the sheet. Disabled during the
+  // 0.4s commit beat (plan §B).
+  function undoPoint() {
+    if (sheetBusy) return;
+    if (sheetCommitTimer) { clearTimeout(sheetCommitTimer); sheetCommitTimer = null; }
+    rollbackLastPoint();
+    closeSheet();
+    showToast("Undo");
+    render();
+  }
+
+  function closeSheet() {
+    pendingStat = null;
+    sheetStep = null;
+    sheetOutcome = null;
+    sheetBusy = false;
+    deferredEvents = null;
+  }
+
+  // Applying the selection (mirrors selectOutcome, ScoreViewModel ~L1165):
+  // Double Fault commits immediately with endingShot "serve"; everything
+  // else stashes the outcome and advances to step 2.
+  function chooseOutcome(outcome, btns, index) {
+    beginCommitBeat(btns, index, function () {
+      if (outcome === "doubleFault") {
+        commitSheetStat("doubleFault", "serve");
+      } else {
+        sheetOutcome = outcome;
+        sheetStep = 2;
+        render();
+      }
+    });
+  }
+
+  function chooseEndingShot(shot, btns, index) {
+    beginCommitBeat(btns, index, function () {
+      commitSheetStat(sheetOutcome, shot);
+    });
+  }
+
+  // Back chevron on step 2 (mirrors cancelOutcomeSelection): clears only the
+  // stashed outcome, score stays applied, sheet re-renders step 1.
+  function sheetBack() {
+    if (sheetBusy) return;
+    sheetOutcome = null;
+    sheetStep = 1;
+    render();
+  }
+
+  // Commit beat (plan §B): chosen button gets a check badge, siblings dim to
+  // 35% opacity, further taps are ignored, then after 0.4s `onApply` runs.
+  // Mutates the live sheet DOM directly rather than going through render() —
+  // a full re-render would rebuild the button list from state and lose this
+  // transient visual (sheetStep/sheetOutcome haven't changed yet).
+  function beginCommitBeat(btns, chosenIndex, onApply) {
+    if (sheetBusy) return;
+    sheetBusy = true;
+    btns.forEach(function (b, i) {
+      b.disabled = true;
+      if (i === chosenIndex) {
+        var check = document.createElement("span");
+        check.className = "check";
+        check.textContent = "✓";
+        b.appendChild(check);
+      } else {
+        b.classList.add("dimmed");
+      }
+    });
+    if (el.sheetUndo) el.sheetUndo.disabled = true;
+    sheetCommitTimer = setTimeout(function () {
+      sheetCommitTimer = null;
+      sheetBusy = false;
+      onApply();
+    }, 400);
+  }
+
+  function commitSheetStat(outcome, endingShot) {
+    stats.push(window.DeuceMateTracking.buildPointStat(pendingStat, outcome, endingShot));
+    var events = deferredEvents;
+    closeSheet();
+    render();
+    // Toasts/changeovers queued during categorisation appear 0.4s past
+    // commit (mirrors commitPointStat's DispatchQueue delay, ScoreViewModel
+    // ~L1231).
+    deferredToastTimer = setTimeout(function () {
+      deferredToastTimer = null;
+      applyEvents(events);
+    }, 400);
+  }
+
+  var STEP2_QUESTIONS = {
+    winner: "Winning shot?",
+    forcedError: "Shot that forced it?",
+    unforcedError: "Shot of the error?"
+  };
+  // Outcome tints as r,g,b (MatchStats.swift ~L34-37) — step 2's header uses
+  // these at 30% opacity (plan §B).
+  var OUTCOME_TINT_RGB = {
+    winner: "77,199,128",
+    forcedError: "235,179,77",
+    unforcedError: "168,128,235"
+  };
+
+  function shotLabel(outcome, shot) {
+    if (shot === "serve") return outcome === "winner" ? "Ace" : "Serve";
+    return window.DeuceMateTracking.ENDING_SHOT_LABELS[shot];
+  }
+
+  // Two-per-row grid; a trailing odd item spans the full width (plan §B).
+  function buildSheetButtonsGrid(items, renderBtn) {
+    var grid = document.createElement("div");
+    grid.className = "sheet-buttons";
+    var btns = items.map(function (item, i) {
+      var b = document.createElement("button");
+      b.type = "button";
+      renderBtn(b, item, i);
+      if (i === items.length - 1 && items.length % 2 === 1) b.classList.add("full");
+      grid.appendChild(b);
+      return b;
+    });
+    el.sheet.appendChild(grid);
+    return btns;
+  }
+
+  function buildSheetUndo() {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "sheet-undo";
+    btn.textContent = "↶ Undo point";
+    btn.addEventListener("click", undoPoint);
+    el.sheet.appendChild(btn);
+    return btn;
+  }
+
+  function buildSheetStep1() {
+    var pending = pendingStat;
+    var won = pending.winner === "me";
+    var yourServe = pending.server === "me";
+
+    var header = document.createElement("div");
+    header.className = "sheet-header";
+    header.style.background = won ? "#21472E" : "#52242E";
+    var title = document.createElement("div");
+    title.className = "sheet-title";
+    title.textContent = (won ? "Won" : "Lost") + " — " + (yourServe ? "Your" : "Their") + " serve";
+    if (pending.isSecondServe) {
+      var cap = document.createElement("span");
+      cap.className = "sheet-2nd";
+      cap.textContent = "2nd";
+      title.appendChild(cap);
+    }
+    header.appendChild(title);
+    el.sheet.appendChild(header);
+
+    // PointOutcome.userSelectable order (PointStat.swift L24-26); Double
+    // Fault only shows on a lost second-serve point (PointCategorySheet ~L51-57).
+    var outcomes = window.DeuceMateTracking.USER_SELECTABLE_OUTCOMES.filter(function (o) {
+      return o !== "doubleFault" || window.DeuceMateTracking.doubleFaultAvailable(pending);
+    });
+    var btns = buildSheetButtonsGrid(outcomes, function (b, outcome) {
+      b.className = "sheet-btn sheet-outcome-" + outcome;
+      b.textContent = window.DeuceMateTracking.OUTCOME_LABELS[outcome];
+    });
+    outcomes.forEach(function (outcome, i) {
+      btns[i].addEventListener("click", function () { chooseOutcome(outcome, btns, i); });
+    });
+
+    el.sheetUndo = buildSheetUndo();
+  }
+
+  function buildSheetStep2() {
+    var pending = pendingStat, outcome = sheetOutcome;
+
+    var header = document.createElement("div");
+    header.className = "sheet-header";
+    header.style.background = "rgba(" + OUTCOME_TINT_RGB[outcome] + ",.3)";
+
+    var back = document.createElement("button");
+    back.type = "button";
+    back.className = "sheet-back";
+    back.textContent = "‹";
+    back.setAttribute("aria-label", "Back");
+    back.addEventListener("click", sheetBack);
+    header.appendChild(back);
+
+    var title = document.createElement("div");
+    title.className = "sheet-title";
+    title.textContent = window.DeuceMateTracking.OUTCOME_LABELS[outcome];
+    var sub = document.createElement("span");
+    sub.className = "sub";
+    sub.textContent = STEP2_QUESTIONS[outcome];
+    title.appendChild(sub);
+    header.appendChild(title);
+    el.sheet.appendChild(header);
+
+    var shots = window.DeuceMateTracking.endingShotOptions(outcome, pending);
+    var btns = buildSheetButtonsGrid(shots, function (b, shot) {
+      b.className = "sheet-btn sheet-shot";
+      b.textContent = shotLabel(outcome, shot);
+    });
+    shots.forEach(function (shot, i) {
+      btns[i].addEventListener("click", function () { chooseEndingShot(shot, btns, i); });
+    });
+
+    el.sheetUndo = buildSheetUndo();
+  }
+
+  function renderSheet() {
+    if (!el.sheet) return;
+    if (!sheetStep) { el.sheet.hidden = true; el.sheet.innerHTML = ""; return; }
+    el.sheet.hidden = false;
+    el.sheet.innerHTML = "";
+    if (sheetStep === 1) buildSheetStep1(); else buildSheetStep2();
   }
 
   function applyEvents(events) {
@@ -613,10 +887,14 @@
 
     if (el.foot) el.foot.textContent = FORMAT_LABELS[state.format] + " · Singles";
 
+    renderSheet();
+
+    // All scoring input is blocked while the categorisation sheet is open
+    // (plan §UI state machine) — "New match" is the one exception (unguarded).
     var over = isMatchComplete(state);
-    if (el.undo) el.undo.disabled = !history.length;
-    if (el.ptMe) el.ptMe.disabled = over;
-    if (el.ptOpp) el.ptOpp.disabled = over;
+    if (el.undo) el.undo.disabled = !history.length || !!sheetStep;
+    if (el.ptMe) el.ptMe.disabled = over || !!sheetStep;
+    if (el.ptOpp) el.ptOpp.disabled = over || !!sheetStep;
     if (el.secondServe) {
       el.secondServe.disabled = !canToggleSecondServe();
       el.secondServe.classList.toggle("active", isOnSecondServe);

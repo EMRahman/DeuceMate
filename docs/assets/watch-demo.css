@@ -130,6 +130,59 @@
 .banner-text { font-size: 1.25rem; font-weight: 850; }
 .banner .btn { padding: 9px 16px; font-size: .9rem; }
 
+/* ---- Post-point categorisation sheet — mirrors PointCategorySheet.swift -- */
+.sheet {
+  position: absolute; inset: 0; z-index: 9; display: flex; flex-direction: column;
+  background: #101316; border-radius: 50px / 44px; overflow: hidden;
+}
+.sheet[hidden] { display: none; } /* see .banner[hidden] note above */
+.sheet-header {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  text-align: center; padding: 14px 30px 10px; min-height: 44px; flex: none;
+}
+.sheet-back {
+  position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
+  background: none; border: 0; color: #fff; font-size: 20px; font-weight: 800;
+  cursor: pointer; padding: 4px 9px; line-height: 1;
+}
+.sheet-title { font-size: .88rem; font-weight: 800; color: #fff; line-height: 1.35; }
+.sheet-title .sub { display: block; font-weight: 600; font-size: .74rem; color: rgba(255,255,255,.75); margin-top: 2px; }
+.sheet-2nd {
+  display: inline-block; margin-left: 6px; background: #FFD60A; color: #000;
+  font-size: .6rem; font-weight: 800; padding: 1px 7px; border-radius: 999px; vertical-align: middle;
+}
+.sheet-buttons {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 7px;
+  padding: 8px 12px; flex: 1; align-content: start;
+}
+.sheet-btn {
+  position: relative; cursor: pointer; font: inherit; font-weight: 700; font-size: .78rem;
+  color: #fff; border: 0; border-radius: 10px; padding: 11px 6px; text-align: center;
+  transition: opacity .15s ease;
+}
+.sheet-btn.full { grid-column: 1 / -1; }
+.sheet-btn.dimmed { opacity: .35; }
+.sheet-btn:disabled { cursor: default; }
+.sheet-btn .check {
+  position: absolute; top: 3px; right: 3px; width: 14px; height: 14px; border-radius: 50%;
+  background: rgba(255,255,255,.95); color: #052015; font-size: 9px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+}
+.sheet-outcome-doubleFault { background: #DB5C5C; }
+.sheet-outcome-winner { background: #4DC780; }
+.sheet-outcome-forcedError { background: #EBB34D; }
+.sheet-outcome-unforcedError { background: #A880EB; }
+.sheet-shot { background: #428aed; }
+.sheet-undo {
+  cursor: pointer; font: inherit; font-weight: 700; font-size: .78rem; color: rgba(255,255,255,.75);
+  background: transparent; border: 1px solid rgba(255,255,255,.25); border-radius: 10px;
+  margin: 6px 12px 12px; padding: 8px; text-align: center; flex: none;
+}
+.sheet-undo:disabled { opacity: .35; cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+  .sheet-btn { transition: none; }
+}
+
 /* ---- Controls below the watch ------------------------------------------- */
 .demo-controls { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 26px; }
 .pt-buttons { display: flex; gap: 12px; }
