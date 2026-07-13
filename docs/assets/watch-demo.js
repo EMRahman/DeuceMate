@@ -402,6 +402,7 @@
   var sheetCommitTimer = null; // the commit-beat timeout, cancellable by New match
   var deferredEvents = null;   // pointWon() events, applied 0.4s after the sheet commits
   var deferredToastTimer = null;
+  var deferredToastEvents = null; // events captured for deferredToastTimer (deferredEvents is already cleared by closeSheet() by the time the timer fires)
 
   function select(btns, attr, value) {
     btns.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute(attr) === value ? "true" : "false"); });
@@ -525,6 +526,7 @@
     deferredEvents = null;
     if (sheetCommitTimer) { clearTimeout(sheetCommitTimer); sheetCommitTimer = null; }
     if (deferredToastTimer) { clearTimeout(deferredToastTimer); deferredToastTimer = null; }
+    deferredToastEvents = null;
     if (el.banner) el.banner.hidden = true;
     if (el.setup) el.setup.hidden = true;
     el.play.hidden = false;
@@ -534,6 +536,18 @@
 
   function award(player) {
     if (!state || isMatchComplete(state) || sheetStep) return;
+
+    // Resolve any still-pending deferred toast from the previous point's
+    // sheet commit before this point's sheet can open — otherwise it could
+    // fire mid-flight over this new, unrelated sheet (Gemini review on #49).
+    if (deferredToastTimer) {
+      clearTimeout(deferredToastTimer);
+      deferredToastTimer = null;
+      var flushEvents = deferredToastEvents;
+      deferredToastEvents = null;
+      if (flushEvents) applyEvents(flushEvents);
+    }
+
     var prevState = state;
     history.push({ snapshot: clone(prevState), momentum: momentum.slice(), secondServe: isOnSecondServe, statsLen: stats.length });
     if (history.length > 200) history.shift();
@@ -595,6 +609,7 @@
     if (!history.length || sheetStep) return;
     rollbackLastPoint();
     if (deferredToastTimer) { clearTimeout(deferredToastTimer); deferredToastTimer = null; }
+    deferredToastEvents = null;
     if (el.banner) el.banner.hidden = true;
     showToast("Undo");
     render();
@@ -684,10 +699,15 @@
     render();
     // Toasts/changeovers queued during categorisation appear 0.4s past
     // commit (mirrors commitPointStat's DispatchQueue delay, ScoreViewModel
-    // ~L1231).
+    // ~L1231). Stashed in deferredToastEvents (not the `events` closure
+    // alone) so award() can flush it early if another point is scored
+    // before this timer fires.
+    deferredToastEvents = events;
     deferredToastTimer = setTimeout(function () {
       deferredToastTimer = null;
-      applyEvents(events);
+      var e = deferredToastEvents;
+      deferredToastEvents = null;
+      applyEvents(e);
     }, 400);
   }
 
