@@ -619,6 +619,15 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertTrue(html.contains("touch-action:pan-y"))
     }
 
+    func test_htmlChartFallsBackForNonInvertibleScreenTransform() {
+        let html = MatchHTMLExporter.html(for: makeRecord())
+
+        XCTAssertTrue(html.contains("const transformedX = point.matrixTransform(matrix.inverse()).x"))
+        XCTAssertTrue(html.contains("Number.isFinite(transformedX)"))
+        XCTAssertTrue(html.contains("catch (_) {"))
+        XCTAssertTrue(html.contains("svg.getBoundingClientRect()"))
+    }
+
     func test_htmlChartHasCountedServingPillsAndMatchingRules() {
         let html = MatchHTMLExporter.html(for: makeServingRecord())
 

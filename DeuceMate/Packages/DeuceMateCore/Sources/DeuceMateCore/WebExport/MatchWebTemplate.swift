@@ -577,12 +577,17 @@ public enum MatchWebTemplate {
         else selectionRule.style.display = "none";
 
         function localX(event) {
-          const matrix = svg.getScreenCTM && svg.getScreenCTM();
-          if (matrix && svg.createSVGPoint) {
-            const point = svg.createSVGPoint();
-            point.x = event.clientX;
-            point.y = event.clientY;
-            return point.matrixTransform(matrix.inverse()).x;
+          try {
+            const matrix = svg.getScreenCTM && svg.getScreenCTM();
+            if (matrix && svg.createSVGPoint) {
+              const point = svg.createSVGPoint();
+              point.x = event.clientX;
+              point.y = event.clientY;
+              const transformedX = point.matrixTransform(matrix.inverse()).x;
+              if (Number.isFinite(transformedX)) return transformedX;
+            }
+          } catch (_) {
+            // Older SVG implementations can throw for non-invertible matrices.
           }
           const bounds = svg.getBoundingClientRect();
           return bounds.width > 0 ? (event.clientX - bounds.left) * W / bounds.width : M.l;
