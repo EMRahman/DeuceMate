@@ -45,6 +45,28 @@ public enum WebExportColors {
         }
     }
 
+    // MARK: - Serving scatter (mirrors PointsGraphView serving colours/symbols)
+
+    public static func servingColorHex(_ category: ServingPointCategory) -> String {
+        switch category {
+        case .firstServe:       return "#30B0C7" // teal
+        case .secondServe:      return "#5856D6" // indigo
+        case .doubleFault:      return "#FF9500" // orange
+        case .ace:              return "#FFCC00" // yellow
+        case .serveForcedError: return "#AF52DE" // purple
+        }
+    }
+
+    public static func servingSymbol(_ category: ServingPointCategory) -> String {
+        switch category {
+        case .firstServe:       return "circle"
+        case .secondServe:      return "asterisk"
+        case .doubleFault:      return "square"
+        case .ace:              return "pentagon"
+        case .serveForcedError: return "triangle"
+        }
+    }
+
     // MARK: - Ending-shot scatter (mirrors PointsGraphView ending-shot colours/symbols)
 
     public static func endingShotColorHex(_ shot: EndingShot) -> String {

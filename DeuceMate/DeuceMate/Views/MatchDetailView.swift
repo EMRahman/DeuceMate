@@ -684,21 +684,36 @@ struct MatchDetailView: View {
         let grouped = Dictionary(grouping: record.stats, by: \.setIndex)
         let setIndices = grouped.keys.sorted()
         let matchScores = PointMatchScore.atStart(of: record.stats, record: record)
+        let perPointSteps = perPointStepsByID
         ForEach(setIndices, id: \.self) { setIdx in
             let points = grouped[setIdx] ?? []
             Section(SetFilter.set(setIdx).label(matchFormat: record.matchFormat)) {
                 ForEach(Array(points.enumerated()), id: \.element.id) { idx, pt in
-                    pointRow(number: idx + 1, point: pt, matchScore: matchScores[pt.id])
+                    pointRow(
+                        number: idx + 1,
+                        point: pt,
+                        matchScore: matchScores[pt.id],
+                        perPointSteps: perPointSteps[pt.id]
+                    )
                 }
             }
         }
+    }
+
+    private var perPointStepsByID: [PointStat.ID: Int] {
+        let series = StepsSeries.make(stats: record.stats, totalSteps: record.totalSteps)
+        return Dictionary(uniqueKeysWithValues: series.compactMap { sample in
+            guard record.stats.indices.contains(sample.pointIndex) else { return nil }
+            return (record.stats[sample.pointIndex].id, sample.perPoint)
+        })
     }
 
     @ViewBuilder
     private func pointRow(
         number: Int,
         point: PointStat,
-        matchScore: PointMatchScore.Snapshot?
+        matchScore: PointMatchScore.Snapshot?,
+        perPointSteps: Int?
     ) -> some View {
         HStack(spacing: 8) {
             Text("\(number)")
@@ -714,9 +729,7 @@ struct MatchDetailView: View {
                 }
 
                 HStack(spacing: 4) {
-                    Text("🎾")
-                        .accessibilityHidden(true)
-                    Text(point.server == .me ? "Me" : "Opp")
+                    PointServiceStatusLabel(isServing: point.server == .me)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                     if let score = point.gameScoreAtStart {
@@ -746,7 +759,7 @@ struct MatchDetailView: View {
 
             Spacer()
 
-            if point.endingShot != nil || point.heartRateBPM != nil {
+            if point.endingShot != nil || point.heartRateBPM != nil || perPointSteps != nil {
                 VStack(alignment: .trailing, spacing: 2) {
                     if let shot = point.endingShot {
                         Text(shot.displayLabel)
@@ -755,6 +768,11 @@ struct MatchDetailView: View {
                     }
                     if let bpm = point.heartRateBPM {
                         Text("My HR: \(bpm) bpm")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    if let perPointSteps {
+                        Text("\(perPointSteps) steps")
                             .font(.caption2.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
@@ -767,7 +785,8 @@ struct MatchDetailView: View {
             Text(pointAccessibilityLabel(
                 number: number,
                 point: point,
-                matchScore: matchScore
+                matchScore: matchScore,
+                perPointSteps: perPointSteps
             ))
         )
     }
@@ -775,11 +794,12 @@ struct MatchDetailView: View {
     private func pointAccessibilityLabel(
         number: Int,
         point: PointStat,
-        matchScore: PointMatchScore.Snapshot?
+        matchScore: PointMatchScore.Snapshot?,
+        perPointSteps: Int?
     ) -> String {
         var parts = [
             "Set \(point.setIndex + 1), point \(number)",
-            "\(point.server == .me ? "Me" : "Opponent") serving"
+            point.server == .me ? "Serving" : "Receiving"
         ]
         if let label = matchScore?.label, !label.isEmpty {
             parts.append("Match score \(label)")
@@ -792,6 +812,7 @@ struct MatchDetailView: View {
         parts.append(outcomeLabel(point))
         if let shot = point.endingShot { parts.append(shot.displayLabel) }
         if let bpm = point.heartRateBPM { parts.append("My heart rate \(bpm) beats per minute") }
+        if let perPointSteps { parts.append("\(perPointSteps) steps") }
         return parts.joined(separator: ", ")
     }
 

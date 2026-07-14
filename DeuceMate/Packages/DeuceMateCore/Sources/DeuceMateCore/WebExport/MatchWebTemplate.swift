@@ -135,6 +135,8 @@ public enum MatchWebTemplate {
     .pt-match { color: var(--muted); opacity: .75; font-size: 11px; font-variant-numeric: tabular-nums; }
     .pt-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .pt-server { color: var(--muted); font-size: 11px; font-weight: 600; }
+    .service-status { display: inline-flex; align-items: center; gap: 4px; }
+    .service-status .service-racquet { width: 14px; height: 14px; color: currentColor; flex: 0 0 auto; }
     .pt-score { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
     .pt-bp { color: #FF9F0A; font-size: 11px; font-weight: 700; }
     .pt-2nd { color: var(--muted); font-size: 11px; }
@@ -165,7 +167,7 @@ public enum MatchWebTemplate {
     .ai-toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--surface2);
       border: 1px solid var(--line); color: var(--text); border-radius: 999px; padding: 9px 16px; font-size: 13px;
       font-weight: 600; opacity: 0; transition: opacity .2s; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
-    svg { width: 100%; height: auto; display: block; touch-action: manipulation; }
+    svg { width: 100%; height: auto; display: block; touch-action: pan-y; }
     .axislabel { fill: var(--muted); font-size: 11px; }
     .gridline { stroke: var(--line); stroke-width: 1; }
     .popup { margin-top: 12px; background: var(--surface2); border: 1px solid var(--line); border-radius: 10px;
@@ -196,12 +198,13 @@ public enum MatchWebTemplate {
       const NS = "http://www.w3.org/2000/svg";
       const root = document.getElementById("root");
       const P = DATA.palette;
-      // Selection model mirrors PointsGraphView's expanded controls: four
+      // Selection model mirrors PointsGraphView's expanded controls: six
       // independent sets of toggled scatter categories, plus the HR/Steps
-      // overlay flags. All four start empty (clean chart) exactly like the app.
+      // overlay flags. All start empty (clean chart) exactly like the app.
       const state = {
         focal: "me",
-        sel: { myOut: new Set(), oppOut: new Set(), wonShot: new Set(), lostShot: new Set() },
+        sel: { myOut: new Set(), oppOut: new Set(), myServe: new Set(), oppServe: new Set(),
+          wonShot: new Set(), lostShot: new Set() },
         hr: false, steps: false,
         stepsMode: "cumulative",  // "cumulative" | "perPoint" — mirrors iOS StepsSeriesMode
         selected: null,
@@ -229,6 +232,29 @@ public enum MatchWebTemplate {
         const n = document.createElementNS(NS, tag);
         if (attrs) for (const k in attrs) n.setAttribute(k, attrs[k]);
         return n;
+      }
+      function racquetIcon() {
+        const icon = s("svg", { class: "service-racquet", viewBox: "0 0 20 20",
+          "aria-hidden": "true", focusable: "false" });
+        const g = s("g", { transform: "rotate(-35 10 10)", fill: "none", stroke: "currentColor",
+          "stroke-width": "1.6", "stroke-linecap": "round" });
+        g.appendChild(s("ellipse", { cx: 10, cy: 6.5, rx: 4.2, ry: 5.2 }));
+        g.appendChild(s("line", { x1: 10, y1: 11.7, x2: 10, y2: 17.2 }));
+        g.appendChild(s("line", { x1: 8.8, y1: 17.2, x2: 11.2, y2: 17.2 }));
+        icon.appendChild(g);
+        return icon;
+      }
+      function serviceStatus(p, includeSecondServe) {
+        const serving = p.server === "me";
+        const label = (serving ? "Serving" : "Receiving") +
+          (includeSecondServe && p.isSecondServe ? ", second serve" : "");
+        const status = el("span", { class: "service-status", "aria-label": label });
+        if (serving) status.appendChild(el("span", { text: "🎾", "aria-hidden": "true" }));
+        else status.appendChild(racquetIcon());
+        status.appendChild(document.createTextNode(serving ? "Serving" : "Receiving"));
+        if (includeSecondServe && p.isSecondServe)
+          status.appendChild(document.createTextNode(" (2nd serve)"));
+        return status;
       }
       const focalP = () => DATA.perspectives[state.focal];
       const isMe = () => state.focal === "me";
@@ -264,8 +290,8 @@ public enum MatchWebTemplate {
       // ---- chart card ----
       function chartCard() {
         const card = el("div", { class: "card" }, [el("h2", { text: "Points Momentum" })]);
-        card.appendChild(buildSVG());
         const pop = el("div", { class: "popup" });
+        card.appendChild(buildSVG(() => renderPopup(pop)));
         card.appendChild(pop);
         renderPopup(pop);
         card.appendChild(legend());
@@ -277,8 +303,10 @@ public enum MatchWebTemplate {
       // Per-outcome chip metadata keyed by PointOutcome raw value, and the iOS
       // chip order (DF · W · UE · FE) so the rows read exactly like the app.
       const OUT_META = {}; P.outcomes.forEach(o => OUT_META[o.key] = o);
+      const SERVE_META = {}; P.serving.forEach(o => SERVE_META[o.key] = o);
       const SHOT_META = {}; P.endingShots.forEach(o => SHOT_META[o.key] = o);
       const OUTCOME_ORDER = ["doubleFault", "winner", "unforcedError", "forcedError"];
+      const SERVING_ORDER = ["firstServe", "secondServe", "doubleFault", "ace", "serveForcedError"];
       const LOSS_OUTCOMES = ["unforcedError", "forcedError", "doubleFault"];
       const GREEN = "#34C759", RED = "#FF3B30";
 
@@ -302,6 +330,19 @@ public enum MatchWebTemplate {
         if (cat === "winner")        return p.winner === who && p.outcome === "winner";
         if (cat === "unforcedError") return p.winner === other && p.outcome === "unforcedError";
         if (cat === "forcedError")   return p.winner === other && p.outcome === "forcedError";
+        return false;
+      }
+
+      // Server-attributed categories mirror ServingPointCategory.matches in
+      // Core. First/second/DF are distinct buckets; Ace and Serve FE are
+      // additional detailed tags that can overlap either landed serve bucket.
+      function matchesServing(cat, p, who) {
+        if (p.server !== who) return false;
+        if (cat === "firstServe")       return !p.isSecondServe && p.outcome !== "doubleFault";
+        if (cat === "secondServe")      return p.isSecondServe && p.outcome !== "doubleFault";
+        if (cat === "doubleFault")      return p.outcome === "doubleFault";
+        if (cat === "ace")              return p.winner === who && p.outcome === "winner" && p.endingShot === "serve";
+        if (cat === "serveForcedError") return p.winner === who && p.outcome === "forcedError" && p.endingShot === "serve";
         return false;
       }
 
@@ -351,6 +392,15 @@ public enum MatchWebTemplate {
         const oppRow = chipRow("Opp", OUTCOME_ORDER.map(k =>
           scatterChip(OUT_META[k], co[k] || 0, state.sel.oppOut.has(k), () => { toggleIn(state.sel.oppOut, k); render(); })));
         return el("div", { class: "ctrl-sec" }, [el("div", { class: "ctrl-title", text: "Outcomes" }), quick, meRow, oppRow]);
+      }
+
+      function servingSection() {
+        const c = focalP().servingCounts || {}, co = focalP().servingCountsOpponent || {};
+        const meRow = chipRow("Me", SERVING_ORDER.map(k =>
+          scatterChip(SERVE_META[k], c[k] || 0, state.sel.myServe.has(k), () => { toggleIn(state.sel.myServe, k); render(); })));
+        const oppRow = chipRow("Opp", SERVING_ORDER.map(k =>
+          scatterChip(SERVE_META[k], co[k] || 0, state.sel.oppServe.has(k), () => { toggleIn(state.sel.oppServe, k); render(); })));
+        return el("div", { class: "ctrl-sec" }, [el("div", { class: "ctrl-title", text: "Serving" }), meRow, oppRow]);
       }
 
       function endingShotsSection() {
@@ -414,10 +464,10 @@ public enum MatchWebTemplate {
 
       function controls() {
         const wrap = el("div", { class: "controls" });
-        // Outcome controls need categorised points; ending-shot controls only
-        // need ending-shot data (which can exist on uncategorised points), so
-        // they're gated independently — matching the static fallback + view model.
+        // Outcome controls need categorised points. Serving is always available
+        // for a non-empty point history; ending-shot controls need phase data.
         if (focalP().hasOutcomes) wrap.appendChild(outcomesSection());
+        wrap.appendChild(servingSection());
         const es = endingShotsSection(); if (es) wrap.appendChild(es);
         const ov = overlayToggles(); if (ov) wrap.appendChild(ov);
         return wrap;
@@ -440,7 +490,7 @@ public enum MatchWebTemplate {
       function oppAbs() { return isMe() ? "opp" : "me"; }
       function cumOf(p, who) { return who === "me" ? p.cumulativeMe : p.cumulativeOpp; }
 
-      function buildSVG() {
+      function buildSVG(onSelection) {
         const svg = s("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
         if (!n) { svg.appendChild(s("rect", { x: 0, y: 0, width: W, height: H, fill: "transparent" })); return svg; }
 
@@ -491,6 +541,14 @@ public enum MatchWebTemplate {
             state.sel.oppOut.forEach(cat => { if (matchesOutcome(cat, p, opp))
               svg.appendChild(symbol(OUT_META[cat].symbol, xAt(p.index), yP(cumOf(p, opp)), OUT_META[cat].colorHex)); });
           }
+          // Stable category order draws Ace / Serve FE after their broader
+          // first/second-serve mark so the more-specific symbol stays visible.
+          SERVING_ORDER.forEach(cat => {
+            if (state.sel.myServe.has(cat) && matchesServing(cat, p, me))
+              svg.appendChild(symbol(SERVE_META[cat].symbol, xAt(p.index), yP(cumOf(p, me)), SERVE_META[cat].colorHex));
+            if (state.sel.oppServe.has(cat) && matchesServing(cat, p, opp))
+              svg.appendChild(symbol(SERVE_META[cat].symbol, xAt(p.index), yP(cumOf(p, opp)), SERVE_META[cat].colorHex));
+          });
           if (p.endingShot) {
             if (p.winner === me && state.sel.wonShot.has(p.endingShot))
               svg.appendChild(symbol(p.endingShotSymbol, xAt(p.index), yP(cumOf(p, me)), p.endingShotColorHex));
@@ -499,19 +557,70 @@ public enum MatchWebTemplate {
           }
         });
 
-        // selection rule
-        if (state.selected != null && pts[state.selected]) {
-          const x = xAt(pts[state.selected].index);
-          svg.appendChild(s("line", { x1: x, y1: M.t, x2: x, y2: M.t + plotH, stroke: "var(--text)",
-            "stroke-opacity": .5, "stroke-width": 1, "stroke-dasharray": "3 3" }));
+        // Persistent selection rule. Pointer movement updates this line and the
+        // popup directly instead of rebuilding the SVG, which would discard
+        // pointer capture midway through a drag.
+        const selectionRule = s("line", { y1: M.t, y2: M.t + plotH, stroke: "var(--text)",
+          "stroke-opacity": .5, "stroke-width": 1, "stroke-dasharray": "3 3" });
+        svg.appendChild(selectionRule);
+
+        function selectPoint(index, notify) {
+          const selected = Math.max(0, Math.min(n - 1, index));
+          state.selected = selected;
+          const x = xAt(pts[selected].index);
+          selectionRule.setAttribute("x1", x);
+          selectionRule.setAttribute("x2", x);
+          selectionRule.style.display = "";
+          if (notify && onSelection) onSelection();
+        }
+        if (state.selected != null && pts[state.selected]) selectPoint(state.selected, false);
+        else selectionRule.style.display = "none";
+
+        function localX(event) {
+          try {
+            const matrix = svg.getScreenCTM && svg.getScreenCTM();
+            if (matrix && svg.createSVGPoint) {
+              const point = svg.createSVGPoint();
+              point.x = event.clientX;
+              point.y = event.clientY;
+              const transformedX = point.matrixTransform(matrix.inverse()).x;
+              if (Number.isFinite(transformedX)) return transformedX;
+            }
+          } catch (_) {
+            // Older SVG implementations can throw for non-invertible matrices.
+          }
+          const bounds = svg.getBoundingClientRect();
+          return bounds.width > 0 ? (event.clientX - bounds.left) * W / bounds.width : M.l;
+        }
+        function selectFromPointer(event) {
+          const raw = n > 1 ? (localX(event) - M.l) / plotW * (n - 1) : 0;
+          selectPoint(Math.round(raw), true);
         }
 
-        // invisible per-point hit columns for selection
-        pts.forEach(p => {
-          const r = s("rect", { x: xAt(p.index) - step / 2, y: M.t, width: step, height: plotH, fill: "transparent", style: "cursor:pointer" });
-          r.addEventListener("click", () => { state.selected = p.index; render(); });
-          svg.appendChild(r);
+        // One hit surface supports click/tap and continuous mouse, trackpad, or
+        // touch dragging. `pan-y` leaves normal vertical page scrolling intact.
+        const hit = s("rect", { x: M.l, y: M.t, width: plotW, height: plotH,
+          fill: "transparent", style: "cursor:pointer;touch-action:pan-y" });
+        let dragging = false;
+        hit.addEventListener("pointerdown", event => {
+          if (event.pointerType === "mouse" && event.button !== 0) return;
+          dragging = true;
+          if (hit.setPointerCapture) hit.setPointerCapture(event.pointerId);
+          selectFromPointer(event);
         });
+        hit.addEventListener("pointermove", event => {
+          if (dragging) selectFromPointer(event);
+        });
+        hit.addEventListener("pointerup", event => {
+          if (!dragging) return;
+          selectFromPointer(event);
+          dragging = false;
+          if (hit.hasPointerCapture && hit.hasPointerCapture(event.pointerId))
+            hit.releasePointerCapture(event.pointerId);
+        });
+        hit.addEventListener("pointercancel", () => { dragging = false; });
+        hit.addEventListener("lostpointercapture", () => { dragging = false; });
+        svg.appendChild(hit);
 
         return svg;
       }
@@ -607,15 +716,18 @@ public enum MatchWebTemplate {
         if (p.matchScoreLabel) bits.push(["Match", p.matchScoreLabel]);
         bits.push(
           ["Game", p.gameScoreLabel + (p.isBreakPoint ? "  · break pt" : "")],
-          ["Server", lbl(p.server) + (p.isSecondServe ? " (2nd serve)" : "")],
+          ["Status", serviceStatus(p, true)],
           ["Winner", lbl(p.winner)],
           ["Outcome", p.outcome === "uncategorized" ? "—" : p.outcomeLabel],
           ["Shot", p.endingShotLabel || "—"]
         );
         if (isMe() && p.heartRateBPM != null) bits.push(["Heart rate", p.heartRateBPM + " bpm"]);
-        bits.forEach(b => pop.appendChild(el("div", null, [
-          el("span", { class: "k", text: b[0] + ": " }), el("b", { text: b[1] })
-        ])));
+        bits.forEach(b => {
+          const value = el("b");
+          if (typeof b[1] === "string") value.textContent = b[1];
+          else value.appendChild(b[1]);
+          pop.appendChild(el("div", null, [el("span", { class: "k", text: b[0] + ": " }), value]));
+        });
       }
 
       // ---- Stats / Points tab toggle (mirrors MatchDetailView's segmented picker) ----
@@ -710,9 +822,9 @@ public enum MatchWebTemplate {
       }
       function pointRow(number, p) {
         const meta = el("div", { class: "pt-meta" });
-        const serverName = p.server === "me" ? "Me" : "Opp";
-        meta.appendChild(el("span", { class: "pt-server", text: "🎾 " + serverName,
-          "aria-label": serverName + " serving" }));
+        const status = serviceStatus(p, false);
+        status.classList.add("pt-server");
+        meta.appendChild(status);
         if (p.pointScoreLabel) meta.appendChild(el("span", { class: "pt-score", text: p.pointScoreLabel }));
         if (p.isBreakPoint) meta.appendChild(el("span", { class: "pt-bp", text: "BP" }));
         if (p.isSecondServe) meta.appendChild(el("span", { class: "pt-2nd", text: "2nd" }));

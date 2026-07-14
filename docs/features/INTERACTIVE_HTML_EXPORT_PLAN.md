@@ -9,9 +9,10 @@ at individual points. This feature lets a user export a single finished match as
 **one self-contained, interactive HTML file** and share it via the normal iOS
 share sheet. The opponent opens it in any browser — phone or laptop — and
 explores the full match **offline**: the momentum chart with set bands and
-`PointsGraphView`-style outcome/ending-shot scatter pills, a **Stats/Points tab
-toggle** and **All/Set N set filter**, the set-filtered TV-style Me-vs-Opp stat
-comparison (with points-won bar + duration), a point-by-point list, recorder-only
+`PointsGraphView`-style counted outcome/Serving/ending-shot scatter pills, a
+**Stats/Points tab toggle** and **All/Set N set filter**, the set-filtered TV-style Me-vs-Opp stat
+comparison (with points-won bar + duration), a point-by-point list with
+recorder-relative 🎾 Serving / racquet Receiving status, recorder-only
 HR/steps overlays, and an **AI Coach card** (copy the coaching prompt + opt-in
 launch links to ChatGPT/Claude/Gemini/…). The page is recorder-framed throughout
 (no perspective toggle), mirroring the iOS archive detail. *(Schema history: v2
@@ -19,7 +20,10 @@ replaced the per-perspective stat cards with the fixed Me-vs-Opp comparison and
 dropped the me⇄opponent toggle; v3 added the Stats/Points tabs and the per-set
 `filters`; v4 added the optional `aiCoach` block.)* The page still loads **zero
 external resources** on open — the AI-app links are user-clicked navigations, not
-fetches.
+fetches. *(Later schema history: v5 added per-point step deltas; v6 added in-set
+game scores; v7 replaced them with full pre-point match scores; v8 added each
+point's tiebreak state for iOS-parity chart bands; v9 added per-player Serving
+counts and palette metadata.)*
 
 Chosen over a hosted "share a link" approach because it needs **no server, no
 hosting, no database, no link expiry**, and adds **no networking** to an app that
@@ -65,6 +69,12 @@ MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
   structure. The browser JS only paints what the JSON gives it. This keeps the
   HTML and text exports in lock-step and the logic testable.
 
+- **Shared Serving categories.** Core's `ServingPointCategory` owns the matching
+  rules used by iOS and the Swift-derived HTML counts: distinct first-serve,
+  landed-second-serve and double-fault buckets, plus overlapping Ace and Serve FE
+  tags. The interactive viewer mirrors those rules only to decide which emitted
+  points receive a selected SVG mark; every Me/Opp pill displays its Swift count.
+
 - **Recorder-only HR.** Heart rate / steps / distance / calories are the
   *recorder's* physiology. They populate only the `me` perspective and the
   top-level `hr` / `steps` / `meta.totals` blocks; the `opponent` perspective is
@@ -73,9 +83,10 @@ MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
   are still flattened into the JSON — the `opponent` side feeds the Me-vs-Opp
   comparison even though the viewer never renders it as a standalone view.)
 
-- **SVG, not Canvas.** Each point is a DOM element with a tap handler — faithful
-  to `PointsGraphView`'s declarative marks — and the scatter pills toggle marks
-  without a redraw loop or manual hit-testing.
+- **SVG, not Canvas.** A transparent pointer surface uses pointer capture,
+  nearest-point hit testing, and an in-place selection rule so click/touch
+  dragging scrubs continuously without rebuilding the SVG. The scatter pills
+  toggle declarative SVG marks without a canvas redraw loop.
 
 - **Progressive enhancement (no-JS fallback).** The interactive UI is drawn by JS
   into `#root`, but `#root` ships pre-filled with a styled static report
@@ -98,16 +109,17 @@ MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
   framed page; the Me-vs-Opp comparison shows both sides at once.
 
 - **Colour parity.** `WebExportColors` is the single source of the export's
-  palette/symbols (outcome scatter, ending-shot scatter, set bands, me/opponent
-  lines, HR/steps), kept in step with `PointsGraphView`. The JS never re-encodes
-  colours — Swift emits hex.
+  palette/symbols (outcome, serving and ending-shot scatter, set bands, me/opponent
+  lines, HR/steps), kept in step with `PointsGraphView`. Per-point `isTiebreak`
+  state splits regular and TB segments so both interactive and fallback charts
+  use iOS's yellow tiebreak wash. The JS never re-encodes colours — Swift emits hex.
 
 ## Files
 
 | File | Role |
 |---|---|
 | `Packages/DeuceMateCore/Sources/DeuceMateCore/WebExport/MatchWebViewModel.swift` | The `Encodable` view-model types + `make(from:maxHR:)`. |
-| `…/WebExport/MatchWebViewModel+Build.swift` | Pure derivation (per-perspective sections, scatter-pill counts, points, set bands, HR/steps, formatting). |
+| `…/WebExport/MatchWebViewModel+Build.swift` | Pure derivation (per-perspective sections, counted outcome/Serving/ending-shot pills, points, set bands, HR/steps, formatting). |
 | `…/WebExport/MatchWebViewModel+Comparison.swift` | Pure builder for the per-set `filters` + TV-style Me-vs-Opp `comparison` block (mirrors `MatchDetailView`'s split bars). |
 | `…/WebExport/MatchWebViewModel+AICoach.swift` | Pure builder for the optional `aiCoach` block (intro copy + AI-app launch list) wrapped around the injected prompt(s). |
 | `…/WebExport/MatchWebStaticFallback.swift` | The no-JS `#root` fallback: header + server-rendered SVG momentum charts (`staticChartSVG`) + the TV-style Me/Opp split-bar comparison (`pointsWonBar`/`comparisonCard`/`splitBar`) for the whole match plus a per-set breakdown, so file previews that can't run scripts still show the match. |
@@ -115,7 +127,7 @@ MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
 | `…/WebExport/MatchWebTemplate.swift` | The viewer (HTML/CSS/SVG-JS) as raw-string constants. |
 | `…/WebExport/MatchHTMLExporter.swift` | Assembles + script-safely injects the JSON; pure entry point. |
 | `DeuceMate/Views/MatchDetailView.swift` | Builds the HTML off-thread, temp-file write, share action. |
-| `Tests/DeuceMateCoreTests/MatchWebExportTests.swift` | View-model shape, both-perspective consistency, recorder-only-HR, self-contained-HTML, script-safety. |
+| `Tests/DeuceMateCoreTests/MatchWebExportTests.swift` | View-model shape, mirrored Serving counts/rules/palette, both-perspective consistency, recorder-only-HR, self-contained HTML and script safety. |
 
 ## Verifying
 
@@ -123,8 +135,9 @@ MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
   test -scheme DeuceMateCoreTests -destination "platform=macOS"
   CODE_SIGNING_ALLOWED=NO`.
 - Generate a sample from a fixture and open it in a browser **in airplane mode**
-  to confirm it renders fully offline; exercise the scatter pills (Outcomes /
-  Ending Shots), point popups, HR/steps overlay toggles, the Stats/Points tabs,
+  to confirm it renders fully offline; exercise the counted scatter pills
+  (Outcomes / Serving / Ending Shots), click/touch-drag point scrubbing, point
+  popups, HR/steps overlay toggles, the Stats/Points tabs,
   the All/Set N set filter (the comparison + points-won + duration must update),
   the Me-vs-Opp comparison split bars, the point-by-point list, and the AI Coach
   card (Copy Prompt, Show/Hide prompt, My/Opponent toggle). The AI-app links are

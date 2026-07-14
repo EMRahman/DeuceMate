@@ -4,6 +4,28 @@ import Charts
 import UIKit
 import DeuceMateCore
 
+/// Recorder-relative serving status shared by the Points history and graph
+/// inspector. A tennis ball denotes serving; the racquet denotes receiving.
+struct PointServiceStatusLabel: View {
+    let isServing: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if isServing {
+                Text("🎾")
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: "tennis.racket")
+                    .imageScale(.small)
+                    .accessibilityHidden(true)
+            }
+            Text(isServing ? "Serving" : "Receiving")
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(isServing ? "Serving" : "Receiving")
+    }
+}
+
 private struct GraphEntry: Identifiable {
     let id: String    // "<pointIndex>-<player>" — unique per series and point
     let pointIndex: Int
@@ -70,6 +92,31 @@ private enum OutcomeCategory: String, CaseIterable, Identifiable {
     }
 }
 
+/// Scatter styling for server-attributed first/second/DF/Ace/Serve-FE marks.
+/// The category definitions and matching rules live in Core so iOS and the
+/// interactive HTML export cannot disagree about which points belong.
+private extension ServingPointCategory {
+    var color: Color {
+        switch self {
+        case .firstServe:       return .teal
+        case .secondServe:      return .indigo
+        case .doubleFault:      return .orange
+        case .ace:              return .yellow
+        case .serveForcedError: return .purple
+        }
+    }
+
+    var symbol: BasicChartSymbolShape {
+        switch self {
+        case .firstServe:       return .circle
+        case .secondServe:      return .asterisk
+        case .doubleFault:      return .square
+        case .ace:              return .pentagon
+        case .serveForcedError: return .triangle
+        }
+    }
+}
+
 /// Scatter styling for the core `EndingShot` phases (Serve / Return / S+1 / Rally).
 /// `displayLabel` already lives on the model; only chart color + symbol are view
 /// concerns, so they hang off this file-private extension.
@@ -99,6 +146,17 @@ private struct ScatterEntry: Identifiable {
     let color: Color
     let symbol: BasicChartSymbolShape
     let label: String
+}
+
+/// Equatable snapshot used to rebuild cached graph data whenever any scatter
+/// filter changes, without a long chain of separate SwiftUI `onChange` calls.
+private struct PointsGraphScatterSelection: Equatable {
+    let myOutcomes: Set<OutcomeCategory>
+    let opponentOutcomes: Set<OutcomeCategory>
+    let myServing: Set<ServingPointCategory>
+    let opponentServing: Set<ServingPointCategory>
+    let wonEndingShots: Set<EndingShot>
+    let lostEndingShots: Set<EndingShot>
 }
 
 private struct SetBand: Identifiable {
@@ -148,6 +206,11 @@ private struct PointsGraphData {
     let myOutcomeCounts: [OutcomeCategory: Int]
     /// Total outcome counts attributed to the opponent across the whole match.
     let oppOutcomeCounts: [OutcomeCategory: Int]
+    /// Server-attributed first/second/DF/Ace/Serve-FE counts for each player.
+    /// These are computed over all points so the Serving section also works for
+    /// score-only matches whose outcomes were not categorised.
+    let myServingCounts: [ServingPointCategory: Int]
+    let oppServingCounts: [ServingPointCategory: Int]
     /// (me, opp) cumulative score at each pointIndex from 0…stats.count.
     /// Pre-computed so the selection summary can look up totals in O(1) per
     /// touch frame without re-walking the line series.
@@ -165,6 +228,9 @@ private struct PointsGraphData {
     /// Point numbering restarts within each set in the Points tab. Keep the
     /// same number here so a highlighted graph point can be cross-checked.
     let setPointNumberByIndex: [Int: Int]
+    /// Steps taken during each point, keyed to the graph's 1-based x-axis.
+    /// Missing samples stay absent rather than being presented as zero.
+    let perPointStepsByIndex: [Int: Int]
 
     var hasHeartRateData: Bool { !hrEntries.isEmpty }
     var hasStepsData: Bool { !stepEntries.isEmpty }
@@ -172,6 +238,8 @@ private struct PointsGraphData {
     init(record: MatchRecord,
          selectedMyOutcomes: Set<OutcomeCategory>,
          selectedOpponentOutcomes: Set<OutcomeCategory>,
+         selectedMyServing: Set<ServingPointCategory>,
+         selectedOpponentServing: Set<ServingPointCategory>,
          selectedWonEndingShots: Set<EndingShot>,
          selectedLostEndingShots: Set<EndingShot>) {
         let stats = record.stats
@@ -181,6 +249,8 @@ private struct PointsGraphData {
 
         let hasAnySelection = !selectedMyOutcomes.isEmpty
             || !selectedOpponentOutcomes.isEmpty
+            || !selectedMyServing.isEmpty
+            || !selectedOpponentServing.isEmpty
             || !selectedWonEndingShots.isEmpty
             || !selectedLostEndingShots.isEmpty
         let scatterEnabled = !stats.isEmpty && hasAnySelection
@@ -200,6 +270,8 @@ private struct PointsGraphData {
         var endLost: [EndingShot: Int] = [:]
         var myOutcomes: [OutcomeCategory: Int] = [:]
         var oppOutcomes: [OutcomeCategory: Int] = [:]
+        var myServing: [ServingPointCategory: Int] = [:]
+        var oppServing: [ServingPointCategory: Int] = [:]
 
         var bands: [SetBand] = []
         var bandStart: Int = 0
@@ -231,6 +303,14 @@ private struct PointsGraphData {
                 }
                 if Self.matchesOutcome(category, stat: stat, focal: .opponent) {
                     oppOutcomes[category, default: 0] += 1
+                }
+            }
+            for category in ServingPointCategory.allCases {
+                if category.matches(stat, server: .me) {
+                    myServing[category, default: 0] += 1
+                }
+                if category.matches(stat, server: .opponent) {
+                    oppServing[category, default: 0] += 1
                 }
             }
 
@@ -292,6 +372,33 @@ private struct PointsGraphData {
                         label: "Opp \(category.label)"
                     ))
                 }
+                // Serving categories — plotted on the selected server's line.
+                // Iterate in Core's stable order so Ace / Serve FE are appended
+                // after their broader first/second-serve bucket and stay visible.
+                for category in ServingPointCategory.allCases
+                where selectedMyServing.contains(category)
+                    && category.matches(stat, server: .me) {
+                    scatter.append(ScatterEntry(
+                        id: "\(x)-me-serve-\(category.rawValue)",
+                        pointIndex: x,
+                        y: m,
+                        color: category.color,
+                        symbol: category.symbol,
+                        label: "My \(category.displayLabel)"
+                    ))
+                }
+                for category in ServingPointCategory.allCases
+                where selectedOpponentServing.contains(category)
+                    && category.matches(stat, server: .opponent) {
+                    scatter.append(ScatterEntry(
+                        id: "\(x)-opp-serve-\(category.rawValue)",
+                        pointIndex: x,
+                        y: o,
+                        color: category.color,
+                        symbol: category.symbol,
+                        label: "Opp \(category.displayLabel)"
+                    ))
+                }
                 // Ending shots framed as won / lost by phase. A point the focal
                 // player won is plotted on the Me line; a lost point on the
                 // Opponent line — so won-vs-lost reads off the marker's line,
@@ -344,6 +451,8 @@ private struct PointsGraphData {
         self.endingLostByPhase = endLost
         self.myOutcomeCounts = myOutcomes
         self.oppOutcomeCounts = oppOutcomes
+        self.myServingCounts = myServing
+        self.oppServingCounts = oppServing
 
         if hr.isEmpty {
             self.hrDomain = 50...200
@@ -358,6 +467,9 @@ private struct PointsGraphData {
         // map them onto the graph's 1-based x-axis and prepend a seed at x=0 so
         // the line starts at the chart origin.
         let coreSteps = StepsSeries.make(stats: stats, totalSteps: totalSteps)
+        self.perPointStepsByIndex = Dictionary(uniqueKeysWithValues: coreSteps.map {
+            ($0.pointIndex + 1, $0.perPoint)
+        })
         if coreSteps.isEmpty {
             self.stepEntries = []
         } else {
@@ -777,12 +889,17 @@ private struct PointsGraphLegend: View {
 private struct PointsGraphScatterControls: View {
     @Binding var selectedMyOutcomes: Set<OutcomeCategory>
     @Binding var selectedOpponentOutcomes: Set<OutcomeCategory>
+    @Binding var selectedMyServing: Set<ServingPointCategory>
+    @Binding var selectedOpponentServing: Set<ServingPointCategory>
     @Binding var selectedWonEndingShots: Set<EndingShot>
     @Binding var selectedLostEndingShots: Set<EndingShot>
+    let hasOutcomeData: Bool
     let wonByPhase: [EndingShot: Int]
     let lostByPhase: [EndingShot: Int]
     let myOutcomeCounts: [OutcomeCategory: Int]
     let oppOutcomeCounts: [OutcomeCategory: Int]
+    let myServingCounts: [ServingPointCategory: Int]
+    let oppServingCounts: [ServingPointCategory: Int]
 
     private var isPointsWonActive: Bool {
         selectedMyOutcomes == [.winner] &&
@@ -891,22 +1008,43 @@ private struct PointsGraphScatterControls: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            section(title: "Outcomes") {
-                quickSelectRow
+            if hasOutcomeData {
+                section(title: "Outcomes") {
+                    quickSelectRow
+                    chipRow(
+                        title: "Me",
+                        items: OutcomeCategory.allCases,
+                        isSelected: { selectedMyOutcomes.contains($0) },
+                        toggle: { selectedMyOutcomes.formSymmetricDifference([$0]) },
+                        label: { "\($0.label) \(myOutcomeCounts[$0] ?? 0)" },
+                        color: { $0.color }
+                    )
+                    chipRow(
+                        title: "Opp",
+                        items: OutcomeCategory.allCases,
+                        isSelected: { selectedOpponentOutcomes.contains($0) },
+                        toggle: { selectedOpponentOutcomes.formSymmetricDifference([$0]) },
+                        label: { "\($0.label) \(oppOutcomeCounts[$0] ?? 0)" },
+                        color: { $0.color }
+                    )
+                }
+            }
+
+            section(title: "Serving") {
                 chipRow(
                     title: "Me",
-                    items: OutcomeCategory.allCases,
-                    isSelected: { selectedMyOutcomes.contains($0) },
-                    toggle: { selectedMyOutcomes.formSymmetricDifference([$0]) },
-                    label: { "\($0.label) \(myOutcomeCounts[$0] ?? 0)" },
+                    items: ServingPointCategory.allCases,
+                    isSelected: { selectedMyServing.contains($0) },
+                    toggle: { selectedMyServing.formSymmetricDifference([$0]) },
+                    label: { "\($0.displayLabel) \(myServingCounts[$0] ?? 0)" },
                     color: { $0.color }
                 )
                 chipRow(
                     title: "Opp",
-                    items: OutcomeCategory.allCases,
-                    isSelected: { selectedOpponentOutcomes.contains($0) },
-                    toggle: { selectedOpponentOutcomes.formSymmetricDifference([$0]) },
-                    label: { "\($0.label) \(oppOutcomeCounts[$0] ?? 0)" },
+                    items: ServingPointCategory.allCases,
+                    isSelected: { selectedOpponentServing.contains($0) },
+                    toggle: { selectedOpponentServing.formSymmetricDifference([$0]) },
+                    label: { "\($0.displayLabel) \(oppServingCounts[$0] ?? 0)" },
                     color: { $0.color }
                 )
             }
@@ -1033,6 +1171,7 @@ private struct PointsGraphSelectionSummary: View {
     let setPointNumber: Int?
     let point: PointStat?
     let matchScore: PointMatchScore.Snapshot?
+    let perPointSteps: Int?
     let me: Int
     let opp: Int
     let scatter: [ScatterEntry]
@@ -1067,9 +1206,7 @@ private struct PointsGraphSelectionSummary: View {
 
             if let point {
                 HStack(spacing: 5) {
-                    Text("🎾")
-                        .accessibilityHidden(true)
-                    Text(point.server == .me ? "Me serving" : "Opp serving")
+                    PointServiceStatusLabel(isServing: point.server == .me)
                     if let gameScore = point.gameScoreAtStart {
                         Text("·")
                         Text(GameScoreLabel.string(for: gameScore, server: point.server))
@@ -1078,6 +1215,11 @@ private struct PointsGraphSelectionSummary: View {
                     if let matchScore, !matchScore.label.isEmpty {
                         Text("·")
                         Text(matchScore.label)
+                            .monospacedDigit()
+                    }
+                    if let perPointSteps {
+                        Text("·")
+                        Text("\(perPointSteps) steps")
                             .monospacedDigit()
                     }
                 }
@@ -1263,6 +1405,8 @@ struct PointsGraphView: View {
     // expanded view binds to and mutates them.
     @State private var selectedMyOutcomes: Set<OutcomeCategory> = []
     @State private var selectedOpponentOutcomes: Set<OutcomeCategory> = []
+    @State private var selectedMyServing: Set<ServingPointCategory> = []
+    @State private var selectedOpponentServing: Set<ServingPointCategory> = []
     @State private var selectedWonEndingShots: Set<EndingShot> = []
     @State private var selectedLostEndingShots: Set<EndingShot> = []
     @State private var showHeartRate = false
@@ -1283,6 +1427,8 @@ struct PointsGraphView: View {
             record: record,
             selectedMyOutcomes: [],
             selectedOpponentOutcomes: [],
+            selectedMyServing: [],
+            selectedOpponentServing: [],
             selectedWonEndingShots: [],
             selectedLostEndingShots: []
         )
@@ -1358,6 +1504,8 @@ struct PointsGraphView: View {
                 record: record,
                 selectedMyOutcomes: $selectedMyOutcomes,
                 selectedOpponentOutcomes: $selectedOpponentOutcomes,
+                selectedMyServing: $selectedMyServing,
+                selectedOpponentServing: $selectedOpponentServing,
                 selectedWonEndingShots: $selectedWonEndingShots,
                 selectedLostEndingShots: $selectedLostEndingShots,
                 showHeartRate: $showHeartRate,
@@ -1385,14 +1533,14 @@ struct PointsGraphView: View {
     }
 
     /// Caption under the inline chart naming what the full-screen view adds.
-    /// Returns nil when the match has neither categorized outcomes nor HR/Steps
-    /// data, so we never advertise controls that wouldn't appear there.
+    /// Every non-empty match has first/second-serve filters, including matches
+    /// recorded without detailed outcome tracking.
     private func expandHintText(data: PointsGraphData) -> String? {
-        let canFilter = data.hasOutcomeData
+        let canFilter = !stats.isEmpty
         let canOverlay = data.hasHeartRateData || data.hasStepsData
         switch (canFilter, canOverlay) {
-        case (true, true):   return String(localized: "Expand to filter outcomes & add overlays")
-        case (true, false):  return String(localized: "Expand to filter outcomes")
+        case (true, true):   return String(localized: "Expand to filter points & add overlays")
+        case (true, false):  return String(localized: "Expand to filter points")
         case (false, true):  return String(localized: "Expand to add heart rate & steps")
         case (false, false): return nil
         }
@@ -1412,6 +1560,7 @@ struct PointsGraphView: View {
                 setPointNumber: data.setPointNumberByIndex[x],
                 point: point,
                 matchScore: matchScore,
+                perPointSteps: data.perPointStepsByIndex[x],
                 me: totals.me,
                 opp: totals.opp,
                 scatter: scatter,
@@ -1441,6 +1590,8 @@ struct ExpandedPointsGraphView: View {
     // selections survive closing and reopening the full-screen cover.
     @Binding private var selectedMyOutcomes: Set<OutcomeCategory>
     @Binding private var selectedOpponentOutcomes: Set<OutcomeCategory>
+    @Binding private var selectedMyServing: Set<ServingPointCategory>
+    @Binding private var selectedOpponentServing: Set<ServingPointCategory>
     @Binding private var selectedWonEndingShots: Set<EndingShot>
     @Binding private var selectedLostEndingShots: Set<EndingShot>
     @Binding private var showHeartRate: Bool
@@ -1463,6 +1614,8 @@ struct ExpandedPointsGraphView: View {
     fileprivate init(record: MatchRecord,
                      selectedMyOutcomes: Binding<Set<OutcomeCategory>>,
                      selectedOpponentOutcomes: Binding<Set<OutcomeCategory>>,
+                     selectedMyServing: Binding<Set<ServingPointCategory>>,
+                     selectedOpponentServing: Binding<Set<ServingPointCategory>>,
                      selectedWonEndingShots: Binding<Set<EndingShot>>,
                      selectedLostEndingShots: Binding<Set<EndingShot>>,
                      showHeartRate: Binding<Bool>,
@@ -1474,6 +1627,8 @@ struct ExpandedPointsGraphView: View {
         _fetcher                  = ObservedObject(wrappedValue: fetcher)
         _selectedMyOutcomes       = selectedMyOutcomes
         _selectedOpponentOutcomes = selectedOpponentOutcomes
+        _selectedMyServing        = selectedMyServing
+        _selectedOpponentServing  = selectedOpponentServing
         _selectedWonEndingShots   = selectedWonEndingShots
         _selectedLostEndingShots  = selectedLostEndingShots
         _showHeartRate            = showHeartRate
@@ -1486,6 +1641,8 @@ struct ExpandedPointsGraphView: View {
             record: record,
             selectedMyOutcomes: selectedMyOutcomes.wrappedValue,
             selectedOpponentOutcomes: selectedOpponentOutcomes.wrappedValue,
+            selectedMyServing: selectedMyServing.wrappedValue,
+            selectedOpponentServing: selectedOpponentServing.wrappedValue,
             selectedWonEndingShots: selectedWonEndingShots.wrappedValue,
             selectedLostEndingShots: selectedLostEndingShots.wrappedValue
         ))
@@ -1496,6 +1653,8 @@ struct ExpandedPointsGraphView: View {
             record: record,
             selectedMyOutcomes: selectedMyOutcomes,
             selectedOpponentOutcomes: selectedOpponentOutcomes,
+            selectedMyServing: selectedMyServing,
+            selectedOpponentServing: selectedOpponentServing,
             selectedWonEndingShots: selectedWonEndingShots,
             selectedLostEndingShots: selectedLostEndingShots
         )
@@ -1504,6 +1663,16 @@ struct ExpandedPointsGraphView: View {
     private var totalRange: Int { max(stats.count, 1) }
     private var minVisibleLength: Int { min(max(stats.count, 1), 5) }
     private var zoomEnabled: Bool { stats.count > 5 }
+    private var scatterSelection: PointsGraphScatterSelection {
+        PointsGraphScatterSelection(
+            myOutcomes: selectedMyOutcomes,
+            opponentOutcomes: selectedOpponentOutcomes,
+            myServing: selectedMyServing,
+            opponentServing: selectedOpponentServing,
+            wonEndingShots: selectedWonEndingShots,
+            lostEndingShots: selectedLostEndingShots
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -1536,10 +1705,7 @@ struct ExpandedPointsGraphView: View {
                     }
                 }
             }
-            .onChange(of: selectedMyOutcomes)       { rebuildData() }
-            .onChange(of: selectedOpponentOutcomes) { rebuildData() }
-            .onChange(of: selectedWonEndingShots)   { rebuildData() }
-            .onChange(of: selectedLostEndingShots)  { rebuildData() }
+            .onChange(of: scatterSelection) { rebuildData() }
             .onChange(of: hrSeriesMode) { _, newMode in
                 guard newMode == .averaged else { return }
                 if case .loaded = fetcher.state { return }
@@ -1598,18 +1764,21 @@ struct ExpandedPointsGraphView: View {
                     hasStepsData: data.hasStepsData
                 )
 
-                if data.hasOutcomeData {
-                    PointsGraphScatterControls(
-                        selectedMyOutcomes: $selectedMyOutcomes,
-                        selectedOpponentOutcomes: $selectedOpponentOutcomes,
-                        selectedWonEndingShots: $selectedWonEndingShots,
-                        selectedLostEndingShots: $selectedLostEndingShots,
-                        wonByPhase: data.endingWonByPhase,
-                        lostByPhase: data.endingLostByPhase,
-                        myOutcomeCounts: data.myOutcomeCounts,
-                        oppOutcomeCounts: data.oppOutcomeCounts
-                    )
-                }
+                PointsGraphScatterControls(
+                    selectedMyOutcomes: $selectedMyOutcomes,
+                    selectedOpponentOutcomes: $selectedOpponentOutcomes,
+                    selectedMyServing: $selectedMyServing,
+                    selectedOpponentServing: $selectedOpponentServing,
+                    selectedWonEndingShots: $selectedWonEndingShots,
+                    selectedLostEndingShots: $selectedLostEndingShots,
+                    hasOutcomeData: data.hasOutcomeData,
+                    wonByPhase: data.endingWonByPhase,
+                    lostByPhase: data.endingLostByPhase,
+                    myOutcomeCounts: data.myOutcomeCounts,
+                    oppOutcomeCounts: data.oppOutcomeCounts,
+                    myServingCounts: data.myServingCounts,
+                    oppServingCounts: data.oppServingCounts
+                )
 
                 if data.hasHeartRateData || data.hasStepsData {
                     PointsGraphToggleRow(
@@ -1649,6 +1818,7 @@ struct ExpandedPointsGraphView: View {
                 setPointNumber: data.setPointNumberByIndex[x],
                 point: point,
                 matchScore: matchScore,
+                perPointSteps: data.perPointStepsByIndex[x],
                 me: totals.me,
                 opp: totals.opp,
                 scatter: scatter,
