@@ -226,13 +226,13 @@ extension MatchWebViewModel {
 
     // MARK: - Points / set bands / HR / steps
 
-    static func pointRows(_ stats: [PointStat], matchFormat: MatchFormat) -> [PointVM] {
+    static func pointRows(_ stats: [PointStat], matchFormat: MatchFormat, setScores: [SetScore]) -> [PointVM] {
         var cumMe = 0
         var cumOpp = 0
         let bySet = Dictionary(grouping: stats, by: \.setIndex)
         var gamesAtStart: [PointStat.ID: GamesScoreSnapshot] = [:]
         for (setIdx, points) in bySet {
-            gamesAtStart.merge(PointGamesScore.atStart(of: points, setIndex: setIdx, matchFormat: matchFormat)) { _, new in new }
+            gamesAtStart.merge(PointGamesScore.atStart(of: points, setIndex: setIdx, matchFormat: matchFormat, setScores: setScores)) { _, new in new }
         }
         return stats.enumerated().map { idx, pt in
             if pt.winner == .me { cumMe += 1 } else { cumOpp += 1 }

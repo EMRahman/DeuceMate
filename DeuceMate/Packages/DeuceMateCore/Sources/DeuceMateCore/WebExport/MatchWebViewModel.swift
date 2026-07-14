@@ -356,7 +356,7 @@ public struct MatchWebViewModel: Encodable, Sendable {
         )
 
         // Points + set bands
-        let points = Self.pointRows(allStats, matchFormat: record.matchFormat)
+        let points = Self.pointRows(allStats, matchFormat: record.matchFormat, setScores: record.setScores)
         let setBands = Self.setBands(points)
 
         // Recorder-only HR / steps blocks (from the `me` full summary).

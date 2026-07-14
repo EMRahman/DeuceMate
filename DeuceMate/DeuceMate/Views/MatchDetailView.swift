@@ -704,7 +704,7 @@ struct MatchDetailView: View {
         let setIndices = grouped.keys.sorted()
         ForEach(setIndices, id: \.self) { setIdx in
             let points = grouped[setIdx] ?? []
-            let gamesAtStart = PointGamesScore.atStart(of: points, setIndex: setIdx, matchFormat: record.matchFormat)
+            let gamesAtStart = PointGamesScore.atStart(of: points, setIndex: setIdx, matchFormat: record.matchFormat, setScores: record.setScores)
             Section(SetFilter.set(setIdx).label(matchFormat: record.matchFormat)) {
                 ForEach(Array(points.enumerated()), id: \.element.id) { idx, pt in
                     pointRow(number: idx + 1, point: pt, games: gamesAtStart[pt.id])
