@@ -186,7 +186,7 @@ final class MatchWebExportTests: XCTestCase {
 
     func test_comparison_sectionsAndGating_fullMatch() throws {
         let vm = MatchWebViewModel.make(from: makeRecord())
-        XCTAssertEqual(vm.schemaVersion, 6)
+        XCTAssertEqual(vm.schemaVersion, 7)
         XCTAssertTrue(allComparison(vm).hasAnyOutcomeData)
         let titles = allComparison(vm).sections.map { $0.title }
         // Outcome Breakdown leads; Serve/Return present (every point categorised).
@@ -337,7 +337,7 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertEqual(p[4].pointScoreLabel, "Deuce")
     }
 
-    func test_gamesScoreLabel_reflectsInSetGamesScore() {
+    func test_matchScoreLabel_reflectsInSetGamesScore() {
         // A self-consistent fixture: two completed one-point "games" (me, then
         // opponent), with a third in progress — the games score in setScores
         // matches what's derivable from the tracked points.
@@ -360,12 +360,12 @@ final class MatchWebExportTests: XCTestCase {
 
         let p = MatchWebViewModel.make(from: record).points
 
-        XCTAssertEqual(p[0].gamesScoreLabel, "0–0")
-        XCTAssertEqual(p[1].gamesScoreLabel, "1–0")
-        XCTAssertEqual(p[2].gamesScoreLabel, "1–1")
+        XCTAssertEqual(p[0].matchScoreLabel, "0–0")
+        XCTAssertEqual(p[1].matchScoreLabel, "1–0")
+        XCTAssertEqual(p[2].matchScoreLabel, "1–1")
     }
 
-    func test_gamesScoreLabel_suppressedWhenTrackedPointsAreOnlyASuffixOfTheSet() {
+    func test_matchScoreLabel_suppressedWhenTrackedPointsAreOnlyASuffixOfFirstSet() {
         // Mirrors a match reconstructed via ManualMatchEntryView mid-set (at a
         // non-zero games score) and resumed on the watch: only the resumed
         // suffix is tracked, so setScores disagrees with what the tracked
@@ -387,8 +387,78 @@ final class MatchWebExportTests: XCTestCase {
 
         let p = MatchWebViewModel.make(from: record).points
 
-        XCTAssertNil(p[0].gamesScoreLabel)
-        XCTAssertNil(p[1].gamesScoreLabel)
+        XCTAssertNil(p[0].matchScoreLabel)
+        XCTAssertNil(p[1].matchScoreLabel)
+    }
+
+    func test_matchScoreLabel_includesAuthoritativeCompletedSets() {
+        let point = PointStat(
+            setIndex: 1,
+            server: .opponent,
+            winner: .me,
+            outcome: .winner,
+            gameScoreAtStart: snap(0, 0, false)
+        )
+        let record = MatchRecord(
+            startTime: Date(timeIntervalSince1970: 1_700_000_000),
+            setScores: [
+                SetScore(gamesMe: 6, gamesOpponent: 4),
+                SetScore()
+            ],
+            stats: [point],
+            matchFormat: .standard
+        )
+
+        let exported = MatchWebViewModel.make(from: record).points
+
+        XCTAssertEqual(exported[0].matchScoreLabel, "6–4  0–0")
+        XCTAssertEqual(exported[0].server, "opp")
+    }
+
+    func test_matchScoreLabel_survivesARealisticCompletedSixFourSet() {
+        let gameWinners: [Player] = [
+            .me, .opponent, .me, .opponent, .me,
+            .opponent, .me, .opponent, .me, .me
+        ]
+        var stats: [PointStat] = []
+        for (gameIndex, winner) in gameWinners.enumerated() {
+            let server: Player = gameIndex.isMultiple(of: 2) ? .me : .opponent
+            for pointIndex in 0..<4 {
+                stats.append(PointStat(
+                    setIndex: 0,
+                    server: server,
+                    winner: winner,
+                    outcome: .uncategorized,
+                    gameScoreAtStart: snap(
+                        winner == server ? pointIndex : 0,
+                        winner == server ? 0 : pointIndex,
+                        false
+                    )
+                ))
+            }
+        }
+        let record = MatchRecord(
+            startTime: Date(timeIntervalSince1970: 1_700_000_000),
+            endTime: Date(timeIntervalSince1970: 1_700_001_000),
+            setScores: [SetScore(gamesMe: 6, gamesOpponent: 4)],
+            stats: stats,
+            iWon: true,
+            matchFormat: .standard
+        )
+
+        let exported = MatchWebViewModel.make(from: record).points
+
+        XCTAssertEqual(exported.count, stats.count)
+        XCTAssertEqual(exported[0].matchScoreLabel, "0–0")
+        XCTAssertEqual(exported[exported.count - 1].matchScoreLabel, "5–4")
+    }
+
+    func test_htmlPointRowsRenderMatchScoreAndServerIndicator() {
+        let html = MatchHTMLExporter.html(for: makeRecord())
+
+        XCTAssertTrue(html.contains("p.matchScoreLabel"))
+        XCTAssertTrue(html.contains("🎾 "))
+        XCTAssertFalse(html.contains("p.gamesScoreLabel"))
     }
 
     // MARK: - AI Coach (mirrors AICoachSheet)

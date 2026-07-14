@@ -226,18 +226,16 @@ extension MatchWebViewModel {
 
     // MARK: - Points / set bands / HR / steps
 
-    static func pointRows(_ stats: [PointStat], matchFormat: MatchFormat, setScores: [SetScore]) -> [PointVM] {
+    static func pointRows(_ record: MatchRecord) -> [PointVM] {
+        let stats = record.stats
         var cumMe = 0
         var cumOpp = 0
-        let bySet = Dictionary(grouping: stats, by: \.setIndex)
-        var gamesAtStart: [PointStat.ID: GamesScoreSnapshot] = [:]
-        for (setIdx, points) in bySet {
-            gamesAtStart.merge(PointGamesScore.atStart(of: points, setIndex: setIdx, matchFormat: matchFormat, setScores: setScores)) { _, new in new }
-        }
+        let matchScores = PointMatchScore.atStart(of: stats, record: record)
         return stats.enumerated().map { idx, pt in
             if pt.winner == .me { cumMe += 1 } else { cumOpp += 1 }
             let shot = pt.endingShot
             let chip = pointChip(pt)
+            let matchScore = matchScores[pt.id]?.label
             return PointVM(
                 index: idx,
                 setIndex: pt.setIndex,
@@ -258,7 +256,7 @@ extension MatchWebViewModel {
                 isSecondServe: pt.isSecondServe,
                 isBreakPoint: pt.isBreakPoint,
                 gameScoreLabel: gameScoreLabel(pt),
-                gamesScoreLabel: gamesAtStart[pt.id].map { "\($0.me)–\($0.opponent)" },
+                matchScoreLabel: matchScore?.isEmpty == false ? matchScore : nil,
                 cumulativeMe: cumMe,
                 cumulativeOpp: cumOpp,
                 heartRateBPM: pt.heartRateBPM,
@@ -335,8 +333,18 @@ extension MatchWebViewModel {
             let secs = record.setElapsedSeconds[i] ?? 0
             return SetVM(
                 setNumber: i + 1,
-                scoreMe: setScoreString(record: record, index: i, focal: .me),
-                scoreOpponent: setScoreString(record: record, index: i, focal: .opponent),
+                scoreMe: SetScoreLabel.string(
+                    for: record.setScores[i],
+                    setIndex: i,
+                    matchFormat: record.matchFormat,
+                    focal: .me
+                ),
+                scoreOpponent: SetScoreLabel.string(
+                    for: record.setScores[i],
+                    setIndex: i,
+                    matchFormat: record.matchFormat,
+                    focal: .opponent
+                ),
                 durationSeconds: Int(secs),
                 durationDisplay: secs > 0 ? minutesString(secs) : nil
             )
@@ -428,31 +436,15 @@ extension MatchWebViewModel {
     static func scoreString(record: MatchRecord, focal: Player) -> String? {
         guard !record.setScores.isEmpty else { return nil }
         return record.setScores.indices
-            .map { setScoreString(record: record, index: $0, focal: focal) }
+            .map {
+                SetScoreLabel.string(
+                    for: record.setScores[$0],
+                    setIndex: $0,
+                    matchFormat: record.matchFormat,
+                    focal: focal
+                )
+            }
             .joined(separator: "  ")
-    }
-
-    /// One set's score from `focal`'s perspective (mirrors MatchExporter).
-    static func setScoreString(record: MatchRecord, index: Int, focal: Player) -> String {
-        let set = record.setScores[index]
-        let cfg = record.matchFormat.config
-        let decidingSetIndex = cfg.setsToWin * 2 - 2
-        if !cfg.playRegularSets ||
-            (cfg.finalSetStyle == .superTiebreak && index == decidingSetIndex && set.isTieBreak) {
-            let a = focal == .me ? set.tieBreakPointsMe : set.tieBreakPointsOpponent
-            let b = focal == .me ? set.tieBreakPointsOpponent : set.tieBreakPointsMe
-            return "\(a)–\(b)"
-        }
-        if set.isTieBreak && set.gamesMe + set.gamesOpponent > 0 {
-            let ga = focal == .me ? set.gamesMe : set.gamesOpponent
-            let gb = focal == .me ? set.gamesOpponent : set.gamesMe
-            let ta = focal == .me ? set.tieBreakPointsMe : set.tieBreakPointsOpponent
-            let tb = focal == .me ? set.tieBreakPointsOpponent : set.tieBreakPointsMe
-            return "\(ga)–\(gb) (\(ta)–\(tb))"
-        }
-        let a = focal == .me ? set.gamesMe : set.gamesOpponent
-        let b = focal == .me ? set.gamesOpponent : set.gamesMe
-        return "\(a)–\(b)"
     }
 
     static func rallyDepthLabel(_ shot: EndingShot) -> String {
@@ -464,21 +456,10 @@ extension MatchWebViewModel {
         }
     }
 
-    /// Tennis score notation for a point's starting game snapshot (server–returner).
+    /// Tennis score notation for a point's starting game snapshot (Me–Opponent).
     static func gameScoreLabel(_ pt: PointStat) -> String {
         guard let g = pt.gameScoreAtStart else { return "—" }
-        if g.isTiebreak { return "\(g.server)-\(g.returner) TB" }
-        return "\(tennisPoints(g.server, g.returner))-\(tennisPoints(g.returner, g.server))"
-    }
-
-    static func tennisPoints(_ mine: Int, _ theirs: Int) -> String {
-        switch mine {
-        case 0: return "0"
-        case 1: return "15"
-        case 2: return "30"
-        case 3: return theirs >= 3 ? (mine > theirs ? "Ad" : "40") : "40"
-        default: return mine > theirs ? "Ad" : "40"
-        }
+        return GameScoreLabel.string(for: g, server: pt.server)
     }
 
     // MARK: - Points-tab display (mirror MatchDetailView.pointRow)
@@ -510,20 +491,10 @@ extension MatchWebViewModel {
         }
     }
 
-    /// Server-relative game score in recorder frame ("0–15", "Deuce", "Ad Me").
+    /// Recorder-oriented game score ("0–15", "Deuce", "Ad Me").
     static func pointScoreLabel(_ pt: PointStat) -> String {
         guard let snap = pt.gameScoreAtStart else { return "" }
-        let s = snap.server, r = snap.returner, server = pt.server
-        if snap.isTiebreak { return server == .me ? "\(s)–\(r)" : "\(r)–\(s)" }
-        let labels = ["0", "15", "30", "40"]
-        if s >= 3 && r >= 3 {
-            if s == r { return "Deuce" }
-            if s > r  { return "Ad \(server == .me ? "Me" : "Opp")" }
-            return "Ad \(server == .me ? "Opp" : "Me")"
-        }
-        let sLabel = s < labels.count ? labels[s] : "\(s)"
-        let rLabel = r < labels.count ? labels[r] : "\(r)"
-        return server == .me ? "\(sLabel)–\(rLabel)" : "\(rLabel)–\(sLabel)"
+        return GameScoreLabel.string(for: snap, server: pt.server)
     }
 
     static func hrZoneColorHex(_ zone: HRZone) -> String {

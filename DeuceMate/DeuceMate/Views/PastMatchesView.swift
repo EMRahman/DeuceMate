@@ -640,33 +640,6 @@ struct PastMatchesView: View {
         return "\(count) \(noun) kept on iPhone — your full history stays here. Apple Watch holds the most recent \(WatchHistory.cap)."
     }
 
-    private func resultLabel(for record: MatchRecord) -> String {
-        if record.isInProgress { return "In Progress" }
-        let result = (record.iWon ?? false) ? "Won" : "Lost"
-        if record.matchFormat == .perpetualPoints, let tb = record.setScores.first {
-            return "Final \(tb.tieBreakPointsMe)-\(tb.tieBreakPointsOpponent)"
-        }
-        if record.matchFormat == .superTiebreak, let tb = record.setScores.first {
-            return "\(result) \(tb.tieBreakPointsMe)-\(tb.tieBreakPointsOpponent)"
-        }
-        if record.matchFormat == .perpetualSuperTiebreak {
-            let scores = record.setScores.map { "\($0.tieBreakPointsMe)-\($0.tieBreakPointsOpponent)" }
-            if scores.count > 4 {
-                return scores.prefix(3).joined(separator: ", ") + ", … (\(scores.count) sets)"
-            }
-            return scores.joined(separator: ", ")
-        }
-        let parts = record.setScores.map { set -> String in
-            if set.isTieBreak && set.gamesMe + set.gamesOpponent > 0 {
-                return "\(set.gamesMe)-\(set.gamesOpponent)(\(set.tieBreakPointsMe)-\(set.tieBreakPointsOpponent))"
-            } else if set.isTieBreak {
-                return "\(set.tieBreakPointsMe)-\(set.tieBreakPointsOpponent)"
-            }
-            return "\(set.gamesMe)-\(set.gamesOpponent)"
-        }
-        return "\(result) \(parts.joined(separator: ", "))"
-    }
-
     private func hasPointStats(_ record: MatchRecord) -> Bool { !record.stats.isEmpty }
 
     private func formatLabel(for record: MatchRecord) -> String {
@@ -687,61 +660,40 @@ struct PastMatchesView: View {
     /// games + current game score (e.g. "6–4  2–1  (30–0)").
     private func inProgressScoreString(for record: MatchRecord) -> String? {
         guard !record.setScores.isEmpty else { return nil }
-        var parts: [String] = []
-
-        // All completed sets (everything except the last)
-        for set in record.setScores.dropLast() {
-            if set.isTieBreak && set.gamesMe + set.gamesOpponent > 0 {
-                parts.append("\(set.gamesMe)–\(set.gamesOpponent)(\(set.tieBreakPointsMe)–\(set.tieBreakPointsOpponent))")
-            } else if set.isTieBreak {
-                parts.append("\(set.tieBreakPointsMe)–\(set.tieBreakPointsOpponent)")
-            } else {
-                parts.append("\(set.gamesMe)–\(set.gamesOpponent)")
-            }
+        var parts = record.setScores.enumerated().map { index, set in
+            SetScoreLabel.string(
+                for: set,
+                setIndex: index,
+                matchFormat: record.matchFormat
+            )
         }
 
-        // Current in-progress set (last element)
-        if let current = record.setScores.last {
-            if current.isTieBreak {
-                parts.append("TB \(current.tieBreakPointsMe)–\(current.tieBreakPointsOpponent)")
-            } else {
-                parts.append("\(current.gamesMe)–\(current.gamesOpponent)")
-                if let gs = MatchRecord.gameScoreString(mePoints: record.currentPointsMe, oppPoints: record.currentPointsOpponent) {
-                    parts.append("(\(gs))")
-                }
-            }
+        if record.matchFormat.config.playRegularSets,
+           record.setScores.last?.isTieBreak == false,
+           let game = MatchRecord.gameScoreString(
+               mePoints: record.currentPointsMe,
+               oppPoints: record.currentPointsOpponent
+           ) {
+            parts.append("(\(game))")
         }
 
-        return parts.isEmpty ? nil : parts.joined(separator: "  ")
+        return parts.joined(separator: "  ")
     }
 
 
     private func scoreString(for record: MatchRecord) -> String? {
         guard !record.isInProgress else { return nil }
-        if record.matchFormat == .perpetualPoints, let tb = record.setScores.first {
-            return "\(tb.tieBreakPointsMe)–\(tb.tieBreakPointsOpponent)"
+        guard !record.setScores.isEmpty else { return nil }
+        let parts = record.setScores.enumerated().map { index, set in
+            SetScoreLabel.string(
+                for: set,
+                setIndex: index,
+                matchFormat: record.matchFormat
+            )
         }
-        if record.matchFormat == .superTiebreak, let tb = record.setScores.first {
-            return "\(tb.tieBreakPointsMe)–\(tb.tieBreakPointsOpponent)"
-        }
-        if record.matchFormat == .perpetualSuperTiebreak {
-            let scores = record.setScores.map { "\($0.tieBreakPointsMe)–\($0.tieBreakPointsOpponent)" }
-            if scores.count > 4 {
-                return scores.prefix(3).joined(separator: "  ") + "  …(\(scores.count))"
-            }
-            return scores.joined(separator: "  ")
-        }
-        let cfg = record.matchFormat.config
-        let parts = record.setScores.enumerated().map { index, set -> String in
-            if cfg.isDecidingSuperTiebreak(setIndex: index) && set.isTieBreak {
-                return "\(set.tieBreakPointsMe)–\(set.tieBreakPointsOpponent)"
-            }
-            if set.isTieBreak && set.gamesMe + set.gamesOpponent > 0 {
-                return "\(set.gamesMe)–\(set.gamesOpponent)(\(set.tieBreakPointsMe)–\(set.tieBreakPointsOpponent))"
-            } else if set.isTieBreak {
-                return "\(set.tieBreakPointsMe)–\(set.tieBreakPointsOpponent)"
-            }
-            return "\(set.gamesMe)–\(set.gamesOpponent)"
+
+        if record.matchFormat == .perpetualSuperTiebreak, parts.count > 4 {
+            return parts.prefix(3).joined(separator: "  ") + "  …(\(parts.count))"
         }
         return parts.joined(separator: "  ")
     }

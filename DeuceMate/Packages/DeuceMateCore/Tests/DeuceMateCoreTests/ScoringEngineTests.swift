@@ -125,6 +125,15 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertEqual(state.currentPointsOpponent, 0)
     }
 
+    func test_regularGameCompletionRule_isPerspectiveNeutral() {
+        XCTAssertFalse(ScoringEngine.isRegularGameComplete(playerOnePoints: 3, playerTwoPoints: 0))
+        XCTAssertFalse(ScoringEngine.isRegularGameComplete(playerOnePoints: 4, playerTwoPoints: 3))
+        XCTAssertFalse(ScoringEngine.isRegularGameComplete(playerOnePoints: 5, playerTwoPoints: 4))
+        XCTAssertTrue(ScoringEngine.isRegularGameComplete(playerOnePoints: 4, playerTwoPoints: 0))
+        XCTAssertTrue(ScoringEngine.isRegularGameComplete(playerOnePoints: 6, playerTwoPoints: 4))
+        XCTAssertTrue(ScoringEngine.isRegularGameComplete(playerOnePoints: 4, playerTwoPoints: 6))
+    }
+
     // MARK: - Break point detection
 
     func test_breakPointDetection() {

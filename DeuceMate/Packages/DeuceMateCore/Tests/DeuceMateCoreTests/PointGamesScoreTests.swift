@@ -15,6 +15,27 @@ final class PointGamesScoreTests: XCTestCase {
                   gameScoreAtStart: gameScoreAtStart)
     }
 
+    private func straightGame(
+        setIndex: Int,
+        winner: Player,
+        server: Player
+    ) -> [PointStat] {
+        (0..<4).map { pointIndex in
+            let serverPoints = winner == server ? pointIndex : 0
+            let returnerPoints = winner == server ? 0 : pointIndex
+            return point(
+                setIndex: setIndex,
+                winner: winner,
+                server: server,
+                gameScoreAtStart: GameScoreSnapshot(
+                    server: serverPoints,
+                    returner: returnerPoints,
+                    isTiebreak: false
+                )
+            )
+        }
+    }
+
     func test_gameByGame_incrementsCorrectPlayer() {
         let g1 = point(setIndex: 0, winner: .me,
                         gameScoreAtStart: GameScoreSnapshot(server: 0, returner: 0, isTiebreak: false))
@@ -52,6 +73,113 @@ final class PointGamesScoreTests: XCTestCase {
         XCTAssertEqual(result[g1p2.id], GamesScoreSnapshot(me: 0, opponent: 0))
         XCTAssertEqual(result[g1p3.id], GamesScoreSnapshot(me: 0, opponent: 0))
         XCTAssertEqual(result[g2p1.id], GamesScoreSnapshot(me: 1, opponent: 0))
+    }
+
+    func test_completedSixFourSet_reconcilesTheSetWinningPoint() {
+        let winners: [Player] = [
+            .me, .opponent, .me, .opponent, .me,
+            .opponent, .me, .opponent, .me, .me
+        ]
+        let points = winners.enumerated().flatMap { gameIndex, winner in
+            straightGame(
+                setIndex: 0,
+                winner: winner,
+                server: gameIndex.isMultiple(of: 2) ? .me : .opponent
+            )
+        }
+
+        let result = PointGamesScore.atStart(
+            of: points,
+            setIndex: 0,
+            matchFormat: .standard,
+            setScores: [SetScore(gamesMe: 6, gamesOpponent: 4)]
+        )
+
+        XCTAssertEqual(result.count, points.count)
+        XCTAssertEqual(result[points[points.count - 4].id], GamesScoreSnapshot(me: 5, opponent: 4))
+        XCTAssertEqual(result[points[points.count - 1].id], GamesScoreSnapshot(me: 5, opponent: 4))
+    }
+
+    func test_completedTiebreakSet_reconcilesTheBreakerWinningPoint() {
+        let regularWinners: [Player] = [
+            .me, .opponent, .me, .opponent, .me, .opponent,
+            .me, .opponent, .me, .opponent, .me, .opponent
+        ]
+        var points = regularWinners.enumerated().flatMap { gameIndex, winner in
+            straightGame(
+                setIndex: 0,
+                winner: winner,
+                server: gameIndex.isMultiple(of: 2) ? .me : .opponent
+            )
+        }
+        let tiebreakWinners: [Player] = [
+            .me, .opponent, .me, .opponent, .me, .opponent,
+            .me, .opponent, .me, .opponent, .me, .me
+        ]
+        var me = 0, opponent = 0
+        var tiebreakPoints: [PointStat] = []
+        for winner in tiebreakWinners {
+            tiebreakPoints.append(point(
+                setIndex: 0,
+                winner: winner,
+                server: .me,
+                gameScoreAtStart: GameScoreSnapshot(
+                    server: me,
+                    returner: opponent,
+                    isTiebreak: true
+                )
+            ))
+            if winner == .me { me += 1 } else { opponent += 1 }
+        }
+        points.append(contentsOf: tiebreakPoints)
+
+        let result = PointGamesScore.atStart(
+            of: points,
+            setIndex: 0,
+            matchFormat: .standard,
+            setScores: [SetScore(
+                gamesMe: 7,
+                gamesOpponent: 6,
+                isTieBreak: true,
+                tieBreakPointsMe: 7,
+                tieBreakPointsOpponent: 5
+            )]
+        )
+
+        XCTAssertEqual(result.count, points.count)
+        XCTAssertEqual(result[tiebreakPoints[0].id], GamesScoreSnapshot(me: 6, opponent: 6))
+        XCTAssertEqual(result[tiebreakPoints[tiebreakPoints.count - 1].id], GamesScoreSnapshot(me: 6, opponent: 6))
+    }
+
+    func test_liveSetWhoseLastTrackedPointEndedAGame_reconcilesThatGame() {
+        let points = straightGame(setIndex: 0, winner: .me, server: .me)
+
+        let result = PointGamesScore.atStart(
+            of: points,
+            setIndex: 0,
+            matchFormat: .standard,
+            setScores: [SetScore(gamesMe: 1, gamesOpponent: 0)]
+        )
+
+        XCTAssertEqual(result.count, points.count)
+        XCTAssertEqual(result[points[points.count - 1].id], GamesScoreSnapshot(me: 0, opponent: 0))
+    }
+
+    func test_lastTrackedPointMidGame_doesNotExcuseOneGameMismatch() {
+        let point = point(
+            setIndex: 0,
+            winner: .me,
+            gameScoreAtStart: GameScoreSnapshot(server: 1, returner: 0, isTiebreak: false)
+        )
+
+        let result = PointGamesScore.atStart(
+            of: [point],
+            setIndex: 0,
+            matchFormat: .standard,
+            setScores: [SetScore(gamesMe: 1, gamesOpponent: 0)]
+        )
+
+        XCTAssertTrue(result.isEmpty)
     }
 
     func test_tiebreak_freezesGamesScoreThroughout() {

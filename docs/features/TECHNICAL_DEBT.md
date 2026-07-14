@@ -49,20 +49,21 @@ persistence, undo, and scoring in one ~2.3k-line file. The riskiest logic
 (`winPoint`, `losePoint`, `completeSet`, `updateScore`) was untestable without
 watchOS.
 
-**Done:** `Scoring/ScoringEngine.swift` (~555 lines) added to Core as a pure
+**Done:** `Scoring/ScoringEngine.swift` (~567 lines) added to Core as a pure
 static reducer — `pointWon(by:in:) -> ScoringResult`. State is a value type
 (`ScoringState`), side-effects are typed `ScoringEvent`s returned in the
 result. `ScoreViewModel` now delegates to the engine
 (`ScoreViewModel.swift:1010`) and reacts to events.
 
-**Tests added:** 16 tests in `ScoringEngineTests` covering deuce
+**Tests added:** 17 tests in `ScoringEngineTests` covering deuce
 cycling, server rotation, break-point detection, snapshot correctness,
-changeover event reasons, all four non-standard formats, and endless formats.
-Test count across the Core package: 345 (re-counted at the latest audit, 26 test files).
+changeover event reasons, the shared perspective-neutral game-completion predicate,
+all four non-standard formats, and endless formats. Test count across the Core package:
+378 (re-counted after the point-match-score work, 29 test files).
 
 **Remaining gap:** The `handleSideChangesAfterTiebreakSetEnd` 4-case switch
-(players change × ball-holder changes; `ScoringEngine.swift:519–553`, called
-from the set-completion path at `:305`) has no dedicated test. Low risk given
+(players change × ball-holder changes; `ScoringEngine.swift:531–565`, called
+from the set-completion path at `:317`) has no dedicated test. Low risk given
 the logic is simple, but worth adding if the area is touched.
 
 ---
@@ -356,7 +357,7 @@ false claim in `CLAUDE.md` misleads every future session.
 need" — but the prescribed navigation is impossible in exactly the files where
 it matters most. Current anchor counts: `ScoreViewModel.swift` **1 MARK in
 1928 lines**, `HomeView.swift` **0 in 903**, `ContentView.swift` **3 in 941**.
-By contrast `PointsGraphView.swift` (9 MARKs / 1525 lines) shows the target
+By contrast `PointsGraphView.swift` (9 MARKs / ~1700 lines) shows the target
 state and is pleasant to work in. For an agent this is not cosmetic: without
 anchors it must load the whole file (context cost) and its exact-match `Edit`s
 get riskier because there are no nearby unique landmarks.
@@ -476,7 +477,7 @@ enforce that, so the one counterexample in the codebase weakens the rule
 (`DeuceMateTests/DeuceMateTests.swift`) and both UITest targets contain only
 the Xcode template stubs (`testExample`, `testLaunchPerformance`). They add
 scheme noise and imply coverage that doesn't exist. Meanwhile the watch test
-target is real (36 Swift Testing tests) and Core has 345.
+target is real (36 Swift Testing tests) and Core has 378.
 
 **Proposed fix / status:** (a) ✅ Done — replaced `realSteps.first!`
 with `realSteps[0]`; the count guard at line 322 still applies, no behaviour

@@ -54,9 +54,62 @@ public enum PointGamesScore {
         }
 
         let known = setIndex < setScores.count ? setScores[setIndex] : SetScore()
-        guard me == known.gamesMe, opponent == known.gamesOpponent else {
+        if me == known.gamesMe, opponent == known.gamesOpponent {
+            return result
+        }
+
+        // A new-game boundary is the only evidence the loop normally has that
+        // the preceding point completed a game. There is no later point after
+        // the final tracked point, so reconcile once more with that point's
+        // post-point score — but only when its snapshot proves that it really
+        // completed the regular game or tiebreak. Blindly crediting its winner
+        // would make a one-game gap in a resumed history look trustworthy.
+        guard let last = points.last,
+              completesGame(last, setIndex: setIndex, matchFormat: matchFormat, setScores: setScores) else {
+            return [:]
+        }
+        let finalMe = me + (last.winner == .me ? 1 : 0)
+        let finalOpponent = opponent + (last.winner == .opponent ? 1 : 0)
+        guard finalMe == known.gamesMe, finalOpponent == known.gamesOpponent else {
             return [:]
         }
         return result
+    }
+
+    private static func completesGame(
+        _ point: PointStat,
+        setIndex: Int,
+        matchFormat: MatchFormat,
+        setScores: [SetScore]
+    ) -> Bool {
+        guard let snapshot = point.gameScoreAtStart else { return false }
+
+        var serverPoints = snapshot.server
+        var returnerPoints = snapshot.returner
+        if point.winner == point.server {
+            serverPoints += 1
+        } else {
+            returnerPoints += 1
+        }
+
+        if snapshot.isTiebreak {
+            guard !matchFormat.config.isEndless else { return false }
+            let target = ScoringEngine.tiebreakTargetPoints(
+                forSetAt: setIndex,
+                in: setScores,
+                format: matchFormat
+            )
+            return ScoringEngine.isTiebreakComplete(
+                mePoints: serverPoints,
+                oppPoints: returnerPoints,
+                target: target,
+                format: matchFormat
+            )
+        }
+
+        return ScoringEngine.isRegularGameComplete(
+            playerOnePoints: serverPoints,
+            playerTwoPoints: returnerPoints
+        )
     }
 }
