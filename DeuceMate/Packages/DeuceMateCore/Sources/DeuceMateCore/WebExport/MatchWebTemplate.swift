@@ -132,7 +132,9 @@ public enum MatchWebTemplate {
     .pt-num { min-width: 22px; text-align: right; color: var(--muted); opacity: .7; font-size: 12px;
       font-variant-numeric: tabular-nums; padding-top: 2px; }
     .pt-body { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+    .pt-match { color: var(--muted); opacity: .75; font-size: 11px; font-variant-numeric: tabular-nums; }
     .pt-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .pt-server { color: var(--muted); font-size: 11px; font-weight: 600; }
     .pt-score { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
     .pt-bp { color: #FF9F0A; font-size: 11px; font-weight: 700; }
     .pt-2nd { color: var(--muted); font-size: 11px; }
@@ -600,13 +602,16 @@ public enum MatchWebTemplate {
         const p = pts[state.selected];
         const lbl = who => who === "me" ? (isMe() ? "You" : "Opponent") : (isMe() ? "Opponent" : "You");
         const bits = [
-          ["Point", "#" + (p.index + 1) + " · Set " + (p.setIndex + 1)],
+          ["Point", "#" + (p.index + 1) + " · Set " + (p.setIndex + 1)]
+        ];
+        if (p.matchScoreLabel) bits.push(["Match", p.matchScoreLabel]);
+        bits.push(
           ["Game", p.gameScoreLabel + (p.isBreakPoint ? "  · break pt" : "")],
           ["Server", lbl(p.server) + (p.isSecondServe ? " (2nd serve)" : "")],
           ["Winner", lbl(p.winner)],
           ["Outcome", p.outcome === "uncategorized" ? "—" : p.outcomeLabel],
           ["Shot", p.endingShotLabel || "—"]
-        ];
+        );
         if (isMe() && p.heartRateBPM != null) bits.push(["Heart rate", p.heartRateBPM + " bpm"]);
         bits.forEach(b => pop.appendChild(el("div", null, [
           el("span", { class: "k", text: b[0] + ": " }), el("b", { text: b[1] })
@@ -705,14 +710,17 @@ public enum MatchWebTemplate {
       }
       function pointRow(number, p) {
         const meta = el("div", { class: "pt-meta" });
-        if (p.gamesScoreLabel) meta.appendChild(el("span", { class: "pt-score", text: p.gamesScoreLabel + " ·" }));
+        const serverName = p.server === "me" ? "Me" : "Opp";
+        meta.appendChild(el("span", { class: "pt-server", text: "🎾 " + serverName,
+          "aria-label": serverName + " serving" }));
         if (p.pointScoreLabel) meta.appendChild(el("span", { class: "pt-score", text: p.pointScoreLabel }));
         if (p.isBreakPoint) meta.appendChild(el("span", { class: "pt-bp", text: "BP" }));
         if (p.isSecondServe) meta.appendChild(el("span", { class: "pt-2nd", text: "2nd" }));
-        const body = el("div", { class: "pt-body" }, [
-          meta,
-          el("div", { class: "pt-outcome" }, [chipPill(p.chipText, p.chipColorHex), el("span", { class: "pt-otext", text: p.outcomeText })])
-        ]);
+        const bodyRows = [];
+        if (p.matchScoreLabel) bodyRows.push(el("div", { class: "pt-match", text: p.matchScoreLabel }));
+        bodyRows.push(meta);
+        bodyRows.push(el("div", { class: "pt-outcome" }, [chipPill(p.chipText, p.chipColorHex), el("span", { class: "pt-otext", text: p.outcomeText })]));
+        const body = el("div", { class: "pt-body" }, bodyRows);
         const right = el("div", { class: "pt-right" });
         if (p.endingShotLabel) right.appendChild(el("span", { class: "pt-shot", text: p.endingShotLabel }));
         if (p.heartRateBPM != null) right.appendChild(el("span", { class: "pt-hr", text: "My HR: " + p.heartRateBPM + " bpm" }));

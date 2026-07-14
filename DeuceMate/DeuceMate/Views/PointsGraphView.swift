@@ -130,8 +130,6 @@ private struct SetBand: Identifiable {
 /// needs, so render frames during pinch/pan don't pay an O(N) cost per
 /// computed property — and rebuilding the struct on filter change is cheap.
 private struct PointsGraphData {
-    let totalSteps: Int?
-
     let lineEntries: [GraphEntry]
     let scatterEntries: [ScatterEntry]
     let hrEntries: [HREntry]
@@ -159,18 +157,27 @@ private struct PointsGraphData {
     /// look up the dots at a touched point in O(1) without re-filtering the
     /// flat array each frame.
     let scatterByPoint: [Int: [ScatterEntry]]
+    /// Full pre-point match-score snapshots, shared with the Points tab.
+    let matchScoreByID: [PointStat.ID: PointMatchScore.Snapshot]
+    /// The chart's x-axis is 1-based after each point; bridge that index back
+    /// to the stable point id used by `PointMatchScore`.
+    let idByIndex: [Int: PointStat.ID]
+    /// Point numbering restarts within each set in the Points tab. Keep the
+    /// same number here so a highlighted graph point can be cross-checked.
+    let setPointNumberByIndex: [Int: Int]
 
     var hasHeartRateData: Bool { !hrEntries.isEmpty }
     var hasStepsData: Bool { !stepEntries.isEmpty }
 
-    init(stats: [PointStat],
-         totalSteps: Int?,
+    init(record: MatchRecord,
          selectedMyOutcomes: Set<OutcomeCategory>,
          selectedOpponentOutcomes: Set<OutcomeCategory>,
          selectedWonEndingShots: Set<EndingShot>,
          selectedLostEndingShots: Set<EndingShot>) {
-        self.totalSteps = totalSteps
+        let stats = record.stats
+        let totalSteps = record.totalSteps
         self.xDomain = 0...max(stats.count, 1)
+        self.matchScoreByID = PointMatchScore.atStart(of: stats, record: record)
 
         let hasAnySelection = !selectedMyOutcomes.isEmpty
             || !selectedOpponentOutcomes.isEmpty
@@ -201,6 +208,9 @@ private struct PointsGraphData {
 
         var cumulative: [(me: Int, opp: Int)] = [(0, 0)]
         cumulative.reserveCapacity(stats.count + 1)
+        var idsByIndex: [Int: PointStat.ID] = [:]
+        var pointNumbersByIndex: [Int: Int] = [:]
+        var pointCountBySet: [Int: Int] = [:]
 
         // Single pass: cumulative line series, scatter overlay, HR overlay,
         // hasOutcomeData, HR min/max and per-point step samples derived in
@@ -225,6 +235,9 @@ private struct PointsGraphData {
             }
 
             let x = i + 1
+            idsByIndex[x] = stat.id
+            pointCountBySet[stat.setIndex, default: 0] += 1
+            pointNumbersByIndex[x] = pointCountBySet[stat.setIndex]
             let pointTiebreak = stat.gameScoreAtStart?.isTiebreak ?? false
 
             if let current = bandSetIndex {
@@ -319,6 +332,8 @@ private struct PointsGraphData {
         }
         self.cumulativeByIndex = cumulative
         self.scatterByPoint = Dictionary(grouping: scatter, by: \.pointIndex)
+        self.idByIndex = idsByIndex
+        self.setPointNumberByIndex = pointNumbersByIndex
 
         self.lineEntries = line
         self.scatterEntries = scatter
@@ -1011,10 +1026,13 @@ private struct PointsGraphScatterControls: View {
 }
 
 /// Compact summary rendered above the chart while the user touches it.
-/// Shows the running Me/Opp cumulative score at the tapped point plus chips
-/// for any selected outcome / ending-shot categories that hit that point.
+/// Shows cumulative points won plus the selected point's serving side,
+/// pre-point game/match score, set-relative number, and any scatter chips.
 private struct PointsGraphSelectionSummary: View {
     let pointIndex: Int
+    let setPointNumber: Int?
+    let point: PointStat?
+    let matchScore: PointMatchScore.Snapshot?
     let me: Int
     let opp: Int
     let scatter: [ScatterEntry]
@@ -1022,28 +1040,50 @@ private struct PointsGraphSelectionSummary: View {
     let oppColor: Color
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(pointIndex == 0 ? "Start" : "Pt \(pointIndex)")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(pointLabel)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
 
-            scoreBadge(label: "Me",  count: me,  color: meColor)
-            scoreBadge(label: "Opp", count: opp, color: oppColor)
+                scoreBadge(label: "Me",  count: me,  color: meColor)
+                scoreBadge(label: "Opp", count: opp, color: oppColor)
 
-            if !scatter.isEmpty {
-                Divider().frame(height: 12)
-                HStack(spacing: 4) {
-                    ForEach(scatter) { s in
-                        Text(s.label)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(s.color)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(s.color.opacity(0.15)))
+                if !scatter.isEmpty {
+                    Divider().frame(height: 12)
+                    HStack(spacing: 4) {
+                        ForEach(scatter) { s in
+                            Text(s.label)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(s.color)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(s.color.opacity(0.15)))
+                        }
                     }
                 }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+
+            if let point {
+                HStack(spacing: 5) {
+                    Text("🎾")
+                        .accessibilityHidden(true)
+                    Text(point.server == .me ? "Me serving" : "Opp serving")
+                    if let gameScore = point.gameScoreAtStart {
+                        Text("·")
+                        Text(GameScoreLabel.string(for: gameScore, server: point.server))
+                            .monospacedDigit()
+                    }
+                    if let matchScore, !matchScore.label.isEmpty {
+                        Text("·")
+                        Text(matchScore.label)
+                            .monospacedDigit()
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
@@ -1057,6 +1097,11 @@ private struct PointsGraphSelectionSummary: View {
         )
         .frame(maxWidth: .infinity)
         .transition(.opacity)
+    }
+
+    private var pointLabel: String {
+        guard let point else { return "Start" }
+        return "Set \(point.setIndex + 1) · Pt \(setPointNumber ?? pointIndex)"
     }
 
     private func scoreBadge(label: String, count: Int, color: Color) -> some View {
@@ -1202,7 +1247,6 @@ private struct PointsGraphToggleRow: View {
 struct PointsGraphView: View {
     let record: MatchRecord
     private var stats: [PointStat] { record.stats }
-    private var totalSteps: Int? { record.totalSteps }
 
     @Environment(\.appTheme) private var theme
     private var meColor:  Color { theme.colors.me }
@@ -1236,8 +1280,7 @@ struct PointsGraphView: View {
         // HR/Steps overlays, so it builds with empty selections and the overlays
         // off. Tap-to-select still surfaces the running score.
         let data = PointsGraphData(
-            stats: stats,
-            totalSteps: totalSteps,
+            record: record,
             selectedMyOutcomes: [],
             selectedOpponentOutcomes: [],
             selectedWonEndingShots: [],
@@ -1362,8 +1405,13 @@ struct PointsGraphView: View {
            x < data.cumulativeByIndex.count {
             let totals = data.cumulativeByIndex[x]
             let scatter = data.scatterByPoint[x] ?? []
+            let point = x > 0 && x <= stats.count ? stats[x - 1] : nil
+            let matchScore = data.idByIndex[x].flatMap { data.matchScoreByID[$0] }
             PointsGraphSelectionSummary(
                 pointIndex: x,
+                setPointNumber: data.setPointNumberByIndex[x],
+                point: point,
+                matchScore: matchScore,
                 me: totals.me,
                 opp: totals.opp,
                 scatter: scatter,
@@ -1381,7 +1429,6 @@ struct PointsGraphView: View {
 struct ExpandedPointsGraphView: View {
     let record: MatchRecord
     private var stats: [PointStat] { record.stats }
-    private var totalSteps: Int? { record.totalSteps }
 
     @ObservedObject var fetcher: HealthKitHRFetcher
 
@@ -1436,8 +1483,7 @@ struct ExpandedPointsGraphView: View {
         let stats = record.stats
         _visibleDomainLength      = State(initialValue: max(stats.count, 1))
         _data = State(initialValue: PointsGraphData(
-            stats: stats,
-            totalSteps: record.totalSteps,
+            record: record,
             selectedMyOutcomes: selectedMyOutcomes.wrappedValue,
             selectedOpponentOutcomes: selectedOpponentOutcomes.wrappedValue,
             selectedWonEndingShots: selectedWonEndingShots.wrappedValue,
@@ -1447,8 +1493,7 @@ struct ExpandedPointsGraphView: View {
 
     private func rebuildData() {
         data = PointsGraphData(
-            stats: stats,
-            totalSteps: totalSteps,
+            record: record,
             selectedMyOutcomes: selectedMyOutcomes,
             selectedOpponentOutcomes: selectedOpponentOutcomes,
             selectedWonEndingShots: selectedWonEndingShots,
@@ -1597,8 +1642,13 @@ struct ExpandedPointsGraphView: View {
            x < data.cumulativeByIndex.count {
             let totals = data.cumulativeByIndex[x]
             let scatter = data.scatterByPoint[x] ?? []
+            let point = x > 0 && x <= stats.count ? stats[x - 1] : nil
+            let matchScore = data.idByIndex[x].flatMap { data.matchScoreByID[$0] }
             PointsGraphSelectionSummary(
                 pointIndex: x,
+                setPointNumber: data.setPointNumberByIndex[x],
+                point: point,
+                matchScore: matchScore,
                 me: totals.me,
                 opp: totals.opp,
                 scatter: scatter,

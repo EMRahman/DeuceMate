@@ -19,8 +19,9 @@ public struct MatchWebViewModel: Encodable, Sendable {
     /// added the Stats/Points tabs + point-display fields. v4 added the optional
     /// `aiCoach` block (AI coaching prompt + launch links). v5 added the
     /// `perPoint` field to each steps sample (Total vs Per-point overlay mode).
-    /// v6 added `gamesScoreLabel` to each point (in-set games score).
-    public static let currentSchemaVersion = 6
+    /// v6 added `gamesScoreLabel` to each point (in-set games score). v7
+    /// replaces it with `matchScoreLabel` (completed sets + live set score).
+    public static let currentSchemaVersion = 7
 
     public let schemaVersion: Int
     public let generatedAt: String
@@ -148,9 +149,9 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public let outcomeSymbol: String
         // Points-tab display (mirrors MatchDetailView.pointRow): the short chip
         // (W / Opp W / DF / UE / FE / + / −) coloured by attribution, the longer
-        // outcome line ("Winner — Me"), and the server-relative game-score label
-        // ("0–15", "Deuce", "Ad Me"). Distinct from `gameScoreLabel`, which is the
-        // server–returner notation the chart popup uses.
+        // outcome line ("Winner — Me"), and the recorder-oriented game-score
+        // label ("0–15", "Deuce", "Ad Me"). `gameScoreLabel` intentionally
+        // carries the same notation for the chart popup.
         public let chipText: String
         public let chipColorHex: String
         public let outcomeText: String
@@ -162,11 +163,10 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public let isSecondServe: Bool
         public let isBreakPoint: Bool
         public let gameScoreLabel: String
-        /// Me–Opponent games score in the current set, at the start of this
-        /// point. `nil` when the set has no games concept (a deciding
-        /// super-tiebreak set, or a tiebreak-only/perpetual match format) or
-        /// the match predates per-point score snapshotting.
-        public let gamesScoreLabel: String?
+        /// Full recorder-perspective match score at the start of this point:
+        /// completed prior sets plus the live score of this point's set.
+        /// `nil` for legacy snapshots or when no segment is knowable.
+        public let matchScoreLabel: String?
         public let cumulativeMe: Int
         public let cumulativeOpp: Int
         public let heartRateBPM: Int?    // recorder's HR
@@ -356,7 +356,7 @@ public struct MatchWebViewModel: Encodable, Sendable {
         )
 
         // Points + set bands
-        let points = Self.pointRows(allStats, matchFormat: record.matchFormat, setScores: record.setScores)
+        let points = Self.pointRows(record)
         let setBands = Self.setBands(points)
 
         // Recorder-only HR / steps blocks (from the `me` full summary).

@@ -290,32 +290,23 @@ struct MatchExporter {
             lines.append("No sets completed.")
             return lines.joined(separator: "\n")
         }
-        let cfg = record.matchFormat.config
-        let decidingSetIndex = cfg.setsToWin * 2 - 2
         for (i, set) in record.setScores.enumerated() {
-            let scoreStr: String
+            let baseScore = SetScoreLabel.string(
+                for: set,
+                setIndex: i,
+                matchFormat: record.matchFormat,
+                focal: focal
+            )
+            let config = record.matchFormat.config
             // Tiebreak-only formats (Super/Perpetual Tiebreak, Perpetual
             // Points) store the running score in tieBreakPoints* with
             // games* left at 0; treat every set as a tiebreak score.
             // Otherwise only the deciding-set super-tiebreak slot uses the
-            // tiebreak score. Matches the property-based check in
-            // scoreString(record:focal:) below.
-            if !cfg.playRegularSets ||
-               (cfg.finalSetStyle == .superTiebreak && i == decidingSetIndex && set.isTieBreak) {
-                let a = focal == .me ? set.tieBreakPointsMe : set.tieBreakPointsOpponent
-                let b = focal == .me ? set.tieBreakPointsOpponent : set.tieBreakPointsMe
-                scoreStr = "\(a)–\(b) tiebreak"
-            } else if set.isTieBreak && set.gamesMe + set.gamesOpponent > 0 {
-                let ga = focal == .me ? set.gamesMe : set.gamesOpponent
-                let gb = focal == .me ? set.gamesOpponent : set.gamesMe
-                let ta = focal == .me ? set.tieBreakPointsMe : set.tieBreakPointsOpponent
-                let tb = focal == .me ? set.tieBreakPointsOpponent : set.tieBreakPointsMe
-                scoreStr = "\(ga)–\(gb) (\(ta)–\(tb))"
-            } else {
-                let a = focal == .me ? set.gamesMe : set.gamesOpponent
-                let b = focal == .me ? set.gamesOpponent : set.gamesMe
-                scoreStr = "\(a)–\(b)"
-            }
+            // tiebreak score. Keep the prose suffix used in this detailed
+            // section; the score itself comes from the shared formatter.
+            let isTiebreakOnly = !config.playRegularSets
+                || (config.isDecidingSuperTiebreak(setIndex: i) && set.isTieBreak)
+            let scoreStr = isTiebreakOnly ? "\(baseScore) tiebreak" : baseScore
             let durationStr: String
             if let secs = record.setElapsedSeconds[i], secs > 0 {
                 durationStr = "  (\(durationString(secs)))"
@@ -564,25 +555,13 @@ struct MatchExporter {
 
     private static func scoreString(record: MatchRecord, focal: Player) -> String? {
         guard !record.setScores.isEmpty else { return nil }
-        let parts = record.setScores.enumerated().map { index, set -> String in
-            let cfg = record.matchFormat.config
-            let decidingSetIndex = cfg.setsToWin * 2 - 2
-            if !cfg.playRegularSets ||
-               (cfg.finalSetStyle == .superTiebreak && index == decidingSetIndex && set.isTieBreak) {
-                let a = focal == .me ? set.tieBreakPointsMe : set.tieBreakPointsOpponent
-                let b = focal == .me ? set.tieBreakPointsOpponent : set.tieBreakPointsMe
-                return "\(a)–\(b)"
-            }
-            if set.isTieBreak && set.gamesMe + set.gamesOpponent > 0 {
-                let ga = focal == .me ? set.gamesMe : set.gamesOpponent
-                let gb = focal == .me ? set.gamesOpponent : set.gamesMe
-                let ta = focal == .me ? set.tieBreakPointsMe : set.tieBreakPointsOpponent
-                let tb = focal == .me ? set.tieBreakPointsOpponent : set.tieBreakPointsMe
-                return "\(ga)–\(gb) (\(ta)–\(tb))"
-            }
-            let a = focal == .me ? set.gamesMe : set.gamesOpponent
-            let b = focal == .me ? set.gamesOpponent : set.gamesMe
-            return "\(a)–\(b)"
+        let parts = record.setScores.enumerated().map { index, set in
+            SetScoreLabel.string(
+                for: set,
+                setIndex: index,
+                matchFormat: record.matchFormat,
+                focal: focal
+            )
         }
         return parts.joined(separator: "  ")
     }

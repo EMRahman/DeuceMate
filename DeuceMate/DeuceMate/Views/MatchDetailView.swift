@@ -155,43 +155,22 @@ struct MatchDetailView: View {
 
     private var scoreString: String? {
         guard !record.setScores.isEmpty else { return nil }
-        let cfg = record.matchFormat.config
-        let decidingSetIndex = cfg.setsToWin * 2 - 2
-
-        if record.isInProgress {
-            // All sets except the last are completed; the last is the current set.
-            var parts = record.setScores.dropLast().enumerated().map { index, set -> String in
-                if !cfg.playRegularSets ||
-                   (cfg.finalSetStyle == .superTiebreak && index == decidingSetIndex && set.isTieBreak) {
-                    return "\(set.tieBreakPointsMe)–\(set.tieBreakPointsOpponent)"
-                }
-                if set.isTieBreak && set.gamesMe + set.gamesOpponent > 0 {
-                    return "\(set.gamesMe)–\(set.gamesOpponent)(\(set.tieBreakPointsMe)–\(set.tieBreakPointsOpponent))"
-                }
-                return "\(set.gamesMe)–\(set.gamesOpponent)"
-            }
-            if let current = record.setScores.last {
-                if current.isTieBreak {
-                    parts.append("TB \(current.tieBreakPointsMe)–\(current.tieBreakPointsOpponent)")
-                } else {
-                    parts.append("\(current.gamesMe)–\(current.gamesOpponent)")
-                    if let gs = MatchRecord.gameScoreString(mePoints: record.currentPointsMe, oppPoints: record.currentPointsOpponent) {
-                        parts.append("(\(gs))")
-                    }
-                }
-            }
-            return parts.joined(separator: "  ")
+        var parts = record.setScores.enumerated().map { index, set in
+            SetScoreLabel.string(
+                for: set,
+                setIndex: index,
+                matchFormat: record.matchFormat
+            )
         }
 
-        let parts = record.setScores.enumerated().map { index, set -> String in
-            if !cfg.playRegularSets ||
-               (cfg.finalSetStyle == .superTiebreak && index == decidingSetIndex && set.isTieBreak) {
-                return "\(set.tieBreakPointsMe)–\(set.tieBreakPointsOpponent)"
-            }
-            if set.isTieBreak && set.gamesMe + set.gamesOpponent > 0 {
-                return "\(set.gamesMe)–\(set.gamesOpponent)(\(set.tieBreakPointsMe)–\(set.tieBreakPointsOpponent))"
-            }
-            return "\(set.gamesMe)–\(set.gamesOpponent)"
+        if record.isInProgress,
+           record.matchFormat.config.playRegularSets,
+           record.setScores.last?.isTieBreak == false,
+           let game = MatchRecord.gameScoreString(
+               mePoints: record.currentPointsMe,
+               oppPoints: record.currentPointsOpponent
+           ) {
+            parts.append("(\(game))")
         }
         return parts.joined(separator: "  ")
     }
@@ -704,19 +683,23 @@ struct MatchDetailView: View {
     private var pointsListSections: some View {
         let grouped = Dictionary(grouping: record.stats, by: \.setIndex)
         let setIndices = grouped.keys.sorted()
+        let matchScores = PointMatchScore.atStart(of: record.stats, record: record)
         ForEach(setIndices, id: \.self) { setIdx in
             let points = grouped[setIdx] ?? []
-            let gamesAtStart = PointGamesScore.atStart(of: points, setIndex: setIdx, matchFormat: record.matchFormat, setScores: record.setScores)
             Section(SetFilter.set(setIdx).label(matchFormat: record.matchFormat)) {
                 ForEach(Array(points.enumerated()), id: \.element.id) { idx, pt in
-                    pointRow(number: idx + 1, point: pt, games: gamesAtStart[pt.id])
+                    pointRow(number: idx + 1, point: pt, matchScore: matchScores[pt.id])
                 }
             }
         }
     }
 
     @ViewBuilder
-    private func pointRow(number: Int, point: PointStat, games: GamesScoreSnapshot?) -> some View {
+    private func pointRow(
+        number: Int,
+        point: PointStat,
+        matchScore: PointMatchScore.Snapshot?
+    ) -> some View {
         HStack(spacing: 8) {
             Text("\(number)")
                 .font(.caption2.monospacedDigit())
@@ -724,14 +707,20 @@ struct MatchDetailView: View {
                 .frame(minWidth: 22, alignment: .trailing)
 
             VStack(alignment: .leading, spacing: 2) {
+                if let matchScore, !matchScore.label.isEmpty {
+                    Text(matchScore.label)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                }
+
                 HStack(spacing: 4) {
-                    if let games {
-                        Text("\(games.me)–\(games.opponent) ·")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
+                    Text("🎾")
+                        .accessibilityHidden(true)
+                    Text(point.server == .me ? "Me" : "Opp")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
                     if let score = point.gameScoreAtStart {
-                        Text(gameScoreLabel(score, server: point.server))
+                        Text(GameScoreLabel.string(for: score, server: point.server))
                             .font(.caption.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
@@ -773,22 +762,37 @@ struct MatchDetailView: View {
             }
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            Text(pointAccessibilityLabel(
+                number: number,
+                point: point,
+                matchScore: matchScore
+            ))
+        )
     }
 
-    private func gameScoreLabel(_ snap: GameScoreSnapshot, server: Player) -> String {
-        let s = snap.server, r = snap.returner
-        if snap.isTiebreak {
-            return server == .me ? "\(s)–\(r)" : "\(r)–\(s)"
+    private func pointAccessibilityLabel(
+        number: Int,
+        point: PointStat,
+        matchScore: PointMatchScore.Snapshot?
+    ) -> String {
+        var parts = [
+            "Set \(point.setIndex + 1), point \(number)",
+            "\(point.server == .me ? "Me" : "Opponent") serving"
+        ]
+        if let label = matchScore?.label, !label.isEmpty {
+            parts.append("Match score \(label)")
         }
-        let labels = ["0", "15", "30", "40"]
-        if s >= 3 && r >= 3 {
-            if s == r { return "Deuce" }
-            if s > r  { return "Ad \(server == .me ? "Me" : "Opp")" }
-            return "Ad \(server == .me ? "Opp" : "Me")"
+        if let score = point.gameScoreAtStart {
+            parts.append("Game score \(GameScoreLabel.string(for: score, server: point.server))")
         }
-        let sLabel = s < labels.count ? labels[s] : "\(s)"
-        let rLabel = r < labels.count ? labels[r] : "\(r)"
-        return server == .me ? "\(sLabel)–\(rLabel)" : "\(rLabel)–\(sLabel)"
+        if point.isBreakPoint { parts.append("Break point") }
+        if point.isSecondServe { parts.append("Second serve") }
+        parts.append(outcomeLabel(point))
+        if let shot = point.endingShot { parts.append(shot.displayLabel) }
+        if let bpm = point.heartRateBPM { parts.append("My heart rate \(bpm) beats per minute") }
+        return parts.joined(separator: ", ")
     }
 
     private func outcomeLabel(_ point: PointStat) -> String {

@@ -215,6 +215,17 @@ public enum ScoringEngine {
         return reached && abs(mePoints - oppPoints) >= 2
     }
 
+    /// True once either side has at least four points and a two-point lead.
+    /// The parameters are deliberately perspective-neutral so score
+    /// derivations can apply the same rule to server/returner snapshots.
+    public static func isRegularGameComplete(
+        playerOnePoints: Int,
+        playerTwoPoints: Int
+    ) -> Bool {
+        max(playerOnePoints, playerTwoPoints) >= 4
+            && abs(playerOnePoints - playerTwoPoints) >= 2
+    }
+
     private struct Engine {
         var state: ScoringState
         var events: [ScoringEvent] = []
@@ -236,10 +247,11 @@ public enum ScoringEngine {
                 pointsOpponent += 1
             }
 
-            if pointsMe >= 4 && pointsMe - pointsOpponent >= 2 {
-                gameWon(by: .me, in: &set)
-            } else if pointsOpponent >= 4 && pointsOpponent - pointsMe >= 2 {
-                gameWon(by: .opponent, in: &set)
+            if ScoringEngine.isRegularGameComplete(
+                playerOnePoints: pointsMe,
+                playerTwoPoints: pointsOpponent
+            ) {
+                gameWon(by: pointsMe > pointsOpponent ? .me : .opponent, in: &set)
             } else {
                 state.currentPointsMe = pointsMe
                 state.currentPointsOpponent = pointsOpponent
