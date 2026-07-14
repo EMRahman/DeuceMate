@@ -706,16 +706,17 @@ struct MatchDetailView: View {
         let setIndices = grouped.keys.sorted()
         ForEach(setIndices, id: \.self) { setIdx in
             let points = grouped[setIdx] ?? []
+            let gamesAtStart = PointGamesScore.atStart(of: points, setIndex: setIdx, matchFormat: record.matchFormat, setScores: record.setScores)
             Section(SetFilter.set(setIdx).label(matchFormat: record.matchFormat)) {
                 ForEach(Array(points.enumerated()), id: \.element.id) { idx, pt in
-                    pointRow(number: idx + 1, point: pt)
+                    pointRow(number: idx + 1, point: pt, games: gamesAtStart[pt.id])
                 }
             }
         }
     }
 
     @ViewBuilder
-    private func pointRow(number: Int, point: PointStat) -> some View {
+    private func pointRow(number: Int, point: PointStat, games: GamesScoreSnapshot?) -> some View {
         HStack(spacing: 8) {
             Text("\(number)")
                 .font(.caption2.monospacedDigit())
@@ -724,6 +725,11 @@ struct MatchDetailView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
+                    if let games {
+                        Text("\(games.me)–\(games.opponent) ·")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
                     if let score = point.gameScoreAtStart {
                         Text(gameScoreLabel(score, server: point.server))
                             .font(.caption.monospacedDigit())

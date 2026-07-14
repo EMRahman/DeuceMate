@@ -186,7 +186,7 @@ final class MatchWebExportTests: XCTestCase {
 
     func test_comparison_sectionsAndGating_fullMatch() throws {
         let vm = MatchWebViewModel.make(from: makeRecord())
-        XCTAssertEqual(vm.schemaVersion, 5)
+        XCTAssertEqual(vm.schemaVersion, 6)
         XCTAssertTrue(allComparison(vm).hasAnyOutcomeData)
         let titles = allComparison(vm).sections.map { $0.title }
         // Outcome Breakdown leads; Serve/Return present (every point categorised).
@@ -335,6 +335,60 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertEqual(p[2].chipColorHex, WebExportColors.meLineHex)
         // Point 4: deuce game state.
         XCTAssertEqual(p[4].pointScoreLabel, "Deuce")
+    }
+
+    func test_gamesScoreLabel_reflectsInSetGamesScore() {
+        // A self-consistent fixture: two completed one-point "games" (me, then
+        // opponent), with a third in progress — the games score in setScores
+        // matches what's derivable from the tracked points.
+        let stats: [PointStat] = [
+            PointStat(setIndex: 0, server: .me, winner: .me, outcome: .winner,
+                      gameScoreAtStart: snap(0, 0, false)),
+            PointStat(setIndex: 0, server: .me, winner: .opponent, outcome: .unforcedError,
+                      gameScoreAtStart: snap(0, 0, false)),
+            PointStat(setIndex: 0, server: .opponent, winner: .me, outcome: .winner,
+                      gameScoreAtStart: snap(0, 0, false))
+        ]
+        let record = MatchRecord(
+            startTime: Date(timeIntervalSince1970: 1_700_000_000),
+            endTime: Date(timeIntervalSince1970: 1_700_000_600),
+            setScores: [SetScore(gamesMe: 1, gamesOpponent: 1)],
+            stats: stats,
+            iWon: true,
+            matchFormat: .standard
+        )
+
+        let p = MatchWebViewModel.make(from: record).points
+
+        XCTAssertEqual(p[0].gamesScoreLabel, "0–0")
+        XCTAssertEqual(p[1].gamesScoreLabel, "1–0")
+        XCTAssertEqual(p[2].gamesScoreLabel, "1–1")
+    }
+
+    func test_gamesScoreLabel_suppressedWhenTrackedPointsAreOnlyASuffixOfTheSet() {
+        // Mirrors a match reconstructed via ManualMatchEntryView mid-set (at a
+        // non-zero games score) and resumed on the watch: only the resumed
+        // suffix is tracked, so setScores disagrees with what the tracked
+        // points alone imply. The label should be suppressed, not wrong.
+        let stats: [PointStat] = [
+            PointStat(setIndex: 0, server: .me, winner: .me, outcome: .winner,
+                      gameScoreAtStart: snap(0, 0, false)),
+            PointStat(setIndex: 0, server: .me, winner: .me, outcome: .winner,
+                      gameScoreAtStart: snap(1, 0, false))
+        ]
+        let record = MatchRecord(
+            startTime: Date(timeIntervalSince1970: 1_700_000_000),
+            endTime: Date(timeIntervalSince1970: 1_700_000_600),
+            setScores: [SetScore(gamesMe: 4, gamesOpponent: 2)],
+            stats: stats,
+            iWon: true,
+            matchFormat: .standard
+        )
+
+        let p = MatchWebViewModel.make(from: record).points
+
+        XCTAssertNil(p[0].gamesScoreLabel)
+        XCTAssertNil(p[1].gamesScoreLabel)
     }
 
     // MARK: - AI Coach (mirrors AICoachSheet)

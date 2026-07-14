@@ -1,0 +1,62 @@
+// PointGamesScore.swift — derives the running games score within a set at the
+// start of each point, purely from an ordered [PointStat] array. No stored
+// field carries this; it's inferred because in-game score only ever
+// increases, so a point whose gameScoreAtStart resets to 0–0 always marks the
+// first point of a new game. Platform-neutral: no SwiftUI.
+import Foundation
+
+/// Games won so far in the current set, from each side's perspective.
+public struct GamesScoreSnapshot: Equatable, Sendable {
+    public let me: Int
+    public let opponent: Int
+}
+
+public enum PointGamesScore {
+    /// Me–Opponent games score immediately before each point in `points`,
+    /// keyed by point id. `points` must be a single set's points (all sharing
+    /// `setIndex`), in chronological order. `setScores` is the match's known
+    /// per-set tallies (`MatchRecord.setScores`), used to sanity-check the
+    /// derivation below.
+    ///
+    /// Returns no entry for any point in the set when:
+    /// - the set has no games concept (a deciding super-tiebreak set, or a
+    ///   match format that never plays regular sets — `.superTiebreak`,
+    ///   `.perpetualSuperTiebreak`, `.perpetualPoints`), or
+    /// - the boundary-detected completed-games count disagrees with
+    ///   `setScores[setIndex]`'s known completed-games count. This happens
+    ///   when `points` is only a suffix of the set rather than its full
+    ///   history — e.g. a match reconstructed via `ManualMatchEntryView` at a
+    ///   non-zero games score and then resumed on the watch, where only the
+    ///   resumed points are tracked. The offset can't be safely attributed to
+    ///   either player, so the whole set is suppressed rather than mislabeled.
+    ///
+    /// Returns no entry for an individual point when its `gameScoreAtStart`
+    /// is missing (matches recorded before per-point score snapshotting).
+    public static func atStart(
+        of points: [PointStat],
+        setIndex: Int,
+        matchFormat: MatchFormat,
+        setScores: [SetScore]
+    ) -> [PointStat.ID: GamesScoreSnapshot] {
+        let cfg = matchFormat.config
+        guard cfg.playRegularSets, !cfg.isDecidingSuperTiebreak(setIndex: setIndex) else {
+            return [:]
+        }
+
+        var result: [PointStat.ID: GamesScoreSnapshot] = [:]
+        var me = 0, opponent = 0
+        for (i, point) in points.enumerated() {
+            guard let snap = point.gameScoreAtStart else { continue }
+            if i > 0, snap.server == 0, snap.returner == 0 {
+                if points[i - 1].winner == .me { me += 1 } else { opponent += 1 }
+            }
+            result[point.id] = GamesScoreSnapshot(me: me, opponent: opponent)
+        }
+
+        let known = setIndex < setScores.count ? setScores[setIndex] : SetScore()
+        guard me == known.gamesMe, opponent == known.gamesOpponent else {
+            return [:]
+        }
+        return result
+    }
+}

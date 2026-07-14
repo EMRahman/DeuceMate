@@ -705,6 +705,7 @@ public enum MatchWebTemplate {
       }
       function pointRow(number, p) {
         const meta = el("div", { class: "pt-meta" });
+        if (p.gamesScoreLabel) meta.appendChild(el("span", { class: "pt-score", text: p.gamesScoreLabel + " ·" }));
         if (p.pointScoreLabel) meta.appendChild(el("span", { class: "pt-score", text: p.pointScoreLabel }));
         if (p.isBreakPoint) meta.appendChild(el("span", { class: "pt-bp", text: "BP" }));
         if (p.isSecondServe) meta.appendChild(el("span", { class: "pt-2nd", text: "2nd" }));
