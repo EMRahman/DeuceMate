@@ -2,256 +2,355 @@
 machine-readable summary (parse this block first)
 
 status: proposed
-author: human + AI pairing session (Claude, Sonnet 5)
+author: human + AI pairing session (Claude, Sonnet 5); revised after review (Claude, Opus 4.8)
 date: 2026-07-14
 depends_on_commits: ["2099481c4b8e07f1ba2005958f6ac8b932f13f8c", "de1bdeffc1caa6b446b37c1c1fa67afe000bf985"]
-supersedes: "in-set games score prefix added in commit 2099481 (subsumed, not kept alongside)"
+supersedes: "in-set games score prefix added in commit 2099481 — subsumed on BOTH surfaces (iOS Points tab + HTML export Points tab), not kept alongside and not left behind on one of them"
+blocked_by: "PR 1 below — PointGamesScore currently suppresses every completed set (see root_cause_finding). PointMatchScore delegates to it, so the feature cannot work until that is fixed."
 scope:
   in_scope:
-    - "Packages/DeuceMateCore/Sources/DeuceMateCore/Stats/PointMatchScore.swift (new)"
-    - "Packages/DeuceMateCore/Tests/DeuceMateCoreTests/PointMatchScoreTests.swift (new)"
-    - "DeuceMate/DeuceMate/Views/MatchDetailView.swift (Points tab row)"
+    - "Packages/DeuceMateCore/Sources/DeuceMateCore/Stats/PointGamesScore.swift (fix the reconciliation guard — PR 1)"
+    - "Packages/DeuceMateCore/Sources/DeuceMateCore/Stats/SetScoreLabel.swift (new — single set-score formatter, PR 2)"
+    - "Packages/DeuceMateCore/Sources/DeuceMateCore/Stats/PointMatchScore.swift (new — PR 3)"
+    - "Packages/DeuceMateCore/Tests/DeuceMateCoreTests/{PointGamesScoreTests,SetScoreLabelTests,PointMatchScoreTests,MatchWebExportTests}.swift"
+    - "DeuceMate/DeuceMate/Views/MatchDetailView.swift (Points tab row + header scoreString)"
     - "DeuceMate/DeuceMate/Views/PointsGraphView.swift (selection/highlight summary, both inline + expanded)"
-    - "docs/architecture/file-inventory.md (register new Core file)"
+    - "DeuceMate/DeuceMate/Views/PastMatchesView.swift, DeuceMate/DeuceMate/Export/MatchExporter.swift (adopt the shared formatter)"
+    - "Packages/DeuceMateCore/Sources/DeuceMateCore/WebExport/{MatchWebViewModel+Build,MatchWebViewModel,MatchWebTemplate}.swift (Points tab parity + schema bump)"
+    - "docs/architecture/file-inventory.md (register new Core files)"
   out_of_scope:
-    - "HTML match export Points tab (MatchWebViewModel+Build.swift, MatchWebTemplate.swift, static SVG fallback) — flagged as a deliberate, separate follow-up"
-    - "Watch app (DeuceMate Watch App) — this is an iOS-archive-only display feature"
+    - "Watch app (DeuceMate Watch App) — this is an iOS-archive + export display feature"
+    - "Per-point DoublesServer (S1/S2) attribution — PointStat stores only server: Player (the team). Reconstructing the individual doubles server from doublesServiceOrder is a separate change."
 open_questions:
-  - id: server-indicator-style
-    question: "Colored dot (matches LiveScoreboardView convention) vs text label for who served"
-    resolution: "colored dot — proposed default, not yet explicitly confirmed by user"
   - id: graph-highlight-layout
     question: "Replace cumulative Me/Opp points-won totals in the graph highlight strip, or add the new score line alongside them"
-    resolution: "add alongside (second line) — proposed default, not yet explicitly confirmed by user"
-  - id: parenthetical-spacing
-    question: "\"6–7 (9–7)\" (space before paren, per user's own example) vs \"6–7(9–7)\" (existing convention in 4 other call sites)"
-    resolution: "space before paren, matching user's literal example; deliberately diverges from existing call sites since this is a new display context"
-  - id: html-export-parity
-    question: "Should MatchWebViewModel+Build.swift's Points tab mirror this the way it mirrored the in-set games score feature in commit 2099481?"
-    resolution: "deferred — not requested, flagged as optional follow-up"
+    resolution: "add alongside (second line) — total points won is not derivable from the score string, so it stays"
+  - id: current-set-unknown
+    question: "When the current set's live segment is unsuppressible (genuinely partial point history), render an em-dash placeholder or omit the segment"
+    resolution: "omit the segment and show only the completed sets — after PR 1 this fires only for truly truncated histories, and prior sets remain authoritative. An em-dash reads like a score, not like 'unknown'."
 key_data_model_facts:
-  - "PointStat.gameScoreAtStart (GameScoreSnapshot: server/returner points + isTiebreak) is captured pre-point in ScoreViewModel.gameScoreSnapshotAtPointStart(), called before updateScore(for:) — confirmed correct, not the source of the reported issue"
-  - "SetScore.gamesMe/gamesOpponent increments live as each game completes (ScoringEngine.swift ~line 384-386), not only at set-end — MatchRecord.setScores is live-accurate mid-match"
-  - "SetScore also carries tieBreakPointsMe/tieBreakPointsOpponent for the final breaker score of any set that went to one"
-  - "PointGamesScore.atStart(of:setIndex:matchFormat:setScores:) already exists (Stats/PointGamesScore.swift) and derives a single set's live games score per point via 0-0 boundary detection, with suppression when the tracked points are a suffix (not the full history) of the set"
-root_cause_finding: "No data-capture bug found. The per-point in-game tennis score (0/15/30/40) already updates correctly point-to-point. What was actually missing was match-level context: the games count for the CURRENT set only went in as far as commit 2099481, and there was no view of completed prior sets or a deciding-set tiebreak's live point score. This plan generalizes that into one full running match-score string per point."
+  - "PointStat.gameScoreAtStart (GameScoreSnapshot: server/returner points + isTiebreak) is captured pre-point in ScoreViewModel.gameScoreSnapshotAtPointStart(), called before updateScore(for:) — capture is correct; the reported issue is a derivation bug, see root_cause_finding"
+  - "GameScoreSnapshot is SERVER-RELATIVE (fields are `server`/`returner`, not me/opp). Every read must be re-oriented through point.server, exactly as MatchDetailView.gameScoreLabel(_:server:) does."
+  - "PointStat carries server: Player (the team) only — there is NO per-point DoublesServer (PointStat.swift:100-116)"
+  - "SetScore.gamesMe/gamesOpponent increment live as each game completes (ScoringEngine.gameWon, ScoringEngine.swift:382-387), not only at set-end — MatchRecord.setScores is live-accurate mid-match"
+  - "A set won via a breaker has its games column OVERWRITTEN to the tiebreak-win value: 7–6, not 6–6 (ScoringEngine.swift:292-299). SetScore also carries tieBreakPointsMe/Opponent for the breaker's own score."
+  - "setScores.count == completedSets + 1 while a match is in progress (completeSet appends a fresh SetScore for the next set), and == completedSets once the match is over — no trailing empty set (ScoringEngine.completeSet, ScoringEngine.swift:445-488)"
+  - "PointGamesScore.atStart(of:setIndex:matchFormat:setScores:) exists (Stats/PointGamesScore.swift) and derives a single set's live games score per point via 0-0 boundary detection — but its reconciliation guard is broken, see root_cause_finding"
+root_cause_finding: "There IS a bug, and it is in the derivation, not the capture. PointGamesScore counts a game only when a LATER point in the set resets to 0-0, so after its loop the counters hold the games score at the START OF THE LAST TRACKED POINT — the game that the last point wins is never counted. It then requires that count to equal setScores[setIndex], which is incremented the moment the game is won. For any completed set the last tracked point wins a game (or the breaker), so derived == known - 1 and the guard suppresses the WHOLE SET. Net effect on main: the shipped in-set games score renders for no completed set at all, on either the iOS Points tab or the HTML export. Both existing tests encode the wrong invariant (their fixtures set setScores to the count BEFORE the last point), and the one realistic 6-4/7-5 fixture in MatchWebExportTests is never asserted against gamesScoreLabel. This is the 'the score isn't changing' report that prompted this plan."
 -->
 
 # Plan: Full Running Match Score + Server Indicator on Points Tab & Graph Highlight
 
 ## Context
 
-Commits `2099481` ("feat: show in-set games score in the Points tab list")
-and `de1bdef` ("fix: suppress games score when tracked points are only a
-suffix of the set") landed on 2026-07-14 and added an in-set games score
-(e.g. `"0–1 ·"`) next to each point's existing in-game tennis score
-(`"40–0"`) in the iOS Match Stats → Points tab (`MatchDetailView`'s point
-list).
+Commits `2099481` ("feat: show in-set games score in the Points tab list") and `de1bdef`
+("fix: suppress games score when tracked points are only a suffix of the set") landed on
+2026-07-14 and added an in-set games score (e.g. `"0–1 ·"`) next to each point's existing
+in-game tennis score (`"40–0"`) in the iOS Match Stats → Points tab and the HTML export's
+Points tab.
 
-Testing that feature against a real multi-set match, the request evolved in
-two rounds:
+Testing that feature against a real multi-set match, the request evolved in two rounds:
 
-1. Initially: "the score isn't changing, I just see `0-0 2nd`" — prompted an
-   investigation into whether `PointStat.gameScoreAtStart` is captured
-   correctly. It is (see `root_cause_finding` above); the real gap was
-   missing context, not a stuck value.
-2. Clarified: the user wants the **full match score as of that point**, not
-   just the current set's games — completed prior sets (with tiebreak detail
-   in parens) plus the live score of whatever set the point belongs to, e.g.:
+1. Initially: *"the score isn't changing"* — prompting an investigation into whether
+   `PointStat.gameScoreAtStart` is captured correctly. **It is.** The first version of this
+   plan concluded from that there was no bug at all, only missing context. That conclusion
+   was wrong: capture is fine, but the *derivation* shipped in `de1bdef` suppresses the
+   games score for every completed set. See **PR 1** below — it must land first, or
+   everything built on top of it renders nothing.
+2. Clarified: the user wants the **full match score as of that point**, not just the current
+   set's games — completed prior sets (with tiebreak detail in parens) plus the live score of
+   whatever set the point belongs to, e.g.:
 
    ```
    6–7 (9–7)  6–4  2–2
    ```
 
-   = lost set 1 in a breaker (9–7), won set 2 6–4, and set 3 (in this
-   example a deciding super-tiebreak format) currently stands 2–2.
+   = lost set 1 in a breaker (9–7), won set 2 6–4, and set 3 (here a deciding
+   super-tiebreak) currently stands 2–2.
 
-   This fully subsumes the narrower "games in current set" display just
-   shipped, so this plan **replaces** it rather than showing both.
+   This subsumes the narrower "games in current set" display, so it **replaces** it — on
+   *both* Points tabs. Commit `2099481` deliberately shipped the games score to the iOS list
+   and the HTML export together ("so they keep mirroring each other"), and
+   `docs/architecture/file-inventory.md` records `PointGamesScore` as shared by both.
+   Upgrading only one of them would silently break that contract.
 
 Two more requirements layered on top:
 
 - **Who was serving** on each point, shown on the Points tab row.
-- The **points graph**'s tap/drag highlight strip should show the same score
-  representation for whichever point is selected, not just the cumulative
-  points-won totals it currently shows.
+- The **points graph**'s tap/drag highlight strip should show the same score representation
+  for whichever point is selected, not just the cumulative points-won totals it shows today.
 
-### Prior art already in the codebase
+---
 
-A "sets so far" formatter already exists — duplicated across four call
-sites, none of which compute it for a specific *historical* point (only
-"final" or "right now"):
+## The blocking bug (why PR 1 comes first)
 
-| Call site | File |
-|---|---|
-| `scoreString` (list row) | `DeuceMate/DeuceMate/Views/PastMatchesView.swift` |
-| `inProgressScoreString` | `DeuceMate/DeuceMate/Views/PastMatchesView.swift` |
-| `scoreString` (header) | `DeuceMate/DeuceMate/Views/MatchDetailView.swift` (~line 156) |
-| `scoreString` / `setBySetScores` | `DeuceMate/DeuceMate/Export/MatchExporter.swift` |
-| `scoreString` / `setScoreString` | `Packages/DeuceMateCore/Sources/DeuceMateCore/WebExport/MatchWebViewModel+Build.swift` |
+`Stats/PointGamesScore.swift:46-60`:
 
-All four follow the same three formatting rules, which this plan reuses:
+```swift
+var me = 0, opponent = 0
+for (i, point) in points.enumerated() {
+    guard let snap = point.gameScoreAtStart else { continue }
+    if i > 0, snap.server == 0, snap.returner == 0 {           // a LATER point resetting to 0–0
+        if points[i - 1].winner == .me { me += 1 } else { opponent += 1 }
+    }
+    result[point.id] = GamesScoreSnapshot(me: me, opponent: opponent)
+}
+let known = setIndex < setScores.count ? setScores[setIndex] : SetScore()
+guard me == known.gamesMe, opponent == known.gamesOpponent else { return [:] }   // ← always fails
+```
 
-- Completed regular set → `"6–4"`.
-- Completed set that went to a breaker → `"6–7(9–7)"` (games, tiebreak
-  points in parens).
-- A currently-live in-set breaker (not the deciding set) → `"TB 3–2"`.
-- A deciding super-tiebreak-only set (`MatchFormatConfig.isDecidingSuperTiebreak`)
-  → raw points, no games, no `"TB"` prefix: `"2–2"`.
+A game is credited only when a **later** point in the set resets to `0–0`. After the loop the
+counters therefore hold the games score **at the start of the last tracked point**; the game
+that the last point *wins* is never counted. `setScores[setIndex]`, meanwhile, is incremented
+the moment that game is won (`ScoringEngine.gameWon`, `ScoringEngine.swift:382-387`).
 
-## Design decisions (open to critique — see `open_questions` above)
+| Set | Derived after loop | `setScores[i]` | Guard |
+|---|---|---|---|
+| Completed 6–4 | `5–4` | `6–4` | fails → **whole set suppressed** |
+| Completed 7–6 (breaker; games overwritten to 7 at `ScoringEngine.swift:292-299`) | `6–6` | `7–6` | fails → **suppressed** |
+| Live set, last tracked point ended a game | `n-1` games | `n` games | fails → **suppressed** |
+| Live set, last tracked point mid-game | matches | matches | passes ✅ |
 
-1. **Server indicator**: a small dot filled in the server's color
-   (`meColor`/`oppColor`), matching the serving-dot already used in
-   `LiveScoreboardView.playerRow` (`DeuceMate/DeuceMate/Views/LiveScoreboardView.swift:395-406`).
-   Reuses an existing visual language instead of inventing a new one.
-2. **Graph highlight**: keep the existing cumulative "Me X / Opp Y"
-   points-won badges (still independently useful — total points won isn't
-   derivable from the score string), and add the match-score line as a
-   second row beneath it, mirroring the Points tab row's two-line layout.
-3. **Parenthetical spacing**: `"6–7 (9–7)"` with a space, matching the
-   user's own example — diverges intentionally from the no-space convention
-   (`"6–7(9–7)"`) used by the four existing call sites above, since this is
-   a new, separate display context and reads more clearly at caption size.
-4. **Suffix-only sets** (a match resumed mid-set via `ManualMatchEntryView`,
-   where tracked points don't start at 0 games): `PointGamesScore` already
-   detects and suppresses this per set. Prior *completed* sets are always
-   authoritative from `MatchRecord.setScores` regardless of point-history
-   coverage, so they still display; only the current set's live segment
-   falls back to `"—"` instead of a confidently wrong number.
-5. **HTML export parity is deliberately out of scope.** The HTML match
-   export's own Points tab mirrors the in-set games score today (commit
-   `2099481` touched both surfaces), so there's a real argument for mirroring
-   this too — flagged as a follow-up, not silently dropped.
+`atStart` returns a non-empty result **only** for a set whose last tracked point is mid-game.
+The iOS archive shows finished matches, so on `main` today the in-set games score renders for
+no completed set at all — on the Points tab *and* the HTML export (which shares the helper,
+`MatchWebViewModel+Build.swift:229-261`).
 
-## Implementation
+The tests encode the bug rather than catching it: `PointGamesScoreTests.swift:18-34` and
+`MatchWebExportTests.swift:340-366` both set `setScores` to the games count *before* the last
+tracked point, and `MatchWebExportTests.makeRecord()` — the one realistic `6–4` / `7–5`
+fixture — is never asserted against `gamesScoreLabel`. It would fail if it were.
 
-### 1. New Core derivation
+`PointMatchScore` delegates its current-set segment to `PointGamesScore`, so without the fix
+every point of every set in every archived match would render its own set as unknown.
 
-**New file:** `Packages/DeuceMateCore/Sources/DeuceMateCore/Stats/PointMatchScore.swift`
-— sibling to the existing `Stats/PointGamesScore.swift`.
+---
+
+## Design decisions
+
+1. **Fix the reconciliation, don't loosen it.** The suffix-suppression contract from `de1bdef`
+   is right — a mis-attributed games count is worse than none. It just needs to compare like
+   with like: accept the derived count **or** the derived count after crediting the last
+   tracked point with the game it just won. The last point of a game always wins that game
+   (true for regular games and for breakers), so the credit is unambiguous. Suffix suppression
+   survives untouched: a resumed set with `setScores` at `4–2` and derived `0–0` fails both
+   branches.
+2. **One set-score formatter, in Core.** The three formatting rules are currently hand-copied
+   across **five** call sites, which already disagree with each other:
+
+   | Call site | Emits |
+   |---|---|
+   | `Core/WebExport/MatchWebViewModel+Build.swift:428-456` (`setScoreString`) | `6–7 (5–7)` — **with** space |
+   | `iOS/Export/MatchExporter.swift:287-328, 565-588` | `6–7 (5–7)` — **with** space |
+   | `iOS/Views/MatchDetailView.swift:156-197` (header `scoreString`) | `6–7(5–7)` — no space |
+   | `iOS/Views/PastMatchesView.swift:686-750` | `6–7(5–7)` — no space |
+
+   Two of them also re-derive `decidingSetIndex` inline instead of calling
+   `MatchFormatConfig.isDecidingSuperTiebreak(setIndex:)` (`ScoreTypes.swift:88-90`). Adding a
+   sixth copy for `PointMatchScore` would be the wrong move; promoting one into Core settles
+   the spacing question by construction and makes "the Points tab row agrees with the header
+   above it" true rather than hoped for. **Canonical form: `6–7 (5–7)`, with the space** —
+   it is already the majority, it is what Core and the exporter emit, and it reads better at
+   caption size.
+3. **Server indicator: 🎾 glyph on the serving side, not a coloured dot.** The first draft
+   proposed a `meColor`/`oppColor` dot "matching `LiveScoreboardView.playerRow`". That dot is
+   `theme.colors.server` — a dedicated *third* colour shown on whichever player row is serving
+   (`LiveScoreboardView.swift:395-406`); identity comes from the **row**, not the colour. A
+   points-list row has no row context, so a me/opp-coloured dot would be a new visual language
+   *and* colour-only. The real prior art is the watch's `ContentView.serverIndicator`
+   (`ContentView.swift:433-457`): a 🎾 glyph plus `.accessibilityLabel("Serving")`. Mirror
+   that, and match whatever the HTML viewer already does with its per-point `server` field
+   (`MatchWebViewModel+Build.swift:244`).
+   - The row must gain an `.accessibilityLabel` covering server + score; it has none today.
+   - **Doubles shows the serving side, not S1/S2** — `PointStat` stores only `server: Player`.
+4. **Live breaker keeps its games.** A non-deciding set inside a breaker renders
+   `"6–6 (3–2)"`, not `"TB 3–2"`. The completed form of the same set is `"7–6 (7–5)"`, so this
+   keeps the shape stable and the string an actual match score.
+5. **When the current set is unknowable, omit it.** After PR 1, suppression only fires for
+   genuinely partial point histories (a `ManualMatchEntryView` mid-set reconstruction resumed
+   on the watch). Prior *completed* sets come from `MatchRecord.setScores` and stay
+   authoritative regardless, so the row still shows them; the live segment is simply absent
+   rather than rendered as a placeholder that looks like a score.
+
+### Per-format behaviour (this table is the test matrix)
+
+`playRegularSets == false` formats have no games concept at all; `PointGamesScore` returns
+`[:]` for them today and `PointMatchScore` must handle them directly from `gameScoreAtStart`.
+
+| `MatchFormat` | Prior sets | The point's own set |
+|---|---|---|
+| `.standard` (best-of-3, deciding super-TB) | `6–4`, `7–6 (7–5)` | games `2–2`; in a breaker `6–6 (3–2)`; in the deciding super-TB, raw points `7–5` |
+| `.bestOf3FullFinalSet` | same | same, but the final set is a regular set (no super-TB case) |
+| `.quick4Games` (win at 3, TB at 2, 1-pt TB) | `3–1`, `3–2 (1–0)` | same rules — the derivation is format-driven, not special-cased |
+| `.superTiebreak` (one TB to 10) | none | raw TB points `6–4` |
+| `.perpetualSuperTiebreak` (endless TB sets) | prior TB scores `10–8  10–7` | raw TB points of the live breaker |
+| `.perpetualPoints` | n/a | n/a — `disablesPointTracking`, so there are no `PointStat`s to render |
+
+---
+
+## Implementation — three PRs, in order
+
+### PR 1 — `[Core] fix: reconcile in-set games score against the game the last point won`
+
+Standalone, off `main`, merged before anything else. Restores the shipped feature on both
+surfaces.
+
+`Stats/PointGamesScore.swift`, replacing the final guard:
+
+```swift
+let known = setIndex < setScores.count ? setScores[setIndex] : SetScore()
+// The loop's counters are the games score at the START of the last tracked point, so the
+// game that point wins (if it wins one) is not yet in them. Accept either reading.
+if me == known.gamesMe, opponent == known.gamesOpponent { return result }   // last point mid-game
+if let last = points.last?.winner {                                          // last point ended a game
+    let m = me + (last == .me ? 1 : 0)
+    let o = opponent + (last == .opponent ? 1 : 0)
+    if m == known.gamesMe, o == known.gamesOpponent { return result }
+}
+return [:]   // genuinely partial history — suppress rather than mislabel
+```
+
+A breaker-decided set falls out of the same rule: derived `6–6`, credit the last TB point's
+winner → `7–6` == known.
+
+**Tests** (write the first one *before* the fix and watch it fail):
+- `PointGamesScoreTests`: a realistic completed 6–4 set (points ending with the set-winning
+  point, `setScores: [SetScore(gamesMe: 6, gamesOpponent: 4)]`) → non-empty, correct per-point
+  values; a set won 7–6 via a breaker; a live set whose last tracked point ended a game.
+- `MatchWebExportTests`: assert `gamesScoreLabel` against the existing realistic
+  `makeRecord()` fixture (`6–4` / `7–5`), which no test currently touches.
+- Both existing suffix-suppression tests must stay green, unchanged.
+
+### PR 2 — `[Core] refactor: single set-score formatter`
+
+Pure de-duplication, no behaviour change beyond settling the spacing on `6–7 (5–7)`.
+
+- New `Stats/SetScoreLabel.swift` — promote `setScoreString(record:index:focal:)` out of the
+  `WebExport` extension (`MatchWebViewModel+Build.swift:428-456`, already the canonical
+  version) into a public Core helper, using `MatchFormatConfig.isDecidingSuperTiebreak(setIndex:)`
+  rather than re-deriving the deciding index.
+- Adopt it in `MatchWebViewModel+Build`, `MatchExporter`, `MatchDetailView` (header
+  `scoreString`), `PastMatchesView` (`scoreString` + `inProgressScoreString`).
+- Tests: `SetScoreLabelTests` covering the three rules × the six formats; existing exporter and
+  web-export tests pin the output.
+
+### PR 3 — `[Core][iOS] feat: full running match score + server on the Points tab`
+
+**New Core file** `Stats/PointMatchScore.swift`, sibling to `PointGamesScore.swift`:
 
 ```swift
 public enum PointMatchScore {
-    /// Full match score immediately before each point in `points`, as an
-    /// ordered list of set-score labels (one per set played so far,
-    /// including the point's own set's live score) — e.g.
-    /// ["6–7 (9–7)", "6–4", "2–2"]. UI callers join with "  ".
-    /// `points` is the whole match's stats (all sets), not a single-set slice.
-    public static func atStart(
-        of points: [PointStat],
-        matchFormat: MatchFormat,
-        setScores: [SetScore]
-    ) -> [PointStat.ID: [String]]
+    /// The match score immediately before a point: every set played so far, including
+    /// the live score of the point's own set.
+    public struct Snapshot: Equatable, Sendable {
+        /// Completed sets before this point's set, e.g. ["6–7 (9–7)", "6–4"].
+        public let completedSets: [String]
+        /// The point's own set, live as of this point — e.g. "2–2", "6–6 (3–2)", "7–5".
+        /// nil when the set's point history is only a suffix (see PointGamesScore).
+        public let currentSet: String?
+        /// The raw games tally behind `currentSet`, for callers that want the number.
+        public let games: GamesScoreSnapshot?
+        /// e.g. "6–7 (9–7)  6–4  2–2" — completed sets only when `currentSet` is nil.
+        public var label: String { (completedSets + [currentSet].compactMap { $0 }).joined(separator: "  ") }
+    }
+
+    /// Keyed by point id. `points` is the whole match's stats (all sets), in order.
+    public static func atStart(of points: [PointStat], record: MatchRecord) -> [PointStat.ID: Snapshot]
 }
 ```
 
+Returning a typed snapshot rather than a pre-joined `[String]` keeps formatting decisions in
+the UI (the Points tab can emphasise the live set; the graph reuses the same value), and
+follows the standing preference in `TECHNICAL_DEBT.md` #7. Both surfaces key by
+`PointStat.ID`, so they provably look up the same value.
+
 Logic:
 
-- Group `points` by `setIndex` (same pattern `MatchDetailView.pointsListSections`
-  already uses).
-- Prior-set labels for set `setIndex` = `setScores[0..<setIndex]`, each
-  formatted with the three rules above — always authoritative since those
-  sets are complete, independent of how much point history is tracked.
-- The point's own set's live segment:
-  - **Deciding super-tiebreak set** (`matchFormat.config.isDecidingSuperTiebreak(setIndex:)`):
-    raw `"me–opp"` read directly off that point's own `gameScoreAtStart`
-    (mapped through `point.server`) — no games concept, no boundary
-    detection needed, no suppression risk.
-  - **In-set breaker, not the deciding set** (`gameScoreAtStart.isTiebreak == true`):
-    `"TB me–opp"`, matching `PastMatchesView.inProgressScoreString`'s
-    existing convention.
-  - **Otherwise**: reuse `PointGamesScore.atStart(of:setIndex:matchFormat:setScores:)`
-    for that set's points to get the live games tally; `"—"` if suppressed.
-- Points with `gameScoreAtStart == nil` (matches recorded before per-point
-  snapshotting existed) get no entry — same graceful-degradation as
+- Group `points` by `setIndex` (the pattern `MatchDetailView.pointsListSections` already uses).
+- `completedSets` for a point in set `i` = `SetScoreLabel` over `record.setScores[0..<i]` —
+  always authoritative, independent of how much point history is tracked.
+- `currentSet` for set `i`:
+  - **No games concept** (`!config.playRegularSets`, or `config.isDecidingSuperTiebreak(setIndex: i)`):
+    raw `me–opp` read from the point's own `gameScoreAtStart`, re-oriented through `point.server`.
+  - **In a breaker within a regular set** (`gameScoreAtStart.isTiebreak == true`): `"6–6 (3–2)"`
+    — games from `PointGamesScore`, breaker points from `gameScoreAtStart`.
+  - **Otherwise**: games from `PointGamesScore.atStart(...)`; `nil` if that set is suppressed.
+- Points with `gameScoreAtStart == nil` (recorded before per-point snapshotting) get no entry —
+  same graceful degradation as `PointGamesScore`.
+
+**New tests** `PointMatchScoreTests.swift` — one per row of the per-format table above, plus:
+mid-match on set 2 where set 1 ended in a breaker; a deciding super-tiebreak in progress; an
+in-set 6–6 breaker mid-way through a non-deciding set; the suffix case (prior sets still show,
+current set omitted); a legacy match with no snapshots.
+
+**`MatchDetailView.swift`**
+- `pointsListSections` (~:703): replace the per-set `PointGamesScore.atStart` call with one
+  whole-match `PointMatchScore.atStart(of: record.stats, record: record)`, threaded into
+  `pointRow` as `matchScore: PointMatchScore.Snapshot?` in place of `games:`.
+- `pointRow` (~:718): new first line `snapshot.label` (caption2, `.tertiary`), above the
+  existing in-game-score line, omitted when empty; 🎾 server indicator in the in-game-score
+  `HStack`; row `.accessibilityLabel`. `gameScoreLabel(_:server:)`, the `BP`/`2nd` badges and
+  the outcome line are unchanged.
+
+**`PointsGraphView.swift`**
+- `PointsGraphData` (~:132): add `record`-derived inputs to `init`, call `PointMatchScore.atStart`
+  once, and in the existing single-pass loop over `stats` (~:208) populate
+  `snapshotByID: [PointStat.ID: PointMatchScore.Snapshot]` plus an `idByIndex: [Int: PointStat.ID]`
+  so the x-indexed selection can reach it. Update the three construction sites (~:1238, ~:1438,
+  ~:1449) — all already have `record` in scope.
+- `PointsGraphSelectionSummary` (~:1016): add a second line below the existing
+  "Pt N · Me X · Opp Y" with the server indicator, the in-game score, and `snapshot.label`.
+  Both call sites (~:1359, ~:1594) pass the snapshot for the selected x.
+- `gameScoreLabel(_:server:)` is currently a private method on `MatchDetailView` and the graph
+  needs identical output. Lift it into Core alongside `SetScoreLabel` rather than duplicating a
+  third copy (the web export already has its own at `MatchWebViewModel+Build.swift:468-472`,
+  which uses a **hyphen** where the iOS one uses an en dash — fold that in too).
+- Note the numbering mismatch: the graph's "Pt N" is a match-wide index over `record.stats`
+  (`PointsGraphView.swift:208`), while the Points tab restarts numbering inside each set section
+  (`MatchDetailView.swift:711`). Either make the graph label set-relative too, or don't claim the
+  two surfaces can be cross-checked by point number.
+
+**HTML export** (parity — the reason `2099481` touched both surfaces)
+- `MatchWebViewModel.PointVM`: replace `gamesScoreLabel` (`MatchWebViewModel.swift:169`) with
+  `matchScoreLabel`; bump `currentSchemaVersion` 6 → 7 (`:22-23`).
+- `MatchWebViewModel+Build.swift:229-261`: build it from `PointMatchScore` instead of
   `PointGamesScore`.
+- `MatchWebTemplate.swift:708`: render `matchScoreLabel` in the point row.
+- `MatchWebExportTests`: update the two `gamesScoreLabel` tests to the new field and add the
+  completed-set case.
 
-**New tests:** `Packages/DeuceMateCore/Tests/DeuceMateCoreTests/PointMatchScoreTests.swift`
-(mirrors `PointGamesScoreTests.swift`), covering:
+**Docs**
+- `docs/architecture/file-inventory.md`: register `Stats/SetScoreLabel.swift` and
+  `Stats/PointMatchScore.swift`; update the `Stats/PointGamesScore.swift` row (it becomes an
+  internal building block of `PointMatchScore` rather than a directly-rendered value).
 
-- Mid-match on set 2, where set 1 ended in a tiebreak.
-- A deciding super-tiebreak set in progress.
-- An in-set 6–6 breaker mid-way through a non-deciding set.
-- The suffix-only suppression case: prior sets still show, current segment
-  is `"—"`.
-
-### 2. `MatchDetailView.swift` — Points tab row
-
-- `pointsListSections` (~line 704): replace the per-set `PointGamesScore.atStart`
-  call + `games: GamesScoreSnapshot?` parameter on `pointRow` with one
-  whole-match call to `PointMatchScore.atStart(of: record.stats, matchFormat: record.matchFormat, setScores: record.setScores)`,
-  threaded into `pointRow` as `matchScore: [String]`.
-- `pointRow` (~line 719):
-  - New first line: `matchScore.joined(separator: "  ")` (caption2,
-    `.tertiary`), above the existing in-game-score line; omitted when empty.
-  - Server dot added to the existing in-game-score `HStack`
-    (`Circle().fill(point.server == .me ? meColor : oppColor)`).
-  - Existing `gameScoreLabel(_:server:)`, `BP`/`2nd` badges, and the
-    outcome chip/label line are unchanged.
-
-### 3. `PointsGraphView.swift` — graph highlight
-
-- `PointsGraphData` (private struct, ~line 132): add `matchFormat: MatchFormat`
-  and `setScores: [SetScore]` to `init`; call `PointMatchScore.atStart` once
-  and, inside the existing single-pass loop over `stats` (~line 208),
-  populate two new index-keyed maps alongside `cumulativeByIndex`/
-  `scatterByPoint`: `statByIndex: [Int: PointStat]` and
-  `matchScoreByIndex: [Int: [String]]` (both keyed by the same 1-based
-  `x = i + 1`).
-- Update all three `PointsGraphData(...)` construction sites to pass
-  `matchFormat: record.matchFormat, setScores: record.setScores` — inline
-  `PointsGraphView.body` (~line 1238), `ExpandedPointsGraphView.init`
-  (~line 1438), `ExpandedPointsGraphView.rebuildData()` (~line 1449) — all
-  already have `record` in scope.
-- `PointsGraphSelectionSummary` (~line 1016): add `point: PointStat?` and
-  `matchScoreParts: [String]` params; add a second line below the existing
-  "Pt N · Me X · Opp Y" line with the server dot + in-game score +
-  `matchScoreParts.joined(separator: "  ")`.
-- Both `selectionSummary` call sites (inline ~line 1359, expanded ~line 1594)
-  pass `point: data.statByIndex[x]` and `matchScoreParts: data.matchScoreByIndex[x] ?? []`.
-- `gameScoreLabel(_:server:)` currently lives as a private method on
-  `MatchDetailView`; `PointsGraphView` needs identical output so the two
-  views agree. Lift it to a shared fileprivate/internal helper at
-  implementation time rather than duplicating the formatting logic a third
-  time.
-
-### 4. Docs
-
-- `docs/architecture/file-inventory.md`: register the new
-  `Stats/PointMatchScore.swift` (CLAUDE.md §6 hard rule for new source files;
-  this plan doc itself is not tracked there — confirmed no existing
-  `docs/features/*.md` entries appear in that inventory).
+---
 
 ## Verification
 
-- `cd DeuceMate/Packages/DeuceMateCore && swift test` (or `xcodebuild test
-  -scheme DeuceMateCore -destination "platform=macOS" CODE_SIGNING_ALLOWED=NO`)
-  — run the new `PointMatchScoreTests` plus the full suite to confirm no
-  regressions in `PointGamesScoreTests` / `MatchStatsSummaryTests` / etc.
-- Build the iOS app in the simulator if the toolchain is available; if not,
-  say so explicitly rather than claiming it was verified.
-- Manually open a real multi-set archived match's Match Stats → Points tab
-  and confirm: the match-score line reads correctly across a set boundary
-  and across a tiebreak, the server dot matches who actually served, and
-  scrolling shows the score evolving point-by-point within a game and
-  set-by-set across the match.
-- Open the same match's Points Graph, drag across a few points spanning a
-  set boundary, and confirm the highlight strip's new line matches the
-  corresponding Points tab row exactly for the same point.
+- `cd DeuceMate/Packages/DeuceMateCore && swift test` (or `xcodebuild test -scheme DeuceMateCore
+  -destination "platform=macOS" CODE_SIGNING_ALLOWED=NO`) after each PR. PR 1's new test must be
+  demonstrated failing on `main` before the fix lands.
+- Build the iOS app in the simulator if the toolchain is available; if not, say so explicitly
+  rather than claiming it was verified.
+- Open a real multi-set **completed** archived match's Match Stats → Points tab (the case that is
+  broken today) and confirm: the match-score line is correct across a set boundary and across a
+  tiebreak, the server indicator matches who actually served, and the score evolves point-by-point
+  within a game and set-by-set across the match.
+- Open the same match's Points Graph, drag across points spanning a set boundary, and confirm the
+  highlight strip's new line agrees with the Points tab for the same point.
+- Export the same match to HTML and confirm its Points tab shows the same string as iOS.
 
 ## Notes for reviewing AI models
 
-- This doc's HTML comment block at the top is a structured summary intended
-  for quick machine parsing (scope, open questions, key facts, root-cause
-  finding) — the prose below it is the full human-readable plan. Keep both
-  in sync if this doc is edited.
-- Flag anything in `open_questions` you'd resolve differently, and flag any
-  additional call site that formats a "sets so far" string that isn't listed
-  under "Prior art already in the codebase" above — that list was found by
-  grepping for `tieBreakPoints`/`scoreString`/`setScoreString` and may not be
-  exhaustive.
-- Flag if `PointGamesScore`'s existing suppression contract (whole-set
-  all-or-nothing) is the wrong granularity to inherit here, given this plan
-  now also needs a per-point fallback (`"—"`) rather than an empty dictionary
-  entry.
+- The HTML comment block at the top is a structured summary for quick machine parsing. Keep it in
+  sync with the prose if you edit this doc — and note that the first version of this doc was
+  *confidently wrong* in exactly that field (`root_cause_finding` asserted there was no bug).
+  Verify header claims against `file:line` before building on them.
+- Flag anything in `open_questions` you'd resolve differently.
+- Flag any additional call site that formats a "sets so far" string beyond the five in the
+  Design-decisions table — that list came from grepping `tieBreakPoints` / `scoreString` /
+  `setScoreString` and may not be exhaustive.
+- The `PointGamesScore` bug (PR 1) was found by hand-simulating the loop against a real 6–4 set.
+  Derivations reconciled against a stored value are worth checking that way: confirm both sides of
+  the comparison are measured at the same instant.
