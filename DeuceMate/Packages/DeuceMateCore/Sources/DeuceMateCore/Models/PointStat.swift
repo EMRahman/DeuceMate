@@ -186,3 +186,50 @@ public struct PointStat: Codable, Identifiable, Equatable, Sendable {
         )
     }
 }
+
+/// Server-attributed categories used by the iOS and interactive-HTML points
+/// graphs. First serve, second serve, and double fault are mutually exclusive
+/// attempt buckets; ace and serve-forced-error are more-specific tags that may
+/// overlap a first- or second-serve point.
+public enum ServingPointCategory: String, CaseIterable, Identifiable, Sendable {
+    case firstServe
+    case secondServe
+    case doubleFault
+    case ace
+    case serveForcedError
+
+    public var id: String { rawValue }
+
+    public var displayLabel: String {
+        switch self {
+        case .firstServe:       return "1st Serve"
+        case .secondServe:      return "2nd Serve"
+        case .doubleFault:      return "DF"
+        case .ace:              return "Ace"
+        case .serveForcedError: return "Serve FE"
+        }
+    }
+
+    /// Whether `point` belongs to this category for the specified server.
+    /// Detailed Ace / Serve FE tags require the point to have ended on Serve;
+    /// S+1 and rally forced errors intentionally do not match.
+    public func matches(_ point: PointStat, server: Player) -> Bool {
+        guard point.server == server else { return false }
+        switch self {
+        case .firstServe:
+            return !point.isSecondServe && point.outcome != .doubleFault
+        case .secondServe:
+            return point.isSecondServe && point.outcome != .doubleFault
+        case .doubleFault:
+            return point.outcome == .doubleFault
+        case .ace:
+            return point.winner == server
+                && point.outcome == .winner
+                && point.endingShot == .serve
+        case .serveForcedError:
+            return point.winner == server
+                && point.outcome == .forcedError
+                && point.endingShot == .serve
+        }
+    }
+}

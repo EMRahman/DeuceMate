@@ -58,6 +58,45 @@ final class MatchWebExportTests: XCTestCase {
         )
     }
 
+    /// Exercises every Serving pill, including overlapping detailed tags and
+    /// forced errors that must not be labelled Serve FE.
+    private func makeServingRecord() -> MatchRecord {
+        let stats: [PointStat] = [
+            // Me: 4 first serves, 2 landed second serves, 1 DF, 2 aces, 2 Serve FE.
+            PointStat(setIndex: 0, server: .me, winner: .me, outcome: .winner,
+                      isSecondServe: false, endingShot: .serve),
+            PointStat(setIndex: 0, server: .me, winner: .me, outcome: .winner,
+                      isSecondServe: true, endingShot: .serve),
+            PointStat(setIndex: 0, server: .me, winner: .opponent, outcome: .doubleFault,
+                      isSecondServe: true, endingShot: .serve),
+            PointStat(setIndex: 0, server: .me, winner: .me, outcome: .forcedError,
+                      isSecondServe: false, endingShot: .serve),
+            PointStat(setIndex: 0, server: .me, winner: .me, outcome: .forcedError,
+                      isSecondServe: true, endingShot: .serve),
+            PointStat(setIndex: 0, server: .me, winner: .me, outcome: .forcedError,
+                      isSecondServe: false, endingShot: .servePlusOne),
+            PointStat(setIndex: 0, server: .me, winner: .me, outcome: .forcedError,
+                      isSecondServe: false, endingShot: .rally),
+
+            // Opp: 2 first serves, 1 landed second serve, 1 legacy-style DF
+            // missing second-serve context, 1 ace, and no Serve FE.
+            PointStat(setIndex: 0, server: .opponent, winner: .opponent, outcome: .winner,
+                      isSecondServe: false, endingShot: .rally),
+            PointStat(setIndex: 0, server: .opponent, winner: .opponent, outcome: .winner,
+                      isSecondServe: true, endingShot: .rally),
+            PointStat(setIndex: 0, server: .opponent, winner: .me, outcome: .doubleFault,
+                      isSecondServe: false, endingShot: .serve),
+            PointStat(setIndex: 0, server: .opponent, winner: .opponent, outcome: .winner,
+                      isSecondServe: false, endingShot: .serve)
+        ]
+        return MatchRecord(
+            startTime: Date(timeIntervalSince1970: 1_700_000_000),
+            setScores: [SetScore(gamesMe: 1, gamesOpponent: 0)],
+            stats: stats,
+            matchFormat: .standard
+        )
+    }
+
     private func jsonObject(_ vm: MatchWebViewModel) throws -> [String: Any] {
         let data = try JSONEncoder().encode(vm)
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -74,6 +113,11 @@ final class MatchWebExportTests: XCTestCase {
         let persp = try XCTUnwrap(obj["perspectives"] as? [String: Any])
         XCTAssertNotNil(persp["me"])
         XCTAssertNotNil(persp["opponent"])
+        let me = try XCTUnwrap(persp["me"] as? [String: Any])
+        XCTAssertNotNil(me["servingCounts"])
+        XCTAssertNotNil(me["servingCountsOpponent"])
+        let palette = try XCTUnwrap(obj["palette"] as? [String: Any])
+        XCTAssertNotNil(palette["serving"])
         XCTAssertEqual(obj["schemaVersion"] as? Int, MatchWebViewModel.currentSchemaVersion)
     }
 
@@ -88,8 +132,43 @@ final class MatchWebExportTests: XCTestCase {
             XCTAssertTrue(p.outcomeColorHex.hasPrefix("#"))
             XCTAssertFalse(p.outcomeSymbol.isEmpty)
         }
+        XCTAssertFalse(vm.points[0].isTiebreak)
+        XCTAssertTrue(vm.points[5].isTiebreak)
         // Set bands cover both sets.
         XCTAssertEqual(Set(vm.setBands.map { $0.setNumber }), [1, 2])
+    }
+
+    func test_setBands_splitRegularPlayFromTiebreakWithIOSPalette() {
+        let stats = [
+            PointStat(setIndex: 0, server: .me, winner: .me, outcome: .winner,
+                      gameScoreAtStart: snap(0, 0, false)),
+            PointStat(setIndex: 0, server: .me, winner: .opponent, outcome: .winner,
+                      gameScoreAtStart: snap(0, 0, true)),
+            PointStat(setIndex: 0, server: .opponent, winner: .me, outcome: .winner,
+                      gameScoreAtStart: snap(1, 0, true))
+        ]
+        let record = MatchRecord(
+            startTime: Date(timeIntervalSince1970: 1_700_000_000),
+            setScores: [SetScore(gamesMe: 6, gamesOpponent: 6)],
+            stats: stats,
+            matchFormat: .standard
+        )
+
+        let vm = MatchWebViewModel.make(from: record)
+
+        XCTAssertEqual(vm.setBands.count, 2)
+        XCTAssertEqual(vm.setBands[0].label, "Set 1")
+        XCTAssertFalse(vm.setBands[0].isTiebreak)
+        XCTAssertEqual(vm.setBands[0].startIndex, 0)
+        XCTAssertEqual(vm.setBands[0].endIndex, 0)
+        XCTAssertEqual(vm.setBands[1].label, "TB")
+        XCTAssertTrue(vm.setBands[1].isTiebreak)
+        XCTAssertEqual(vm.setBands[1].startIndex, 1)
+        XCTAssertEqual(vm.setBands[1].endIndex, 2)
+        XCTAssertEqual(vm.setBands[1].colorHex,
+                       WebExportColors.setBandColorHex(setNumber: 1, isTiebreak: true))
+        XCTAssertEqual(vm.setBands[1].opacity,
+                       WebExportColors.setBandOpacity(isTiebreak: true))
     }
 
     // MARK: - 2. Both perspectives consistent
@@ -138,6 +217,58 @@ final class MatchWebExportTests: XCTestCase {
                        vm.perspectives.me.outcomeCounts)
     }
 
+    func test_servingPointCategory_usesDistinctBucketsAndServeEndingTags() {
+        let points = makeServingRecord().stats
+
+        XCTAssertEqual(points.filter { ServingPointCategory.firstServe.matches($0, server: .me) }.count, 4)
+        XCTAssertEqual(points.filter { ServingPointCategory.secondServe.matches($0, server: .me) }.count, 2)
+        XCTAssertEqual(points.filter { ServingPointCategory.doubleFault.matches($0, server: .me) }.count, 1)
+        XCTAssertEqual(points.filter { ServingPointCategory.ace.matches($0, server: .me) }.count, 2,
+                       "first- and second-serve aces both match")
+        XCTAssertEqual(points.filter { ServingPointCategory.serveForcedError.matches($0, server: .me) }.count, 2,
+                       "only Serve-ending forced errors match")
+
+        let sPlusOne = points[5]
+        let rally = points[6]
+        XCTAssertFalse(ServingPointCategory.serveForcedError.matches(sPlusOne, server: .me))
+        XCTAssertFalse(ServingPointCategory.serveForcedError.matches(rally, server: .me))
+        XCTAssertFalse(ServingPointCategory.firstServe.matches(points[9], server: .opponent),
+                       "a legacy DF without second-serve context stays in DF only")
+        XCTAssertFalse(ServingPointCategory.ace.matches(points[0], server: .opponent),
+                       "categories are attributed to the specified server")
+    }
+
+    func test_servingCounts_areMirroredPerPerspective() {
+        let vm = MatchWebViewModel.make(from: makeServingRecord())
+        let me = vm.perspectives.me.servingCounts
+        XCTAssertEqual(me["firstServe"], 4)
+        XCTAssertEqual(me["secondServe"], 2)
+        XCTAssertEqual(me["doubleFault"], 1)
+        XCTAssertEqual(me["ace"], 2)
+        XCTAssertEqual(me["serveForcedError"], 2)
+
+        let opp = vm.perspectives.me.servingCountsOpponent
+        XCTAssertEqual(opp["firstServe"], 2)
+        XCTAssertEqual(opp["secondServe"], 1)
+        XCTAssertEqual(opp["doubleFault"], 1)
+        XCTAssertEqual(opp["ace"], 1)
+        XCTAssertEqual(opp["serveForcedError"], 0)
+
+        XCTAssertEqual(vm.perspectives.me.servingCountsOpponent,
+                       vm.perspectives.opponent.servingCounts)
+        XCTAssertEqual(vm.perspectives.opponent.servingCountsOpponent,
+                       vm.perspectives.me.servingCounts)
+    }
+
+    func test_servingPalette_carriesLabelsColorsAndSymbols() {
+        let serving = MatchWebViewModel.make(from: makeRecord()).palette.serving
+        XCTAssertEqual(serving.map(\.key),
+                       ["firstServe", "secondServe", "doubleFault", "ace", "serveForcedError"])
+        XCTAssertEqual(serving.map(\.label), ["1st Serve", "2nd Serve", "DF", "Ace", "Serve FE"])
+        XCTAssertEqual(serving.map(\.symbol), ["circle", "asterisk", "square", "pentagon", "triangle"])
+        XCTAssertTrue(serving.allSatisfy { $0.colorHex.hasPrefix("#") })
+    }
+
     func test_endingShotPhases_splitWonAndLostPerPerspective() {
         let vm = MatchWebViewModel.make(from: makeRecord())
         // All four phases occur this match, exposed in rally order.
@@ -171,6 +302,14 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertTrue(vm.perspectives.me.endingLostByPhase.isEmpty)
     }
 
+    func test_scoreOnlyMatch_stillCarriesServingCounts() {
+        let vm = MatchWebViewModel.make(from: makeScoreOnlyRecord())
+        XCTAssertFalse(vm.perspectives.me.hasOutcomes)
+        XCTAssertEqual(vm.perspectives.me.servingCounts["firstServe"], 2)
+        XCTAssertEqual(vm.perspectives.me.servingCountsOpponent["firstServe"], 2)
+        XCTAssertEqual(vm.perspectives.me.servingCounts["ace"], 0)
+    }
+
     // MARK: - TV-style Me vs Opp comparison (mirrors MatchDetailView)
 
     /// The `All`-filter comparison (the whole-match view).
@@ -186,7 +325,7 @@ final class MatchWebExportTests: XCTestCase {
 
     func test_comparison_sectionsAndGating_fullMatch() throws {
         let vm = MatchWebViewModel.make(from: makeRecord())
-        XCTAssertEqual(vm.schemaVersion, 7)
+        XCTAssertEqual(vm.schemaVersion, 9)
         XCTAssertTrue(allComparison(vm).hasAnyOutcomeData)
         let titles = allComparison(vm).sections.map { $0.title }
         // Outcome Breakdown leads; Serve/Return present (every point categorised).
@@ -453,12 +592,51 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertEqual(exported[exported.count - 1].matchScoreLabel, "5–4")
     }
 
-    func test_htmlPointRowsRenderMatchScoreAndServerIndicator() {
+    func test_htmlPointRowsRenderMatchScoreAndServingStatus() {
         let html = MatchHTMLExporter.html(for: makeRecord())
 
         XCTAssertTrue(html.contains("p.matchScoreLabel"))
-        XCTAssertTrue(html.contains("🎾 "))
+        XCTAssertTrue(html.contains("serviceStatus(p, false)"))
+        XCTAssertTrue(html.contains("serviceStatus(p, true)"))
+        XCTAssertTrue(html.contains("text: \"🎾\""))
+        XCTAssertTrue(html.contains("service-racquet"))
+        XCTAssertTrue(html.contains("Serving"))
+        XCTAssertTrue(html.contains("Receiving"))
         XCTAssertFalse(html.contains("p.gamesScoreLabel"))
+    }
+
+    func test_htmlChartSupportsContinuousPointerSelection() {
+        let html = MatchHTMLExporter.html(for: makeRecord())
+
+        XCTAssertTrue(html.contains("pointerdown"))
+        XCTAssertTrue(html.contains("pointermove"))
+        XCTAssertTrue(html.contains("pointerup"))
+        XCTAssertTrue(html.contains("pointercancel"))
+        XCTAssertTrue(html.contains("lostpointercapture"))
+        XCTAssertTrue(html.contains("setPointerCapture"))
+        XCTAssertTrue(html.contains("releasePointerCapture"))
+        XCTAssertTrue(html.contains("selectFromPointer"))
+        XCTAssertTrue(html.contains("touch-action:pan-y"))
+    }
+
+    func test_htmlChartHasCountedServingPillsAndMatchingRules() {
+        let html = MatchHTMLExporter.html(for: makeServingRecord())
+
+        XCTAssertTrue(html.contains("function servingSection()"))
+        XCTAssertTrue(html.contains("servingCountsOpponent"))
+        XCTAssertTrue(html.contains("state.sel.myServe"))
+        XCTAssertTrue(html.contains("state.sel.oppServe"))
+        XCTAssertTrue(html.contains("scatterChip(SERVE_META[k], c[k] || 0"),
+                      "each Me serving pill must include its count")
+        XCTAssertTrue(html.contains("scatterChip(SERVE_META[k], co[k] || 0"),
+                      "each Opp serving pill must include its count")
+        XCTAssertTrue(html.contains(
+            "SERVING_ORDER = [\"firstServe\", \"secondServe\", \"doubleFault\", \"ace\", \"serveForcedError\"]"
+        ))
+        XCTAssertTrue(html.contains("function matchesServing(cat, p, who)"))
+        XCTAssertTrue(html.contains("p.endingShot === \"serve\""))
+        XCTAssertTrue(html.contains("wrap.appendChild(servingSection())"),
+                      "Serving controls must not be gated on outcome tracking")
     }
 
     // MARK: - AI Coach (mirrors AICoachSheet)
@@ -746,6 +924,14 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertTrue(svg.contains(">0</text>"))
         // Exactly two momentum step paths.
         XCTAssertEqual(occurrences(of: "<path ", in: svg), 2)
+    }
+
+    func test_staticChartSVG_usesTiebreakBandBackground() {
+        let svg = MatchHTMLExporter.staticChartSVG(MatchWebViewModel.make(from: makeRecord()))
+
+        XCTAssertTrue(svg.contains("fill=\"\(WebExportColors.setBandColorHex(setNumber: 2, isTiebreak: true))\""))
+        XCTAssertTrue(svg.contains("fill-opacity=\"\(WebExportColors.setBandOpacity(isTiebreak: true))\""))
+        XCTAssertTrue(svg.contains(">TB</text>"))
     }
 
     func test_staticChartSVG_emptyWhenNoPoints() {

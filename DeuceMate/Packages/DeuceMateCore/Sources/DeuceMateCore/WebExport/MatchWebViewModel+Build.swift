@@ -95,6 +95,18 @@ extension MatchWebViewModel {
             PointOutcome.doubleFault.rawValue:   categorized.opponentDoubleFaults
         ]
 
+        // Serving pills are score-level first/second/DF buckets plus detailed
+        // Ace / Serve-FE tags. Derive them over all points so first/second serve
+        // filtering remains available when outcome tracking was disabled.
+        let other: Player = focal == .me ? .opponent : .me
+        func makeServingCounts(for server: Player) -> [String: Int] {
+            Dictionary(uniqueKeysWithValues: ServingPointCategory.allCases.map { category in
+                (category.rawValue, record.stats.filter { category.matches($0, server: server) }.count)
+            })
+        }
+        let servingCounts = makeServingCounts(for: focal)
+        let servingCountsOpponent = makeServingCounts(for: other)
+
         // Ending-shot phases split into points the focal player won vs. lost.
         // Computed over *all* stats (an ending shot can sit on an uncategorised
         // point), keyed/ordered by EndingShot — mirrors PointsGraphData.
@@ -119,6 +131,8 @@ extension MatchWebViewModel {
             sections: sections,
             outcomeCounts: outcomeCounts,
             outcomeCountsOpponent: outcomeCountsOpponent,
+            servingCounts: servingCounts,
+            servingCountsOpponent: servingCountsOpponent,
             endingWonByPhase: endingWonByPhase,
             endingLostByPhase: endingLostByPhase,
             presentEndingPhases: presentEndingPhases,
@@ -255,6 +269,7 @@ extension MatchWebViewModel {
                 endingShotSymbol: shot.map { WebExportColors.endingShotSymbol($0) },
                 isSecondServe: pt.isSecondServe,
                 isBreakPoint: pt.isBreakPoint,
+                isTiebreak: pt.gameScoreAtStart?.isTiebreak ?? false,
                 gameScoreLabel: gameScoreLabel(pt),
                 matchScoreLabel: matchScore?.isEmpty == false ? matchScore : nil,
                 cumulativeMe: cumMe,
@@ -267,30 +282,30 @@ extension MatchWebViewModel {
 
     static func setBands(_ points: [PointVM]) -> [SetBandVM] {
         guard !points.isEmpty else { return [] }
-        // Group consecutive runs by setIndex (match order is already chronological).
+        // Group consecutive runs by set and tiebreak state (match order is
+        // already chronological), matching PointsGraphData on iOS.
         var bands: [SetBandVM] = []
         var runStart = 0
         var runSet = points[0].setIndex
+        var runTiebreak = points[0].isTiebreak
         func close(at end: Int) {
-            let isTb = false // setIndex alone does not distinguish a tiebreak band;
-                              // the underlying score view does, but per-point we lack
-                              // it cheaply, so colour by set number only.
             let setNumber = runSet + 1
             bands.append(SetBandVM(
                 setNumber: setNumber,
-                isTiebreak: isTb,
+                isTiebreak: runTiebreak,
                 startIndex: points[runStart].index,
                 endIndex: points[end].index,
-                colorHex: WebExportColors.setBandColorHex(setNumber: setNumber, isTiebreak: isTb),
-                opacity: WebExportColors.setBandOpacity(isTiebreak: isTb),
-                label: "Set \(setNumber)"
+                colorHex: WebExportColors.setBandColorHex(setNumber: setNumber, isTiebreak: runTiebreak),
+                opacity: WebExportColors.setBandOpacity(isTiebreak: runTiebreak),
+                label: runTiebreak ? "TB" : "Set \(setNumber)"
             ))
         }
         for i in 1..<points.count {
-            if points[i].setIndex != runSet {
+            if points[i].setIndex != runSet || points[i].isTiebreak != runTiebreak {
                 close(at: i - 1)
                 runStart = i
                 runSet = points[i].setIndex
+                runTiebreak = points[i].isTiebreak
             }
         }
         close(at: points.count - 1)

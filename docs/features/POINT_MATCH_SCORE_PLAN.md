@@ -43,7 +43,7 @@ root_cause_finding: "There IS a bug, and it is in the derivation, not the captur
 implementation_review:
   - "The proposed PR 1 pseudocode was unsafe: blindly crediting the last point's winner could accept a one-game history gap even when that point was mid-game. The implementation credits it only when gameScoreAtStart plus the format rules prove that the point completed a regular game or tiebreak."
   - "Regular-game completion is centralized in ScoringEngine.isRegularGameComplete and used by both live scoring and PointGamesScore reconciliation, preventing the historical derivation from drifting from the rule engine."
-  - "The HTML Points tab carried PointVM.server but did not render it. The implementation adds the same tennis-ball + Me/Opp serving indicator there, as well as on iOS."
+  - "The iOS and HTML Points tabs render PointVM.server from the recorder's perspective as 🎾 Serving or racquet Receiving; the same status appears in the graph inspector."
   - "The opening example's lost-set tiebreak detail was backwards for the recorder perspective; canonical focal-oriented output is 6–7 (7–9), not 6–7 (9–7)."
 -->
 

@@ -21,7 +21,10 @@ public struct MatchWebViewModel: Encodable, Sendable {
     /// `perPoint` field to each steps sample (Total vs Per-point overlay mode).
     /// v6 added `gamesScoreLabel` to each point (in-set games score). v7
     /// replaces it with `matchScoreLabel` (completed sets + live set score).
-    public static let currentSchemaVersion = 7
+    /// v8 adds each point's `isTiebreak` flag so regular and tiebreak chart
+    /// bands can use the same distinct backgrounds as the iOS graph. v9 adds
+    /// server-attributed scatter counts and serving legend metadata.
+    public static let currentSchemaVersion = 9
 
     public let schemaVersion: Int
     public let generatedAt: String
@@ -97,6 +100,12 @@ public struct MatchWebViewModel: Encodable, Sendable {
         /// Per-outcome counts attributed to the *other* player, shown on the
         /// chart's "Opp" outcome pills (mirrors PointsGraphView's `oppOutcomeCounts`).
         public let outcomeCountsOpponent: [String: Int]
+        /// Server-attributed first/second/DF/Ace/Serve-FE counts for this
+        /// perspective's player, shown on the chart's "Me" serving pills.
+        public let servingCounts: [String: Int]
+        /// The same server-attributed counts for the other player, shown on the
+        /// chart's "Opp" serving pills.
+        public let servingCountsOpponent: [String: Int]
         /// Points this perspective's player *won*, bucketed by the ending shot
         /// phase (keyed by `EndingShot` raw value) — drives the "Won" ending-shot
         /// pills. Mirrors PointsGraphView's `endingWonByPhase`.
@@ -162,6 +171,7 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public let endingShotSymbol: String?
         public let isSecondServe: Bool
         public let isBreakPoint: Bool
+        public let isTiebreak: Bool
         public let gameScoreLabel: String
         /// Full recorder-perspective match score at the start of this point:
         /// completed prior sets plus the live score of this point's set.
@@ -224,6 +234,7 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public let hrLineHex: String
         public let stepsLineHex: String
         public let outcomes: [Legend]
+        public let serving: [Legend]
         public let endingShots: [Legend]
     }
 
@@ -373,6 +384,12 @@ public struct MatchWebViewModel: Encodable, Sendable {
                                label: WebExportColors.outcomeShortLabel($0),
                                colorHex: WebExportColors.outcomeColorHex($0),
                                symbol: WebExportColors.outcomeSymbol($0))
+            },
+            serving: ServingPointCategory.allCases.map {
+                Palette.Legend(key: $0.rawValue,
+                               label: $0.displayLabel,
+                               colorHex: WebExportColors.servingColorHex($0),
+                               symbol: WebExportColors.servingSymbol($0))
             },
             endingShots: EndingShot.allCases.map {
                 Palette.Legend(key: $0.rawValue,
