@@ -36,4 +36,9 @@ public enum SettingsCopy: CaseIterable, Sendable {
     /// Shared length budget so the UI, the copy author, and the unit test agree on
     /// one number. Kept tight so summaries stay one short line on the Apple Watch.
     public static let maxLength = 90
+
+    /// Caption displayed while Pulse Coach uses its automatic fallback instead
+    /// of an age-derived maximum heart rate. Shared by iPhone and Watch so the
+    /// guidance remains identical on both settings surfaces.
+    public static let defaultMaxHRNote = "190 bpm default — set your birth year for accuracy"
 }
