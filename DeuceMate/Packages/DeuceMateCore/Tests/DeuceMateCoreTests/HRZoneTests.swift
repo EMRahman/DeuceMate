@@ -27,9 +27,8 @@ final class HRZoneTests: XCTestCase {
 
     // MARK: - resolveMaxHR
 
-    func test_resolveMaxHR_overrideWinsOverEverything() {
+    func test_resolveMaxHR_overrideWinsOverAge() {
         let resolved = HRZone.resolveMaxHR(
-            historical99thPct: 200,
             manualOverride: 175,
             birthYear: 1990,
             currentYear: 2026
@@ -37,20 +36,9 @@ final class HRZoneTests: XCTestCase {
         XCTAssertEqual(resolved, 175)
     }
 
-    func test_resolveMaxHR_historicalWinsOverAge() {
-        let resolved = HRZone.resolveMaxHR(
-            historical99thPct: 188,
-            manualOverride: nil,
-            birthYear: 1990,
-            currentYear: 2026
-        )
-        XCTAssertEqual(resolved, 188)
-    }
-
     func test_resolveMaxHR_ageFallback() {
         // 2026 - 1990 = 36 → 220 - 36 = 184
         let resolved = HRZone.resolveMaxHR(
-            historical99thPct: nil,
             manualOverride: nil,
             birthYear: 1990,
             currentYear: 2026
@@ -60,7 +48,6 @@ final class HRZoneTests: XCTestCase {
 
     func test_resolveMaxHR_ultimateFallback() {
         let resolved = HRZone.resolveMaxHR(
-            historical99thPct: nil,
             manualOverride: nil,
             birthYear: nil,
             currentYear: 2026
@@ -68,19 +55,18 @@ final class HRZoneTests: XCTestCase {
         XCTAssertEqual(resolved, 190)
     }
 
-    func test_resolveMaxHR_overrideOutOfRangeIsIgnored() {
+    func test_resolveMaxHR_overrideOutOfRangeFallsThroughToAge() {
+        // Override 999 is outside 120…220 → ignored → age formula wins.
         let resolved = HRZone.resolveMaxHR(
-            historical99thPct: 175,
             manualOverride: 999,
-            birthYear: nil,
+            birthYear: 1990,
             currentYear: 2026
         )
-        XCTAssertEqual(resolved, 175)
+        XCTAssertEqual(resolved, 184)
     }
 
     func test_resolveMaxHR_invalidBirthYearFallsBack() {
         let resolved = HRZone.resolveMaxHR(
-            historical99thPct: nil,
             manualOverride: nil,
             birthYear: 2030,
             currentYear: 2026

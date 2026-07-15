@@ -185,43 +185,21 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
 
     /// Push the current Pulse Coach settings to the watch. Queued on failure so
     /// the watch eventually mirrors the latest values even if it was unreachable
-    /// when the user toggled them. Birth year and max-HR override are included
-    /// so the watch can compute the same resolved max HR locally.
-    /// Re-pushes the current Pulse Coach bundle to the watch using the values
-    /// the phone has just persisted. Used after the watch toggles a Pulse Coach
-    /// setting so the watch immediately sees the freshly resolved max HR
-    /// (otherwise it keeps the previous cached value until the next iPhone
-    /// foregrounding).
+    /// when the user toggled them. Only the user-entered birth year and max-HR
+    /// override are sent; the watch computes the same resolved max HR locally
+    /// from these, so there is no resolved value to push.
     func pushCurrentPulseCoachSettings() {
         let defaults = UserDefaults.standard
-        let birthYear = defaults.integer(forKey: "userBirthYear")
-        let birthYearFromHealth = defaults.bool(forKey: "userBirthYearFromHealth")
-        let override_ = defaults.integer(forKey: "userMaxHROverride")
-        let computed = defaults.integer(forKey: "maxHRComputed")
-        let resolved = HRZone.resolveMaxHR(
-            historical99thPct: computed > 0 ? computed : nil,
-            manualOverride: override_ > 0 ? override_ : nil,
-            birthYear: birthYear > 0 ? birthYear : nil
-        )
         pushPulseCoachSettings(
-            maxHR: resolved,
-            birthYear: birthYear,
-            birthYearFromHealth: birthYearFromHealth,
-            maxHROverride: override_
+            birthYear: defaults.integer(forKey: "userBirthYear"),
+            maxHROverride: defaults.integer(forKey: "userMaxHROverride")
         )
     }
 
-    func pushPulseCoachSettings(
-        maxHR: Int,
-        birthYear: Int,
-        birthYearFromHealth: Bool,
-        maxHROverride: Int
-    ) {
+    func pushPulseCoachSettings(birthYear: Int, maxHROverride: Int) {
         transport.sendControl(
             [
-                MatchSyncKey.pulseCoachMaxHR: maxHR,
                 MatchSyncKey.userBirthYear: birthYear,
-                MatchSyncKey.userBirthYearFromHealth: birthYearFromHealth,
                 MatchSyncKey.userMaxHROverride: maxHROverride
             ],
             queueOnFailure: true
@@ -456,11 +434,6 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                     UserDefaults.standard.set(v, forKey: "userBirthYear")
                     self.pushCurrentPulseCoachSettings()
                 }
-            case .userBirthYearFromHealth(let v):
-                DispatchQueue.main.async {
-                    UserDefaults.standard.set(v, forKey: "userBirthYearFromHealth")
-                    self.pushCurrentPulseCoachSettings()
-                }
             case .userMaxHROverride(let v):
                 DispatchQueue.main.async {
                     UserDefaults.standard.set(v, forKey: "userMaxHROverride")
@@ -495,7 +468,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                     self.pendingPoint = nil
                     self.pendingPointOutcome = nil
                 }
-            case .requestFullHistory, .ping, .pulseCoachMaxHR, .scoreCommand, .statAction,
+            case .requestFullHistory, .ping, .scoreCommand, .statAction,
                  .deleteMatchOnWatch:
                 // scoreCommand / statAction / deleteMatchOnWatch are phone → watch
                 // only; the phone ignores any echo (matchID / action payloads are

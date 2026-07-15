@@ -619,14 +619,9 @@ struct HomeView: View {
                             BirthYearPickerView(
                                 selectedYear: viewModel.userBirthYear,
                                 onSelect: { selected in
-                                    guard selected != viewModel.userBirthYear
-                                        || viewModel.userBirthYearFromHealth else { return }
+                                    guard selected != viewModel.userBirthYear else { return }
                                     viewModel.userBirthYear = selected
-                                    viewModel.userBirthYearFromHealth = false
-                                    WatchMatchSyncService.shared.pushSharedUserBirthYear(
-                                        selected,
-                                        fromHealth: false
-                                    )
+                                    WatchMatchSyncService.shared.pushSharedUserBirthYear(selected)
                                 }
                             )
                         } label: {
@@ -645,13 +640,6 @@ struct HomeView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .opacity(viewModel.isHROverrideActive ? 0.45 : 1)
-
-                        if viewModel.userBirthYearFromHealth, viewModel.userBirthYear > 0 {
-                            Label("From Health record", systemImage: "heart.text.square")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .opacity(viewModel.isHROverrideActive ? 0.45 : 1)
-                        }
 
                         HStack {
                             Text("Max HR (resolved)")
@@ -706,9 +694,6 @@ struct HomeView: View {
                 }
                 .font(.footnote)
                 .padding()
-            }
-            .onAppear {
-                viewModel.tryReadBirthYearFromHealth()
             }
             } // NavigationStack
         }

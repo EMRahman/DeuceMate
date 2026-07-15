@@ -47,6 +47,29 @@ copy only; it makes no Swift implementation changes:
 
 ---
 
+## Implementation update - 15 July 2026
+
+Birth year is no longer read from HealthKit. This is a code change (not copy),
+made to shrink the HealthKit surface and remove a health-derived value from
+`UserDefaults` ahead of the Blocker 4 device-backup work:
+
+- [x] Removed the HealthKit `dateOfBirth` read (`WorkoutManager` no longer
+  requests the characteristic; `requestBirthYearAuthorization` /
+  `fetchBirthYearFromHealth` deleted). Birth year is now entered by the user in
+  the app's Birth Year picker only. Max HR resolves as
+  `manual override → 220 − age → 190`.
+- [x] Deleted the `userBirthYearFromHealth` provenance flag and the dead
+  computed-percentile path (`maxHRComputed`, the `pulseCoachMaxHR` wire key, and
+  the `historical99thPct` parameter of `HRZone.resolveMaxHR`). The watch now
+  computes the resolved max HR locally from the synced birth year and override.
+- [x] Reconciled the Watch `NSHealthShareUsageDescription`, privacy policy
+  (Markdown + HTML), and App Store metadata / App Review notes to drop date of
+  birth from the HealthKit read list. This supersedes the 13 July copy-follow-up
+  statement that the usage string names date of birth.
+- See `docs/features/TECHNICAL_DEBT.md` #16 for the full rationale.
+
+---
+
 ## Blockers
 
 ### 1. Archive configuration fixed; signed validation pending
@@ -154,10 +177,11 @@ The unused `workoutSessionEnabled` wire key is technical debt, not a product
 control or a submission blocker.
 
 The Watch authorization request reads workout, heart rate, active and basal
-energy, steps, walking/running distance, and date of birth. The Watch read-purpose
-string now names those requested measurements. The privacy policy and App Review
-notes now also state the first-launch timing and automatic per-match workout
-behavior.
+energy, steps, and walking/running distance. (Date of birth is no longer read —
+see the 15 July 2026 implementation update; birth year is now user-entered.) The
+Watch read-purpose string now names those requested measurements. The privacy
+policy and App Review notes now also state the first-launch timing and automatic
+per-match workout behavior.
 
 Required work:
 
@@ -167,8 +191,9 @@ Required work:
   walking/running distance.
 - [x] Update `PRIVACY_POLICY.md`, `docs/privacy.html`, `APP_STORE_METADATA.md`,
   and App Review notes to describe the implemented behavior.
-- [ ] Test fresh-install grant, denial, partial authorization, revocation, no
-  date of birth, and HealthKit-unavailable behavior.
+- [ ] Test fresh-install grant, denial, partial authorization, revocation, and
+  HealthKit-unavailable behavior. (The date-of-birth authorization case was
+  removed on 15 July 2026 — the app no longer reads it.)
 
 ### 4. Health-derived data needs an iCloud and sharing compliance decision
 
@@ -179,8 +204,12 @@ need resolution before the document can claim Health data stays on-device:
 - Full records containing health-derived values are stored in Documents or
   Application Support on iPhone and Watch, and are not marked as excluded from
   normal device backup.
-- Health-derived preferences such as birth-year provenance and Pulse Coach max
-  heart rate are stored in `UserDefaults`, which is also part of device backup.
+- ~~Health-derived preferences such as birth-year provenance and Pulse Coach max
+  heart rate are stored in `UserDefaults`, which is also part of device backup.~~
+  **Resolved 15 July 2026:** the birth-year provenance flag and the computed max
+  heart rate were removed (see the implementation update above). The remaining
+  Pulse Coach preferences in `UserDefaults` — the user-entered birth year and the
+  manual max-HR override — are user-supplied values, not HealthKit-derived data.
 - Full-fidelity manual archive export can be saved to iCloud Drive.
 - Normal text, HTML, and AI exports can contain heart rate, zones, steps,
   calories, and distance. The opponent summary still receives match-level

@@ -64,15 +64,13 @@ public enum HRZone: Int, CaseIterable, Codable, Sendable {
     }
 
     /// Resolve the player's max HR using the configured precedence:
-    /// manual override → HealthKit historical 99th-percentile → 220−age → 190.
+    /// manual override → 220−age → 190.
     public static func resolveMaxHR(
-        historical99thPct: Int?,
         manualOverride: Int?,
         birthYear: Int?,
         currentYear: Int = Calendar(identifier: .gregorian).component(.year, from: Date())
     ) -> Int {
         if let m = manualOverride, m >= 120, m <= 220 { return m }
-        if let h = historical99thPct, h >= 120, h <= 220 { return h }
         if let by = birthYear, by > 1900, by <= currentYear {
             let age = currentYear - by
             if age >= 5 && age <= 100 { return 220 - age }

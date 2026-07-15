@@ -57,7 +57,7 @@ Two safety properties worth knowing as a reviewer:
 flowchart LR
     W["Apple Watch"]
     P["iPhone"]
-    W -- "theme · announcements on/off ·<br/>player name · iPhone Input on/off ·<br/>birth year & max heart rate (Pulse Coach)" <--> P
+    W -- "theme · announcements on/off ·<br/>player name · iPhone Input on/off ·<br/>birth year & max-HR override (Pulse Coach)" <--> P
     P -- "outcome tracking on/off ·<br/>changeover compass on/off" --> W
 ```
 

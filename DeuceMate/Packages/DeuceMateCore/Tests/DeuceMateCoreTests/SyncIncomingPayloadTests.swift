@@ -244,35 +244,9 @@ final class SyncIncomingPayloadTests: XCTestCase {
 
     // MARK: - Pulse Coach settings
 
-    func test_decode_pulseCoachMaxHR() {
-        let events = SyncIncomingPayload.decode([MatchSyncKey.pulseCoachMaxHR: 184])
-        XCTAssertEqual(events, [.pulseCoachMaxHR(184)])
-    }
-
-    func test_decode_pulseCoachSettingsTogether() {
-        let events = SyncIncomingPayload.decode([
-            MatchSyncKey.pulseCoachMaxHR: 175
-        ])
-        XCTAssertTrue(events.contains(.pulseCoachMaxHR(175)))
-    }
-
     func test_decode_userBirthYear() {
         let events = SyncIncomingPayload.decode([MatchSyncKey.userBirthYear: 1985])
         XCTAssertEqual(events, [.userBirthYear(1985)])
-    }
-
-    func test_decode_userBirthYearFromHealth() {
-        let events = SyncIncomingPayload.decode([MatchSyncKey.userBirthYearFromHealth: true])
-        XCTAssertEqual(events, [.userBirthYearFromHealth(true)])
-    }
-
-    func test_decode_userBirthYearFromHealth_withYear() {
-        let events = SyncIncomingPayload.decode([
-            MatchSyncKey.userBirthYear: 1985,
-            MatchSyncKey.userBirthYearFromHealth: true
-        ])
-        XCTAssertTrue(events.contains(.userBirthYear(1985)))
-        XCTAssertTrue(events.contains(.userBirthYearFromHealth(true)))
     }
 
     func test_decode_userMaxHROverride() {
@@ -280,15 +254,25 @@ final class SyncIncomingPayloadTests: XCTestCase {
         XCTAssertEqual(events, [.userMaxHROverride(192)])
     }
 
-    func test_decode_pulseCoachAllSettingsTogether() {
+    func test_decode_pulseCoachSettingsTogether() {
         let events = SyncIncomingPayload.decode([
-            MatchSyncKey.pulseCoachMaxHR: 188,
             MatchSyncKey.userBirthYear: 1990,
             MatchSyncKey.userMaxHROverride: 0
         ])
-        XCTAssertTrue(events.contains(.pulseCoachMaxHR(188)))
         XCTAssertTrue(events.contains(.userBirthYear(1990)))
         XCTAssertTrue(events.contains(.userMaxHROverride(0)))
+    }
+
+    /// The retired `pulseCoachMaxHR` / `userBirthYearFromHealth` wire keys no
+    /// longer decode to any event; a peer still sending them is ignored, and the
+    /// live birth-year key in the same payload still decodes.
+    func test_decode_retiredPulseCoachKeys_areIgnored() {
+        let events = SyncIncomingPayload.decode([
+            "pulseCoachMaxHR": 188,
+            "userBirthYearFromHealth": true,
+            MatchSyncKey.userBirthYear: 1990
+        ])
+        XCTAssertEqual(events, [.userBirthYear(1990)])
     }
 
     // MARK: - Pending-point mirror + stat actions
@@ -410,18 +394,14 @@ final class SyncIncomingPayloadTests: XCTestCase {
         XCTAssertTrue(events.isEmpty)
     }
 
-    func test_decode_pulseCoachMaxHR_outOfRange_isDropped() {
-        XCTAssertTrue(SyncIncomingPayload.decode([MatchSyncKey.pulseCoachMaxHR: 99_999]).isEmpty)
-        XCTAssertTrue(SyncIncomingPayload.decode([MatchSyncKey.pulseCoachMaxHR: -5]).isEmpty)
-    }
-
-    func test_decode_pulseCoachMaxHR_atCeiling_isKept() {
-        let events = SyncIncomingPayload.decode([MatchSyncKey.pulseCoachMaxHR: SyncIncomingPayload.maxHeartRate])
-        XCTAssertEqual(events, [.pulseCoachMaxHR(SyncIncomingPayload.maxHeartRate)])
-    }
-
     func test_decode_userMaxHROverride_outOfRange_isDropped() {
         XCTAssertTrue(SyncIncomingPayload.decode([MatchSyncKey.userMaxHROverride: 5_000]).isEmpty)
+        XCTAssertTrue(SyncIncomingPayload.decode([MatchSyncKey.userMaxHROverride: -5]).isEmpty)
+    }
+
+    func test_decode_userMaxHROverride_atCeiling_isKept() {
+        let events = SyncIncomingPayload.decode([MatchSyncKey.userMaxHROverride: SyncIncomingPayload.maxHeartRate])
+        XCTAssertEqual(events, [.userMaxHROverride(SyncIncomingPayload.maxHeartRate)])
     }
 
     func test_decode_userMaxHROverride_zeroSentinel_isKept() {

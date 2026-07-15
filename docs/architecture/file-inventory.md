@@ -29,7 +29,7 @@ The scorer. Everything about running a live match happens here.
 | `PointCategorySheet.swift` | 260 | The slide-up sheet after each point (when outcome tracking is on): pick how the point ended — winner, forced/unforced error, double fault — then the ending shot. | Point categorisation |
 | `MatchHistoryView.swift` | 220 | The watch's recent-matches list (newest 25): open stats, resume an in-progress match, swipe to delete. | Match history |
 | `AppTheme.swift` | 220 | The watch's five court-inspired colour themes; the chosen theme syncs to the phone. | Theming |
-| `WorkoutManager.swift` | 200 | Runs the HealthKit workout session during a match: live heart rate, calories, steps, distance per set. | Health/workout tracking |
+| `WorkoutManager.swift` | 170 | Runs the HealthKit workout session during a match: live heart rate, calories, steps, distance per set. | Health/workout tracking |
 | `Sync/WatchMatchSyncService.swift` | 290 | The watch's end of the watch↔phone bridge: sends match checkpoints, full history, manifests and announcements; receives settings, score commands and delete commands from the phone. | Sync |
 | `StatsStore.swift` | 95 | Saves match history to a JSON file on the watch; trims to the newest 25 matches; thread-safe. Distinguishes a genuinely-empty archive from an unreadable/corrupt one and refuses to overwrite (or broadcast) the latter, so a transient read failure can't erase stored matches. | Match history (persistence) |
 | `DeuceMateApp.swift` | 55 | The watch app's entry point: wires up the scoring engine, workout manager and sync service; restores an in-progress match on launch. | App plumbing |
