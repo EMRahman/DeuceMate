@@ -615,6 +615,21 @@ struct HomeView: View {
                             .foregroundStyle(.secondary)
                             .padding(.top, 2)
 
+                        HStack {
+                            Text(viewModel.userBirthYear == 0 ? "Max HR (default)" : "Max HR (resolved)")
+                            Spacer()
+                            Text("\(viewModel.resolvedMaxHR) bpm")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.caption2)
+                        .opacity(viewModel.isHROverrideActive ? 0.45 : 1)
+
+                        if viewModel.userBirthYear == 0 && !viewModel.isHROverrideActive {
+                            Text(SettingsCopy.defaultMaxHRNote)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
                         NavigationLink {
                             BirthYearPickerView(
                                 selectedYear: viewModel.userBirthYear,
@@ -640,15 +655,6 @@ struct HomeView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .opacity(viewModel.isHROverrideActive ? 0.45 : 1)
-
-                        HStack {
-                            Text("Max HR (resolved)")
-                            Spacer()
-                            Text("\(viewModel.resolvedMaxHR) bpm")
-                                .foregroundStyle(.secondary)
-                        }
-                        .font(.caption2)
-                        .opacity(viewModel.isHROverrideActive ? 0.45 : 1)
 
                         Toggle(isOn: Binding(
                             get: { viewModel.isHROverrideActive },

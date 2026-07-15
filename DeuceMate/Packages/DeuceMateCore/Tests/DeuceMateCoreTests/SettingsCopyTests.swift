@@ -29,4 +29,11 @@ final class SettingsCopyTests: XCTestCase {
         // Guards against a forgotten or accidentally duplicated case.
         XCTAssertEqual(SettingsCopy.allCases.count, 10)
     }
+
+    func test_defaultMaxHRNote_matchesSharedPulseCoachGuidance() {
+        XCTAssertEqual(
+            SettingsCopy.defaultMaxHRNote,
+            "190 bpm default — set your birth year for accuracy"
+        )
+    }
 }

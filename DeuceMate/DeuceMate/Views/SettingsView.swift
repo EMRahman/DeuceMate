@@ -492,6 +492,18 @@ struct SettingsView: View {
 
     private var pulseCoachSectionView: some View {
         Section {
+            LabeledContent(userBirthYear == 0 ? "Max HR (default)" : "Max HR (resolved)") {
+                Text("\(resolvedMaxHR) bpm")
+                    .foregroundStyle(.secondary)
+            }
+            .opacity(isOverrideActive ? 0.45 : 1)
+
+            if userBirthYear == 0 && !isOverrideActive {
+                Text(SettingsCopy.defaultMaxHRNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Picker("Birth Year", selection: Binding(
                 get: { userBirthYear == 0 ? -1 : userBirthYear },
                 set: { newValue in
@@ -514,13 +526,7 @@ struct SettingsView: View {
 
             Text(SettingsCopy.birthYear.text)
                 .font(.caption)
-                .foregroundStyle(.secondary)
-                .opacity(isOverrideActive ? 0.45 : 1)
-
-            LabeledContent("Max HR (resolved)") {
-                Text("\(resolvedMaxHR) bpm")
-                    .foregroundStyle(.secondary)
-            }
+            .foregroundStyle(.secondary)
             .opacity(isOverrideActive ? 0.45 : 1)
 
             Toggle(isOn: Binding(
