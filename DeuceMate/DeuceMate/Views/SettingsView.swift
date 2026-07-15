@@ -446,7 +446,7 @@ struct SettingsView: View {
             } header: {
                 Text("Backup & Transfer")
             } footer: {
-                Text("Manual archive files are full-fidelity JSON exports. They may include HealthKit-derived heart rate, steps, distance, and calories when those were recorded.")
+                Text("Automatic iCloud and device restores keep scores and non-health stats, but not recorded heart rate, steps, distance, or calories. Before moving to a new iPhone, Export Match Archive here, then Import it on the new phone. Manual archive files are full-fidelity and may include those HealthKit-derived values.")
             }
 
             Section {

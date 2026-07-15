@@ -583,12 +583,22 @@ class ScoreViewModel: ObservableObject {
 
     private let statsStore: StatsStoring
 
-    private var fileURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("appState.json")
-    }
+    private let stateFileURL: URL
 
-    init(statsStore: StatsStoring = StatsStore.shared) {
+    init(statsStore: StatsStoring = StatsStore.shared, stateFileURL: URL? = nil) {
         self.statsStore = statsStore
+        self.stateFileURL = stateFileURL
+            ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("appState.json")
+        if FileManager.default.fileExists(atPath: self.stateFileURL.path) {
+            do {
+                try BackupExcludedFileWriter.excludeFromBackup(at: self.stateFileURL)
+            } catch {
+                #if DEBUG
+                print("Critical: Failed to exclude existing app state from backup")
+                #endif
+            }
+        }
         UserDefaults.standard.register(defaults: [
             "statsTrackingEnabled": false
         ])
@@ -1570,11 +1580,10 @@ class ScoreViewModel: ObservableObject {
             needsDoublesTeamServerDecision: needsDoublesTeamServerDecision
         )
         do {
-            let data = try JSONEncoder().encode(state)
             // Class B (until-first-unlock): the live-match state must stay writable
-            // when the watch is locked/off-wrist during a match. Matches StatsStore
-            // and PhoneStatsStore; Class A would silently drop the write.
-            try data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            // when the watch is locked/off-wrist during a match. The transient
+            // Health-bearing state is excluded from device backup after every save.
+            try BackupExcludedFileWriter.write(state, to: stateFileURL)
         } catch {
             #if DEBUG
             print("Critical: Failed to save state")
@@ -1621,7 +1630,7 @@ class ScoreViewModel: ObservableObject {
 
     func loadState() {
         do {
-            let data = try Data(contentsOf: fileURL)
+            let data = try Data(contentsOf: stateFileURL)
             let state = try JSONDecoder().decode(AppState.self, from: data)
             sets = state.sets
             currentPointsMe = state.currentPointsMe

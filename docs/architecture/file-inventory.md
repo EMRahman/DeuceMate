@@ -16,7 +16,7 @@ as a size signal — a "small helper" that is suddenly 800 lines deserves a look
 
 ---
 
-## 1. Apple Watch app — `DeuceMate/DeuceMate Watch App/` (12 files)
+## 1. Apple Watch app — `DeuceMate/DeuceMate Watch App/` (13 files)
 
 The scorer. Everything about running a live match happens here.
 
@@ -31,7 +31,8 @@ The scorer. Everything about running a live match happens here.
 | `AppTheme.swift` | 220 | The watch's five court-inspired colour themes; the chosen theme syncs to the phone. | Theming |
 | `WorkoutManager.swift` | 170 | Runs the HealthKit workout session during a match: live heart rate, calories, steps, distance per set. | Health/workout tracking |
 | `Sync/WatchMatchSyncService.swift` | 290 | The watch's end of the watch↔phone bridge: sends match checkpoints, full history, manifests and announcements; receives settings, score commands and delete commands from the phone. | Sync |
-| `StatsStore.swift` | 95 | Saves match history to a JSON file on the watch; trims to the newest 25 matches; thread-safe. Distinguishes a genuinely-empty archive from an unreadable/corrupt one and refuses to overwrite (or broadcast) the latter, so a transient read failure can't erase stored matches. | Match history (persistence) |
+| `StatsStore.swift` | ~120 | Saves backup-excluded match history to a JSON file on the watch; trims to the newest 25 matches; thread-safe. Distinguishes a genuinely-empty archive from an unreadable/corrupt one and refuses to overwrite (or broadcast) the latter, so a transient read failure can't erase stored matches. | Match history (persistence) |
+| `BackupExcludedFileWriter.swift` | ~30 | Shared watch helper for atomic Class B JSON writes that reapplies and verifies device-backup exclusion. Used by match history and transient live-match state. | Match history, live state, health/privacy |
 | `DeuceMateApp.swift` | 55 | The watch app's entry point: wires up the scoring engine, workout manager and sync service; restores an in-progress match on launch. | App plumbing |
 | `MatchStats.swift` | 50 | Small compatibility shim: re-exports shared types under old names, plus watch-only display labels and colours for match formats and point outcomes. | App plumbing, theming |
 
@@ -55,14 +56,14 @@ matches; it does not score them (except by sending validated commands to the wat
 | `Views/Coaching/RecCoachSection.swift` | 60 | "Rec Coach" panel: up to three plain-English coaching observations derived from point stats (rules live in the shared package). | Rec Coach |
 | `Export/MatchExporter.swift` | 640 | Builds the export text: match summary, full point-by-point report, or an AI coaching prompt tuned to the player's skill level. Set scores use Core's canonical formatter. | AI export |
 | `Sync/PhoneMatchSyncService.swift` | 510 | The phone's end of the watch↔phone bridge: receives checkpoints/history/manifests, merges them into the archive, tracks watch reachability, sends settings and (when allowed) score and categorisation commands to the watch. | Sync, live scoreboard |
-| `Persistence/PhoneStatsStore.swift` | ~700 | The permanent archive store. Canonical copy is a device-local JSON pair (Application Support, always readable at launch); iCloud Drive holds a background backup pushed after local saves, and read only during initial local archive setup. On a fresh install with a non-empty backup, publishes `pendingRestorePreview` and waits for the user to call `confirmRestore()` or `declineRestore()` before overwriting the cloud backup. Publishes `isBackupUploaded` (derived from `.ubiquitousItemIsUploaded` on both backup files after each push). | Archive, iCloud backup, manual archive backup |
+| `Persistence/PhoneStatsStore.swift` | ~830 | The permanent archive store. Full records are reconstructed in memory from a normally backed-up, health-stripped history plus a backup-excluded Health sidecar; tombstones remain separate. It migrates legacy full-fidelity history, degrades safely when the sidecar is unavailable, and keeps existing one-time iCloud restore/push behavior. | Archive, health/privacy, iCloud backup, manual archive backup |
 | `AppTheme.swift` | 220 | The phone's copy of the five colour themes, kept in step with the watch via settings sync. | Theming |
 | `Audio/LiveAnnouncementService.swift` | 130 | Speaks the score through the iPhone speaker (umpire-style), foreground-only by design — no background audio tricks. | Announcements |
 | `HealthKitHRFetcher.swift` | 180 | Fetches heart-rate samples from HealthKit for a finished match and buckets them per point for the graph overlay. | Stats & graphs, health |
 | `DeuceMateApp.swift` | 50 | The iPhone app's entry point: wires up the archive store, sync service and announcer; resumes initial restore or backup push whenever the app returns to the foreground. | App plumbing |
 | `ContentView.swift` | 15 | The navigation root — essentially just opens the archive list. | App plumbing |
 
-## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (35 files)
+## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (36 files)
 
 The rulebook both apps use. No screens; pure logic — which makes it the cheapest
 place to test and the safest place to change.
@@ -90,6 +91,7 @@ place to test and the safest place to change.
 | `Sync/MatchMergePolicy.swift` | 75 | The merge rules when a match arrives on the phone: completed beats in-progress, newer completed wins, the watch is trusted for live matches, tombstoned (deleted) matches are skipped. | Sync, archive |
 | `Sync/ArchiveBackupPolicy.swift` | ~115 | The one-way iCloud backup policy: creates outbound snapshots from the phone archive (stripping the five HealthKit-derived fields per App Store Review Guideline 5.1.3(ii)), handles the one-time initial restore, and defines `BackupPreview` (record count + newest date for the user-facing restore prompt). | Archive, iCloud backup |
 | `Persistence/ManualMatchArchiveBackup.swift` | 193 | Versioned full-fidelity JSON codec and merge/replace policy for user-initiated manual archive export/import. Manual exports include HealthKit-derived match fields and are kept separate from iCloud backup policy. | Manual archive backup |
+| `Persistence/HealthSidecarPolicy.swift` | 130 | Pure projection/reconstruction policy for exactly the five HealthKit-derived persisted fields. Produces the phone's stripped main archive and Health-only sidecar, then fills only missing values by match and point ID on load. | Archive, health/privacy |
 | `Sync/WatchMirror.swift` | 70 | Phone-side bookkeeping of *which matches are currently on the watch* — so the phone can show watch-only matches (even ones deleted from the phone) and keep badges accurate. | Sync, archive |
 | `Sync/MatchStorageLocation.swift` | 50 | Derives each match's badge — on both devices / phone only / watch only — from the watch's reported list vs. the phone's archive. | Archive (badges) |
 | `Sync/WatchHistoryCap.swift` | 15 | One number: the watch keeps its newest **25** matches. Lives here so the watch (which enforces it) and the phone (which explains it) can't drift. | Match history |
@@ -113,7 +115,7 @@ Tests are the correctness record. The interesting ones all live against the shar
 package (no simulator needed). Red flags in any PR: tests deleted, skipped, or
 expected values rewritten to make a failure pass — that requires explicit approval.
 
-**Package tests — `DeuceMate/Packages/DeuceMateCore/Tests/DeuceMateCoreTests/` (29 files):**
+**Package tests — `DeuceMate/Packages/DeuceMateCore/Tests/DeuceMateCoreTests/` (30 files):**
 
 | File | Covers |
 |---|---|
@@ -125,6 +127,7 @@ expected values rewritten to make a failure pass — that requires explicit appr
 | `MatchRecordFormattingTests.swift` | Score display notation. |
 | `MatchMergePolicyTests.swift` | The watch-vs-phone merge matrix. |
 | `ArchiveBackupPolicyTests.swift` | The one-way iCloud backup policy: outbound snapshots (health stripped), initial restore, tombstone propagation, stale in-progress backup protection, and health backfill from local checkpoints. |
+| `HealthSidecarPolicyTests.swift` | Health sidecar split/merge identity, five-field stripping, empty projection omission, orphan handling, nil-only fill behavior, and backward-compatible decoding. |
 | `ManualMatchArchiveBackupTests.swift` | Manual archive file format, full health-data round trip, merge/replace import behavior, and invalid file rejection. |
 | `MatchSyncPayloadBuilderTests.swift` / `SyncIncomingPayloadTests.swift` / `MatchSyncRoundTripTests.swift` / `MatchSyncTransportTests.swift` | The wire format: encode → decode → merge round trips; queueing and reachability behaviour. |
 | `MatchStorageLocationTests.swift` / `WatchMirrorTests.swift` | Storage badges and the phone's mirror of the watch's match set. |
@@ -141,7 +144,9 @@ expected values rewritten to make a failure pass — that requires explicit appr
 (~1,140 lines — watch-specific behaviour: tiebreak serve rotation, changeover events,
 compass bearings), `DeuceMate Watch AppTests/StatsStoreTests.swift` (exercises the real
 watch `StatsStore` against a temp file: absent-file vs. corrupt-file semantics, the
-refuse-to-overwrite-on-unreadable guard, and valid round-trips),
+refuse-to-overwrite-on-unreadable guard, valid round-trips, and repeated backup exclusion),
+`DeuceMateTests/PhoneStatsStoreTests.swift` (canonical migration, sidecar failure
+degradation, import repair, unreadable-main suspension, and backup flags),
 `DeuceMateTests/DeuceMateTests.swift` (iPhone WatchConnectivity activation fallbacks
 and paired/unpaired Manual Entry copy), `DeuceMateUITests/DeuceMateUITests.swift`
 (Manual Entry -> history -> truthful detail empty states -> export), and three
@@ -161,8 +166,8 @@ touched. A PR for feature X that edits files far outside its row deserves a ques
 | **Live scoring & match formats** | `ScoreViewModel`, `ContentView`, `MatchStats` | — | `ScoringEngine`, `ScoreTypes` |
 | **Match setup** | `HomeView`, `ScoreViewModel` | `ManualMatchEntryView` | `ScoreTypes` |
 | **Point categorisation** | `PointCategorySheet`, `ScoreViewModel` | `LivePointCategoryPanel` | `PointStat` |
-| **Match history (watch)** | `MatchHistoryView`, `StatsStore` | — | `WatchHistoryCap`, `StatsStoring`, `MatchRecord` |
-| **Archive (phone)** | — | `PastMatchesView`, `PhoneStatsStore` | `MatchRecord`, `MatchMergePolicy`, `ArchiveBackupPolicy`, `MatchStorageLocation`, `WatchMirror` |
+| **Match history (watch)** | `MatchHistoryView`, `StatsStore`, `BackupExcludedFileWriter` | — | `WatchHistoryCap`, `StatsStoring`, `MatchRecord` |
+| **Archive (phone)** | — | `PastMatchesView`, `PhoneStatsStore` | `MatchRecord`, `MatchMergePolicy`, `HealthSidecarPolicy`, `ArchiveBackupPolicy`, `MatchStorageLocation`, `WatchMirror` |
 | **Watch ↔ phone sync** | `Sync/WatchMatchSyncService` | `Sync/PhoneMatchSyncService` | `MatchSyncMessage`, `MatchSyncTransport`, `MatchSyncPayloadBuilder`, `SyncIncomingPayload`, `MatchMergePolicy` |
 | **Live scoreboard & iPhone input** | `ScoreViewModel` (command validation) | `LiveScoreboardView`, `LivePointCategoryPanel`, `PhoneMatchSyncService` | `MatchSyncMessage` |
 | **Announcements (spoken score)** | `ScoreViewModel` (builds the text) | `Audio/LiveAnnouncementService` | `MatchSyncMessage` |

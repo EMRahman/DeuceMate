@@ -1,7 +1,7 @@
 # Privacy Policy for DeuceMate
 
 **Effective Date:** June 11, 2026
-**Last Updated:** July 13, 2026
+**Last Updated:** July 15, 2026
 
 ## Overview
 
@@ -49,7 +49,7 @@ How this data is handled:
 - Your maximum heart rate for Pulse Coach zones is estimated from a birth year you optionally enter in the app (or a manual max-HR value you set). This is **not** read from the Health app.
 - Heart-rate values are saved as part of the match record stored **locally on your devices** (see "Local Data Storage" below), so heart-rate statistics remain available when you review a past match.
 - DeuceMate's automatic app-managed iCloud Drive archive (see "iCloud Sync" below) **excludes** HealthKit-derived heart rate, steps, distance, and calories.
-- HealthKit-derived values may still be included in Apple's system-managed device backup according to your device backup settings.
+- DeuceMate stores these HealthKit-derived values in separate local files that it marks for exclusion from Apple's system-managed device backups. The App reapplies that exclusion whenever it saves those files.
 - When you deliberately export a match, share match analysis with another person or an AI/LLM, or create a manual archive backup, that user-initiated export may include HealthKit-derived measurements. The recipient, storage location, or AI service you select then handles that data under its own terms.
 - HealthKit data is **not** used for advertising or marketing, is **not** sold, and is never sent to or accessible by the developer.
 - You can review or revoke DeuceMate's HealthKit access at any time in the Apple Watch Settings app or the iPhone Health app.
@@ -65,7 +65,7 @@ The App stores the following information locally on your devices:
 This data:
 - Is never sent to a developer-controlled server; DeuceMate has no such backend
 - When iCloud Drive is available, the iPhone app stores a stripped backup copy of the match archive in your personal iCloud Drive account — see "iCloud Sync" below for details.
-- May also be included in your device's standard **iCloud Backup** if you have iCloud Backup enabled in iOS/watchOS Settings. That backup is encrypted and tied to your own Apple ID and is managed by iOS — the App does not trigger or control it. You can exclude DeuceMate from iCloud Backup, or turn iCloud Backup off entirely, in your device Settings.
+- Non-health local data may also be included in your device's standard **iCloud Backup** if you have it enabled. DeuceMate marks its HealthKit-derived match files for exclusion, so automatic device restore is intentionally partial: matches, scores, and non-health statistics can return, but recorded heart rate, steps, distance, and calories do not.
 - May leave your device when you deliberately export or share it, as described in "Sharing, Export & AI Coaching" below
 - Is removed from your device when you uninstall the App
 - Can be cleared by resetting the match or reinstalling the App
@@ -132,8 +132,10 @@ We may update this Privacy Policy from time to time. Any changes will be reflect
 
 Because the developer does not collect or receive your data, the developer has
 no account record to access, modify, or delete. You manage DeuceMate's local
-data on your devices, your app backup through Apple device settings, and any
-exports through the storage location or recipient you select.
+data on your devices, automatic backups through Apple device settings, and any
+exports through the storage location or recipient you select. To migrate
+HealthKit-derived match values, create a manual archive in Settings → Backup &
+Transfer before switching devices and import it on the new iPhone.
 
 ## Contact
 

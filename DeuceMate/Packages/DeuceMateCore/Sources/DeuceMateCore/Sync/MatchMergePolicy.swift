@@ -59,7 +59,8 @@ public enum MatchMergePolicy {
 
         for record in incoming {
             guard !tombstones.contains(record.id) else { continue }
-            byID[record.id] = resolve(incoming: record, existing: byID[record.id])
+            let resolved = resolve(incoming: record, existing: byID[record.id])
+            byID[record.id] = resolved.fillingMissingHealthData(from: record)
         }
 
         // Stable id tiebreak so equal start times never reorder the list

@@ -86,6 +86,7 @@ sequenceDiagram
     W->>W: Save checkpoint to watch storage
     W->>P: Live checkpoint (full match record)<br/>+ announcement text
     P->>P: Merge into archive (MatchMergePolicy)
+    P->>P: Split Health values into<br/>backup-excluded sidecar
     P->>P: Update live scoreboard
     P->>U: Speak the score aloud<br/>(only if app is on screen)
 ```
@@ -181,6 +182,9 @@ document picker and the confirmation dialogs, persisting through
 This flow only ever writes the **phone** archive (via the same `adoptOnQueue`
 funnel as any other mutation): it does **not** push to the watch, and the watch
 stays the source of truth for live matches (§1). Because it goes through the
-normal funnel, the imported result is subsequently pushed to the iCloud backup
-on the usual debounced schedule — so a Replace also overwrites the previous
-iCloud backup once it lands.
+normal funnel, full records remain in memory while `HealthSidecarPolicy` writes
+a health-stripped `matchHistory.json` and a backup-excluded Health sidecar. The
+stripped result is subsequently pushed to the iCloud backup on the usual
+debounced schedule — so a Replace also overwrites the previous iCloud backup
+once it lands. A full-fidelity manual import can repopulate missing sidecar data
+after an automatic restore.

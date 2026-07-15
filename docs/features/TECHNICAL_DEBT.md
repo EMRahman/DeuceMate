@@ -549,3 +549,9 @@ or hand-edited heart-rate zones via `HKWorkout.zoneGroupsByType`
 Since the app already creates an `HKWorkoutSession` per match, adopting that API
 (gated by `#available`, post-1.0 on the iOS 26 SDK) would replace local max-HR
 derivation entirely with Apple's own zones.
+
+**Device-backup follow-up completed 15 July 2026:** The Health-derived match
+values this cleanup prepared for now live in the phone's backup-excluded Health
+sidecar rather than its normally backed-up canonical history. The watch history
+and live-state files are also marked backup-excluded after every save. See
+`HealthSidecarPolicy`, `PhoneStatsStore`, and `SUBMISSION_REVIEW.md` Blocker 4.

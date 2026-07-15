@@ -2,11 +2,13 @@
 // No historyCap — the phone is a durable archive that keeps everything.
 //
 // Storage model (canonical + backup):
-//   • CANONICAL — a device-local JSON pair (history + tombstones) in
+//   • CANONICAL — device-local JSON (health-stripped history + tombstones) in
 //     Application Support. Always readable at launch: no iCloud daemon, no
 //     network, never evicted by storage optimisation, and protected only until
 //     first unlock so background WatchConnectivity launches can read it. The
 //     UI renders from this, unconditionally.
+//   • HEALTH SIDECAR — a device-local, backup-excluded JSON projection holding
+//     only the five HealthKit-derived fields. It is merged into history in memory.
 //   • ICLOUD BACKUP — the same two files in the iCloud Drive ubiquity container,
 //     pushed in the background (debounced) after local saves. iCloud is only
 //     read during initial local-archive setup; once initialized, it never pulls
@@ -95,24 +97,62 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private static let historyFilename = "matchHistory.json"
     private static let tombstoneFilename = "deletedMatchIDs.json"
     private static let initializedFilename = "archiveInitialized.json"
+    private static let healthFilename = "healthData.json"
 
-    private static var canonicalDirectoryURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("MatchArchive", isDirectory: true)
+    struct StorageConfiguration {
+        let canonicalDirectoryURL: URL
+        let legacyDocumentsDirectoryURL: URL
+        let startsICloudSync: Bool
+        let backupExcluder: (URL) throws -> Void
+
+        init(
+            canonicalDirectoryURL: URL,
+            legacyDocumentsDirectoryURL: URL,
+            startsICloudSync: Bool,
+            backupExcluder: ((URL) throws -> Void)? = nil
+        ) {
+            self.canonicalDirectoryURL = canonicalDirectoryURL
+            self.legacyDocumentsDirectoryURL = legacyDocumentsDirectoryURL
+            self.startsICloudSync = startsICloudSync
+            self.backupExcluder = backupExcluder ?? { try PhoneStatsStore.excludeFromBackup($0) }
+        }
+
+        static var production: StorageConfiguration {
+            StorageConfiguration(
+                canonicalDirectoryURL: FileManager.default
+                    .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent("MatchArchive", isDirectory: true),
+                legacyDocumentsDirectoryURL: FileManager.default
+                    .urls(for: .documentDirectory, in: .userDomainMask)[0],
+                startsICloudSync: true
+            )
+        }
     }
-    private static var canonicalHistoryURL: URL {
-        canonicalDirectoryURL.appendingPathComponent(historyFilename)
+
+    private let storageConfiguration: StorageConfiguration
+
+    private var canonicalDirectoryURL: URL { storageConfiguration.canonicalDirectoryURL }
+    private var canonicalHistoryURL: URL {
+        canonicalDirectoryURL.appendingPathComponent(Self.historyFilename)
     }
-    private static var canonicalTombstoneURL: URL {
-        canonicalDirectoryURL.appendingPathComponent(tombstoneFilename)
+    private var canonicalTombstoneURL: URL {
+        canonicalDirectoryURL.appendingPathComponent(Self.tombstoneFilename)
     }
-    private static var canonicalInitializedURL: URL {
-        canonicalDirectoryURL.appendingPathComponent(initializedFilename)
+    private var canonicalInitializedURL: URL {
+        canonicalDirectoryURL.appendingPathComponent(Self.initializedFilename)
+    }
+    private var healthSidecarURL: URL {
+        canonicalDirectoryURL.appendingPathComponent(Self.healthFilename)
     }
 
     // MARK: - Init
 
-    init() {
+    convenience init() {
+        self.init(storageConfiguration: .production)
+    }
+
+    init(storageConfiguration: StorageConfiguration) {
+        self.storageConfiguration = storageConfiguration
         let initial = queue.sync { () -> ([MatchRecord], Set<UUID>, Bool) in
             migrateLegacyDocumentsArchiveIfNeeded()
             loadCanonicalOnQueue()
@@ -123,15 +163,18 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         // Fresh local archive setup with iCloud signed in: show "Restoring from
         // iCloud…" until the first restore attempt settles, so an initially
         // short list reads as in-progress rather than data loss.
-        if initial.2 && initial.0.isEmpty && isICloudAvailable {
+        if storageConfiguration.startsICloudSync
+                && initial.2 && initial.0.isEmpty && isICloudAvailable {
             isRestoringFromICloud = true
         }
-        ubiquityObserver = NotificationCenter.default.addObserver(
-            forName: .NSUbiquityIdentityDidChange, object: nil, queue: nil
-        ) { [weak self] _ in
-            self?.syncICloudBackup()
+        if storageConfiguration.startsICloudSync {
+            ubiquityObserver = NotificationCenter.default.addObserver(
+                forName: .NSUbiquityIdentityDidChange, object: nil, queue: nil
+            ) { [weak self] _ in
+                self?.syncICloudBackup()
+            }
+            syncICloudBackup()
         }
-        syncICloudBackup()
     }
 
     deinit {
@@ -267,7 +310,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             }
             return
         }
-        scheduleICloudBackupSyncOnQueue(after: Self.backupPushDebounce, retriesRemaining: Self.backupRetryDelays.count)
+        if storageConfiguration.startsICloudSync {
+            scheduleICloudBackupSyncOnQueue(after: Self.backupPushDebounce, retriesRemaining: Self.backupRetryDelays.count)
+        }
     }
 
     private func publishOnQueue() {
@@ -283,11 +328,29 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private func writeCanonicalOnQueue() -> Bool {
         guard !canonicalWritesSuspended else { return false }
         do {
+            let split = HealthSidecarPolicy.split(records)
             try FileManager.default.createDirectory(
-                at: Self.canonicalDirectoryURL, withIntermediateDirectories: true
+                at: canonicalDirectoryURL, withIntermediateDirectories: true
             )
-            try Self.write(records, to: Self.canonicalHistoryURL)
-            try Self.write(Array(tombstones), to: Self.canonicalTombstoneURL)
+            try Self.write(split.health, to: healthSidecarURL)
+            // Atomic writes replace the destination inode, so the exclusion
+            // resource value must be reapplied after every sidecar write. If
+            // that fails, discard the unsafe projection but continue saving
+            // the stripped main archive: scores must remain durable without
+            // ever leaving Health data eligible for device backup.
+            do {
+                try storageConfiguration.backupExcluder(healthSidecarURL)
+            } catch {
+                phoneStoreLogger.error("Failed to exclude Health sidecar from backup; discarding its Health projection: \(error.localizedDescription, privacy: .public)")
+                Self.discardUnsafeHealthSidecar(at: healthSidecarURL)
+            }
+
+            // Sidecar first during the normal path: a process interruption can
+            // leave an older stripped main paired with newer Health values. The
+            // exclusion-failure path above deliberately prefers a durable,
+            // stripped main even though its local Health projection is dropped.
+            try Self.write(split.stripped, to: canonicalHistoryURL)
+            try Self.write(Array(tombstones), to: canonicalTombstoneURL)
             return true
         } catch {
             phoneStoreLogger.error("Failed to write canonical archive: \(error.localizedDescription, privacy: .public)")
@@ -296,7 +359,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     }
 
     private func loadCanonicalOnQueue() {
-        switch Self.readCanonicalFile([UUID].self, at: Self.canonicalTombstoneURL) {
+        switch Self.readCanonicalFile([UUID].self, at: canonicalTombstoneURL) {
         case .loaded(let ids):
             tombstones = Set(ids)
         case .missing, .corrupt:
@@ -304,13 +367,46 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         case .unreadable:
             canonicalWritesSuspended = true
         }
-        switch Self.readCanonicalFile([MatchRecord].self, at: Self.canonicalHistoryURL) {
+        let loadedRecords: [MatchRecord]
+        switch Self.readCanonicalFile([MatchRecord].self, at: canonicalHistoryURL) {
         case .loaded(let loaded):
-            records = Self.sortedNewestFirst(loaded)
+            loadedRecords = loaded
         case .missing, .corrupt:
-            break // corrupt file was moved aside; initial restore may refill what it can
+            loadedRecords = [] // corrupt file was moved aside; initial restore may refill what it can
         case .unreadable:
             canonicalWritesSuspended = true
+            loadedRecords = []
+        }
+
+        // Reassert the file flag before a corrupt sidecar can be moved to a
+        // recovery file. The moved quarantine copy still contains Health data.
+        if FileManager.default.fileExists(atPath: healthSidecarURL.path) {
+            do {
+                try storageConfiguration.backupExcluder(healthSidecarURL)
+            } catch {
+                phoneStoreLogger.error("Failed to reapply Health sidecar backup exclusion: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        let health: [MatchHealthData]
+        switch Self.readCanonicalFile([MatchHealthData].self, at: healthSidecarURL) {
+        case .loaded(let loaded):
+            health = loaded
+        case .missing, .corrupt, .unreadable:
+            health = []
+        }
+
+        let loadedHadHealth = !HealthSidecarPolicy.split(loadedRecords).health.isEmpty
+        records = Self.sortedNewestFirst(
+            HealthSidecarPolicy.merge(stripped: loadedRecords, health: health)
+        )
+
+        // The pre-sidecar canonical file was full-fidelity. Content detection is
+        // the migration marker: once rewritten successfully, the main file has
+        // no Health fields and this path never runs again.
+        if loadedHadHealth && !canonicalWritesSuspended {
+            if writeCanonicalOnQueue() {
+                phoneStoreLogger.notice("Migrated canonical archive to the backup-excluded Health sidecar")
+            }
         }
         if canonicalWritesSuspended {
             phoneStoreLogger.error("Canonical archive unreadable; running in-memory with writes suspended")
@@ -319,7 +415,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     private var shouldAttemptInitialRestoreOnQueue: Bool {
         !canonicalWritesSuspended
-            && !FileManager.default.fileExists(atPath: Self.canonicalInitializedURL.path)
+            && !FileManager.default.fileExists(atPath: canonicalInitializedURL.path)
     }
 
     private enum CanonicalRead<T> {
@@ -362,14 +458,45 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 
+    private static func excludeFromBackup(_ originalURL: URL) throws {
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var url = originalURL
+        try url.setResourceValues(values)
+        let applied = try url.resourceValues(forKeys: [.isExcludedFromBackupKey])
+            .isExcludedFromBackup == true
+        guard applied else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [
+                NSURLErrorKey: originalURL,
+                NSLocalizedDescriptionKey: "Backup exclusion was not applied"
+            ])
+        }
+    }
+
+    /// Best-effort privacy fallback after an exclusion failure. Removing the
+    /// file is preferred; if that fails, atomically replace it with an empty
+    /// projection so no Health values remain eligible for backup.
+    private static func discardUnsafeHealthSidecar(at url: URL) {
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            phoneStoreLogger.fault("Failed to remove unsafe Health sidecar; replacing it with an empty projection: \(error.localizedDescription, privacy: .public)")
+            do {
+                try write([MatchHealthData](), to: url)
+            } catch {
+                phoneStoreLogger.fault("Failed to clear unsafe Health sidecar: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
     @discardableResult
     private func markArchiveInitializedOnQueue() -> Bool {
         guard !canonicalWritesSuspended else { return false }
         do {
             try FileManager.default.createDirectory(
-                at: Self.canonicalDirectoryURL, withIntermediateDirectories: true
+                at: canonicalDirectoryURL, withIntermediateDirectories: true
             )
-            try Self.write(true, to: Self.canonicalInitializedURL)
+            try Self.write(true, to: canonicalInitializedURL)
             return true
         } catch {
             phoneStoreLogger.error("Failed to mark archive initialized: \(error.localizedDescription, privacy: .public)")
@@ -391,8 +518,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// of inheriting the old complete-protection metadata.
     private func migrateLegacyDocumentsArchiveIfNeeded() {
         let fm = FileManager.default
-        guard !fm.fileExists(atPath: Self.canonicalHistoryURL.path) else { return }
-        let documents = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        guard !fm.fileExists(atPath: canonicalHistoryURL.path) else { return }
+        let documents = storageConfiguration.legacyDocumentsDirectoryURL
         let legacyHistory = documents.appendingPathComponent(Self.historyFilename)
         let legacyTombstoneURL = documents.appendingPathComponent(Self.tombstoneFilename)
         guard fm.fileExists(atPath: legacyHistory.path) || fm.fileExists(atPath: legacyTombstoneURL.path) else {
@@ -401,9 +528,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         do {
             let legacyRecords = try Self.readLegacyFile([MatchRecord].self, at: legacyHistory) ?? []
             let legacyTombstones = try Self.readLegacyFile([UUID].self, at: legacyTombstoneURL) ?? []
-            try fm.createDirectory(at: Self.canonicalDirectoryURL, withIntermediateDirectories: true)
-            try Self.write(Self.sortedNewestFirst(legacyRecords), to: Self.canonicalHistoryURL)
-            try Self.write(legacyTombstones, to: Self.canonicalTombstoneURL)
+            try fm.createDirectory(at: canonicalDirectoryURL, withIntermediateDirectories: true)
+            try Self.write(Self.sortedNewestFirst(legacyRecords), to: canonicalHistoryURL)
+            try Self.write(legacyTombstones, to: canonicalTombstoneURL)
             try? fm.removeItem(at: legacyHistory)
             try? fm.removeItem(at: legacyTombstoneURL)
             phoneStoreLogger.notice("Migrated legacy Documents archive into the canonical store")
