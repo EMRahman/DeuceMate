@@ -31,6 +31,15 @@ struct PhoneStatsStoreTests {
             ))
         }
 
+        func makeStore(backupExcluder: @escaping (URL) throws -> Void) -> PhoneStatsStore {
+            PhoneStatsStore(storageConfiguration: .init(
+                canonicalDirectoryURL: canonical,
+                legacyDocumentsDirectoryURL: legacyDocuments,
+                startsICloudSync: false,
+                backupExcluder: backupExcluder
+            ))
+        }
+
         func remove() {
             try? FileManager.default.removeItem(at: root)
         }
@@ -164,5 +173,31 @@ struct PhoneStatsStoreTests {
 
         #expect(try fixture.healthURL
             .resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+    }
+
+    @Test func exclusionFailureDiscardsHealthButStillPersistsStrippedArchive() throws {
+        struct ExclusionFailure: Error {}
+
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = record()
+        let store = fixture.makeStore { _ in throw ExclusionFailure() }
+
+        store.saveHistory([original])
+
+        #expect(store.loadHistory() == [original]) // current process remains full-fidelity
+        #expect(!FileManager.default.fileExists(atPath: fixture.healthURL.path))
+        let persistedMain = try JSONDecoder().decode(
+            [MatchRecord].self,
+            from: Data(contentsOf: fixture.historyURL)
+        )
+        #expect(persistedMain == [original.strippingHealthData()])
+        #expect(try JSONDecoder().decode(
+            [UUID].self,
+            from: Data(contentsOf: fixture.tombstoneURL)
+        ).isEmpty)
+
+        let reloaded = fixture.makeStore()
+        #expect(reloaded.loadHistory() == [original.strippingHealthData()])
     }
 }

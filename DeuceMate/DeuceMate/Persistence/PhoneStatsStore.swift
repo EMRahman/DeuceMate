@@ -103,6 +103,19 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         let canonicalDirectoryURL: URL
         let legacyDocumentsDirectoryURL: URL
         let startsICloudSync: Bool
+        let backupExcluder: (URL) throws -> Void
+
+        init(
+            canonicalDirectoryURL: URL,
+            legacyDocumentsDirectoryURL: URL,
+            startsICloudSync: Bool,
+            backupExcluder: ((URL) throws -> Void)? = nil
+        ) {
+            self.canonicalDirectoryURL = canonicalDirectoryURL
+            self.legacyDocumentsDirectoryURL = legacyDocumentsDirectoryURL
+            self.startsICloudSync = startsICloudSync
+            self.backupExcluder = backupExcluder ?? { try PhoneStatsStore.excludeFromBackup($0) }
+        }
 
         static var production: StorageConfiguration {
             StorageConfiguration(
@@ -321,12 +334,21 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             )
             try Self.write(split.health, to: healthSidecarURL)
             // Atomic writes replace the destination inode, so the exclusion
-            // resource value must be reapplied after every sidecar write.
-            try Self.excludeFromBackup(healthSidecarURL)
+            // resource value must be reapplied after every sidecar write. If
+            // that fails, discard the unsafe projection but continue saving
+            // the stripped main archive: scores must remain durable without
+            // ever leaving Health data eligible for device backup.
+            do {
+                try storageConfiguration.backupExcluder(healthSidecarURL)
+            } catch {
+                phoneStoreLogger.error("Failed to exclude Health sidecar from backup; discarding its Health projection: \(error.localizedDescription, privacy: .public)")
+                Self.discardUnsafeHealthSidecar(at: healthSidecarURL)
+            }
 
-            // Sidecar first: a process interruption can leave an older stripped
-            // main paired with newer Health values, but cannot strip the latest
-            // main before its Health projection is durable.
+            // Sidecar first during the normal path: a process interruption can
+            // leave an older stripped main paired with newer Health values. The
+            // exclusion-failure path above deliberately prefers a durable,
+            // stripped main even though its local Health projection is dropped.
             try Self.write(split.stripped, to: canonicalHistoryURL)
             try Self.write(Array(tombstones), to: canonicalTombstoneURL)
             return true
@@ -360,7 +382,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         // recovery file. The moved quarantine copy still contains Health data.
         if FileManager.default.fileExists(atPath: healthSidecarURL.path) {
             do {
-                try Self.excludeFromBackup(healthSidecarURL)
+                try storageConfiguration.backupExcluder(healthSidecarURL)
             } catch {
                 phoneStoreLogger.error("Failed to reapply Health sidecar backup exclusion: \(error.localizedDescription, privacy: .public)")
             }
@@ -448,6 +470,22 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 NSURLErrorKey: originalURL,
                 NSLocalizedDescriptionKey: "Backup exclusion was not applied"
             ])
+        }
+    }
+
+    /// Best-effort privacy fallback after an exclusion failure. Removing the
+    /// file is preferred; if that fails, atomically replace it with an empty
+    /// projection so no Health values remain eligible for backup.
+    private static func discardUnsafeHealthSidecar(at url: URL) {
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            phoneStoreLogger.fault("Failed to remove unsafe Health sidecar; replacing it with an empty projection: \(error.localizedDescription, privacy: .public)")
+            do {
+                try write([MatchHealthData](), to: url)
+            } catch {
+                phoneStoreLogger.fault("Failed to clear unsafe Health sidecar: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
