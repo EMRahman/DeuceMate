@@ -106,9 +106,7 @@ struct SettingsView: View {
     @AppStorage("iPhoneInputEnabled") private var iPhoneInputEnabled: Bool = false
     @AppStorage("playerName") private var playerName: String = ""
     @AppStorage("userBirthYear") private var userBirthYear: Int = 0
-    @AppStorage("userBirthYearFromHealth") private var userBirthYearFromHealth: Bool = false
     @AppStorage("userMaxHROverride") private var userMaxHROverride: Int = 0
-    @AppStorage("maxHRComputed") private var maxHRComputed: Int = 0
     @AppStorage("playerNTRP") private var playerNTRP: String = "3.0–3.5"
 
     // Watch-only settings (phone controls watch)
@@ -485,7 +483,6 @@ struct SettingsView: View {
 
     private var resolvedMaxHR: Int {
         HRZone.resolveMaxHR(
-            historical99thPct: maxHRComputed > 0 ? maxHRComputed : nil,
             manualOverride: userMaxHROverride > 0 ? userMaxHROverride : nil,
             birthYear: userBirthYear > 0 ? userBirthYear : nil
         )
@@ -499,13 +496,10 @@ struct SettingsView: View {
                 get: { userBirthYear == 0 ? -1 : userBirthYear },
                 set: { newValue in
                     let resolved = newValue == -1 ? 0 : newValue
-                    guard resolved != userBirthYear || userBirthYearFromHealth else { return }
+                    guard resolved != userBirthYear else { return }
                     userBirthYear = resolved
-                    userBirthYearFromHealth = false
                     syncService.pushPulseCoachSettings(
-                        maxHR: resolvedMaxHR,
                         birthYear: userBirthYear,
-                        birthYearFromHealth: false,
                         maxHROverride: userMaxHROverride
                     )
                 }
@@ -523,13 +517,6 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
                 .opacity(isOverrideActive ? 0.45 : 1)
 
-            if userBirthYearFromHealth, userBirthYear > 0 {
-                Label("From Apple Health record", systemImage: "heart.text.square")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .opacity(isOverrideActive ? 0.45 : 1)
-            }
-
             LabeledContent("Max HR (resolved)") {
                 Text("\(resolvedMaxHR) bpm")
                     .foregroundStyle(.secondary)
@@ -541,9 +528,7 @@ struct SettingsView: View {
                 set: { enabled in
                     userMaxHROverride = enabled ? HRZone.defaultOverrideBPM : 0
                     syncService.pushPulseCoachSettings(
-                        maxHR: resolvedMaxHR,
                         birthYear: userBirthYear,
-                        birthYearFromHealth: userBirthYearFromHealth,
                         maxHROverride: userMaxHROverride
                     )
                 }
@@ -557,9 +542,7 @@ struct SettingsView: View {
                     set: { newValue in
                         userMaxHROverride = newValue
                         syncService.pushPulseCoachSettings(
-                            maxHR: resolvedMaxHR,
                             birthYear: userBirthYear,
-                            birthYearFromHealth: userBirthYearFromHealth,
                             maxHROverride: userMaxHROverride
                         )
                     }

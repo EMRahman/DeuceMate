@@ -102,20 +102,11 @@ class ScoreViewModel: ObservableObject {
             WatchMatchSyncService.shared.pushSharedAnnouncements(enabled)
         }
     }
-    /// Player birth year used to derive max HR when no override or HK history is set.
-    /// 0 means "Skip" (unset). Bidirectionally synced with the iPhone.
+    /// Player birth year used to derive max HR when no override is set.
+    /// 0 means "Skip" (unset). User-entered; bidirectionally synced with the iPhone.
     @Published var userBirthYear: Int = UserDefaults.standard.integer(forKey: "userBirthYear") {
         didSet {
             UserDefaults.standard.set(userBirthYear, forKey: "userBirthYear")
-        }
-    }
-
-    /// True when `userBirthYear` was sourced from the user's Health record on
-    /// the watch. Persisted and synced to the iPhone so both surfaces can label
-    /// the value as "from Health" rather than a manual pick.
-    @Published var userBirthYearFromHealth: Bool = UserDefaults.standard.bool(forKey: "userBirthYearFromHealth") {
-        didSet {
-            UserDefaults.standard.set(userBirthYearFromHealth, forKey: "userBirthYearFromHealth")
         }
     }
 
@@ -130,52 +121,14 @@ class ScoreViewModel: ObservableObject {
         }
     }
 
-    /// HK-derived historical 99th-percentile max HR pushed by the phone.
-    /// Published so SwiftUI re-renders the resolved-max readout when it
-    /// changes (UserDefaults isn't observable on its own).
-    @Published var pulseCoachMaxHR: Int = UserDefaults.standard.integer(forKey: "pulseCoachMaxHR") {
-        didSet {
-            UserDefaults.standard.set(pulseCoachMaxHR, forKey: "pulseCoachMaxHR")
-        }
-    }
-
     /// Re-reads the persisted Pulse Coach values into the published properties so
     /// SwiftUI bindings reflect phone-pushed changes. Called from the
     /// `.pulseCoachSettingsChanged` observer below.
     fileprivate func refreshPulseCoachValuesFromDefaults() {
         let by = UserDefaults.standard.integer(forKey: "userBirthYear")
         if by != userBirthYear { userBirthYear = by }
-        let fromHealth = UserDefaults.standard.bool(forKey: "userBirthYearFromHealth")
-        if fromHealth != userBirthYearFromHealth { userBirthYearFromHealth = fromHealth }
         let mo = UserDefaults.standard.integer(forKey: "userMaxHROverride")
         if mo != userMaxHROverride { userMaxHROverride = mo }
-        let ch = UserDefaults.standard.integer(forKey: "pulseCoachMaxHR")
-        if ch != pulseCoachMaxHR { pulseCoachMaxHR = ch }
-    }
-
-    /// Attempt to read the user's birth year from HealthKit and adopt it as the
-    /// authoritative source. Requests dateOfBirth read auth on first call.
-    ///
-    /// Only adopts the Health value when the user has not already entered a
-    /// manual year — i.e. when the current value is unset (`0`) or was itself
-    /// sourced from Health. A manual pick is preserved verbatim so this can be
-    /// called freely on every settings-sheet open or Pulse Coach toggle without
-    /// clobbering user input. Pushes the result to the iPhone so both devices
-    /// stay in sync.
-    func tryReadBirthYearFromHealth() {
-        guard userBirthYear == 0 || userBirthYearFromHealth else { return }
-        workoutManager.requestBirthYearAuthorization { [weak self] _ in
-            guard let self else { return }
-            guard self.userBirthYear == 0 || self.userBirthYearFromHealth else { return }
-            guard let year = self.workoutManager.fetchBirthYearFromHealth(), year > 1900
-            else { return }
-            let alreadyMatches = self.userBirthYear == year && self.userBirthYearFromHealth
-            self.userBirthYear = year
-            self.userBirthYearFromHealth = true
-            if !alreadyMatches {
-                WatchMatchSyncService.shared.pushSharedUserBirthYear(year, fromHealth: true)
-            }
-        }
     }
     let momentumEnabled = true
 
@@ -666,10 +619,9 @@ class ScoreViewModel: ObservableObject {
     }
 
     /// Resolved player max HR using the same precedence chain as the iPhone:
-    /// manual override → HK historical 99th percentile → 220 − age → 190.
+    /// manual override → 220 − age → 190.
     var resolvedMaxHR: Int {
         HRZone.resolveMaxHR(
-            historical99thPct: pulseCoachMaxHR > 0 ? pulseCoachMaxHR : nil,
             manualOverride: userMaxHROverride > 0 ? userMaxHROverride : nil,
             birthYear: userBirthYear > 0 ? userBirthYear : nil
         )

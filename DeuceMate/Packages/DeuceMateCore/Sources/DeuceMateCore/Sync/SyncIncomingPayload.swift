@@ -22,9 +22,7 @@ public enum SyncIncomingEvent: Equatable {
     case announcement(String)
     case requestFullHistory
     case ping
-    case pulseCoachMaxHR(Int)
     case userBirthYear(Int)
-    case userBirthYearFromHealth(Bool)
     case userMaxHROverride(Int)
     /// The raw string value of the peer's selected `AppTheme`, sent bidirectionally.
     case selectedTheme(String)
@@ -76,9 +74,7 @@ extension SyncIncomingEvent {
         case (.announcement(let a), .announcement(let b)): return a == b
         case (.requestFullHistory, .requestFullHistory): return true
         case (.ping, .ping): return true
-        case (.pulseCoachMaxHR(let a), .pulseCoachMaxHR(let b)): return a == b
         case (.userBirthYear(let a), .userBirthYear(let b)): return a == b
-        case (.userBirthYearFromHealth(let a), .userBirthYearFromHealth(let b)): return a == b
         case (.userMaxHROverride(let a), .userMaxHROverride(let b)): return a == b
         case (.selectedTheme(let a), .selectedTheme(let b)): return a == b
         case (.statsTrackingEnabled(let a), .statsTrackingEnabled(let b)): return a == b
@@ -171,16 +167,9 @@ public enum SyncIncomingPayload {
         // Numeric settings are range-checked so a corrupt peer can't persist a
         // nonsense value. 0 is a valid sentinel ("unset" / "auto") for the
         // birth-year and max-HR-override fields, so the lower bound is 0 there.
-        if let maxHR = payload[MatchSyncKey.pulseCoachMaxHR] as? Int,
-           (0...maxHeartRate).contains(maxHR) {
-            events.append(.pulseCoachMaxHR(maxHR))
-        }
         if let year = payload[MatchSyncKey.userBirthYear] as? Int,
            year == 0 || birthYearRange.contains(year) {
             events.append(.userBirthYear(year))
-        }
-        if let fromHealth = payload[MatchSyncKey.userBirthYearFromHealth] as? Bool {
-            events.append(.userBirthYearFromHealth(fromHealth))
         }
         if let override_ = payload[MatchSyncKey.userMaxHROverride] as? Int,
            (0...maxHeartRate).contains(override_) {

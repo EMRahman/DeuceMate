@@ -40,12 +40,13 @@ DeuceMate includes fitness features on Apple Watch that use Apple's **HealthKit*
 
 If you grant access, the App:
 
-- **Reads**, during each match, the following data from the Health app on your Apple Watch: heart rate, active and resting energy, step count, walking/running distance, and your date of birth. Date of birth is used only to estimate your maximum heart rate for Pulse Coach heart-rate zones.
+- **Reads**, during each match, the following data from the Health app on your Apple Watch: heart rate, active and resting energy, step count, and walking/running distance.
 - **Writes** one workout of type "Tennis" to the Health app for each match you record.
 
 How this data is handled:
 
 - Heart-rate samples and derived fitness metrics are analysed in DeuceMate to show live stats during the match and compute per-match statistics and coaching insights.
+- Your maximum heart rate for Pulse Coach zones is estimated from a birth year you optionally enter in the app (or a manual max-HR value you set). This is **not** read from the Health app.
 - Heart-rate values are saved as part of the match record stored **locally on your devices** (see "Local Data Storage" below), so heart-rate statistics remain available when you review a past match.
 - DeuceMate's automatic app-managed iCloud Drive archive (see "iCloud Sync" below) **excludes** HealthKit-derived heart rate, steps, distance, and calories.
 - HealthKit-derived values may still be included in Apple's system-managed device backup according to your device backup settings.

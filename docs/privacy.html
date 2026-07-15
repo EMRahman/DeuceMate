@@ -69,12 +69,13 @@
   <p>DeuceMate includes fitness features on Apple Watch that use Apple's <strong>HealthKit</strong> framework. When the Apple Watch app first launches, it requests optional HealthKit access. You can deny that request or later revoke access, and tennis scoring remains fully usable without it. If you grant access, DeuceMate automatically starts or resumes a Tennis workout for each match.</p>
   <p>If you grant access, the App:</p>
   <ul>
-    <li><strong>Reads</strong>, during each match, the following data from the Health app on your Apple Watch: heart rate, active and resting energy, step count, walking/running distance, and your date of birth. Date of birth is used only to estimate your maximum heart rate for Pulse Coach heart-rate zones.</li>
+    <li><strong>Reads</strong>, during each match, the following data from the Health app on your Apple Watch: heart rate, active and resting energy, step count, and walking/running distance.</li>
     <li><strong>Writes</strong> one workout of type "Tennis" to the Health app for each match you record.</li>
   </ul>
   <p>How this data is handled:</p>
   <ul>
     <li>Heart-rate samples and derived fitness metrics are analysed in DeuceMate to show live stats during the match and compute per-match statistics and coaching insights.</li>
+    <li>Your maximum heart rate for Pulse Coach zones is estimated from a birth year you optionally enter in the app (or a manual max-HR value you set). This is <strong>not</strong> read from the Health app.</li>
     <li>Heart-rate values are saved as part of the match record stored <strong>locally on your devices</strong> (see "Local Data Storage" below), so heart-rate statistics remain available when you review a past match.</li>
     <li>DeuceMate's automatic app-managed iCloud Drive archive (see "iCloud Sync" below) <strong>excludes</strong> HealthKit-derived heart rate, steps, distance, and calories.</li>
     <li>HealthKit-derived values may still be included in Apple's system-managed device backup according to your device backup settings.</li>

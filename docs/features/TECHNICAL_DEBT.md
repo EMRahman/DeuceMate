@@ -37,6 +37,7 @@ accurate docs, navigable files, and text-level checks are its substitutes.
 | 13 | Architecture | Split `PastMatchesView` (705 lines, fastest-growing file) | Low | Backlog |
 | 14 | Hygiene | Force-unwrap in `PointsGraphView`; placeholder test targets | Low | **14a done**; 14b backlog |
 | 15 | i18n | Localization (all UI copy is hardcoded English) | — | **Parked (product, not code)** |
+| 16 | Health/Privacy | Drop HealthKit date-of-birth read; user-entered birth year; remove dead computed max-HR path | High | **Done** |
 
 ---
 
@@ -507,3 +508,44 @@ wanted: adopt Xcode String Catalogs, and note that Core's `SettingsCopy` /
 `ICloudBackupCopy` pattern (centralised copy, unit-tested) is the right shape
 to extend — item 7's `RatioStat` would also need to happen first for
 locale-aware number formatting.
+
+### 16 — Drop HealthKit date-of-birth read; user-entered birth year; remove dead computed max-HR path (Done, 15 July 2026)
+
+**What changed:** Max HR (which defines the Pulse Coach heart-rate zones) is now
+resolved as `manual override → 220 − age → 190` — see `HRZone.resolveMaxHR`.
+Removed:
+- The HealthKit `dateOfBirth` read: `WorkoutManager` no longer requests the
+  characteristic, and `requestBirthYearAuthorization` / `fetchBirthYearFromHealth`
+  are deleted. Birth year is now entered by the user in the Birth Year picker on
+  either app.
+- The `userBirthYearFromHealth` provenance flag (wire key, `SyncIncomingPayload`
+  case, both sync services, and the "From Health record" UI on both apps).
+- The dead computed-percentile path: `maxHRComputed` (phone `UserDefaults`, never
+  written), the `pulseCoachMaxHR` wire key + watch `@Published` mirror, and the
+  `historical99thPct` parameter of `resolveMaxHR`. The phone previously pushed a
+  resolved max HR to the watch; the watch now computes the identical value locally
+  from the synced birth year + override, so the push is gone.
+
+**Why:** Three reasons. (1) Shrinks the HealthKit surface — one fewer read, a
+shorter first-launch authorization prompt, and date of birth out of the
+`NSHealthShareUsageDescription`, privacy policy, and App Review notes. (2) Removes
+the only genuinely HealthKit-derived value that lived in `UserDefaults` (the
+birth-year provenance flag), which mattered ahead of the device-backup exclusion
+work — see `SUBMISSION_REVIEW.md` Blockers 3 & 4. A user-entered birth year is not
+HealthKit data, so it can remain in `UserDefaults`. (3) The computed-percentile
+branch was dead (`maxHRComputed` was never written), so `resolveMaxHR` carried a
+permanently-nil parameter and a misleading doc comment. Zone math is otherwise
+unchanged — no user's zones move.
+
+**Coupling exercised:** This was a multi-site synced-setting removal (the trap in
+items #3 and #10) — the same value lived as a raw string across `MatchSyncKey`,
+`SyncIncomingPayload`, both sync services, and `@AppStorage`/`UserDefaults` in the
+views. All sites were updated together; the CLAUDE.md §0 grep confirms no orphan
+literals remain.
+
+**Future direction:** iOS 27 / watchOS 27 expose the user's own system-calculated
+or hand-edited heart-rate zones via `HKWorkout.zoneGroupsByType`
+(`HKWorkoutZoneConfiguration`, `HKLiveWorkoutBuilderDelegate.didUpdateWorkoutZone`).
+Since the app already creates an `HKWorkoutSession` per match, adopting that API
+(gated by `#available`, post-1.0 on the iOS 26 SDK) would replace local max-HR
+derivation entirely with Apple's own zones.

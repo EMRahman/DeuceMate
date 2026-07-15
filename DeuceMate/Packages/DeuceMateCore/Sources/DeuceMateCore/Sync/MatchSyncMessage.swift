@@ -29,14 +29,8 @@ public enum MatchSyncKey {
     public static let deleteMatchOnWatch = "deleteMatchOnWatch"
     /// UUID string of the match a `deleteMatchOnWatch` command targets.
     public static let deleteMatchID = "deleteMatchID"
-    /// Phone → watch resolved player max heart rate in bpm (Int).
-    public static let pulseCoachMaxHR = "pulseCoachMaxHR"
     /// Player birth year used to derive max HR via `220 − age`; synced bidirectionally. 0 means unset.
     public static let userBirthYear = "userBirthYear"
-    /// True when the birth year originated from the user's Health record (read on the watch via HealthKit).
-    /// Synced bidirectionally so the iPhone UI can label the value as "from Health". Cleared whenever the
-    /// user manually picks a different year on either device.
-    public static let userBirthYearFromHealth = "userBirthYearFromHealth"
     /// Manual max-HR override in bpm; synced bidirectionally. 0 means auto.
     public static let userMaxHROverride = "userMaxHROverride"
     /// Raw value of the selected `AppTheme`, synced bidirectionally so the skin matches on both devices.

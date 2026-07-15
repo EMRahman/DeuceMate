@@ -161,17 +161,9 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
         transport.sendControl(payload, queueOnFailure: false)
     }
 
-    /// Watch → phone push of the player's birth year (0 means unset / "Skip").
-    /// `fromHealth` is true when the value was sourced from the user's Health
-    /// record on the watch, so the phone can label the value accordingly.
-    func pushSharedUserBirthYear(_ year: Int, fromHealth: Bool) {
-        transport.sendControl(
-            [
-                MatchSyncKey.userBirthYear: year,
-                MatchSyncKey.userBirthYearFromHealth: fromHealth
-            ],
-            queueOnFailure: true
-        )
+    /// Watch → phone push of the player's user-entered birth year (0 means unset / "Skip").
+    func pushSharedUserBirthYear(_ year: Int) {
+        transport.sendControl([MatchSyncKey.userBirthYear: year], queueOnFailure: true)
     }
 
     /// Watch → phone push of the manual max-HR override (0 means auto).
@@ -224,25 +216,9 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
             switch event {
             case .requestFullHistory, .ping:
                 pushFullHistory()
-            case .pulseCoachMaxHR(let bpm):
-                DispatchQueue.main.async {
-                    UserDefaults.standard.set(bpm, forKey: "pulseCoachMaxHR")
-                    NotificationCenter.default.post(
-                        name: .pulseCoachSettingsChanged,
-                        object: nil
-                    )
-                }
             case .userBirthYear(let year):
                 DispatchQueue.main.async {
                     UserDefaults.standard.set(year, forKey: "userBirthYear")
-                    NotificationCenter.default.post(
-                        name: .pulseCoachSettingsChanged,
-                        object: nil
-                    )
-                }
-            case .userBirthYearFromHealth(let fromHealth):
-                DispatchQueue.main.async {
-                    UserDefaults.standard.set(fromHealth, forKey: "userBirthYearFromHealth")
                     NotificationCenter.default.post(
                         name: .pulseCoachSettingsChanged,
                         object: nil

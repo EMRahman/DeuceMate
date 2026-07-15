@@ -224,10 +224,11 @@ When completing the App Privacy questionnaire in App Store Connect:
   but the developer cannot access that archive. "**Data Not Collected**" may
   therefore remain appropriate under Apple's developer-access definition;
   confirm the final answer in App Store Connect.
-- HealthKit data (heart rate, energy, steps, distance, date of birth) is read
-  and analysed in DeuceMate. HealthKit-derived match fields are excluded from
-  DeuceMate's automatic iCloud Drive archive and are never sent to the
-  developer.
+- HealthKit data (heart rate, energy, steps, distance) is read and analysed in
+  DeuceMate. HealthKit-derived match fields are excluded from DeuceMate's
+  automatic iCloud Drive archive and are never sent to the developer. Maximum
+  heart rate for Pulse Coach zones is estimated from an optional user-entered
+  birth year (or manual value), not read from HealthKit.
 - Match exports, AI-coaching hand-offs, and manual archive backups are
   **user-initiated** and may include HealthKit-derived measurements. The user
   chooses the recipient or service, whose privacy terms then apply; the
@@ -286,10 +287,11 @@ On its first launch, the Apple Watch app requests optional HealthKit access.
 The watchOS authorization prompt normally appears only until the reviewer makes
 a choice. Once authorized, every match automatically starts or resumes one
 "Tennis" workout and reads heart rate, active and resting energy, step count,
-walking/running distance, and date of birth (used only to estimate maximum
-heart rate for heart-rate zones). There is no separate in-app HealthKit switch;
+and walking/running distance. There is no separate in-app HealthKit switch;
 access is controlled through the system Health settings. The app remains fully
-usable if the reviewer denies or later revokes access.
+usable if the reviewer denies or later revokes access. Maximum heart rate for
+heart-rate zones is estimated from an optional birth year the user enters in the
+app (or a manual value), not read from HealthKit.
 
 HealthKit-derived measurements are stored locally so the user can review match
 fitness analysis. DeuceMate strips heart rate, steps, distance, and calories

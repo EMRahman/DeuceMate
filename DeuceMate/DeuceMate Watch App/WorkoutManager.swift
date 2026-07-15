@@ -18,7 +18,7 @@ class WorkoutManager: NSObject, ObservableObject {
     func requestAuthorization(completion: @escaping (Bool) -> Void) {
         guard HKHealthStore.isHealthDataAvailable() else { completion(false); return }
         let share: Set<HKSampleType> = [HKQuantityType.workoutType()]
-        var read: Set<HKObjectType> = [
+        let read: Set<HKObjectType> = [
             HKQuantityType.workoutType(),
             HKQuantityType(.heartRate),
             HKQuantityType(.activeEnergyBurned),
@@ -26,36 +26,8 @@ class WorkoutManager: NSObject, ObservableObject {
             HKQuantityType(.stepCount),
             HKQuantityType(.distanceWalkingRunning)
         ]
-        if let dob = HKCharacteristicType.characteristicType(forIdentifier: .dateOfBirth) {
-            read.insert(dob)
-        }
         healthStore.requestAuthorization(toShare: share, read: read) { success, _ in
             DispatchQueue.main.async { completion(success) }
-        }
-    }
-
-    /// Request only the dateOfBirth characteristic. Used when Pulse Coach is
-    /// turned on without a full workout session being enabled, so we can prompt
-    /// for just the read needed to derive max HR via age.
-    func requestBirthYearAuthorization(completion: @escaping (Bool) -> Void) {
-        guard HKHealthStore.isHealthDataAvailable(),
-              let dob = HKCharacteristicType.characteristicType(forIdentifier: .dateOfBirth)
-        else { completion(false); return }
-        healthStore.requestAuthorization(toShare: [], read: [dob]) { success, _ in
-            DispatchQueue.main.async { completion(success) }
-        }
-    }
-
-    /// Returns the user's birth year as recorded in Health, or nil if no value
-    /// is set / the read isn't authorized. The HealthKit API does not let us
-    /// distinguish "not set" from "denied"; both surface as a thrown error.
-    func fetchBirthYearFromHealth() -> Int? {
-        guard HKHealthStore.isHealthDataAvailable() else { return nil }
-        do {
-            let components = try healthStore.dateOfBirthComponents()
-            return components.year
-        } catch {
-            return nil
         }
     }
 

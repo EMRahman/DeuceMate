@@ -16,7 +16,6 @@ struct MatchDetailView: View {
 
     @AppStorage("userBirthYear") private var userBirthYear: Int = 0
     @AppStorage("userMaxHROverride") private var userMaxHROverride: Int = 0
-    @AppStorage("maxHRComputed") private var maxHRComputed: Int = 0
     @AppStorage("playerNTRP") private var playerNTRP: String = "3.0–3.5"
     @State private var tab: Tab = .stats
     @State private var setFilter: SetFilter = .all
@@ -250,7 +249,6 @@ struct MatchDetailView: View {
 
     private var resolvedMaxHR: Int {
         HRZone.resolveMaxHR(
-            historical99thPct: maxHRComputed > 0 ? maxHRComputed : nil,
             manualOverride: userMaxHROverride > 0 ? userMaxHROverride : nil,
             birthYear: userBirthYear > 0 ? userBirthYear : nil
         )
