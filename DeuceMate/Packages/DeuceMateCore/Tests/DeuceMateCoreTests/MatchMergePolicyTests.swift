@@ -124,6 +124,53 @@ final class MatchMergePolicyTests: XCTestCase {
         XCTAssertEqual(result.first?.id, r2.id)
     }
 
+    func test_merge_backfillsHealthWhenExistingCompletedRecordWins() throws {
+        let id = UUID()
+        let pointID = UUID()
+        let newerEnd = Date(timeIntervalSince1970: 2_000)
+        let existing = MatchRecord(
+            id: id,
+            startTime: Date(timeIntervalSince1970: 1_000),
+            endTime: newerEnd,
+            setScores: [],
+            stats: [PointStat(
+                id: pointID,
+                setIndex: 0,
+                server: .me,
+                winner: .me,
+                outcome: .winner
+            )],
+            iWon: true
+        )
+        let incoming = MatchRecord(
+            id: id,
+            startTime: existing.startTime,
+            endTime: newerEnd.addingTimeInterval(-100),
+            setScores: [],
+            stats: [PointStat(
+                id: pointID,
+                setIndex: 0,
+                server: .me,
+                winner: .me,
+                outcome: .winner,
+                heartRateBPM: 155,
+                stepsCumulative: 42
+            )],
+            iWon: true,
+            totalSteps: 1_234,
+            totalDistanceMeters: 3_210,
+            totalCaloriesKcal: 456
+        )
+
+        let result = try XCTUnwrap(MatchMergePolicy.merge(incoming: [incoming], into: [existing]).first)
+        XCTAssertEqual(result.endTime, newerEnd)
+        XCTAssertEqual(result.totalSteps, 1_234)
+        XCTAssertEqual(result.totalDistanceMeters, 3_210)
+        XCTAssertEqual(result.totalCaloriesKcal, 456)
+        XCTAssertEqual(result.stats.first?.heartRateBPM, 155)
+        XCTAssertEqual(result.stats.first?.stepsCumulative, 42)
+    }
+
     // MARK: - merge edge cases
 
     func test_merge_emptyIncoming_returnsCurrentUnchanged() {

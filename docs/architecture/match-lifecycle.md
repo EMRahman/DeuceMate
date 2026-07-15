@@ -13,7 +13,7 @@ flowchart TD
     CHANGE["Changeovers<br/>prompt + compass check of court end"]
     END1["4 · Match ends<br/>workout closed, result saved on watch<br/>(newest 25 matches kept)"]
     SYNC["5 · Sync to iPhone<br/>record + manifest over the bridge"]
-    ARCHIVE["6 · Permanent archive on iPhone<br/>(unlimited, on-device; iCloud backup in background)"]
+    ARCHIVE["6 · Permanent archive on iPhone<br/>(stripped main + local Health sidecar;<br/>iCloud backup in background)"]
     INSIGHT["7 · Stats, graphs & coaching<br/>serve/return/error stats, momentum chart,<br/>Rec Coach & Pulse Coach observations"]
     EXPORT["8 · Export & AI coaching<br/>text report, coaching prompt, or<br/>interactive HTML page · handed to<br/>ChatGPT, Claude, Gemini, ... or shared"]
     MANAGE["9 · Housekeeping<br/>free watch space (keep phone copy)<br/>or delete permanently (tombstoned)"]
@@ -79,13 +79,16 @@ in [sync-and-data-flow.md](sync-and-data-flow.md).
 *Files: `WatchMatchSyncService`, `PhoneMatchSyncService`, `MatchMergePolicy`,
 `MatchSyncTransport`.*
 
-**6 · Archive (phone).** The match joins the permanent archive — a JSON pair
-stored on-device (always readable at launch) with a background backup in the
-user's own iCloud Drive (status shown as "Backed up to iCloud"). iCloud can
-restore during initial local archive setup; after that it receives pushes from
-the phone and does not merge back. Backup rules live in `ArchiveBackupPolicy`.
+**6 · Archive (phone).** The match joins the permanent archive. Full records are
+kept in memory, while disk persistence is split into a normally backed-up,
+health-stripped match history and a backup-excluded sidecar containing only
+heart rate, steps, distance, and calories. A background backup in the user's own
+iCloud Drive (status shown as "Backed up to iCloud") also contains only the
+stripped records. iCloud can restore during initial local archive setup; after
+that it receives pushes from the phone and does not merge back. Sidecar rules
+live in `HealthSidecarPolicy`; cloud rules live in `ArchiveBackupPolicy`.
 The list shows where each match lives: both devices, phone only, or watch only.
-*Files: `PastMatchesView`, `PhoneStatsStore`, `ArchiveBackupPolicy`,
+*Files: `PastMatchesView`, `PhoneStatsStore`, `HealthSidecarPolicy`, `ArchiveBackupPolicy`,
 `ICloudBackupCopy`, `MatchStorageLocation`, `WatchMirror`.*
 
 **7 · Stats, graphs & coaching (phone).** The match page derives everything from

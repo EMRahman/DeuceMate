@@ -102,7 +102,7 @@ struct StatsStoreTests {
 
     // MARK: - Valid data round-trips
 
-    @Test func validHistoryRoundTrips() {
+    @Test func validHistoryRoundTrips() throws {
         let url = makeTempURL()
         defer { try? FileManager.default.removeItem(at: url) }
         let store = StatsStore(fileURL: url)
@@ -112,5 +112,33 @@ struct StatsStoreTests {
 
         #expect(store.loadHistoryOrNil() == records)
         #expect(store.loadHistory() == records)
+        #expect(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+    }
+
+    @Test func repeatedWritesReapplyBackupExclusion() throws {
+        let url = makeTempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = StatsStore(fileURL: url)
+
+        store.saveHistory([makeRecord()])
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = false
+        var mutableURL = url
+        try mutableURL.setResourceValues(values)
+        #expect(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == false)
+
+        store.saveHistory([makeRecord(), makeRecord()])
+        #expect(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+    }
+
+    @Test func initializerExcludesAnExistingArchiveDuringUpgrade() throws {
+        let url = makeTempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        try JSONEncoder().encode([makeRecord()]).write(to: url)
+        #expect(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup != true)
+
+        _ = StatsStore(fileURL: url)
+
+        #expect(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
     }
 }

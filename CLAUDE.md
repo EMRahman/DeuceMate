@@ -74,8 +74,9 @@ Data-flow invariants — **internalise these before touching sync or persistence
   manual match entry builds a record on the phone, saves it to the phone
   archive, and sends a copy to the watch, which then owns the live match.)
 - **The phone archive is canonical on-device; iCloud is backup/restore only.**
-  `PhoneStatsStore` renders the UI from a local Application Support JSON pair,
-  always; the iCloud ubiquity container holds a background backup copy pushed
+  `PhoneStatsStore` renders the UI from full-fidelity records reconstructed from
+  a health-stripped Application Support history plus a backup-excluded Health
+  sidecar; tombstones live alongside them. The iCloud ubiquity container holds a background backup copy pushed
   after local saves. iCloud may be read only during initial local archive setup
   (fresh install / first canonical initialization), via Core's
   `ArchiveBackupPolicy`; once initialized, match data continues one way:
@@ -117,6 +118,7 @@ anything portable; no `.pbxproj` change needed — the package globs its sources
 | `Sync/MatchStorageLocation.swift` | Pure derivation of where a match lives (`both` / `phoneOnly` / `watchOnly`) from the watch's reported id manifest vs the phone's store. Drives the iOS storage-location indicators. |
 | `Sync/WatchMirror.swift`, `WatchHistoryCap.swift` | Pure merge/prune rules for the phone's mirror of the watch's rolling history; `WatchHistory.cap` (25) lives here so the watch (enforces) and phone (explains) cite one number. |
 | `Sync/ArchiveBackupPolicy.swift` | Pure one-way iCloud backup policy: builds outbound snapshots from the phone archive (stripping the five HealthKit-derived fields to comply with App Store Review Guideline 5.1.3(ii)), handles the one-time initial restore before the local archive is initialized, and defines `BackupPreview` (record count + newest date, used for the restore prompt). Used by `PhoneStatsStore`. |
+| `Persistence/HealthSidecarPolicy.swift` | Pure split/merge policy for the phone's local archive: projects exactly the five HealthKit-derived fields into a backup-excluded sidecar and reconstructs full records in memory without overwriting existing non-nil Health values. |
 | `Persistence/ManualMatchArchiveBackup.swift` | Versioned full-fidelity JSON codec + merge/replace policy for the iPhone Settings > Backup & Transfer manual archive export/import. Manual exports intentionally include HealthKit-derived fields and must stay separate from iCloud backup policy. |
 | `Stats/MatchStatsSummary.swift` | Derives serve/return/break/error/rally stats from `[PointStat]`. The reporting core. |
 | `Stats/PointGamesScore.swift`, `PointMatchScore.swift`, `SetScoreLabel.swift` | Derive the trustworthy full match score immediately before each tracked point and format set/game scores once for iOS, text export, and HTML. `PointGamesScore` reconciles reset-derived games with stored scores and suppresses suffix-only histories; any final-point credit must first prove that the point completed its game. See `docs/features/POINT_MATCH_SCORE_PLAN.md`. |
@@ -135,7 +137,7 @@ anything portable; no `.pbxproj` change needed — the package globs its sources
 | `ContentView.swift` | ~941 | Live scoreboard + gesture handling. |
 | `MatchStatsView.swift` | ~630 | On-watch live stats. |
 | `Sync/WatchMatchSyncService.swift` | ~289 | Watch side of `WatchConnectivity`. |
-| `PointCategorySheet.swift`, `WorkoutManager.swift`, `MatchHistoryView.swift`, `StatsStore.swift`, `AppTheme.swift` | | Categorisation UI, HealthKit workout, history, persistence, theming. |
+| `PointCategorySheet.swift`, `WorkoutManager.swift`, `MatchHistoryView.swift`, `StatsStore.swift`, `BackupExcludedFileWriter.swift`, `AppTheme.swift` | | Categorisation UI, HealthKit workout, backup-excluded history/live-state persistence, theming. |
 
 Watch tests: `DeuceMate Watch AppTests/DeuceMate_Watch_AppTests.swift` (~1.1k
 lines, 36 Swift Testing `@Test` functions — high-level `ScoreViewModel`
@@ -152,7 +154,7 @@ scenarios; needs `import DeuceMateCore`, see §0).
 | `Views/SettingsView.swift` (~790), `ManualMatchEntryView.swift` (~442), `LiveScoreboardView.swift` (~490), `LivePointCategoryPanel.swift` (~222) | | Settings including Backup & Transfer archive export/import, manual entry, live spectator, phone-side point categorisation (mirrors the watch sheet when iPhone Input is on). |
 | `Views/PulseCoach/PulseCoachSection.swift`, `Views/Coaching/RecCoachSection.swift`, `AICoachLauncher.swift`, `AICoachSheet.swift` | | HR coaching panel, recreational coaching insights, and routing a generated coaching prompt to third-party AI apps. |
 | `Sync/PhoneMatchSyncService.swift` | ~508 | Phone side of `WatchConnectivity`. |
-| `Persistence/PhoneStatsStore.swift`, `Audio/LiveAnnouncementService.swift`, `HealthKitHRFetcher.swift` | | Archive including manual export/import, TTS announcements, HR backfill. |
+| `Persistence/PhoneStatsStore.swift`, `Audio/LiveAnnouncementService.swift`, `HealthKitHRFetcher.swift` | | Health-stripped archive plus backup-excluded sidecar, manual export/import, TTS announcements, HR backfill. |
 
 Feature design docs live in `docs/features/*.md` — read the relevant plan before
 extending sync, changeover, or the companion app. The prioritised improvement

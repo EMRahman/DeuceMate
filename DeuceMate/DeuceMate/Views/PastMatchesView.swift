@@ -334,6 +334,11 @@ struct PastMatchesView: View {
             .background(Color(.secondarySystemBackground))
             .clipShape(RoundedRectangle(cornerRadius: 12))
 
+            Text("Automatic restores keep matches, scores, and non-health stats, but not recorded heart rate, steps, distance, or calories. To move those fitness metrics to a new iPhone, use Settings → Backup & Transfer → Export before switching, then Import on the new phone.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+
             Button {
                 if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
             } label: {

@@ -700,6 +700,23 @@ struct DeuceMate_Watch_AppTests {
         #expect(state.setElapsedSeconds.isEmpty)
     }
 
+    @Test func appStateWriteIsExcludedFromBackupAfterEverySave() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("appstate-test-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let viewModel = ScoreViewModel(statsStore: MockStatsStore(), stateFileURL: url)
+
+        viewModel.saveState()
+        #expect(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = false
+        var mutableURL = url
+        try mutableURL.setResourceValues(values)
+        viewModel.saveState()
+        #expect(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+    }
+
     // MARK: - Set Duration (Stopwatch) Tests
 
     @Test func setElapsedSnapshotOnSetCompletion() throws {

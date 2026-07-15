@@ -70,6 +70,27 @@ made to shrink the HealthKit surface and remove a health-derived value from
 
 ---
 
+## Device-backup implementation update - 15 July 2026
+
+The five HealthKit-derived match fields are now separated from the iPhone's
+normally backed-up canonical history. `matchHistory.json` contains the stripped
+records; `healthData.json` contains only the Health projection and is
+marked backup-excluded after every save. The watch's Health-bearing match
+history and live state files are likewise marked backup-excluded after every
+atomic write. Automatic iCloud Drive and Apple device restores therefore retain
+scores and non-health statistics but not recorded heart rate, steps, distance,
+or calories. A user-initiated manual archive remains the full-fidelity migration
+path.
+
+- [x] Added pure split/merge policy tests covering all five protected fields.
+- [x] Added app-target tests for legacy migration, corrupt/missing sidecars,
+  unreadable-main write suspension, import repair, and repeated backup-exclusion
+  application.
+- [ ] Verify exclusion and restore behavior on signed physical iPhone and Apple
+  Watch hardware before submission.
+
+---
+
 ## Blockers
 
 ### 1. Archive configuration fixed; signed validation pending
@@ -201,9 +222,11 @@ Required work:
 HealthKit-derived metrics from the app-managed iCloud archive. Other paths still
 need resolution before the document can claim Health data stays on-device:
 
-- Full records containing health-derived values are stored in Documents or
+- ~~Full records containing health-derived values are stored in Documents or
   Application Support on iPhone and Watch, and are not marked as excluded from
-  normal device backup.
+  normal device backup.~~ **Resolved 15 July 2026:** the phone persists a
+  health-stripped main archive plus a backup-excluded Health sidecar, and both
+  Health-bearing watch files reapply backup exclusion after every save.
 - ~~Health-derived preferences such as birth-year provenance and Pulse Coach max
   heart rate are stored in `UserDefaults`, which is also part of device backup.~~
   **Resolved 15 July 2026:** the birth-year provenance flag and the computed max
@@ -224,8 +247,10 @@ the generic Share sheet makes every transfer compliant.
 
 Chosen disclosure posture and remaining work before submission:
 
-- [ ] Exclude health-bearing local archive files and related preferences from
-  device backup, or remove the HealthKit-derived values from those stores.
+- [x] Exclude health-bearing local archive files from device backup, while
+  retaining a normally backed-up health-stripped phone archive. The remaining
+  preferences are user-entered rather than HealthKit-derived (implemented and
+  tested 15 July 2026; signed-device restore verification remains outstanding).
 - [~] The product copy now permits a user-initiated full-fidelity manual archive,
   including HealthKit-derived values. This disclosure does not resolve the fact
   that the Files picker can save it to iCloud Drive; confirm a compliant design

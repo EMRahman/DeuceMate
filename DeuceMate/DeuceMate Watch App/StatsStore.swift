@@ -26,6 +26,7 @@ final class StatsStore: StatsStoring {
     init() {
         fileURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("matchHistory.json")
+        excludeExistingArchiveFromBackup()
     }
 
     /// Test-only initializer that points the store at an explicit file, so the
@@ -33,6 +34,7 @@ final class StatsStore: StatsStoring {
     /// touching (or clobbering) the real Documents archive.
     init(fileURL: URL) {
         self.fileURL = fileURL
+        excludeExistingArchiveFromBackup()
     }
 
     func loadHistory() -> [MatchRecord] {
@@ -82,6 +84,15 @@ final class StatsStore: StatsStoring {
 
     // MARK: - Private
 
+    private func excludeExistingArchiveFromBackup() {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+        do {
+            try BackupExcludedFileWriter.excludeFromBackup(at: fileURL)
+        } catch {
+            statsStoreLogger.error("Failed to exclude existing match history from backup: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     /// Returns `[]` only when the file is genuinely absent (no history yet), and
     /// `nil` when the file exists but can't be read or decoded. The distinction
     /// matters: callers that write a derived history back must never treat an
@@ -103,12 +114,12 @@ final class StatsStore: StatsStoring {
 
     private func _writeUnsafe(_ records: [MatchRecord]) {
         do {
-            let data = try JSONEncoder().encode(records)
             // Class B protection (until-first-unlock): background WatchConnectivity
             // deliveries can run this while the watch is locked/off-wrist, and the
             // archive must stay writable there — Class A would silently drop the
-            // write. Matches PhoneStatsStore.
-            try data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            // write. Health-bearing watch history is also excluded from device
+            // backup after every atomic replacement.
+            try BackupExcludedFileWriter.write(records, to: fileURL)
         } catch {
             statsStoreLogger.error("Failed to write match history: \(error.localizedDescription, privacy: .public)")
         }
