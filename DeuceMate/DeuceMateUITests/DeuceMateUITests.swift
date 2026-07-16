@@ -56,6 +56,21 @@ final class DeuceMateUITests: XCTestCase {
         XCTAssertTrue(export.waitForExistence(timeout: 10))
         export.tap()
         XCTAssertTrue(app.buttons["Interactive Web Page"].waitForExistence(timeout: 5))
+
+        // A manually-entered match carries no HealthKit data, so sharing must
+        // skip the per-export health disclosure and present the share sheet
+        // directly — verifying the consent gate's skip-when-empty path.
+        let shareSummary = app.buttons["Share Summary"].firstMatch
+        XCTAssertTrue(shareSummary.waitForExistence(timeout: 5))
+        shareSummary.tap()
+        XCTAssertFalse(
+            app.staticTexts["Share health data?"].waitForExistence(timeout: 2),
+            "A health-free match must not show the health disclosure"
+        )
+        XCTAssertTrue(
+            app.otherElements["ActivityListView"].waitForExistence(timeout: 8),
+            "The system share sheet should present directly"
+        )
     }
 
     @MainActor
