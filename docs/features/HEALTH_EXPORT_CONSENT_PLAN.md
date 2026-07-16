@@ -198,8 +198,11 @@ opponent export names only the fields it really carries.
   dedicated `HealthExportConsent.archiveFields(in:)` (union across the archive;
   heart rate / steps / calories / distance, **never** derived zones) feeding
   `disclosure(…, destination: .archiveFile)`; a health-free archive shows a
-  plain export note instead. The alert stays always-shown (unlike the per-match
-  skip) because it doubles as the bulk-export confirmation.
+  plain export note instead. Because the archive serialises records as-is, it
+  counts **any non-nil** field (including a stored `0` total) — not the rendered
+  `> 0` gating, which would under-disclose a `0` that still ships in the JSON.
+  The alert stays always-shown (unlike the per-match skip) because it doubles as
+  the bulk-export confirmation.
 - **PR 5 — `docs:`** Update `PRIVACY_POLICY.md`, `docs/privacy.html`,
   `APP_STORE_METADATA.md`, and App Review notes to describe the per-export
   disclosure; flip the Blocker 4 export items in `SUBMISSION_REVIEW.md` and

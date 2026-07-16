@@ -167,7 +167,9 @@ struct SettingsView: View {
             Button("Export") { prepareManualArchiveExport() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(archiveExportDisclosureMessage)
+            // SwiftUI evaluates this closure on every body pass; only scan the
+            // archive when the alert is actually up.
+            Text(showArchiveExportDisclosure ? archiveExportDisclosureMessage : "")
         }
         .fileExporter(
             isPresented: $showArchiveExporter,

@@ -112,16 +112,23 @@ public enum HealthExportConsent {
     }
 
     /// The raw stored health categories in one record — heart rate, steps,
-    /// calories, distance (never derived zones), using the same `> 0` gating on
-    /// totals as `presentFields` and the exporters.
+    /// calories, distance (never derived zones). The manual archive serialises
+    /// raw records as-is, so **any non-nil value counts**, including a stored `0`
+    /// total (`WorkoutManager` can record 0 totals). This deliberately differs
+    /// from `presentFields`/the rendered exporters, which omit `0` totals — a
+    /// `0` is still a HealthKit key in the archive JSON, so it must be disclosed.
     private static func rawStoredFields(in record: MatchRecord) -> Set<HealthExportField> {
         var fields: Set<HealthExportField> = []
-        if record.stats.contains(where: { $0.heartRateBPM != nil }) { fields.insert(.heartRate) }
-        if (record.totalSteps ?? 0) > 0 || record.stats.contains(where: { $0.stepsCumulative != nil }) {
-            fields.insert(.steps)
+        if record.totalSteps != nil { fields.insert(.steps) }
+        if record.totalCaloriesKcal != nil { fields.insert(.calories) }
+        if record.totalDistanceMeters != nil { fields.insert(.distance) }
+        // Per-point heart rate and steps in a single pass; stop once both found.
+        let needSteps = !fields.contains(.steps)
+        for stat in record.stats {
+            if stat.heartRateBPM != nil { fields.insert(.heartRate) }
+            if needSteps, stat.stepsCumulative != nil { fields.insert(.steps) }
+            if fields.contains(.heartRate) && fields.contains(.steps) { break }
         }
-        if (record.totalCaloriesKcal ?? 0) > 0 { fields.insert(.calories) }
-        if (record.totalDistanceMeters ?? 0) > 0 { fields.insert(.distance) }
         return fields
     }
 
