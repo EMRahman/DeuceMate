@@ -49,26 +49,47 @@ public enum HealthExportConsent {
     /// for this record. Empty ⇒ nothing to disclose, so callers share directly
     /// with no dialog.
     ///
-    /// Mirrors the gating in `MatchExporter` (text/AI) and `MatchWebViewModel`
-    /// (HTML): heart rate and steps/calories/distance surface for both
-    /// perspectives (the opponent full/AI export shows per-point "Opponent HR",
-    /// and match totals appear in every overview), but **heart-rate zones are
-    /// the recorder's own and never mapped onto the opponent**. HTML and manual
-    /// archive are recorder-framed, so callers pass `focal: .me` for those.
-    public static func presentFields(in record: MatchRecord, focal: Player) -> [HealthExportField] {
+    /// `includesRawPoints` distinguishes the two text-export kinds: `false` for a
+    /// summary-only export (`MatchExporter.summaryExport`), `true` for one that
+    /// appends the raw point-by-point table (`fullExport` / `aiPromptExport`).
+    /// HTML and the manual archive are recorder-framed and full-detail, so their
+    /// callers pass `focal: .me, includesRawPoints: true`.
+    ///
+    /// Mirrors the gating in `MatchExporter` and `MatchWebViewModel`:
+    /// - Match totals (steps/calories/distance) appear in every overview, but
+    ///   only when strictly greater than zero — matching `matchOverview` and
+    ///   `MatchWebViewModel.totals`.
+    /// - For the recorder (`.me`), the heart-rate and movement summary sections
+    ///   render regardless of the raw table, so the export kind doesn't change
+    ///   which health categories are present.
+    /// - For the `.opponent`, those recorder summary sections are suppressed, so
+    ///   per-point heart rate and per-point-only steps reach the export **only**
+    ///   through the raw-point table (`includesRawPoints`). Heart-rate **zones**
+    ///   are the recorder's own and are never shown for the opponent.
+    public static func presentFields(
+        in record: MatchRecord,
+        focal: Player,
+        includesRawPoints: Bool
+    ) -> [HealthExportField] {
         let hasHeartRate = record.stats.contains { $0.heartRateBPM != nil }
-        let hasSteps = record.totalSteps != nil
-            || record.stats.contains { $0.stepsCumulative != nil }
-        let hasCalories = record.totalCaloriesKcal != nil
-        let hasDistance = record.totalDistanceMeters != nil
+        let hasTotalSteps = (record.totalSteps ?? 0) > 0
+        let hasPerPointSteps = record.stats.contains { $0.stepsCumulative != nil }
+        let hasCalories = (record.totalCaloriesKcal ?? 0) > 0
+        let hasDistance = (record.totalDistanceMeters ?? 0) > 0
 
         // Built in `HealthExportField.allCases` order for stable, canonical copy.
         var fields: [HealthExportField] = []
-        if hasHeartRate {
-            fields.append(.heartRate)
-            if focal == .me { fields.append(.heartRateZones) }
+        switch focal {
+        case .me:
+            if hasHeartRate {
+                fields.append(.heartRate)
+                fields.append(.heartRateZones)
+            }
+            if hasTotalSteps || hasPerPointSteps { fields.append(.steps) }
+        case .opponent:
+            if hasHeartRate && includesRawPoints { fields.append(.heartRate) }
+            if hasTotalSteps || (hasPerPointSteps && includesRawPoints) { fields.append(.steps) }
         }
-        if hasSteps { fields.append(.steps) }
         if hasCalories { fields.append(.calories) }
         if hasDistance { fields.append(.distance) }
         return fields
@@ -81,6 +102,11 @@ public enum HealthExportConsent {
         fields: [HealthExportField],
         destination: HealthExportDestination
     ) -> (title: String, message: String) {
+        // Contract: callers pass a non-empty set (from `presentFields`) and skip
+        // the dialog when it is empty. `assert` (debug-only) catches a miswired
+        // caller in development without risking a release crash on this
+        // user-facing path if the contract is ever broken in production.
+        assert(!fields.isEmpty, "HealthExportConsent.disclosure requires a non-empty fields set")
         let list = formattedList(fields.map(\.displayName))
         let recipient: String
         switch destination {

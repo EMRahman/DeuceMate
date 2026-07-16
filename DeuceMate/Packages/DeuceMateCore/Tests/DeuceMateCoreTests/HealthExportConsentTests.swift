@@ -68,19 +68,32 @@ final class HealthExportConsentTests: XCTestCase {
 
     // MARK: - presentFields
 
-    func test_presentFieldsIncludesAllFiveForRecorderWhenPresent() {
+    func test_presentFieldsIncludesAllFiveForRecorderRegardlessOfExportKind() {
+        // For the recorder the HR/movement summary sections render regardless of
+        // the raw-point table, so summary and full expose the same categories.
+        for includesRawPoints in [true, false] {
+            XCTAssertEqual(
+                HealthExportConsent.presentFields(in: record(), focal: .me, includesRawPoints: includesRawPoints),
+                [.heartRate, .heartRateZones, .steps, .calories, .distance]
+            )
+        }
+    }
+
+    func test_presentFieldsForOpponentFullExposesHeartRateButNeverZones() {
+        // The opponent full/AI export exposes per-point "Opponent HR" via the raw
+        // table, but heart-rate zones are the recorder's own and never shown.
         XCTAssertEqual(
-            HealthExportConsent.presentFields(in: record(), focal: .me),
-            [.heartRate, .heartRateZones, .steps, .calories, .distance]
+            HealthExportConsent.presentFields(in: record(), focal: .opponent, includesRawPoints: true),
+            [.heartRate, .steps, .calories, .distance]
         )
     }
 
-    func test_presentFieldsForOpponentOmitsHeartRateZones() {
-        // The opponent full/AI export still exposes per-point "Opponent HR", but
-        // heart-rate zones are the recorder's own and are never shown for the opponent.
+    func test_presentFieldsForOpponentSummaryOmitsHeartRate() {
+        // The opponent SUMMARY omits the raw table and the recorder HR section, so
+        // no heart rate is shared — only the match totals.
         XCTAssertEqual(
-            HealthExportConsent.presentFields(in: record(), focal: .opponent),
-            [.heartRate, .steps, .calories, .distance]
+            HealthExportConsent.presentFields(in: record(), focal: .opponent, includesRawPoints: false),
+            [.steps, .calories, .distance]
         )
     }
 
@@ -89,23 +102,46 @@ final class HealthExportConsentTests: XCTestCase {
             heartRateBPM: nil, stepsCumulative: nil,
             totalSteps: 900, totalDistanceMeters: nil, totalCaloriesKcal: nil
         )
-        XCTAssertEqual(HealthExportConsent.presentFields(in: stepsOnly, focal: .me), [.steps])
-        XCTAssertEqual(HealthExportConsent.presentFields(in: stepsOnly, focal: .opponent), [.steps])
+        for includesRawPoints in [true, false] {
+            XCTAssertEqual(HealthExportConsent.presentFields(in: stepsOnly, focal: .me, includesRawPoints: includesRawPoints), [.steps])
+            // A match total (> 0) shows in the overview for both perspectives and kinds.
+            XCTAssertEqual(HealthExportConsent.presentFields(in: stepsOnly, focal: .opponent, includesRawPoints: includesRawPoints), [.steps])
+        }
 
         let hrOnly = record(
             heartRateBPM: 150, stepsCumulative: nil,
             totalSteps: nil, totalDistanceMeters: nil, totalCaloriesKcal: nil
         )
-        XCTAssertEqual(HealthExportConsent.presentFields(in: hrOnly, focal: .me), [.heartRate, .heartRateZones])
-        XCTAssertEqual(HealthExportConsent.presentFields(in: hrOnly, focal: .opponent), [.heartRate])
+        for includesRawPoints in [true, false] {
+            XCTAssertEqual(HealthExportConsent.presentFields(in: hrOnly, focal: .me, includesRawPoints: includesRawPoints), [.heartRate, .heartRateZones])
+        }
+        XCTAssertEqual(HealthExportConsent.presentFields(in: hrOnly, focal: .opponent, includesRawPoints: true), [.heartRate])
+        XCTAssertEqual(HealthExportConsent.presentFields(in: hrOnly, focal: .opponent, includesRawPoints: false), [])
     }
 
-    func test_presentFieldsUsesPerPointStepsEvenWithoutMatchTotal() {
+    func test_presentFieldsUsesPerPointStepsOnlyViaRawTableForOpponent() {
         let perPointOnly = record(
             heartRateBPM: nil, stepsCumulative: 30,
             totalSteps: nil, totalDistanceMeters: nil, totalCaloriesKcal: nil
         )
-        XCTAssertEqual(HealthExportConsent.presentFields(in: perPointOnly, focal: .me), [.steps])
+        // Recorder: the movement summary shows per-point steps regardless of kind.
+        XCTAssertEqual(HealthExportConsent.presentFields(in: perPointOnly, focal: .me, includesRawPoints: false), [.steps])
+        // Opponent: per-point-only steps reach the export solely via the raw table.
+        XCTAssertEqual(HealthExportConsent.presentFields(in: perPointOnly, focal: .opponent, includesRawPoints: true), [.steps])
+        XCTAssertEqual(HealthExportConsent.presentFields(in: perPointOnly, focal: .opponent, includesRawPoints: false), [])
+    }
+
+    func test_presentFieldsExcludesZeroValuedTotals() {
+        // Totals recorded as 0 are not emitted by the exporters (they gate on > 0),
+        // so they must not be disclosed. Heart rate is still present.
+        let zeroTotals = record(
+            heartRateBPM: 150, stepsCumulative: nil,
+            totalSteps: 0, totalDistanceMeters: 0, totalCaloriesKcal: 0
+        )
+        XCTAssertEqual(
+            HealthExportConsent.presentFields(in: zeroTotals, focal: .me, includesRawPoints: true),
+            [.heartRate, .heartRateZones]
+        )
     }
 
     func test_presentFieldsEmptyForHealthFreeRecord() {
@@ -113,8 +149,11 @@ final class HealthExportConsentTests: XCTestCase {
             heartRateBPM: nil, stepsCumulative: nil,
             totalSteps: nil, totalDistanceMeters: nil, totalCaloriesKcal: nil
         )
-        XCTAssertTrue(HealthExportConsent.presentFields(in: none, focal: .me).isEmpty)
-        XCTAssertTrue(HealthExportConsent.presentFields(in: none, focal: .opponent).isEmpty)
+        for focal in [Player.me, .opponent] {
+            for includesRawPoints in [true, false] {
+                XCTAssertTrue(HealthExportConsent.presentFields(in: none, focal: focal, includesRawPoints: includesRawPoints).isEmpty)
+            }
+        }
     }
 
     // MARK: - disclosure fidelity
@@ -160,7 +199,7 @@ final class HealthExportConsentTests: XCTestCase {
 
     func test_presentFieldsForRecorderAgreesWithHtmlExport() {
         let record = richRecord()
-        let fields = Set(HealthExportConsent.presentFields(in: record, focal: .me))
+        let fields = Set(HealthExportConsent.presentFields(in: record, focal: .me, includesRawPoints: true))
         let vm = MatchWebViewModel.make(from: record)
 
         // Heart rate + its zones (recorder-only) ⟺ the HTML hr block.
@@ -181,7 +220,7 @@ final class HealthExportConsentTests: XCTestCase {
             heartRateBPM: nil, stepsCumulative: nil,
             totalSteps: nil, totalDistanceMeters: nil, totalCaloriesKcal: nil
         )
-        XCTAssertTrue(HealthExportConsent.presentFields(in: record, focal: .me).isEmpty)
+        XCTAssertTrue(HealthExportConsent.presentFields(in: record, focal: .me, includesRawPoints: true).isEmpty)
         let vm = MatchWebViewModel.make(from: record)
         XCTAssertNil(vm.hr)
         XCTAssertNil(vm.steps)

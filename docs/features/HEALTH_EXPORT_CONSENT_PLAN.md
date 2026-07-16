@@ -127,9 +127,13 @@ public enum HealthExportDestination: Sendable {
 
 public enum HealthExportConsent {
     /// Which of the five fields THIS record would actually expose for this
-    /// perspective. Empty ⇒ no dialog needed.
+    /// perspective and export kind. `includesRawPoints` = summary (false) vs
+    /// summary + raw-point table (true). Empty ⇒ no dialog needed. Totals gate
+    /// on > 0 (matching the exporters); opponent HR and per-point-only steps
+    /// require the raw table; zones are recorder-only.
     public static func presentFields(in record: MatchRecord,
-                                     focal: Player) -> [HealthExportField]
+                                     focal: Player,
+                                     includesRawPoints: Bool) -> [HealthExportField]
 
     /// Disclosure copy naming the exact fields + destination. One source, used
     /// by every surface so the wording can't drift.
@@ -148,9 +152,11 @@ future opt-out would add a `HealthExportChoice` and a strip path — see Future 
   view modifier) that renders the dialog from `HealthExportConsent.disclosure` and
   calls back on Share.
 - **Share coordinator for `MatchDetailView`** — replace the bare `ShareLink`s
-  (surfaces 2 & 3) with Buttons. On tap: compute `presentFields`; if empty share
-  immediately, else show the disclosure; on Share, present the system share sheet
-  via a `.sheet(item:)` hosting a `UIActivityViewController` representable
+  (surfaces 2 & 3) with Buttons. On tap: compute `presentFields` for the tapped
+  item's `focal` and export kind (`includesRawPoints`: summary = false;
+  full / AI = true; HTML → `focal: .me`, true); if empty share immediately, else
+  show the disclosure; on Share, present the system share sheet via a
+  `.sheet(item:)` hosting a `UIActivityViewController` representable
   (`ShareSheet`). Removes `ShareLink`'s "shares on tap" problem.
 - **Manual archive (`SettingsView`)** — smallest change: it already gates on an
   Export/Cancel alert; just source its copy from `HealthExportConsent.disclosure`
