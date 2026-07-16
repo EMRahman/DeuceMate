@@ -57,9 +57,12 @@ final class DeuceMateUITests: XCTestCase {
         export.tap()
         XCTAssertTrue(app.buttons["Interactive Web Page"].waitForExistence(timeout: 5))
 
-        // A manually-entered match carries no HealthKit data, so sharing must
-        // skip the per-export health disclosure and present the share sheet
-        // directly — verifying the consent gate's skip-when-empty path.
+        // This match was just entered and never resumed/played on a Watch (the
+        // sim is unpaired), so it holds no HealthKit data yet. Sharing it must
+        // therefore skip the per-export health disclosure and present the share
+        // sheet directly — verifying the consent gate's skip-when-empty path.
+        // (A resumed-and-played match gains health data and would show the
+        // disclosure; that data-driven behavior is covered by the Core tests.)
         let shareSummary = app.buttons["Share Summary"].firstMatch
         XCTAssertTrue(shareSummary.waitForExistence(timeout: 5))
         shareSummary.tap()
