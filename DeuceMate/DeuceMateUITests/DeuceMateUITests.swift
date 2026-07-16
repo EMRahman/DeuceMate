@@ -52,6 +52,21 @@ final class DeuceMateUITests: XCTestCase {
         }
         XCTAssertTrue(emptyStats.isHittable)
 
+        // AI Coach hand-off: this health-free match (see below) opens the sheet
+        // with no disclosure — the same skip-when-empty gate as sharing.
+        // Dismissed here so the share check can run afterwards.
+        let aiCoach = app.buttons
+            .matching(NSPredicate(format: "label CONTAINS[c] 'ai coach'"))
+            .firstMatch
+        XCTAssertTrue(aiCoach.waitForExistence(timeout: 10))
+        aiCoach.tap()
+        XCTAssertFalse(
+            app.staticTexts["Share health data?"].waitForExistence(timeout: 2),
+            "A health-free match must not show the health disclosure"
+        )
+        XCTAssertTrue(app.buttons["Copy Prompt to Clipboard"].waitForExistence(timeout: 5))
+        app.navigationBars["AI Coach"].buttons["Done"].tap()
+
         let export = app.buttons["Export match"]
         XCTAssertTrue(export.waitForExistence(timeout: 10))
         export.tap()

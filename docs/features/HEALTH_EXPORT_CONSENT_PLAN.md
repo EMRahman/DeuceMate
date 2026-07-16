@@ -121,8 +121,9 @@ public enum HealthExportField: CaseIterable, Sendable {
 
 public enum HealthExportDestination: Sendable {
     case archiveFile     // manual archive → Files / iCloud Drive
-    case sharedReport    // text or HTML share sheet
-    case aiService       // AI app / website hand-off
+    case sharedReport    // text / HTML / AI Coach — all reach the share sheet
+    // No AI-only case: the AI Coach sheet also exposes general share options
+    // (Mail, Files, …), so an "AI app/website only" clause would under-disclose.
 }
 
 public enum HealthExportConsent {

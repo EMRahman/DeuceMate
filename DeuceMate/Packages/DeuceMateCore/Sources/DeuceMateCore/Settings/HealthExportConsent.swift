@@ -37,10 +37,12 @@ public enum HealthExportField: String, CaseIterable, Sendable {
 public enum HealthExportDestination: Sendable {
     /// Manual full-fidelity archive written via the Files picker (can target iCloud Drive).
     case archiveFile
-    /// A shared text or interactive-HTML match report (system share sheet).
+    /// A shared match report (text, interactive HTML, or the AI Coach prompt).
+    /// All reach the system share sheet, so any target — a person, Files/iCloud
+    /// Drive, or an AI app — can receive it, and the copy says so. There is no
+    /// AI-only destination: the AI Coach sheet also offers general share options,
+    /// so an "AI app/website only" clause would under-disclose (Blocker 4).
     case sharedReport
-    /// A coaching prompt handed off to a third-party AI app or website.
-    case aiService
 }
 
 public enum HealthExportConsent {
@@ -114,8 +116,6 @@ public enum HealthExportConsent {
             recipient = "the Files app or iCloud Drive location you choose"
         case .sharedReport:
             recipient = "whoever or whatever you send it to — a person, the Files app or iCloud Drive, or an AI service"
-        case .aiService:
-            recipient = "the AI app or website you choose"
         }
         let message = "This export includes your recorded \(list). "
             + "DeuceMate has no server and never receives it, but \(recipient) will receive it."
