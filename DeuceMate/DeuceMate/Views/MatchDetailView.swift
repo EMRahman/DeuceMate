@@ -1218,10 +1218,10 @@ private enum PendingHealthDisclosure: Identifiable {
     }
 
     var destination: HealthExportDestination {
-        switch self {
-        case .share:   return .sharedReport
-        case .aiCoach: return .aiService
-        }
+        // Both use `.sharedReport`: the AI Coach sheet hands off to an AI app but
+        // also exposes general share options (Mail, Files, …), so its disclosure
+        // must name the broad set of recipients, not just "an AI service".
+        .sharedReport
     }
 
     /// Affirmative button label: a share "Share"s; the AI hand-off "Continue"s to

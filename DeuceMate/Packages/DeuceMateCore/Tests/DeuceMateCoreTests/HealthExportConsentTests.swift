@@ -179,11 +179,11 @@ final class HealthExportConsentTests: XCTestCase {
         let fields: [HealthExportField] = [.heartRate]
         XCTAssertTrue(HealthExportConsent.disclosure(fields: fields, destination: .archiveFile)
             .message.contains("Files app or iCloud Drive location"))
+        // `.sharedReport` is used for text, HTML, and the AI Coach hand-off, so it
+        // must name the broad recipient set (including "an AI service").
         let shared = HealthExportConsent.disclosure(fields: fields, destination: .sharedReport).message
         XCTAssertTrue(shared.contains("a person"))
         XCTAssertTrue(shared.contains("AI service"))
-        XCTAssertTrue(HealthExportConsent.disclosure(fields: fields, destination: .aiService)
-            .message.contains("AI app or website"))
     }
 
     func test_disclosureFormatsFieldListWithOxfordCommas() {
