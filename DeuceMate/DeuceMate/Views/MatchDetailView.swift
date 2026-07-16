@@ -31,9 +31,10 @@ struct MatchDetailView: View {
     /// entry rather than per-perspective). Built once in `.task`.
     @State private var htmlExportURL: URL?
     @State private var showAICoachSheet: Bool = false
-    /// A tapped export whose payload carries HealthKit-derived data, awaiting the
-    /// per-export disclosure. Non-nil ⇒ the "Share health data?" alert is shown.
-    @State private var pendingHealthShare: ShareRequest?
+    /// A user action (a share, or the AI Coach hand-off) whose payload carries
+    /// HealthKit-derived data, awaiting the per-export disclosure. Non-nil ⇒ the
+    /// "Share health data?" alert is shown.
+    @State private var pendingDisclosure: PendingHealthDisclosure?
     /// The export currently presented in the system share sheet (set directly for
     /// health-free exports, or after the user confirms the disclosure).
     @State private var activeShare: ShareRequest?
@@ -332,7 +333,29 @@ struct MatchDetailView: View {
         if fields.isEmpty {
             activeShare = request
         } else {
-            pendingHealthShare = request
+            pendingDisclosure = .share(request)
+        }
+    }
+
+    /// Route the AI Coach hand-off through the disclosure. The sheet hands the
+    /// coaching prompt — which can include the recorder's heart rate, zones,
+    /// steps, calories, and distance — to a third-party AI, so disclose the
+    /// recorder's full set (`.me`, raw points included: the superset of both
+    /// perspectives' prompts). No health ⇒ open the sheet directly.
+    private func beginAICoach() {
+        let fields = HealthExportConsent.presentFields(in: record, focal: .me, includesRawPoints: true)
+        if fields.isEmpty {
+            showAICoachSheet = true
+        } else {
+            pendingDisclosure = .aiCoach(fields)
+        }
+    }
+
+    /// Perform a disclosed action once the user confirms.
+    private func confirmDisclosure(_ disclosure: PendingHealthDisclosure) {
+        switch disclosure {
+        case .share(let request): activeShare = request
+        case .aiCoach:            showAICoachSheet = true
         }
     }
 
@@ -643,7 +666,7 @@ struct MatchDetailView: View {
                     ProgressView().controlSize(.small)
                 } else {
                     Button {
-                        showAICoachSheet = true
+                        beginAICoach()
                     } label: {
                         Label("AI Coach", systemImage: "sparkles")
                             .labelStyle(.titleAndIcon)
@@ -695,26 +718,27 @@ struct MatchDetailView: View {
                 filenameOpponent: exportFilename(for: record, mode: .aiOpp)
             )
         }
-        // Per-export HealthKit disclosure (Blocker 4). Naming + the recipient
-        // clause come from Core's single source; "Share" proceeds full-fidelity.
+        // Per-export HealthKit disclosure (Blocker 4), shared by the export share
+        // sheet and the AI Coach hand-off. Naming + the recipient clause come
+        // from Core's single source; confirming proceeds full-fidelity.
         .alert(
             "Share health data?",
             isPresented: Binding(
-                get: { pendingHealthShare != nil },
-                set: { if !$0 { pendingHealthShare = nil } }
+                get: { pendingDisclosure != nil },
+                set: { if !$0 { pendingDisclosure = nil } }
             ),
-            presenting: pendingHealthShare
-        ) { request in
-            Button("Share") {
+            presenting: pendingDisclosure
+        ) { disclosure in
+            Button(disclosure.confirmLabel) {
                 // Defer to the next runloop so the alert fully dismisses before
-                // the share sheet presents (a same-tick present can be dropped
-                // mid-transition).
-                DispatchQueue.main.async { activeShare = request }
+                // the share / AI Coach sheet presents (a same-tick present can be
+                // dropped mid-transition).
+                DispatchQueue.main.async { confirmDisclosure(disclosure) }
             }
             Button("Cancel", role: .cancel) { }
-        } message: { request in
+        } message: { disclosure in
             Text(HealthExportConsent.disclosure(
-                fields: request.healthFields, destination: .sharedReport
+                fields: disclosure.fields, destination: disclosure.destination
             ).message)
         }
         .sheet(item: $activeShare) { request in
@@ -1170,6 +1194,44 @@ private struct ShareRequest: Identifiable {
     let id = UUID()
     let items: [Any]
     let healthFields: [HealthExportField]
+}
+
+/// A user action awaiting the per-export HealthKit disclosure: either a system
+/// share (present the share sheet) or the AI Coach hand-off (open its sheet).
+/// Drives one shared "Share health data?" alert so the copy stays consistent.
+private enum PendingHealthDisclosure: Identifiable {
+    case share(ShareRequest)
+    case aiCoach([HealthExportField])
+
+    var id: String {
+        switch self {
+        case .share(let request): return "share-\(request.id)"
+        case .aiCoach:            return "ai-coach"
+        }
+    }
+
+    var fields: [HealthExportField] {
+        switch self {
+        case .share(let request):  return request.healthFields
+        case .aiCoach(let fields): return fields
+        }
+    }
+
+    var destination: HealthExportDestination {
+        switch self {
+        case .share:   return .sharedReport
+        case .aiCoach: return .aiService
+        }
+    }
+
+    /// Affirmative button label: a share "Share"s; the AI hand-off "Continue"s to
+    /// the AI Coach sheet (nothing leaves until the user launches/copies there).
+    var confirmLabel: String {
+        switch self {
+        case .share:   return "Share"
+        case .aiCoach: return "Continue"
+        }
+    }
 }
 
 /// Wraps a text export so the system share sheet still offers a Mail subject
