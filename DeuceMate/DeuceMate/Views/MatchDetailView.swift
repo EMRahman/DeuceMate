@@ -1,6 +1,7 @@
 // MatchDetailView.swift — iPhone stats view.
 // Shows Me vs Opponent stats side-by-side with split bars; no Me/Opp toggle needed.
 import SwiftUI
+import UIKit
 import DeuceMateCore
 
 struct MatchDetailView: View {
@@ -30,6 +31,12 @@ struct MatchDetailView: View {
     /// entry rather than per-perspective). Built once in `.task`.
     @State private var htmlExportURL: URL?
     @State private var showAICoachSheet: Bool = false
+    /// A tapped export whose payload carries HealthKit-derived data, awaiting the
+    /// per-export disclosure. Non-nil ⇒ the "Share health data?" alert is shown.
+    @State private var pendingHealthShare: ShareRequest?
+    /// The export currently presented in the system share sheet (set directly for
+    /// health-free exports, or after the user confirms the disclosure).
+    @State private var activeShare: ShareRequest?
 
     private enum Tab { case stats, points }
 
@@ -280,38 +287,52 @@ struct MatchDetailView: View {
     private enum SharePerspective { case me, opponent }
 
     @ViewBuilder
-    private func shareLinks(for perspective: SharePerspective) -> some View {
+    private func shareButtons(for perspective: SharePerspective) -> some View {
         let isMe = perspective == .me
+        let focal: Player = isMe ? .me : .opponent
         let summaryItem = isMe ? exportSummary : exportSummaryOpp
         let fullItem    = isMe ? exportFull    : exportFullOpp
         let summarySubject = isMe ? "Tennis Match Summary" : "Tennis Match Summary — Opponent Perspective"
         let fullSubject    = isMe ? "Tennis Match Summary + Raw Points" : "Tennis Match Summary + Raw Points — Opponent Perspective"
-        let summaryMessage = isMe
-            ? "My match stats from DeuceMate."
-            : "Share with your opponent — their match stats from DeuceMate."
-        let fullMessage    = isMe
-            ? "My match stats and point-by-point data from DeuceMate."
-            : "Share with your opponent — their match stats and point-by-point data from DeuceMate."
-        let summaryMode: ExportMode = isMe ? .summary : .summaryOpp
-        let fullMode:    ExportMode = isMe ? .full    : .fullOpp
 
-        ShareLink(
-            item: summaryItem,
-            subject: Text(summarySubject),
-            message: Text(summaryMessage),
-            preview: SharePreview(exportFilename(for: record, mode: summaryMode), image: Image(systemName: "figure.tennis"))
-        ) {
+        // Summary omits the raw point-by-point table (includesRawPoints: false);
+        // "+ Raw Points" includes it. This distinction matters for the opponent
+        // disclosure: only the raw table exposes per-point "Opponent HR".
+        Button {
+            beginShare(
+                items: [TextExportActivityItem(text: summaryItem, subject: summarySubject)],
+                focal: focal,
+                includesRawPoints: false
+            )
+        } label: {
             Label("Share Summary", systemImage: "chart.bar.doc.horizontal")
         }
         if !record.stats.isEmpty {
-            ShareLink(
-                item: fullItem,
-                subject: Text(fullSubject),
-                message: Text(fullMessage),
-                preview: SharePreview(exportFilename(for: record, mode: fullMode), image: Image(systemName: "figure.tennis"))
-            ) {
+            Button {
+                beginShare(
+                    items: [TextExportActivityItem(text: fullItem, subject: fullSubject)],
+                    focal: focal,
+                    includesRawPoints: true
+                )
+            } label: {
                 Label("Share Summary + Raw Points", systemImage: "tablecells")
             }
+        }
+    }
+
+    /// Route an export through the per-export HealthKit disclosure. When the
+    /// export carries no health data for this perspective/kind, share directly;
+    /// otherwise show the "Share health data?" alert first. `focal: .me` +
+    /// `includesRawPoints: true` covers the recorder-framed HTML and manual paths.
+    private func beginShare(items: [Any], focal: Player, includesRawPoints: Bool) {
+        let fields = HealthExportConsent.presentFields(
+            in: record, focal: focal, includesRawPoints: includesRawPoints
+        )
+        let request = ShareRequest(items: items, healthFields: fields)
+        if fields.isEmpty {
+            activeShare = request
+        } else {
+            pendingHealthShare = request
         }
     }
 
@@ -635,10 +656,11 @@ struct MatchDetailView: View {
                     Menu {
                         if let htmlExportURL {
                             Section {
-                                ShareLink(
-                                    item: htmlExportURL,
-                                    preview: SharePreview(htmlExportFilename, image: Image(systemName: "safari"))
-                                ) {
+                                Button {
+                                    // Recorder-framed export (HR/steps are the
+                                    // recorder's), so disclose as `.me` + full.
+                                    beginShare(items: [htmlExportURL], focal: .me, includesRawPoints: true)
+                                } label: {
                                     Label("Interactive Web Page", systemImage: "safari")
                                 }
                             } header: {
@@ -646,13 +668,13 @@ struct MatchDetailView: View {
                             }
                         }
                         Section {
-                            shareLinks(for: .me)
+                            shareButtons(for: .me)
                         } header: {
                             Text("My Stats")
                                 .foregroundStyle(meColor)
                         }
                         Section {
-                            shareLinks(for: .opponent)
+                            shareButtons(for: .opponent)
                         } header: {
                             Text("Opponent's Stats")
                                 .foregroundStyle(oppColor)
@@ -672,6 +694,31 @@ struct MatchDetailView: View {
                 filenameMe: exportFilename(for: record, mode: .ai),
                 filenameOpponent: exportFilename(for: record, mode: .aiOpp)
             )
+        }
+        // Per-export HealthKit disclosure (Blocker 4). Naming + the recipient
+        // clause come from Core's single source; "Share" proceeds full-fidelity.
+        .alert(
+            "Share health data?",
+            isPresented: Binding(
+                get: { pendingHealthShare != nil },
+                set: { if !$0 { pendingHealthShare = nil } }
+            ),
+            presenting: pendingHealthShare
+        ) { request in
+            Button("Share") {
+                // Defer to the next runloop so the alert fully dismisses before
+                // the share sheet presents (a same-tick present can be dropped
+                // mid-transition).
+                DispatchQueue.main.async { activeShare = request }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: { request in
+            Text(HealthExportConsent.disclosure(
+                fields: request.healthFields, destination: .sharedReport
+            ).message)
+        }
+        .sheet(item: $activeShare) { request in
+            ShareSheet(activityItems: request.items) { activeShare = nil }
         }
     }
 
@@ -1113,4 +1160,55 @@ struct MatchDetailView: View {
                 .foregroundStyle(.secondary)
         }
     }
+}
+
+// MARK: - Share plumbing
+
+/// An export the user chose to share, plus the HealthKit-derived fields it
+/// carries (empty ⇒ no disclosure needed). `Identifiable` drives `.sheet(item:)`.
+private struct ShareRequest: Identifiable {
+    let id = UUID()
+    let items: [Any]
+    let healthFields: [HealthExportField]
+}
+
+/// Wraps a text export so the system share sheet still offers a Mail subject
+/// (parity with the previous `ShareLink(subject:)`).
+private final class TextExportActivityItem: NSObject, UIActivityItemSource {
+    private let text: String
+    private let subject: String
+
+    init(text: String, subject: String) {
+        self.text = text
+        self.subject = subject
+    }
+
+    func activityViewControllerPlaceholderItem(_ controller: UIActivityViewController) -> Any { text }
+
+    func activityViewController(
+        _ controller: UIActivityViewController,
+        itemForActivityType activityType: UIActivity.ActivityType?
+    ) -> Any? { text }
+
+    func activityViewController(
+        _ controller: UIActivityViewController,
+        subjectForActivityType activityType: UIActivity.ActivityType?
+    ) -> String { subject }
+}
+
+/// Minimal `UIActivityViewController` bridge so the share sheet can be presented
+/// programmatically after the disclosure — SwiftUI's `ShareLink` shares on tap
+/// with no pre-share hook. `onComplete` clears the presenting binding once the
+/// user finishes or cancels the share.
+private struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    var onComplete: () -> Void = {}
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, _, _, _ in onComplete() }
+        return controller
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
