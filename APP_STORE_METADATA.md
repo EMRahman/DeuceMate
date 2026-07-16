@@ -233,6 +233,11 @@ When completing the App Privacy questionnaire in App Store Connect:
   **user-initiated** and may include HealthKit-derived measurements. The user
   chooses the recipient or service, whose privacy terms then apply; the
   developer does not receive the export.
+- Before a health-bearing export leaves the device, DeuceMate presents an
+  **in-app disclosure** that names exactly which of those measurements the
+  export contains and reminds the user of the destination; the export proceeds
+  only on confirmation. Exports of matches with no recorded health data skip the
+  prompt. This is the informed-consent step for HealthKit data sharing.
 - HealthKit apps must have a privacy policy — see `PRIVACY_POLICY.md`, which
   includes a dedicated Health & Fitness Data section.
 
@@ -302,8 +307,12 @@ A user can deliberately export a match to share it with another person or an
 AI/LLM for match analysis, or create a manual archive backup. Those
 user-initiated exports may include HealthKit-derived measurements and are
 handled by the recipient, storage location, or AI service selected by the
-user. Local app data may separately be included in Apple's encrypted,
-system-managed device backup according to the user's device backup settings.
+user. Before such an export leaves the device, DeuceMate presents an in-app
+disclosure naming exactly which measurements it contains and the destination,
+and proceeds only if the user confirms; exports of matches without recorded
+health data skip the prompt. Local app data may separately be included in
+Apple's encrypted, system-managed device backup according to the user's device
+backup settings.
 
 LOCATION (OPTIONAL — Apple Watch)
 The optional "Check Changeover" feature requests "When In Use" location on

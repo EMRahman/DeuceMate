@@ -91,6 +91,36 @@ path.
 
 ---
 
+## Export-consent implementation update - 16 July 2026
+
+The consent gate from Blocker 4 is now implemented across every user-initiated
+export path (PRs #64–#67). Per the 16 July decision, exports stay
+**full-fidelity** — the change adds an informed **disclosure**, not stripping:
+
+- A single Core policy, `HealthExportConsent`, is the source of truth. It reports
+  exactly which HealthKit-derived fields a given export would expose
+  (`presentFields` for rendered text/HTML/AI; `archiveFields` for the raw manual
+  archive) and builds the "Share health data?" copy naming those fields plus the
+  recipient.
+- The iPhone match-detail share menu (summary/full/HTML, both perspectives), the
+  AI Coach hand-off, and the Settings manual-archive export each present that
+  disclosure before a health-bearing export leaves the device; a match with no
+  recorded health data exports without a prompt.
+- Rendered exports gate totals on `> 0` (they omit zeros); the raw archive
+  discloses any non-nil value, including a stored `0` that still ships in the JSON.
+
+- [x] Consent gate implemented for the share menu, AI hand-off, and manual
+  archive; disclosure copy centralised in Core.
+- [x] Proving tests: `HealthExportConsentTests` verifies the disclosure names
+  exactly the fields each representation exposes (per perspective and export
+  kind, and for the raw archive); a UI test confirms health-free matches skip the
+  prompt and share directly.
+- [ ] Verify the health-bearing disclosure on a real match (with recorded
+  HealthKit data) on signed hardware — manual-entry matches carry no health data
+  in the simulator, so this path is test-covered but not yet device-verified.
+
+---
+
 ## Blockers
 
 ### 1. Archive configuration fixed; signed validation pending
@@ -233,10 +263,16 @@ need resolution before the document can claim Health data stays on-device:
   heart rate were removed (see the implementation update above). The remaining
   Pulse Coach preferences in `UserDefaults` — the user-entered birth year and the
   manual max-HR override — are user-supplied values, not HealthKit-derived data.
-- Full-fidelity manual archive export can be saved to iCloud Drive.
-- Normal text, HTML, and AI exports can contain heart rate, zones, steps,
+- ~~Full-fidelity manual archive export can be saved to iCloud Drive.~~
+  **Addressed 16 July 2026:** the export now names iCloud Drive as a possible
+  destination and requires confirmation; it remains a user-chosen, user-owned
+  location, not developer-managed iCloud storage.
+- ~~Normal text, HTML, and AI exports can contain heart rate, zones, steps,
   calories, and distance. The opponent summary still receives match-level
-  movement/energy totals, and the AI hand-off has no health-specific consent.
+  movement/energy totals, and the AI hand-off has no health-specific consent.~~
+  **Resolved 16 July 2026:** every such export now presents the per-export
+  disclosure — including the opponent summary and the AI hand-off — before
+  leaving the device (see the implementation update above).
 
 Guideline 5.1.3 says apps may not store personal health information in iCloud.
 Apple's
@@ -251,8 +287,13 @@ iCloud archive stays HealthKit-stripped (unchanged); the manual full-fidelity
 archive and the match / HTML / AI-analysis exports may still contain the five
 HealthKit-derived fields, but only behind an explicit, informed consent step
 that names the exact data being shared and the recipient/purpose before it
-leaves DeuceMate. Implementation of the consent gate and its proving tests is
-still pending; the `[~]`/`[ ]` items below track that work.
+leaves DeuceMate.
+
+**Refinement (16 July 2026):** the consent is a per-export **disclosure that
+always includes health data** — a two-way *Share / Cancel* prompt, not a
+three-way include/exclude. An opt-out that strips health is deferred to future
+work. **Implemented 16 July 2026** (PRs #64–#67); see the export-consent
+implementation update above.
 
 Chosen disclosure posture and remaining work before submission:
 
@@ -260,24 +301,25 @@ Chosen disclosure posture and remaining work before submission:
   retaining a normally backed-up health-stripped phone archive. The remaining
   preferences are user-entered rather than HealthKit-derived (implemented and
   tested 15 July 2026; signed-device restore verification remains outstanding).
-- [~] The product copy now permits a user-initiated full-fidelity manual archive,
-  including HealthKit-derived values. This disclosure does not resolve the fact
-  that the Files picker can save it to iCloud Drive. **Direction (15 July 2026):**
-  gate the manual export behind the informed-consent step above; implementation
-  pending.
-- [~] The product copy now permits user-initiated match, HTML, and AI/LLM
-  analysis exports containing HealthKit-derived values. **Direction
-  (15 July 2026):** keep the health fields but add the specific informed-consent
-  step above before any such export or AI hand-off; implementation pending.
-- [ ] Add focused tests proving every cloud/export representation omits the
-  protected fields or, for the approved consent-gated representation, contains
-  only the fields the user expressly authorized.
+- [x] The manual full-fidelity archive export is now gated behind the
+  informed-consent step (PR #67, 16 July 2026). The disclosure names iCloud Drive
+  as a possible destination; the archive remains a user-chosen, user-owned
+  location, not developer-managed iCloud storage.
+- [x] User-initiated match, HTML, and AI/LLM analysis exports keep the health
+  fields but now show the specific informed-consent step before any such export
+  or AI hand-off (PRs #65–#66, 16 July 2026), including the opponent summary.
+- [x] Focused tests prove the consent-gated representation discloses exactly the
+  fields it exposes: `HealthExportConsentTests` cross-checks `presentFields`
+  against the rendered exporters (both perspectives, both export kinds) and
+  covers the raw archive's non-nil field set; a UI test confirms the health-free
+  path shares directly.
 - [x] Update the privacy policy and App Review notes to describe the current
   automatic-backup and user-export behavior without the false "never
-  transmitted" claim.
-- [ ] Re-audit the final App Privacy answers after the implementation and
-  consent design are settled. Do not submit while the policy and behavior
-  disagree.
+  transmitted" claim; the per-export disclosure is now documented there too
+  (16 July 2026).
+- [ ] Re-audit the final App Privacy answers now that the implementation and
+  consent design are settled (owner step in App Store Connect). Do not submit
+  while the policy and behavior disagree.
 
 ---
 
