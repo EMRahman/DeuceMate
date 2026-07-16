@@ -245,6 +245,15 @@ also limits disclosure to third parties and requires prior express consent.
 Treat these paths as unresolved rather than assuming user-controlled backup or
 the generic Share sheet makes every transfer compliant.
 
+**PRODUCT DECISION - 15 July 2026:** The owner chose to **consent-gate**
+health-bearing user exports rather than strip them. The automatic app-managed
+iCloud archive stays HealthKit-stripped (unchanged); the manual full-fidelity
+archive and the match / HTML / AI-analysis exports may still contain the five
+HealthKit-derived fields, but only behind an explicit, informed consent step
+that names the exact data being shared and the recipient/purpose before it
+leaves DeuceMate. Implementation of the consent gate and its proving tests is
+still pending; the `[~]`/`[ ]` items below track that work.
+
 Chosen disclosure posture and remaining work before submission:
 
 - [x] Exclude health-bearing local archive files from device backup, while
@@ -253,14 +262,15 @@ Chosen disclosure posture and remaining work before submission:
   tested 15 July 2026; signed-device restore verification remains outstanding).
 - [~] The product copy now permits a user-initiated full-fidelity manual archive,
   including HealthKit-derived values. This disclosure does not resolve the fact
-  that the Files picker can save it to iCloud Drive; confirm a compliant design
-  before submission.
+  that the Files picker can save it to iCloud Drive. **Direction (15 July 2026):**
+  gate the manual export behind the informed-consent step above; implementation
+  pending.
 - [~] The product copy now permits user-initiated match, HTML, and AI/LLM
-  analysis exports containing HealthKit-derived values. Review whether each
-  recipient and purpose is permitted, then add specific informed consent for
-  the exact data before it leaves DeuceMate.
+  analysis exports containing HealthKit-derived values. **Direction
+  (15 July 2026):** keep the health fields but add the specific informed-consent
+  step above before any such export or AI hand-off; implementation pending.
 - [ ] Add focused tests proving every cloud/export representation omits the
-  protected fields or, for an approved consent-gated representation, contains
+  protected fields or, for the approved consent-gated representation, contains
   only the fields the user expressly authorized.
 - [x] Update the privacy policy and App Review notes to describe the current
   automatic-backup and user-export behavior without the false "never
@@ -377,10 +387,18 @@ Codex ran the following checks on 11 and 13 July 2026:
 
 Remaining gaps:
 
-- [ ] The iOS targets now cover WatchConnectivity activation fallbacks and the
-  Manual Entry -> history -> detail empty states -> export no-Watch route. Add
-  app-target coverage for `PhoneStatsStore` persistence and iCloud integration;
-  the shared Core target already covers backup policy and export derivation.
+- [~] The iOS targets now cover WatchConnectivity activation fallbacks and the
+  Manual Entry -> history -> detail empty states -> export no-Watch route.
+  `PhoneStatsStoreTests` now also covers the on-device persistence contract:
+  the Health-sidecar split/merge and backup exclusion, tombstone persistence and
+  no-resurrection across reload (via `syncToPhone`/`mergeIncoming`), legacy
+  Documents migration into the backup-excluded canonical store, `appendMatch`
+  same-id update semantics, manual `.replace` import, and read-failure ≠ empty
+  archive on both the history and tombstone files. The shared Core target already
+  covers backup policy and export derivation. **Still device-only:** the iCloud
+  ubiquity-container push/restore path uses
+  `FileManager.url(forUbiquityContainerIdentifier:)`, which is not injectable and
+  must be verified on signed hardware (see the device-verification gaps below).
 - [ ] A signed App Store archive has not passed Organizer validation.
 - [ ] HealthKit, iCloud restore, WatchConnectivity, foreground announcements,
   and backup exclusion have not been verified on a real iPhone and Watch.
@@ -390,11 +408,17 @@ Remaining gaps:
 
 Non-blocking Release build warnings to clean up:
 
-- [ ] `MatchExporter.swift` calls main-actor-isolated helpers from
-  `nonisolated` synchronous functions. Resolve these before Swift language-mode
-  changes turn the warnings into errors.
-- [ ] Replace deprecated iOS 17 `onChange(of:perform:)` uses in Settings and the
-  app entry point.
+- [x] `MatchExporter.swift` calls main-actor-isolated helpers from
+  `nonisolated` synchronous functions. **Resolved 15 July 2026:** the whole
+  pure string-builder type is now `nonisolated`, so its private helpers are
+  non-isolated too and the public builders call them without a main-actor
+  warning. No behavior change; the iOS unit-test build is warning-free for this
+  file.
+- [x] Replace deprecated iOS 17 `onChange(of:perform:)` uses in Settings and the
+  app entry point. **Resolved 15 July 2026:** the four sites in `DeuceMateApp`
+  and `SettingsView` now use the two-parameter `onChange(of:_:)` form. The
+  `.build` grep and the iOS test build report zero `onChange(of:perform:)`
+  deprecation warnings.
 
 ---
 
