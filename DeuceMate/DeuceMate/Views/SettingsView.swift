@@ -167,7 +167,7 @@ struct SettingsView: View {
             Button("Export") { prepareManualArchiveExport() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The JSON file includes your full match archive and may include HealthKit-derived heart rate, steps, distance, and calories when those were recorded.")
+            Text(archiveExportDisclosureMessage)
         }
         .fileExporter(
             isPresented: $showArchiveExporter,
@@ -643,6 +643,17 @@ struct SettingsView: View {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate]
         return "deucemate_archive_\(formatter.string(from: Date())).json"
+    }
+
+    /// The archive-export alert body. When any archived match carries HealthKit
+    /// data, use Core's single disclosure source (naming exactly the raw fields
+    /// present, `.archiveFile` recipient); otherwise a health-free export note.
+    private var archiveExportDisclosureMessage: String {
+        let fields = HealthExportConsent.archiveFields(in: store.history)
+        guard !fields.isEmpty else {
+            return "Export your full match archive as a JSON file. Choose where to save it in the Files app or an iCloud Drive folder."
+        }
+        return HealthExportConsent.disclosure(fields: fields, destination: .archiveFile).message
     }
 
     private func prepareManualArchiveExport() {

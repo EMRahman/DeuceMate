@@ -193,8 +193,13 @@ opponent export names only the fields it really carries.
   the embedded HTML AI card. (This is the biggest gap — surfaces 2 & 3.)
 - **PR 3 — `[iOS]` AI Coach consent.** Gate `AICoachSheet` entry behind the
   disclosure.
-- **PR 4 — `[iOS]` manual archive copy.** Point the existing export alert at
-  `HealthExportConsent.disclosure` so its field list matches the others.
+- **PR 4 — `[iOS]` manual archive copy.** Source the "Export Match Archive"
+  alert body from Core. The archive serialises **raw** records, so it uses a
+  dedicated `HealthExportConsent.archiveFields(in:)` (union across the archive;
+  heart rate / steps / calories / distance, **never** derived zones) feeding
+  `disclosure(…, destination: .archiveFile)`; a health-free archive shows a
+  plain export note instead. The alert stays always-shown (unlike the per-match
+  skip) because it doubles as the bulk-export confirmation.
 - **PR 5 — `docs:`** Update `PRIVACY_POLICY.md`, `docs/privacy.html`,
   `APP_STORE_METADATA.md`, and App Review notes to describe the per-export
   disclosure; flip the Blocker 4 export items in `SUBMISSION_REVIEW.md` and
