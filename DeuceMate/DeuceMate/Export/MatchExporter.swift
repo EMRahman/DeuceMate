@@ -3,18 +3,22 @@
 import Foundation
 import DeuceMateCore
 
-struct MatchExporter {
+// The whole type is a pure, main-actor-free string builder: every member runs
+// off the main actor so exports can be generated on a background queue. Marking
+// the type `nonisolated` makes the private helpers non-isolated too, so the
+// public `nonisolated` builders can call them without a main-actor warning.
+nonisolated struct MatchExporter {
 
     // MARK: - Public API
 
     /// Summarised stats only. No AI references.
-    nonisolated static func summaryExport(for record: MatchRecord, maxHR: Int = 190, focal: Player = .me) -> String {
+    static func summaryExport(for record: MatchRecord, maxHR: Int = 190, focal: Player = .me) -> String {
         buildDataSections(for: record, includeRawPoints: false, focal: focal, maxHR: maxHR)
     }
 
     /// Summarised stats + raw point-by-point table. No AI references.
     /// Only useful when outcome tracking was enabled.
-    nonisolated static func fullExport(for record: MatchRecord, maxHR: Int = 190, focal: Player = .me) -> String {
+    static func fullExport(for record: MatchRecord, maxHR: Int = 190, focal: Player = .me) -> String {
         buildDataSections(for: record, includeRawPoints: true, focal: focal, maxHR: maxHR)
     }
 
@@ -24,7 +28,7 @@ struct MatchExporter {
     /// shared with the opponent for coaching tips on their side of the match.
     /// `playerNTRP` is used to tailor the prompt preamble to the player's level
     /// (e.g. "3.0–3.5") so the AI gives appropriately targeted advice.
-    nonisolated static func aiPromptExport(
+    static func aiPromptExport(
         for record: MatchRecord,
         maxHR: Int = 190,
         focal: Player = .me,
@@ -47,7 +51,7 @@ struct MatchExporter {
 
     // MARK: - Core builders
 
-    private nonisolated static func buildDataSections(for record: MatchRecord, includeRawPoints: Bool, focal: Player, maxHR: Int) -> String {
+    private static func buildDataSections(for record: MatchRecord, includeRawPoints: Bool, focal: Player, maxHR: Int) -> String {
         var sections: [String] = []
         let title = focal == .opponent
             ? "# DeuceMate Match Export (Opponent Perspective)"

@@ -33,10 +33,10 @@ struct DeuceMateApp: App {
                 .environmentObject(syncService)
                 .environmentObject(announcementService)
                 .environment(\.appTheme, AppTheme(rawValue: themeRawValue) ?? .default)
-                .onChange(of: themeRawValue) { newValue in
+                .onChange(of: themeRawValue) { _, newValue in
                     syncService.sendTheme(newValue)
                 }
-                .onChange(of: scenePhase) { phase in
+                .onChange(of: scenePhase) { _, phase in
                     // Resume any initial restore, or push the local archive
                     // backup, whenever the app returns to the foreground.
                     if phase == .active {

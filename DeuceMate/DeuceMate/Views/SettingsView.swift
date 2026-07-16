@@ -155,7 +155,7 @@ struct SettingsView: View {
                 Button("Done") { dismiss() }
             }
         }
-        .onChange(of: syncService.lastSyncDate) { newDate in
+        .onChange(of: syncService.lastSyncDate) { _, newDate in
             guard syncStatus == .inFlight,
                   let requestedAt = syncRequestedAt,
                   let date = newDate,
@@ -269,7 +269,7 @@ struct SettingsView: View {
             // Appearance
             ThemeSkinPicker(selection: selectedTheme)
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                .onChange(of: themeRawValue) { newValue in
+                .onChange(of: themeRawValue) { _, newValue in
                     syncService.sendTheme(newValue)
                 }
             Text(SettingsCopy.appearanceTheme.text)
