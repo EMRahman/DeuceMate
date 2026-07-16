@@ -156,6 +156,58 @@ final class HealthExportConsentTests: XCTestCase {
         }
     }
 
+    // MARK: - archiveFields (raw manual archive, no derived zones)
+
+    func test_archiveFieldsUnionsAcrossRecordsAndNeverIncludesZones() {
+        let hrOnly = record(
+            heartRateBPM: 156, stepsCumulative: nil,
+            totalSteps: nil, totalDistanceMeters: nil, totalCaloriesKcal: nil
+        )
+        let movementOnly = record(
+            heartRateBPM: nil, stepsCumulative: nil,
+            totalSteps: 900, totalDistanceMeters: 100, totalCaloriesKcal: 50
+        )
+        // Union across records; heart rate is present but zones (derived, not
+        // stored in the raw archive) are never disclosed.
+        XCTAssertEqual(
+            HealthExportConsent.archiveFields(in: [hrOnly, movementOnly]),
+            [.heartRate, .steps, .calories, .distance]
+        )
+    }
+
+    func test_archiveFieldsEmptyForHealthFreeArchive() {
+        let none = record(
+            heartRateBPM: nil, stepsCumulative: nil,
+            totalSteps: nil, totalDistanceMeters: nil, totalCaloriesKcal: nil
+        )
+        XCTAssertTrue(HealthExportConsent.archiveFields(in: [none, none]).isEmpty)
+        XCTAssertTrue(HealthExportConsent.archiveFields(in: []).isEmpty)
+    }
+
+    func test_archiveFieldsIncludesNonNilZeroTotals() {
+        // The archive serialises raw records, so a stored 0 total is still a
+        // HealthKit key in the JSON and must be disclosed — unlike rendered
+        // exports (presentFields), which omit 0 totals.
+        let zeroTotals = record(
+            heartRateBPM: 150, stepsCumulative: nil,
+            totalSteps: 0, totalDistanceMeters: 0, totalCaloriesKcal: 0
+        )
+        XCTAssertEqual(
+            HealthExportConsent.archiveFields(in: [zeroTotals]),
+            [.heartRate, .steps, .calories, .distance]
+        )
+    }
+
+    func test_archiveFieldsExcludesTrulyAbsentTotals() {
+        // nil (not 0) totals are omitted from the archive JSON, so they are not
+        // disclosed. Only the per-point heart rate is present here.
+        let hrOnly = record(
+            heartRateBPM: 150, stepsCumulative: nil,
+            totalSteps: nil, totalDistanceMeters: nil, totalCaloriesKcal: nil
+        )
+        XCTAssertEqual(HealthExportConsent.archiveFields(in: [hrOnly]), [.heartRate])
+    }
+
     // MARK: - disclosure fidelity
 
     func test_disclosureNamesExactlyTheGivenFields() {

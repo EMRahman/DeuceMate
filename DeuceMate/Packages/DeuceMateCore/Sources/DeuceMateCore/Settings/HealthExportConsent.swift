@@ -97,6 +97,41 @@ public enum HealthExportConsent {
         return fields
     }
 
+    /// The HealthKit-derived fields present across a full-fidelity manual archive
+    /// of `records`. The archive serialises **raw** `MatchRecord`s, so it stores
+    /// heart rate, steps, calories, and distance but **never** derived heart-rate
+    /// zones — hence a dedicated union rather than `presentFields`. Empty ⇒ no
+    /// health to disclose. Order follows `HealthExportField.allCases`.
+    public static func archiveFields(in records: [MatchRecord]) -> [HealthExportField] {
+        var union: Set<HealthExportField> = []
+        for record in records {
+            union.formUnion(rawStoredFields(in: record))
+            if union.count == 4 { break } // the four raw categories are all present
+        }
+        return HealthExportField.allCases.filter { union.contains($0) }
+    }
+
+    /// The raw stored health categories in one record — heart rate, steps,
+    /// calories, distance (never derived zones). The manual archive serialises
+    /// raw records as-is, so **any non-nil value counts**, including a stored `0`
+    /// total (`WorkoutManager` can record 0 totals). This deliberately differs
+    /// from `presentFields`/the rendered exporters, which omit `0` totals — a
+    /// `0` is still a HealthKit key in the archive JSON, so it must be disclosed.
+    private static func rawStoredFields(in record: MatchRecord) -> Set<HealthExportField> {
+        var fields: Set<HealthExportField> = []
+        if record.totalSteps != nil { fields.insert(.steps) }
+        if record.totalCaloriesKcal != nil { fields.insert(.calories) }
+        if record.totalDistanceMeters != nil { fields.insert(.distance) }
+        // Per-point heart rate and steps in a single pass; stop once both found.
+        let needSteps = !fields.contains(.steps)
+        for stat in record.stats {
+            if stat.heartRateBPM != nil { fields.insert(.heartRate) }
+            if needSteps, stat.stepsCumulative != nil { fields.insert(.steps) }
+            if fields.contains(.heartRate) && fields.contains(.steps) { break }
+        }
+        return fields
+    }
+
     /// The disclosure title + message naming exactly `fields` and the recipient
     /// implied by `destination`. Callers must pass a non-empty `fields` (they
     /// obtain it from `presentFields` and skip the dialog when it is empty).
