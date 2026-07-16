@@ -1,7 +1,7 @@
 # Privacy Policy for DeuceMate
 
 **Effective Date:** June 11, 2026
-**Last Updated:** July 15, 2026
+**Last Updated:** July 16, 2026
 
 ## Overview
 
@@ -104,7 +104,8 @@ DeuceMate lets you **choose** to share your own match data:
 Important points about these features:
 
 - They are **always initiated by you**. DeuceMate never shares, exports, or uploads match data on its own.
-- These exports may include HealthKit-derived heart rate, heart-rate zones, steps, distance, and calories when recorded. Consider this before choosing a recipient or storage location.
+- These exports may include HealthKit-derived heart rate, heart-rate zones, steps, distance, and calories when recorded.
+- **DeuceMate asks you to confirm before health data leaves the device.** When the match you are exporting, sharing, or handing to an AI includes any of those recorded measurements, DeuceMate shows a prompt naming exactly which ones are included and reminding you they will reach the recipient, storage location, or AI service you choose; the export proceeds only if you confirm. A match with no recorded health data exports without the prompt.
 - When you export, share, or send a prompt to another app, that data **leaves your device** and is then handled by the app or service you chose. Once it reaches a third-party AI tool or another app, **that third party's privacy policy — not this one — governs how the data is used.** Please review their policies before sending data you consider sensitive.
 - DeuceMate has no developer-controlled server. To show which AI apps are available, the App checks for their app URL schemes locally on your device; no information about your installed apps is collected or sent to the developer.
 
