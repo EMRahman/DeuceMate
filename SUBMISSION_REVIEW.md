@@ -41,9 +41,13 @@ copy only; it makes no Swift implementation changes:
   on first launch. Once authorized, the HealthKit integration applies
   automatically to each match. Scoring remains available when access is denied
   or revoked; no in-app toggle is planned.
-- [ ] This copy change does **not** exclude local files or preferences from
+- [x] ~~This copy change does **not** exclude local files or preferences from
   Apple device backups, add health-specific export consent, or change what any
-  export contains. Blocker 4 therefore remains open.
+  export contains. Blocker 4 therefore remains open.~~ **Superseded:** the
+  device-backup work (15 July) excludes the Health-bearing local files, and the
+  export-consent gate (16 July, PRs #64–#68) added the health-specific
+  disclosure. Blocker 4's code is resolved; only owner device/App-Store-Connect
+  steps remain.
 
 ---
 
@@ -401,8 +405,14 @@ OS versions, subject to App Store Connect's regional result.
 - [ ] Complete the current questionnaire accurately instead of forcing the old
   4+ assumption. See Apple's
   [age-rating definitions](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions).
-- [ ] Update `APP_STORE_METADATA.md` to the rating App Store Connect calculates.
-- [ ] Do not describe DeuceMate as diagnosing or treating a medical condition.
+- [~] Update `APP_STORE_METADATA.md` to the rating App Store Connect calculates.
+  **16 July 2026:** the metadata now states the expected **9+** (Health/Wellness
+  topics) instead of the stale 4+; replace with the exact ASC-calculated rating
+  once the questionnaire is run.
+- [x] Do not describe DeuceMate as diagnosing or treating a medical condition.
+  **Audited 16 July 2026:** no diagnose/treat/medical-condition language in the
+  public or in-app copy — the coaching insights are tennis-performance advice
+  (one clinical-sounding verb in `USER_GUIDE.md` softened to "recommends").
 
 ---
 
