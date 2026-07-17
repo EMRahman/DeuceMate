@@ -24,6 +24,8 @@ DeuceMate is a lightweight, native Apple Watch app for scoring tennis matches in
 | **One tap to send your match data to an AI coach.** | **A structured prompt — with full context — ready for any AI.** |
 | <img src="docs/screenshots/11-ai-coach-stats.png" width="380" alt="Match stats included in the AI export"> | <img src="docs/screenshots/12-ai-coach-raw-data.png" width="380" alt="Full point-by-point data table in the AI export"> |
 | **Complete stats analysis included automatically.** | **Every point, in order — so the AI spots patterns you missed.** |
+| <img src="docs/screenshots/13-web-export-points.png" width="380" alt="Interactive HTML web export — points momentum chart and point-by-point list"> | <img src="docs/screenshots/14-web-export-stats.png" width="380" alt="Interactive HTML web export — Me-vs-Opponent match statistics"> |
+| **Share a match as one self-contained web page — no app required.** | **The full stats breakdown, filterable by set, right in the browser.** |
 
 ## Why DeuceMate Exists
 
