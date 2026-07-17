@@ -16,7 +16,7 @@ statistics. The submission is the iOS app (`ehsan.DeuceMate`); the watchOS app
 **Subtitle:** Tennis Score Keeper + Stats
 **Primary Category:** Sports
 **Secondary Category:** Utilities
-**Age Rating:** 4+ (No Objectionable Content)
+**Age Rating:** Expected **9+** — calculated by the App Store Connect questionnaire (Health/Wellness topics: heart-rate zones, calorie display, fitness coaching). Do not force the old 4+ assumption; confirm the exact rating in App Store Connect.
 **Platforms:** iPhone (iOS 17.0+) with Apple Watch app (watchOS 9.0+)
 
 ---
@@ -351,7 +351,7 @@ mail@ehsanrahman.com
 - [ ] Privacy policy page live and accessible (includes HealthKit section)
 - [ ] Support URL or email verified
 - [ ] App Privacy questionnaire completed ("Data Not Collected")
-- [ ] Age rating completed (4+)
+- [ ] Age rating completed via the current questionnaire (expected 9+ — Health/Wellness topics; not 4+)
 - [ ] Pricing tier selected (Free)
 - [ ] Territories/regions selected
 - [ ] Build archived from Xcode and uploaded

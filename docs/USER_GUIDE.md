@@ -219,7 +219,7 @@ After a match with sufficient outcome data (≥ 20 categorised points), the engi
 1. **Self-inflicted loss share** — fires when ≥55% of points lost were unforced errors or double faults; calls out reliability as the primary lever
 2. **Per-set UE drift** — compares unforced-error rate between consecutive sets; surfaces fatigue-driven shot-selection changes
 3. **Double-fault leakage** — flags when double faults exceed 0.5 per service game, framing each one as a free point given away
-4. **Pressure-point drop** — detects a ≥20-percentage-point win-rate gap between normal points and "big" points (break / deuce / tiebreak) and prescribes simplifying shot choice under pressure
+4. **Pressure-point drop** — detects a ≥20-percentage-point win-rate gap between normal points and "big" points (break / deuce / tiebreak) and recommends simplifying shot choice under pressure
 5. **Rally-length signal** — compares win rates at S+1 vs. extended rallies; recommends finishing points earlier when the gap is ≥15 percentage points
 6. **Second-serve vulnerability** — flags when the first-serve win rate is ≥20 percentage points above the second-serve win rate, suggesting a slower spin-heavy second serve
 7. **Return unforced errors** — fires when ≥40% of your return-game losses were return UEs, recommending a safer deep crosscourt return target
