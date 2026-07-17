@@ -108,7 +108,18 @@ place to test and the safest place to change.
 | `WebExport/MatchHTMLExporter.swift` | ~50 | Assembles ONE self-contained, offline HTML document for a match: encodes the view model and injects it (script-safely) into the template, with the static `#root` fallback from `MatchWebStaticFallback`. Optional `aiPromptMe`/`aiPromptOpponent` surface the AI Coach card. Pure and unit-testable. | Web export |
 | `WebExport/MatchWebStaticFallback.swift` | ~405 | The no-JS view of the export (progressive enhancement): renders a styled static summary into `#root` — banner, header, **four server-rendered SVG momentum charts** (one per interactive preset: Points Won/Lost outcome scatter and Ending Shots All Won/Lost shot scatter), each with its scatter overlay + colour/label/count pills, and the **TV-style Me/Opp split-bar comparison for the whole match plus a per-set breakdown** (mirrors `MatchDetailView` and the viewer's bars) — so no-JS previews (iOS Quick Look, local-file opens) show a near-complete report instead of a blank page. `staticChartSVG(_:scatter:)` mirrors the JS `buildSVG`/`stepPath`/`symbol` geometry, and `pointsWonBar`/`comparisonCard`/`splitBar` mirror the JS comparison bars; the viewer JS clears `#root` and rebuilds on load. Reuses the viewer's CSS. | Web export |
 
-Plus `Package.swift` (~25 lines) — the package manifest (name, platforms, test target). No logic.
+Plus `Package.swift` (~35 lines) — the package manifest (name, platforms, library/executable
+products, test target).
+
+### Command-line tools — `DeuceMate/Packages/DeuceMateCore/Sources/` (2 files)
+
+Reusable dev tooling, built via `swift run` from the package directory (not part of the
+iOS/watchOS app targets). See `docs/screenshots/README.md` for usage.
+
+| File | ~Lines | What it does | Feature(s) |
+|---|---:|---|---|
+| `DeuceMateArchiveTool/main.swift` | ~120 | CLI over `ManualMatchArchiveBackup`/`MatchHTMLExporter`: `list` inspects an archive JSON file (index, UUID, date, format, duration, set scores, stat count), `webexport` renders one match's interactive HTML export to disk, `seed` writes a decoded archive into a simulator app container's canonical `MatchArchive/` files (via `HealthSidecarPolicy`) for visual QA of the import feature without driving the file-picker UI. | Manual archive backup, Web export, tooling |
+| `DeuceMateWebSnapshot/main.swift` | ~150 | macOS-only headless renderer: loads a local HTML file (or wraps a plain `.txt` file in a simple styled dark page) into an off-screen `WKWebView`, runs a sequence of steps — click a button by label (e.g. the web export's Stats/Points tab toggle) or `scroll:<0-100>` to a percentage of the page height — capturing a PNG via `WKWebView.takeSnapshot` after each step. No macOS Screen Recording permission needed since it's an in-process view snapshot, not a display capture. Generic; not DeuceMate-specific. | Web export, AI-coach prompt, tooling |
 
 ## 4. Tests (36 files)
 
@@ -142,7 +153,7 @@ expected values rewritten to make a failure pass — that requires explicit appr
 | `SimulatedGameStatsTests.swift` | Simulates realistic whole matches to exercise stats end-to-end. |
 | `MatchWebExportTests.swift` | The interactive HTML export: view-model shape, mirrored outcome/serving/ending-shot counts, serving-category rules and palette, full per-point match score + server rendering, realistic completed-set integration, recorder-only HR, pointer dragging, and self-contained output. |
 
-**App-target tests (7 files):** `DeuceMate Watch AppTests/DeuceMate_Watch_AppTests.swift`
+**App-target tests (11 files):** `DeuceMate Watch AppTests/DeuceMate_Watch_AppTests.swift`
 (~1,140 lines — watch-specific behaviour: tiebreak serve rotation, changeover events,
 compass bearings), `DeuceMate Watch AppTests/StatsStoreTests.swift` (exercises the real
 watch `StatsStore` against a temp file: absent-file vs. corrupt-file semantics, the
@@ -151,10 +162,19 @@ refuse-to-overwrite-on-unreadable guard, valid round-trips, and repeated backup 
 degradation, import repair, unreadable-main suspension, and backup flags),
 `DeuceMateTests/DeuceMateTests.swift` (iPhone WatchConnectivity activation fallbacks
 and paired/unpaired Manual Entry copy), `DeuceMateUITests/DeuceMateUITests.swift`
-(Manual Entry -> history -> truthful detail empty states -> export), and three
-remaining UI-test placeholders: `DeuceMate Watch AppUITests/DeuceMate_Watch_AppUITests.swift`,
-`DeuceMate Watch AppUITests/DeuceMate_Watch_AppUITestsLaunchTests.swift`,
-`DeuceMateUITests/DeuceMateUITestsLaunchTests.swift`.
+(Manual Entry -> history -> truthful detail empty states -> export), two remaining
+UI-test placeholders (`DeuceMate Watch AppUITests/DeuceMate_Watch_AppUITests.swift`,
+`DeuceMateUITests/DeuceMateUITestsLaunchTests.swift`), plus three screenshot-capture
+suites (not regression tests — see `docs/screenshots/README.md`):
+`DeuceMateTests/AIPromptExportCaptureTests.swift` (calls `MatchExporter.aiPromptExport`
+directly against a real imported archive record and writes the real prompt text to a
+host file — sidesteps `AICoachSheet` never rendering the prompt on-screen),
+`DeuceMateUITests/ScreenshotTests.swift` (navigates a seeded match's detail view —
+expanded Points Graph with HR/Steps overlays and Points Won/Lost filters, Pulse Coach,
+Outcome Breakdown — capturing via `XCUIScreen.main.screenshot()`), and
+`DeuceMate Watch AppUITests/LiveMatchScreenshotTests.swift` (drives a live match via
+real swipe gestures, handling the first-launch HealthKit sheet, a leftover
+in-progress match, and odd-game changeover prompts, for the watch scoreboard shot).
 
 ---
 

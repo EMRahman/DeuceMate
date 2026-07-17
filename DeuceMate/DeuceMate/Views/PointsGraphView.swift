@@ -979,7 +979,7 @@ private struct PointsGraphScatterControls: View {
 
     private var quickSelectRow: some View {
         HStack(spacing: 6) {
-            quickSelectChip(label: "Points Won \(pointsWonCount)", color: .green, isOn: isPointsWonActive) {
+            quickSelectChip(label: "Points Won \(pointsWonCount)", color: .green, isOn: isPointsWonActive, id: "points-won-chip") {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     if isPointsWonActive {
                         selectedMyOutcomes = []
@@ -990,7 +990,7 @@ private struct PointsGraphScatterControls: View {
                     }
                 }
             }
-            quickSelectChip(label: "Points Lost \(pointsLostCount)", color: .red, isOn: isPointsLostActive) {
+            quickSelectChip(label: "Points Lost \(pointsLostCount)", color: .red, isOn: isPointsLostActive, id: "points-lost-chip") {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     if isPointsLostActive {
                         selectedMyOutcomes = []
@@ -1126,6 +1126,7 @@ private struct PointsGraphScatterControls: View {
         label: String,
         color: Color,
         isOn: Bool,
+        id: String? = nil,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -1138,6 +1139,7 @@ private struct PointsGraphScatterControls: View {
                 .overlay(Capsule().strokeBorder(isOn ? color.opacity(0.45) : Color.clear, lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(id ?? "")
     }
 
     private func scatterChip(
@@ -1269,7 +1271,7 @@ private struct PointsGraphToggleRow: View {
         VStack(alignment: .center, spacing: 6) {
             if hasStepsData {
                 VStack(alignment: .center, spacing: 4) {
-                    toggleChip(label: "Steps", systemImage: "figure.walk", color: .green, isOn: $showSteps)
+                    toggleChip(label: "Steps", systemImage: "figure.walk", color: .green, isOn: $showSteps, id: "steps-overlay-toggle")
                     if showSteps {
                         stepsModePicker
                             .transition(.opacity.combined(with: .move(edge: .top)))
@@ -1278,7 +1280,7 @@ private struct PointsGraphToggleRow: View {
             }
             if hasHeartRateData {
                 VStack(alignment: .center, spacing: 4) {
-                    toggleChip(label: "Heart Rate", systemImage: "heart.fill", color: .red, isOn: $showHeartRate)
+                    toggleChip(label: "Heart Rate", systemImage: "heart.fill", color: .red, isOn: $showHeartRate, id: "heart-rate-overlay-toggle")
                     if showHeartRate {
                         hrModePicker
                             .transition(.opacity.combined(with: .move(edge: .top)))
@@ -1365,7 +1367,8 @@ private struct PointsGraphToggleRow: View {
         label: String,
         systemImage: String,
         color: Color,
-        isOn: Binding<Bool>
+        isOn: Binding<Bool>,
+        id: String? = nil
     ) -> some View {
         Button {
             withAnimation(.easeInOut(duration: 0.2)) { isOn.wrappedValue.toggle() }
@@ -1381,6 +1384,7 @@ private struct PointsGraphToggleRow: View {
             .overlay(Capsule().strokeBorder(isOn.wrappedValue ? color.opacity(0.4) : Color.clear, lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(id ?? "")
     }
 }
 
@@ -1530,6 +1534,7 @@ struct PointsGraphView: View {
         .buttonStyle(.plain)
         .padding(6)
         .accessibilityLabel("Expand Points Graph")
+        .accessibilityIdentifier("expand-points-graph")
     }
 
     /// Caption under the inline chart naming what the full-screen view adds.
