@@ -1,18 +1,27 @@
 // LiveMatchScreenshotTests.swift — drives a real live match on the watch via
 // gesture automation (the app's whole live-scoring model is swipe-based), for
 // the docs/screenshots/README.md watch scoreboard (04) and hero composite (01)
-// shots. Not part of the regular regression suite; run explicitly via
-// `xcodebuild test -only-testing:"DeuceMate Watch AppUITests"/LiveMatchScreenshotTests`
-// against a watch simulator paired with a booted phone simulator (`xcrun simctl
-// pair`), so the phone mirrors the match live over WatchConnectivity.
+// shots. Opt-in only (DEUCEMATE_CAPTURE_SCREENSHOTS=1): this target is part of
+// the default "DeuceMate Watch App" scheme, and this test takes minutes and
+// mutates live app state, so it must never run as part of an ordinary test
+// pass. Run explicitly via `DEUCEMATE_CAPTURE_SCREENSHOTS=1 xcodebuild test
+// -only-testing:"DeuceMate Watch AppUITests"/LiveMatchScreenshotTests` against
+// a watch simulator paired with a booted phone simulator (`xcrun simctl pair`),
+// so the phone mirrors the match live over WatchConnectivity.
 import XCTest
 
-private let screenshotOutputDir = "/private/tmp/claude-501/-Users-ehsanrahman-Library-Mobile-Documents-com-apple-CloudDocs-Git2-DeuceMate/ef616c1f-7d65-43b2-8a63-04f9d90681c1/scratchpad/watch-shots"
+/// Override with DEUCEMATE_SCREENSHOT_OUTPUT_DIR; defaults to a temp folder.
+private let screenshotOutputDir = ProcessInfo.processInfo.environment["DEUCEMATE_SCREENSHOT_OUTPUT_DIR"]
+    ?? NSTemporaryDirectory() + "deucemate-screenshots"
 
 final class LiveMatchScreenshotTests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["DEUCEMATE_CAPTURE_SCREENSHOTS"] == "1",
+            "Opt-in only — set DEUCEMATE_CAPTURE_SCREENSHOTS=1 to run this marketing-screenshot helper; see docs/screenshots/README.md."
+        )
     }
 
     @MainActor

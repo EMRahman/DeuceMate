@@ -1,23 +1,35 @@
 // ScreenshotTests.swift — captures fresh marketing/doc screenshots from a real
-// imported match. Not part of the regular regression suite; run explicitly via
-// `xcodebuild test -only-testing:DeuceMateUITests/ScreenshotTests`. See
-// docs/screenshots/README.md for the full capture workflow (seeding the
+// imported match. Opt-in only (DEUCEMATE_CAPTURE_SCREENSHOTS=1): this target is
+// part of the default "DeuceMate" scheme, so an ungated run would fail on any
+// simulator whose archive isn't seeded with `targetMatchID`. Run explicitly via
+// `DEUCEMATE_CAPTURE_SCREENSHOTS=1 xcodebuild test -only-testing:DeuceMateUITests/ScreenshotTests`.
+// See docs/screenshots/README.md for the full capture workflow (seeding the
 // archive, running this suite, rendering the AI-prompt shots).
 import XCTest
 
 /// Absolute host path screenshots are written to — the test process runs
 /// unsandboxed on the simulator host, so a plain file write reaches the Mac's
-/// disk directly (same technique fastlane's `snapshot` uses).
-private let screenshotOutputDir = "/private/tmp/claude-501/-Users-ehsanrahman-Library-Mobile-Documents-com-apple-CloudDocs-Git2-DeuceMate/ef616c1f-7d65-43b2-8a63-04f9d90681c1/scratchpad/ios-shots"
+/// disk directly (same technique fastlane's `snapshot` uses). Override with
+/// DEUCEMATE_SCREENSHOT_OUTPUT_DIR; defaults to a temp folder.
+private let screenshotOutputDir = ProcessInfo.processInfo.environment["DEUCEMATE_SCREENSHOT_OUTPUT_DIR"]
+    ?? NSTemporaryDirectory() + "deucemate-screenshots"
 
-/// UUID of the match seeded via `DeuceMateArchiveTool seed` — record #1 (2026-07-15)
-/// from the real imported archive, chosen for its dramatic 3-set comeback score.
-private let targetMatchID = "5ABCB95C-1E5E-4554-B2B6-503C7C85F0C0"
+/// UUID of the match to capture — seeded into the archive beforehand via
+/// `DeuceMateArchiveTool seed`. Override with DEUCEMATE_TARGET_MATCH_ID;
+/// defaults to record #1 (2026-07-15) from the real imported archive used to
+/// capture the currently-committed shots, chosen for its dramatic 3-set
+/// comeback score.
+private let targetMatchID = ProcessInfo.processInfo.environment["DEUCEMATE_TARGET_MATCH_ID"]
+    ?? "5ABCB95C-1E5E-4554-B2B6-503C7C85F0C0"
 
 final class ScreenshotTests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["DEUCEMATE_CAPTURE_SCREENSHOTS"] == "1",
+            "Opt-in only — set DEUCEMATE_CAPTURE_SCREENSHOTS=1 (and seed the archive) to run this marketing-screenshot helper; see docs/screenshots/README.md."
+        )
     }
 
     @MainActor
@@ -38,7 +50,10 @@ final class ScreenshotTests: XCTestCase {
         for _ in 0..<6 where !matchRow.exists {
             app.swipeUp()
         }
-        XCTAssertTrue(matchRow.waitForExistence(timeout: 10))
+        try XCTSkipUnless(
+            matchRow.waitForExistence(timeout: 10),
+            "Archive not seeded with match \(targetMatchID) — run `DeuceMateArchiveTool seed` first; see docs/screenshots/README.md."
+        )
         matchRow.tap()
 
         // --- Expanded Points Graph: 02 (HR+Steps overlays), 07 (Points Won), 08 (Points Lost) ---

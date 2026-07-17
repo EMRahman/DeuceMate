@@ -46,16 +46,21 @@ xcrun simctl get_app_container <device-udid> ehsan.DeuceMate data
 cd DeuceMate/Packages/DeuceMateCore
 swift run DeuceMateArchiveTool seed /path/to/archive.json "<that path>/Library/Application Support" replace
 
-# 2. Update `targetMatchID` in ScreenshotTests.swift to the UUID of the match
-#    you want to show (get it from `DeuceMateArchiveTool list`), then run:
+# 2. Run it — opt-in only (DEUCEMATE_CAPTURE_SCREENSHOTS=1), since this test
+#    target ships in the default "DeuceMate" scheme and must never run (or
+#    fail) as part of an ordinary test pass. DEUCEMATE_TARGET_MATCH_ID
+#    defaults to the match used for the currently-committed shots; override
+#    it with a UUID from `DeuceMateArchiveTool list` to capture a different one.
 cd ../../DeuceMate
+DEUCEMATE_CAPTURE_SCREENSHOTS=1 \
+DEUCEMATE_SCREENSHOT_OUTPUT_DIR=/tmp/ios-shots \
 xcodebuild test -project DeuceMate.xcodeproj -scheme "DeuceMate" \
   -destination "platform=iOS Simulator,id=<device-udid>" \
   -only-testing:DeuceMateUITests/ScreenshotTests
 ```
-Screenshots land in the directory hardcoded as `screenshotOutputDir` at the
-top of the test file — point that at wherever you want them, then copy the
-ones you want into this folder under the names in the table above.
+Screenshots land in `DEUCEMATE_SCREENSHOT_OUTPUT_DIR` (defaults to a temp
+folder if unset) — copy the ones you want into this folder under the names in
+the table above.
 
 ### AI-coach prompt shots (10, 11, 12)
 
@@ -67,6 +72,12 @@ app's "Copy Prompt to Clipboard" button uses — and writes the real generated
 text to a file:
 
 ```bash
+# Opt-in only (DEUCEMATE_CAPTURE_SCREENSHOTS=1) — this target ships in the
+# default "DeuceMate" scheme, and DEUCEMATE_ARCHIVE_PATH has no safe default
+# (it would otherwise depend on a personal file), so both must be set explicitly.
+DEUCEMATE_CAPTURE_SCREENSHOTS=1 \
+DEUCEMATE_ARCHIVE_PATH=/path/to/archive.json \
+DEUCEMATE_SCREENSHOT_OUTPUT_DIR=/tmp/ios-shots \
 xcodebuild test -project DeuceMate.xcodeproj -scheme "DeuceMate" \
   -destination "platform=iOS Simulator,id=<device-udid>" \
   -only-testing:DeuceMateTests/AIPromptExportCaptureTests
@@ -122,6 +133,11 @@ xcrun simctl pair <watch-udid> <phone-udid>
 xcrun simctl boot <phone-udid>
 xcrun simctl boot <watch-udid>
 
+# Opt-in only (DEUCEMATE_CAPTURE_SCREENSHOTS=1) — this target ships in the
+# default "DeuceMate Watch App" scheme, and this test takes minutes and
+# mutates live app state, so it must never run as part of an ordinary pass.
+DEUCEMATE_CAPTURE_SCREENSHOTS=1 \
+DEUCEMATE_SCREENSHOT_OUTPUT_DIR=/tmp/watch-shots \
 xcodebuild test -project DeuceMate.xcodeproj -scheme "DeuceMate Watch App" \
   -destination "platform=watchOS Simulator,id=<watch-udid>" \
   -only-testing:"DeuceMate Watch AppUITests/LiveMatchScreenshotTests"
