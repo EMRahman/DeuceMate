@@ -125,6 +125,26 @@ export path (PRs #64–#67). Per the 16 July decision, exports stay
 
 ---
 
+## Configuration re-audit - 18 July 2026
+
+A three-surface re-audit (project configuration, code behavior, and store
+metadata/docs, including every change merged after 16 July — PRs #68–#70) found
+**no new blockers**. Changes from that pass:
+
+- [x] Corrected two "Verified implementation details" entries below (the Watch
+  privacy-manifest reason codes and the iOS icon appearance variants were
+  overstated).
+- [x] Recorded three newly verified configuration facts below (`WKApplication`
+  in the generated Watch Info.plist, the `LSApplicationQueriesSchemes` ↔
+  `AICoachLauncher` match, and the WatchConnectivity transit shape).
+- [x] Added the iPhone-side HealthKit prompt to the Blocker 3 device matrix and
+  the final smoke test — the previous matrix was Watch-only.
+- [x] Reconciled the remaining "iCloud backup" wording in `SUPPORT_PAGE.md`,
+  `docs/support.html`, and the `docs/index.html` badge to the iCloud Drive
+  archive terminology agreed in Item 5.
+
+---
+
 ## Blockers
 
 ### 1. Archive configuration fixed; signed validation pending
@@ -249,6 +269,12 @@ Required work:
 - [ ] Test fresh-install grant, denial, partial authorization, revocation, and
   HealthKit-unavailable behavior. (The date-of-birth authorization case was
   removed on 15 July 2026 — the app no longer reads it.)
+- [ ] Test the iPhone's own HealthKit read prompt (`HealthKitHRFetcher`),
+  triggered the first time the user selects the Per-point avg heart-rate view
+  in the Points Graph or Pulse Coach section: verify grant, denial, and
+  HealthKit-unavailable states on a health-bearing match, with scoring and all
+  non-heart-rate statistics unaffected. (Added 18 July 2026 — the earlier
+  matrix covered only the Watch prompt.)
 
 ### 4. Health-derived data needs an iCloud and sharing compliance decision
 
@@ -478,10 +504,14 @@ Non-blocking Release build warnings to clean up:
 
 - [x] The prior background-audio keep-alive was removed. Announcements are
   foreground-only and scores received while backgrounded are skipped.
-- [x] Both app icons are 1024 x 1024 RGB images with no alpha channel, including
-  the iOS light/dark/tinted variants.
-- [x] Privacy manifests are bundled for both targets with current UserDefaults
-  `CA92.1` and System Boot Time `35F9.1` reason codes.
+- [x] Both app icons are 1024 x 1024 RGB images with no alpha channel. The iOS
+  set ships light and tinted assets; the dark appearance reuses the light PNG
+  per the asset catalog's `Contents.json`.
+- [x] Privacy manifests are bundled for both targets. The iPhone manifest
+  declares UserDefaults `CA92.1` and System Boot Time `35F9.1`
+  (`ProcessInfo.systemUptime` is used only in `LiveScoreboardView.swift`); the
+  Watch manifest declares `CA92.1` only, which is correct because the Watch app
+  uses no boot-time API.
 - [x] Location use is heading-only; the code does not request GPS location.
 - [x] `ITSAppUsesNonExemptEncryption = false` is declared on both targets.
 - [x] The iPhone target correctly omits `NSHealthUpdateUsageDescription`; it
@@ -492,6 +522,20 @@ Non-blocking Release build warnings to clean up:
 - [x] No production force-unwraps were found in the source audit.
 - [x] The empty AccentColor asset falls back to system blue; this is polish, not
   an App Store blocker, because runtime theming is handled by `AppTheme`.
+- [x] `WKApplication` is `true` in the generated Watch `Info.plist` — verified
+  in a Release build product on 18 July 2026. The key is injected by Xcode's
+  generated-Info.plist path (`GENERATE_INFOPLIST_FILE = YES`), so its absence
+  from the source tree is not an upload risk.
+- [x] `LSApplicationQueriesSchemes` in the iPhone `Info.plist` declares exactly
+  the seven AI-app schemes `AICoachLauncher` probes with `canOpenURL`
+  (`chatgpt`, `claude`, `googlegemini`, `perplexity`, `ms-copilot`, `poe`,
+  `grok`), so no scheme is probed undeclared and the launcher cannot silently
+  report every app as uninstalled.
+- [x] WatchConnectivity transit uses `sendMessage`, `transferUserInfo`, and
+  `transferFile` (the latter with an ephemeral temporary-directory copy that is
+  deleted after hand-off and never backed up); `updateApplicationContext` is
+  not used. This is local device-to-device sync, consistent with the disclosed
+  privacy posture.
 
 ---
 
@@ -565,6 +609,9 @@ search results.
   access starts or resumes one Tennis workout per match and records only the
   measurements the user authorized.
 - [ ] HealthKit denial/revocation never blocks scoring or corrupts a match.
+- [ ] On iPhone, the Per-point avg heart-rate view's own HealthKit prompt
+  handles grant, denial, and unavailable states without affecting the rest of
+  the match detail.
 - [ ] iCloud disabled/signed out never blocks local history; a later sign-in
   backs up and restores the stripped archive correctly.
 - [ ] The automatic app-managed iCloud archive contains no HealthKit-derived
