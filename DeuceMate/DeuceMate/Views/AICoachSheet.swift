@@ -108,6 +108,7 @@ struct AICoachSheet: View {
                     } label: {
                         Label("Copy Prompt to Clipboard", systemImage: "doc.on.clipboard")
                     }
+                    .accessibilityIdentifier("copy-prompt-to-clipboard")
 
                     ShareLink(
                         item: activePrompt,
