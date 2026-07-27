@@ -149,6 +149,11 @@ Settings → Backup & Transfer. The file format and the import rules are pure lo
 document picker and the confirmation dialogs, persisting through
 `PhoneStatsStore.importManualArchive`.
 
+> The manual archive is one of several health-bearing surfaces gated by a
+> per-export consent disclosure. For the full picture of where HealthKit data is
+> stripped, excluded, or gated across the whole app, see
+> [health-data-flow.md](health-data-flow.md).
+
 - **Export Match Archive** writes a versioned JSON document
   (`format: "deucemate.matchArchive"`, `schemaVersion: 1`) of the phone's
   records, newest-first. Unlike the iCloud backup snapshot — which strips the
