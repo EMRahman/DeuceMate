@@ -91,6 +91,68 @@ final class DeuceMateUITests: XCTestCase {
         )
     }
 
+    /// Positive counterpart to the skip-when-empty gate above: a match that DOES
+    /// carry HealthKit data must surface the "Share health data?" disclosure before
+    /// anything leaves the device. Health only exists on a real watch-recorded
+    /// match, so this test requires the archive to be seeded with a health-bearing
+    /// match (the default seed match carries HR + steps) via `DeuceMateArchiveTool
+    /// seed` — see docs/screenshots/README.md and docs/architecture/health-data-flow.md
+    /// §6. It SKIPS cleanly when the archive is not seeded rather than failing.
+    @MainActor
+    func testHealthBearingMatchShowsConsentDisclosureBeforeSharing() throws {
+        let targetMatchID = ProcessInfo.processInfo.environment["DEUCEMATE_TARGET_MATCH_ID"]
+            ?? "5ABCB95C-1E5E-4554-B2B6-503C7C85F0C0"
+
+        let app = XCUIApplication()
+        app.launch()
+
+        let matchRow = app.buttons["match-row-\(targetMatchID)"]
+        for _ in 0..<6 where !matchRow.exists {
+            app.swipeUp()
+        }
+        try XCTSkipUnless(
+            matchRow.waitForExistence(timeout: 10),
+            "Archive not seeded with health-bearing match \(targetMatchID) — run `DeuceMateArchiveTool seed` first; see docs/screenshots/README.md."
+        )
+        matchRow.tap()
+
+        let disclosure = app.staticTexts["Share health data?"]
+
+        // 1) AI Coach hand-off: gated at sheet entry with the disclosure, so the
+        // sheet must NOT open until the user confirms.
+        let aiCoach = app.buttons
+            .matching(NSPredicate(format: "label CONTAINS[c] 'ai coach'"))
+            .firstMatch
+        XCTAssertTrue(aiCoach.waitForExistence(timeout: 10))
+        aiCoach.tap()
+        XCTAssertTrue(
+            disclosure.waitForExistence(timeout: 5),
+            "A health-bearing match must show the health disclosure before the AI Coach hand-off"
+        )
+        app.buttons["Cancel"].tap()
+        XCTAssertFalse(
+            app.buttons["Copy Prompt to Clipboard"].waitForExistence(timeout: 2),
+            "Cancelling the disclosure must not open the AI Coach sheet"
+        )
+
+        // 2) Sharing: the disclosure must precede the system share sheet.
+        let export = app.buttons["Export match"]
+        XCTAssertTrue(export.waitForExistence(timeout: 10))
+        export.tap()
+        let shareSummary = app.buttons["Share Summary"].firstMatch
+        XCTAssertTrue(shareSummary.waitForExistence(timeout: 5))
+        shareSummary.tap()
+        XCTAssertTrue(
+            disclosure.waitForExistence(timeout: 5),
+            "A health-bearing match must show the health disclosure before sharing"
+        )
+        app.buttons["Cancel"].tap()
+        XCTAssertFalse(
+            app.otherElements["ActivityListView"].waitForExistence(timeout: 2),
+            "Cancelling the disclosure must not present the share sheet"
+        )
+    }
+
     @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
