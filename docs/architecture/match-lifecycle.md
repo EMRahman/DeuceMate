@@ -109,7 +109,14 @@ with the momentum chart and set bands, a Stats/Points tab toggle, All/Set N filt
 TV-style Me-vs-Opp comparison, a point-by-point list, and an optional AI Coach card.
 The page loads zero external resources and is recorder-framed; progressive enhancement
 ships a static, no-JS report so even iOS Quick Look shows a readable preview.
-*Files: text/AI export — `MatchExporter`, `AICoachSheet`, `AICoachLauncher`; HTML export —
+Whenever an export would carry HealthKit data (heart rate, steps, calories,
+distance), a per-export **"Share health data?"** disclosure names exactly what is
+included and the user confirms before it leaves the device — the deliberate,
+consented exception to "health never leaves the device unstripped." The disclosure
+is skipped for a health-free match. See [health-data-flow.md](health-data-flow.md)
+for the full strip / exclude / gate map.
+*Files: consent gate — `HealthExportConsent` (Core), `MatchDetailView` (`beginShare`/`beginAICoach`);
+text/AI export — `MatchExporter`, `AICoachSheet`, `AICoachLauncher`; HTML export —
 `MatchDetailView` (share action) + Core `WebExport/` (`MatchWebViewModel`(+`Build`/`Comparison`/`AICoach`),
 `MatchHTMLExporter`, `MatchWebTemplate`, `MatchWebStaticFallback`, `WebExportColors`);
 see [INTERACTIVE_HTML_EXPORT_PLAN.md](../features/INTERACTIVE_HTML_EXPORT_PLAN.md).*

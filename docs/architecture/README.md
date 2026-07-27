@@ -6,7 +6,7 @@ Swift. Everything here is written in plain English and rendered by GitHub direct
 (the diagrams are [Mermaid](https://mermaid.js.org/) blocks inside Markdown, so they
 stay diffable and AI assistants can update them alongside code changes).
 
-**The four documents:**
+**The five documents:**
 
 | Document | Question it answers |
 |---|---|
@@ -14,6 +14,7 @@ stay diffable and AI assistants can update them alongside code changes).
 | [file-inventory.md](file-inventory.md) | What does every single file do, and which feature does it serve? *(the review guardrail)* |
 | [sync-and-data-flow.md](sync-and-data-flow.md) | What exactly travels between the watch and the phone, and in which direction? |
 | [match-lifecycle.md](match-lifecycle.md) | What happens to one tennis match from first point to AI coaching export? |
+| [health-data-flow.md](health-data-flow.md) | Where does HealthKit data go, and where is it stripped, excluded, or gated? *(the App Store 5.1.3(ii) map)* |
 
 ---
 
@@ -93,6 +94,10 @@ flowchart TB
 **How to read it:** solid arrows are data moving at runtime; dotted arrows mean
 "built on top of". Rounded nodes are systems *outside* DeuceMate's code — Apple
 services and other apps.
+
+The `HealthKit → … → iCloud Drive` path carries a compliance requirement of its
+own (health data must never reach iCloud). Exactly where it is stripped, excluded,
+or gated is mapped in [health-data-flow.md](health-data-flow.md).
 
 ## The five ownership rules
 
