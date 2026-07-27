@@ -155,10 +155,10 @@ A: Yes. In the iPhone app, go to **Settings → Backup & Transfer** and use **Ex
 - **Merge** keeps your current matches and adds the ones from the file. If a match is in both, it keeps the more complete copy (so you won't lose health data or a finished result), and it restores any match you'd previously deleted if it's in the file.
 - **Replace** swaps your iPhone archive for exactly what's in the file. Matches not in the file are removed from the iPhone (though any still on your Apple Watch can sync back), so the app asks you to confirm first.
 
-This is a manual file you control, and is separate from the automatic iCloud backup.
+This is a manual file you control, and is separate from the automatic archive DeuceMate keeps in your personal iCloud Drive.
 
 **Q: How do I delete my data?**
-A: In the iPhone app you can swipe to delete individual matches from your history. Deleting the app removes its on-device data; the iCloud backup lives in your own Apple ID account and can be managed in iOS Settings under your name → iCloud.
+A: In the iPhone app you can swipe to delete individual matches from your history. Deleting the app removes its on-device data; the automatic iCloud Drive archive lives in your own Apple ID account and can be managed in iOS Settings under your name → iCloud.
 
 ---
 
