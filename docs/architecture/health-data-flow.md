@@ -83,10 +83,15 @@ flowchart LR
   distance. `ScoreViewModel` stamps `heartRateBPM`/`stepsCumulative` onto each
   tracked point and attaches the three totals when the match is finalised.
 - **Phone (read-only, display only).** `HealthKitHRFetcher` reads heart-rate
-  samples straight from HealthKit to draw the momentum-chart overlay. It **never
-  writes** into any store — so the phone re-derives HR for display (♻️) rather
-  than depending on backed-up values. This is why stripping health from the
-  phone's archive costs the user nothing visible.
+  samples straight from HealthKit to draw the momentum chart's **HR overlay**. It
+  **never writes** into any store — so that overlay is re-derived live (♻️) rather
+  than read from storage. This re-derivation covers the HR chart *only*: it does
+  **not** reconstruct the *stored* per-point HR/steps (the "My HR" / steps rows in
+  the point-by-point list) or the step/calorie/distance totals (the match overview
+  and the text/AI exports). In normal use those are served full-fidelity from the
+  local Health sidecar (§3), so stripping the *canonical archive* is invisible — but
+  after an iCloud restore they are intentionally absent (the backup is stripped)
+  until a watch re-sync or a full-fidelity manual import heals them.
 
 ---
 
