@@ -98,7 +98,8 @@ private struct HRZoneWinRateChart: View {
             Chart(zoneStats, id: \.zone) { stat in
                 BarMark(
                     x: .value("Zone", stat.zone.displayLabel),
-                    y: .value("Win %", winPct(stat))
+                    yStart: .value("Baseline", 0.0),
+                    yEnd: .value("Win %", winPct(stat))
                 )
                 .foregroundStyle(HRZoneStyle.color(for: stat.zone))
                 .annotation(position: .top, alignment: .center, spacing: 4) {
@@ -107,7 +108,10 @@ private struct HRZoneWinRateChart: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .chartYScale(domain: 0...100)
+            .chartYScale(
+                domain: 0...100,
+                range: .plotDimension(startPadding: 16, endPadding: 0)
+            )
             .chartYAxis {
                 AxisMarks(values: [0, 50, 100]) { value in
                     AxisGridLine()
@@ -119,7 +123,10 @@ private struct HRZoneWinRateChart: View {
                 }
             }
             .chartXAxis {
-                AxisMarks(values: .automatic) { value in
+                AxisMarks(
+                    position: .bottom,
+                    values: zoneStats.map { $0.zone.displayLabel }
+                ) { value in
                     AxisTick()
                     AxisValueLabel(anchor: .top) {
                         if let label = value.as(String.self),
@@ -133,9 +140,9 @@ private struct HRZoneWinRateChart: View {
                             }
                         }
                     }
+                    .offset(y: -5)
                 }
             }
-            .chartPlotStyle { $0.padding(.top, 16) }
             .frame(height: 170)
         }
         .padding(.vertical, 4)
