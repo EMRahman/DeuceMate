@@ -182,11 +182,11 @@ Required work:
 - [x] Remove the redundant Watch app archive entry from the iPhone scheme.
 - [x] Remove the explicit `Apple Development` identity from the Watch Release
   configuration and let automatic distribution signing choose the identity.
-- [ ] Create a signed archive in Xcode Organizer and confirm it is classified as
+- [x] Create a signed archive in Xcode Organizer and confirm it is classified as
   an iOS app archive with only `DeuceMate.app` at `Products/Applications`.
-- [ ] Run **Distribute App -> App Store Connect -> Validate App** successfully.
+- [x] Run **Distribute App -> App Store Connect -> Validate App** successfully.
 
-### 2. iCloud Documents source configuration fixed; signed/device verification pending
+### 2. iCloud Documents source and signing verified; device verification pending
 
 **CODEX FINDING:** Before this fix,
 `DeuceMate/DeuceMate/DeuceMate.entitlements` declared `CloudDocuments` and
@@ -211,9 +211,13 @@ generated simulated entitlement payload contained all three declarations.
 
 The recovery sheet now says iCloud Drive and directs the user through
 **Settings -> Apple Account -> iCloud -> Drive -> Sync this iPhone**, followed
-by the per-app DeuceMate switch under **Saved to iCloud**. A simulator build
-does not prove production-container assignment or distribution-signed
-entitlements, so those checks remain open.
+by the per-app DeuceMate switch under **Saved to iCloud**.
+
+**OWNER VERIFICATION - 1 August 2026:** The production App ID has iCloud enabled
+with the `iCloud.ehsan.DeuceMate` container assigned. Xcode 26.2 generated a new
+App Store distribution profile containing `CloudDocuments`, both required
+container arrays, and the production container environment. The resulting
+signed iOS archive passed App Store Connect validation.
 
 Required work:
 
@@ -222,9 +226,9 @@ Required work:
 - [x] Verify the source and generated simulator entitlements contain both
   `com.apple.developer.icloud-container-identifiers` and
   `com.apple.developer.ubiquity-container-identifiers`.
-- [ ] Verify the distribution-signed product entitlements contain both
+- [x] Verify the distribution-signed product entitlements contain both
   container arrays and use the production `iCloud.ehsan.DeuceMate` container.
-- [ ] Confirm iCloud Documents and the `iCloud.ehsan.DeuceMate` container are
+- [x] Confirm iCloud Documents and the `iCloud.ehsan.DeuceMate` container are
   enabled for the production App ID in the Apple Developer portal.
 - [x] Change the in-app recovery instructions from iCloud Backup to iCloud
   Drive, including the correct Settings path.
@@ -462,6 +466,10 @@ Codex ran the following checks on 11 and 13 July 2026:
   `https://emrahman.github.io/DeuceMate/privacy.html`,
   `https://emrahman.github.io/DeuceMate/support.html`, and
   `https://emrahman.github.io/DeuceMate/`.
+- [x] On 1 August 2026, an Xcode 26.2 signed iOS archive used App Store
+  distribution profiles for the iPhone and embedded Watch products, included
+  the production iCloud Documents entitlements for `iCloud.ehsan.DeuceMate`,
+  and passed **Validate App** in Organizer.
 
 Remaining gaps:
 
@@ -477,7 +485,6 @@ Remaining gaps:
   ubiquity-container push/restore path uses
   `FileManager.url(forUbiquityContainerIdentifier:)`, which is not injectable and
   must be verified on signed hardware (see the device-verification gaps below).
-- [ ] A signed App Store archive has not passed Organizer validation.
 - [ ] HealthKit, iCloud restore, WatchConnectivity, foreground announcements,
   and backup exclusion have not been verified on a real iPhone and Watch.
 - [ ] Run the full manual matrix on a TestFlight build: fresh install, upgrade,
@@ -574,13 +581,13 @@ search results.
 ### Build and compliance
 
 - [ ] Blockers 1-4 resolved in code, configuration, tests, and public copy.
-- [ ] Archive and validate with Xcode 26 / the iOS 26 SDK or newer. Submissions
+- [x] Archive and validate with Xcode 26 / the iOS 26 SDK or newer. Submissions
   have required this toolchain since 28 April 2026; see
   [Upcoming Requirements](https://developer.apple.com/news/upcoming-requirements/).
 - [ ] Test the validated build on a real iPhone and Apple Watch, then TestFlight.
-- [ ] HealthKit and iCloud production capabilities/container verified for the
-  App ID and signed products.
-- [ ] Final bundle ID `ehsan.DeuceMate` explicitly accepted as permanent.
+- [x] HealthKit and iCloud production capabilities/container verified for the
+  iPhone and Watch App IDs and signed products.
+- [x] Final bundle ID `ehsan.DeuceMate` explicitly accepted as permanent.
 
 ### Store record
 
