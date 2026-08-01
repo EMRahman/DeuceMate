@@ -22,6 +22,8 @@
 	<false/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>DeuceMate reads heart rate samples recorded during your matches so it can show per-point averages in your match analysis.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>DeuceMate’s Apple Watch app records tennis matches as workouts in Apple Health to preserve your workout activity and fitness totals.</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>chatgpt</string>
