@@ -82,6 +82,11 @@ flowchart LR
   `HKWorkoutSession` for the match and reads heart rate, calories, steps, and
   distance. `ScoreViewModel` stamps `heartRateBPM`/`stepsCumulative` onto each
   tracked point and attaches the three totals when the match is finalised.
+  Whether any of that happens depends on a permission the app cannot set, so
+  `WorkoutManager` also publishes `healthAccess` (the workout *share* status —
+  read authorization is deliberately unknowable) and the start screen states it
+  up front via `MatchTrackingStatus`: nothing captured here can be added after
+  the match, so "Health: Off" has to be visible before the first point.
 - **Phone (read-only, display only).** `HealthKitHRFetcher` reads heart-rate
   samples straight from HealthKit to draw the momentum chart's **HR overlay**. It
   **never writes** into any store — so that overlay is re-derived live (♻️) rather

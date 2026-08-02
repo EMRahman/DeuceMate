@@ -47,6 +47,10 @@ struct DeuceMateApp: App {
                         viewModel.pauseHeadingMonitoring()
                     } else if scenePhase == .active {
                         viewModel.startHeadingMonitoring()
+                        // Health permission may have changed from the iPhone
+                        // while we were away; the start-screen tracking strip
+                        // must not keep claiming access we no longer have.
+                        viewModel.workoutManager.refreshHealthAccess()
                     }
                 }
         }

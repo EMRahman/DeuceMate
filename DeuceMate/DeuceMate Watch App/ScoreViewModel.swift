@@ -121,6 +121,19 @@ class ScoreViewModel: ObservableObject {
         }
     }
 
+    /// The three "what will this match record?" indicators — point tracking,
+    /// Health access, and Pulse Coach calibration — resolved once here so the
+    /// start-screen strip and the settings summary can never disagree.
+    /// Derivation itself lives in `MatchTrackingStatus` (Core, unit-tested).
+    var trackingStatuses: [MatchTrackingStatus] {
+        MatchTrackingStatus.all(
+            pointTrackingEnabled: statsTrackingEnabled,
+            healthAccess: workoutManager.healthAccess,
+            birthYear: userBirthYear,
+            maxHROverride: userMaxHROverride
+        )
+    }
+
     /// Re-reads the persisted Pulse Coach values into the published properties so
     /// SwiftUI bindings reflect phone-pushed changes. Called from the
     /// `.pulseCoachSettingsChanged` observer below.

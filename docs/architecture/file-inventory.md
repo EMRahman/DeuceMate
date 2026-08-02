@@ -16,7 +16,7 @@ as a size signal — a "small helper" that is suddenly 800 lines deserves a look
 
 ---
 
-## 1. Apple Watch app — `DeuceMate/DeuceMate Watch App/` (13 files)
+## 1. Apple Watch app — `DeuceMate/DeuceMate Watch App/` (14 files)
 
 The scorer. Everything about running a live match happens here.
 
@@ -24,12 +24,13 @@ The scorer. Everything about running a live match happens here.
 |---|---:|---|---|
 | `ScoreViewModel.swift` | 1,930 | The live-match brain. Holds the current score, serve rotation, undo, tiebreak and changeover state; applies the shared scoring rules; manages match start/end, saving, resuming after a crash; holds every synced setting; validates and applies score commands arriving from the phone. The single most consequential file in the repo. | Live scoring, settings, sync, compass changeover, Pulse Coach settings |
 | `ContentView.swift` | 940 | The live scoreboard screen: score display, swipe gestures (up/down = point, left = undo, right = stats), momentum strip, changeover prompts and compass indicator. | Live scoring, compass changeover |
-| `HomeView.swift` | 903 | The start screen and pre-match setup flow: singles/doubles, player names, who serves first, match format, court-end confirmation for the compass feature. | Match setup |
+| `HomeView.swift` | ~915 | The start screen and pre-match setup flow: singles/doubles, player names, who serves first, match format, court-end confirmation for the compass feature. Now scrolls, and shows the Points/Health/Pulse tracking strip under Start Match plus the same three as a summary at the top of the settings sheet. | Match setup, tracking status |
+| `TrackingStatusStrip.swift` | ~130 | Draws the pre-match tracking indicators from `MatchTrackingStatus`: a three-chip strip (Points · Health · Pulse, colour-coded on/degraded/off, tapping opens Settings) and the fuller row form used inside Settings. Observes `WorkoutManager` directly because Health access is a system permission the view model does not republish. | Tracking status |
 | `MatchStatsView.swift` | 630 | On-watch statistics screen shown during/after a match: serve, return, break points, errors, rally depth, heart-rate zones; set and player filters. | Stats |
 | `PointCategorySheet.swift` | 260 | The slide-up sheet after each point (when outcome tracking is on): pick how the point ended — winner, forced/unforced error, double fault — then the ending shot. | Point categorisation |
 | `MatchHistoryView.swift` | 220 | The watch's recent-matches list (newest 25): open stats, resume an in-progress match, swipe to delete. | Match history |
 | `AppTheme.swift` | 220 | The watch's five court-inspired colour themes; the chosen theme syncs to the phone. | Theming |
-| `WorkoutManager.swift` | 170 | Runs the HealthKit workout session during a match: live heart rate, calories, steps, distance per set. | Health/workout tracking |
+| `WorkoutManager.swift` | ~195 | Runs the HealthKit workout session during a match: live heart rate, calories, steps, distance per set. Also publishes `healthAccess` (the workout share permission, mapped onto Core's `HealthAccess`) so the start screen can say whether the next match will record health data. | Health/workout tracking, tracking status |
 | `Sync/WatchMatchSyncService.swift` | 290 | The watch's end of the watch↔phone bridge: sends match checkpoints, full history, manifests and announcements; receives settings, score commands and delete commands from the phone. | Sync |
 | `StatsStore.swift` | ~120 | Saves backup-excluded match history to a JSON file on the watch; trims to the newest 25 matches; thread-safe. Distinguishes a genuinely-empty archive from an unreadable/corrupt one and refuses to overwrite (or broadcast) the latter, so a transient read failure can't erase stored matches. | Match history (persistence) |
 | `BackupExcludedFileWriter.swift` | ~30 | Shared watch helper for atomic Class B JSON writes that reapplies and verifies device-backup exclusion. Used by match history and transient live-match state. | Match history, live state, health/privacy |
@@ -63,7 +64,7 @@ matches; it does not score them (except by sending validated commands to the wat
 | `DeuceMateApp.swift` | 50 | The iPhone app's entry point: wires up the archive store, sync service and announcer; resumes initial restore or backup push whenever the app returns to the foreground. | App plumbing |
 | `ContentView.swift` | 15 | The navigation root — essentially just opens the archive list. | App plumbing |
 
-## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (36 files)
+## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (38 files)
 
 The rulebook both apps use. No screens; pure logic — which makes it the cheapest
 place to test and the safest place to change.
@@ -96,6 +97,7 @@ place to test and the safest place to change.
 | `Sync/MatchStorageLocation.swift` | 50 | Derives each match's badge — on both devices / phone only / watch only — from the watch's reported list vs. the phone's archive. | Archive (badges) |
 | `Sync/WatchHistoryCap.swift` | 15 | One number: the watch keeps its newest **25** matches. Lives here so the watch (which enforces it) and the phone (which explains it) can't drift. | Match history |
 | `Settings/SettingsCopy.swift` | 40 | The one-line description under every setting, written once so the watch and phone settings screens can't show different wording. | Settings |
+| `Settings/MatchTrackingStatus.swift` | ~200 | The rule behind the pre-match "what will this match record?" indicators. Resolves point tracking, Health access, and Pulse Coach into `.on` / `.partial` / `.off` with a short state badge, an SF Symbol, and one line of fix-it copy. `HealthAccess` is the portable stand-in for the HealthKit permission (the watch maps `HKHealthStore` onto it, so the package stays HealthKit-free). Pulse Coach is `.partial` when it would run on the 190 bpm default rather than a calibrated max HR. | Tracking status, settings |
 | `Settings/ICloudBackupCopy.swift` | ~95 | The iCloud backup status line and the rule for choosing it. Six cases: `backedUp`, `notBackedUp`, `unavailable`, `restoring`, `pendingRestore` (backup found, user prompt pending), `pendingUpload` (pushed but daemon upload not yet confirmed). `current(isEnabled:isAvailable:isRestoring:hasPendingRestore:isUploaded:)`. | iCloud backup |
 | `Settings/HealthExportConsent.swift` | ~150 | The single source for the per-export HealthKit disclosure (Blocker 4). `presentFields(in:focal:includesRawPoints:)` reports which of the five health fields a rendered export (text/HTML/AI) would expose for that perspective and kind — totals gate on `> 0`, opponent HR / per-point-only steps need the raw-point table, zones are recorder-only, empty ⇒ skip the dialog. `archiveFields(in:)` is the union across a full-fidelity manual archive of raw records — heart rate, steps, calories, distance, but **never** derived zones; it counts **any non-nil** value (including a stored `0` total, which the archive serialises as-is), unlike the rendered `> 0` gating. `disclosure(fields:destination:)` builds the "Share health data?" copy naming exactly those fields plus the recipient (`archiveFile`, or `sharedReport` for text/HTML/AI-Coach — all reach the share sheet, so its clause names the broad recipient set). Does not strip — exports stay full-fidelity. | Health/privacy, exports |
 | `Persistence/StatsStoring.swift` | 25 | The tiny storage contract (load/save/append/remove) that the watch's and phone's stores both implement. | Archive, match history |
@@ -121,13 +123,13 @@ iOS/watchOS app targets). See `docs/screenshots/README.md` for usage.
 | `DeuceMateArchiveTool/main.swift` | ~120 | CLI over `ManualMatchArchiveBackup`/`MatchHTMLExporter`: `list` inspects an archive JSON file (index, UUID, date, format, duration, set scores, stat count), `webexport` renders one match's interactive HTML export to disk, `seed` writes a decoded archive into a simulator app container's canonical `MatchArchive/` files (via `HealthSidecarPolicy`) for visual QA of the import feature without driving the file-picker UI. | Manual archive backup, Web export, tooling |
 | `DeuceMateWebSnapshot/main.swift` | ~150 | macOS-only headless renderer: loads a local HTML file (or wraps a plain `.txt` file in a simple styled dark page) into an off-screen `WKWebView`, runs a sequence of steps — click a button by label (e.g. the web export's Stats/Points tab toggle) or `scroll:<0-100>` to a percentage of the page height — capturing a PNG via `WKWebView.takeSnapshot` after each step. No macOS Screen Recording permission needed since it's an in-process view snapshot, not a display capture. Generic; not DeuceMate-specific. | Web export, AI-coach prompt, tooling |
 
-## 4. Tests (42 files)
+## 4. Tests (44 files)
 
 Tests are the correctness record. The interesting ones all live against the shared
 package (no simulator needed). Red flags in any PR: tests deleted, skipped, or
 expected values rewritten to make a failure pass — that requires explicit approval.
 
-**Package tests — `DeuceMate/Packages/DeuceMateCore/Tests/DeuceMateCoreTests/` (30 files):**
+**Package tests — `DeuceMate/Packages/DeuceMateCore/Tests/DeuceMateCoreTests/` (32 files):**
 
 | File | Covers |
 |---|---|
@@ -149,6 +151,7 @@ expected values rewritten to make a failure pass — that requires explicit appr
 | `SetScoreLabelTests.swift` | Canonical regular/tiebreak-only set labels across all six formats and both perspectives, plus recorder-oriented game scores (serve orientation, deuce, advantage, and tiebreak points). |
 | `PointMatchScoreTests.swift` | Full pre-point match-score composition across all formats: prior sets, live games, regular-set breakers, deciding super-tiebreaks, suffix-only history, and legacy data. |
 | `SettingsCopyTests.swift` / `ICloudBackupCopyTests.swift` | Settings blurbs and the iCloud status rule. |
+| `MatchTrackingStatusTests.swift` | The pre-match tracking indicators: each facet's on/degraded/off resolution, Health `notDetermined` vs. denied vs. unavailable, Pulse Coach calibration (including age 30 resolving to 190 without being mistaken for the default), and the chip copy/width invariants. |
 | `HealthExportConsentTests.swift` | The per-export health disclosure: present-fields per perspective (zones recorder-only, empty ⇒ skip), disclosure copy fidelity and recipient clauses, and agreement between `presentFields(.me)` and the recorder-framed HTML export's health blocks. |
 | `SimulatedGameStatsTests.swift` | Simulates realistic whole matches to exercise stats end-to-end. |
 | `MatchWebExportTests.swift` | The interactive HTML export: view-model shape, mirrored outcome/serving/ending-shot counts, serving-category rules and palette, full per-point match score + server rendering, realistic completed-set integration, recorder-only HR, pointer dragging, and self-contained output. |
@@ -209,6 +212,7 @@ touched. A PR for feature X that edits files far outside its row deserves a ques
 | **Interactive web (HTML) export** | — | `MatchDetailView` (share action) | `WebExport/MatchHTMLExporter`, `MatchWebStaticFallback`, `MatchWebViewModel` (+`Build`, +`Comparison`, +`AICoach`), `MatchWebTemplate`, `WebExportColors`, `MatchStatsSummary`, `PointMatchScore`, `PointGamesScore`, `SetScoreLabel`, `MatchExporter` (AI prompt) |
 | **Compass changeover** | `ScoreViewModel`, `ContentView`, `HomeView` | `SettingsView` (toggle) | — |
 | **Health / workout tracking** | `WorkoutManager` | `HealthKitHRFetcher` | `HRZone` |
+| **Tracking status (pre-match)** | `TrackingStatusStrip`, `HomeView`, `ScoreViewModel`, `WorkoutManager` | — | `MatchTrackingStatus`, `SettingsCopy`, `HRZone` |
 | **Theming** | `AppTheme` | `AppTheme` | — |
 | **Settings** | `ScoreViewModel` | `SettingsView` | `SettingsCopy`, `MatchSyncMessage` |
 | **iCloud backup** | — | `PhoneStatsStore`, `SettingsView`, `DeuceMateApp` (foreground backup sync) | `ICloudBackupCopy`, `ArchiveBackupPolicy` |

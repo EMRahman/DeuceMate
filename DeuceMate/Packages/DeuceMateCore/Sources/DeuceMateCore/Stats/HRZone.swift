@@ -63,6 +63,20 @@ public enum HRZone: Int, CaseIterable, Codable, Sendable {
         bpm >= overrideMinBPM && bpm <= overrideMaxBPM
     }
 
+    /// Returns `true` when `birthYear` produces an age `resolveMaxHR` will
+    /// actually use (rather than silently falling back to the 190 bpm default).
+    /// Exposed so the UI can tell "calibrated" from "running on the default"
+    /// without re-deriving — and without comparing against 190, which is also a
+    /// legitimate age-derived result (age 30).
+    public static func isUsableBirthYear(
+        _ birthYear: Int,
+        currentYear: Int = Calendar(identifier: .gregorian).component(.year, from: Date())
+    ) -> Bool {
+        guard birthYear > 1900, birthYear <= currentYear else { return false }
+        let age = currentYear - birthYear
+        return age >= 5 && age <= 100
+    }
+
     /// Resolve the player's max HR using the configured precedence:
     /// manual override → 220−age → 190.
     public static func resolveMaxHR(
@@ -70,10 +84,9 @@ public enum HRZone: Int, CaseIterable, Codable, Sendable {
         birthYear: Int?,
         currentYear: Int = Calendar(identifier: .gregorian).component(.year, from: Date())
     ) -> Int {
-        if let m = manualOverride, m >= 120, m <= 220 { return m }
-        if let by = birthYear, by > 1900, by <= currentYear {
-            let age = currentYear - by
-            if age >= 5 && age <= 100 { return 220 - age }
+        if let m = manualOverride, isValidOverride(m) { return m }
+        if let by = birthYear, isUsableBirthYear(by, currentYear: currentYear) {
+            return 220 - (currentYear - by)
         }
         return 190
     }

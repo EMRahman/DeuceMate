@@ -331,8 +331,7 @@ struct HomeView: View {
     }
 
     var body: some View {
-        VStack {
-            Spacer()
+        ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 Button {
                     if matchInProgress {
@@ -348,6 +347,15 @@ struct HomeView: View {
                 }
                 .font(.headline)
                 .buttonStyle(HomeButtonStyle(background: viewModel.selectedTheme.colors.buttonPrimary))
+
+                // What this match will actually record — stated before the first
+                // point, because none of it can be added afterwards. Taps to Settings.
+                LiveTrackingStatusStrip(
+                    viewModel: viewModel,
+                    workoutManager: viewModel.workoutManager
+                ) {
+                    showSettings = true
+                }
 
                 if matchInProgress {
                     Button {
@@ -391,7 +399,6 @@ struct HomeView: View {
 
             }
             .padding()
-            Spacer()
         }
         .sheet(isPresented: $showMatchView) {
             RootModal()
@@ -485,6 +492,17 @@ struct HomeView: View {
             NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
+                    // Mirrors the start-screen strip, with room for the detail —
+                    // including Health, which has no in-app toggle and can only
+                    // be granted from the iPhone.
+                    Text("What This Match Records")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    LiveTrackingStatusRows(
+                        viewModel: viewModel,
+                        workoutManager: viewModel.workoutManager
+                    )
+                    Divider().padding(.vertical, 4)
                     Toggle(isOn: $viewModel.statsTrackingEnabled) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Track point outcome")
@@ -849,6 +867,9 @@ struct HomeView: View {
         }
         .onAppear {
             hasPastMatches = !StatsStore.shared.loadHistory().isEmpty
+            // Health access can be revoked from the iPhone while the app is
+            // backgrounded, so re-read it whenever the start screen appears.
+            viewModel.workoutManager.refreshHealthAccess()
         }
         .onReceive(NotificationCenter.default.publisher(for: .watchMatchHistoryDidChange)) { _ in
             hasPastMatches = !StatsStore.shared.loadHistory().isEmpty
