@@ -26,6 +26,7 @@ scope:
     - "DeuceMate/DeuceMate Watch App/DeuceMateApp.swift (refresh health access on scenePhase == .active)"
     - "DeuceMate/DeuceMate Watch App/TrackingStatusStrip.swift (new — presentation only)"
     - "docs/architecture/file-inventory.md, docs/features/KNOWN_LIMITATIONS.md, docs/features/TECHNICAL_DEBT.md (#5 status), CLAUDE.md §0 (watch-local key exceptions)"
+    - "docs/features/assets/{home-screen-before-after,tracking-strip-states,match-setup-sheet}.svg — hand-written SVG mockups, drawn 1:1 at 45 mm using the real AppTheme Classic gradients. Diagrams, not screenshots."
   out_of_scope:
     - "iPhone app — the phone does not start live matches. No wire key, no MatchSyncKey, no phone settings row. See §5.6."
     - "Removing or repurposing the 'Warming Up' screen — it starts the HealthKit workout session before the match clock, which is a real function. Posed as open question OQ-2, not built."
@@ -39,6 +40,8 @@ key_facts:
   - "PointStat.heartRateBPM / .stepsCumulative are captured live on the watch (PointStat.swift:111,116). No workout session ⇒ those fields are nil forever for that match."
   - "SettingsCopy.workoutSession and SettingsCopy.iCloudSync are defined in Core but referenced by NO UI on main (verified by grep). The prior-art branch gives .workoutSession a home as the Health chip's 'On' detail — a genuine cleanup, keep it."
   - "MatchSyncKey.workoutSessionEnabled is decoded by SyncIncomingPayload but both WatchMatchSyncService.swift:239 and PhoneMatchSyncService.swift:444 `break` on it. It is a dead wire key. Leave it alone; do not repurpose it (§9.2)."
+  - "Height budget (§6.1): rows are 44 pt with 10 pt spacing and HomeView's default .padding() costs 32 pt, against 215 pt on 41 mm. Keeping Past Matches as a full row (220 pt content) or keeping the card mid-match (220 pt) BOTH overflow even 45 mm — which is why the prior-art branch reached for a ScrollView. Demoting Past Matches to the icon row and hiding the card while a match is in progress bring every state to 184–198 pt, so no ScrollView is needed and Start Match stays centred."
+  - "The card is a PRE-match card and must be hidden when matchInProgress: the format is locked and the point-tracking toggle is already .disabled(matchInProgress) (HomeView.swift:497), so mid-match it would show state the user cannot act on."
 open_questions:
   - id: OQ-1
     question: "When Health is off, the Pulse chip is a second grey chip for the same single cause. Collapse to two chips, or keep three fixed?"
@@ -68,6 +71,16 @@ This is also the product/UX conversation that `TECHNICAL_DEBT.md` **#5 — Simpl
 first-run and match-start UX** was parked awaiting ("This is a product design
 decision, not a software engineering improvement… Should be addressed in a
 product/UX conversation rather than a PR").
+
+### 1.1 The proposal at a glance
+
+![Watch start screen today versus proposed: the proposed screen adds a pre-match card
+holding a remembered "Singles · Best of 3" row and a three-chip tracking strip, and
+demotes Past Matches to the icon row](assets/home-screen-before-after.svg)
+
+Mockups are hand-written SVG drawn 1:1 at 45 mm (198 × 242 pt) using the real Classic
+theme gradients from `AppTheme.swift`. They are diagrams, not screenshots — no build
+exists yet.
 
 ---
 
@@ -210,6 +223,11 @@ Three facets × the states each can actually be in. `TrackingReadiness` is
 | Pulse | no birth year and no override | `Est.` | `.partial` | "190 bpm default — set your birth year for accuracy. **Past matches recompute if you set it later.**" |
 | Pulse | calibrated | `On` | `.on` | "Heart-rate zones use your N bpm max HR." |
 
+![Every state the tracking strip can be in: all-green steady state; point tracking off;
+Health denied with the Pulse chip suppressed; Health permission not yet answered;
+Pulse Coach on the 190 bpm default in amber; and the format-suppressed em-dash
+state](assets/tracking-strip-states.svg)
+
 The bolded clause is the change from the prior-art branch, and it is the copy that
 encodes §2.1's asymmetry: Points and Health say *this match*, Pulse says *any time*.
 
@@ -263,6 +281,9 @@ chosen pair is persisted and pre-applied, so `RootModal` skips both the format s
 and the Match Type screen.
 
 **Taps to first point: 5 → 3** (Start Match → Warm Up Complete → Me).
+
+![The Match Setup sheet on the watch: a Singles/Doubles segmented control above the
+existing six-format list, with Best of 3 Club/League selected](assets/match-setup-sheet.svg)
 
 ### 5.2 Last-used, not a configured default — OQ-3
 
@@ -368,40 +389,54 @@ centred `VStack` + `Spacer()`s into a `ScrollView` (`HomeView.swift:334`), which
 un-centres Start Match and lets the primary action drift off-screen on a 41mm watch.
 That is a regression, not a solution.
 
-**Proposal: one combined pre-match card, ~50pt, replacing two full-screen setup steps.**
+**Proposal: one combined pre-match card of 58 pt, replacing two full-screen setup
+steps.** Drawn in §1.1.
 
-```
-        ┌─────────────────────────────┐
-        │        ▶  Start Match       │   44pt  primary gradient, unchanged
-        └─────────────────────────────┘
-        ┌─────────────────────────────┐
-        │  Singles · Best of 3      ⌄ │   ~26pt  tap → format + type sheet   (Feature B)
-        │   ✋ On    ❤️ Off    〰️ Est.  │   ~24pt  tap → Settings              (Feature A)
-        └─────────────────────────────┘
-        ┌─────────────────────────────┐
-        │        Past Matches         │
-        └─────────────────────────────┘
-              [⚙︎]        [📖]
-```
+### 6.1 The height budget
 
-Decisions this encodes:
+Screens are 176 × **215** pt (41 mm), 198 × **242** pt (45 mm), 205 × 251 pt (49 mm
+Ultra). `HomeView` uses the default `.padding()` — 16 pt top and bottom, so **32 pt** of
+the budget is gone before any button. Rows are 44 pt (`HomeButtonStyle` `minHeight`)
+with 10 pt spacing; the card is 58 pt.
 
-- **Chips are icon + state, one line** — not the prior art's three-line
+| State | Rows | Content | + padding | 41 mm (215) | 45 mm (242) |
+|---|---|---:|---:|:---:|:---:|
+| Today, no match in progress | Start · Past Matches · icons | 152 | **184** | ✅ | ✅ |
+| **Proposed, no match** | Start · **card** · icons ×3 | 166 | **198** | ✅ | ✅ |
+| **Proposed, match in progress** (card hidden) | Resume · End · icons ×3 | 152 | **184** | ✅ | ✅ |
+| ✗ if Past Matches stays a full row | Start · card · Past · icons | 220 | 252 | ❌ | ❌ |
+| ✗ if the card is kept mid-match | Resume · End · card · icons | 220 | 252 | ❌ | ❌ |
+
+The two ❌ rows are why the prior-art branch reached for a `ScrollView`. Two decisions
+remove the need for one entirely:
+
+- **Past Matches moves into the icon row.** It is a navigational destination of the same
+  class as Settings and Guide, and it is already conditional on having any history. That
+  frees 54 pt (44 + 10), which pays for the 68 pt card with 14 pt of net growth.
+  Trade-off, stated fairly: Past Matches is probably used more often than Guide, and
+  demoting it costs it a label.
+- **The card is hidden while a match is in progress.** It is a *pre*-match card: mid-match
+  the format is locked, and the point-tracking toggle is already `.disabled(matchInProgress)`
+  (`HomeView.swift:497`). Showing tracking state you cannot act on is noise.
+
+**Keep the centred `VStack` + `Spacer()`s. Do not adopt a `ScrollView`** — with those two
+decisions every state fits, including 41 mm, and the primary action stays centred.
+Verify on a 41 mm simulator before merge; the content width there is 144 pt, not the
+166 pt the mockups are drawn at, so the three chips get ~44.7 pt each.
+
+### 6.2 Presentation decisions
+
+- **Chips are icon + state on one line** — not the prior art's three-line
   icon/label/state stack. The icon carries the identity; the word ("Points", "Health")
-  is redundant next to a hand and a heart on a screen this size, and the full names live
-  in the Settings rows.
+  is redundant next to a heart on a screen this size, and the full names live in the
+  Settings rows.
 - **The card is two tap targets, not one.** The format row opens the setup sheet; the
   chip row opens Settings. Merging them would make the most common action (change
   format) collide with the rarest (change a tracking setting).
 - **The strip is not inside the Start Match button.** Tempting for space; rejected —
   it makes the primary action's tap target ambiguous.
-- **Keep the centred `VStack` + `Spacer()`s.** With Past Matches present that is
-  Start Match + card + Past Matches + icon row ≈ 150pt, which fits. Only the
-  match-in-progress case (which adds End Match) may need scrolling; gate the
-  `ScrollView` on that case rather than adopting it unconditionally, and **verify on a
-  41mm simulator** before merge.
 
-Net: the screen grows by ~50pt and the flow shrinks by two full screens.
+Net: the pre-match screen grows by 14 pt and the flow loses two full screens.
 
 ---
 
@@ -457,7 +492,8 @@ presentation on top of Feature B.**
    values, and a round-trip for every `MatchFormat` × `MatchType`.
 3. `ScoreViewModel` — hydrate in `init` **only when no live state was restored** (§5.4);
    persist in a small `persistMatchSetupDefaults()`.
-4. `HomeView` — the default row; extend the format sheet with Singles/Doubles;
+4. `HomeView` — the default row (hidden when `matchInProgress`); **Past Matches moves
+   into the icon row** (§6.1); extend the format sheet with Singles/Doubles;
    `commitServerSelection()` persists; `RootModal.onAppear` pre-resolves `matchTypeChosen`.
 5. Watch test: cold launch with saved defaults hydrates; restored live match does **not**
    get overwritten.
@@ -525,8 +561,11 @@ Watch target (`xcodebuild test`, needs `import DeuceMateCore`):
 - cold launch hydrates defaults; restored live match is not overwritten;
 - `commitServerSelection()` persists the pair.
 
-Manual, on a **41mm** simulator or device — none of these are text-checkable:
-- Start Match still reachable without scrolling, with and without a match in progress.
+Manual, on a **41 mm** simulator or device — none of these are text-checkable, and the
+§6.1 budget is arithmetic, not a measurement:
+- Start Match still centred and reachable **without a `ScrollView`**, both with and
+  without a match in progress, and with and without past matches.
+- Three chips still legible at the 41 mm content width of 144 pt (~44.7 pt each).
 - VoiceOver reads the strip as one element and the Settings rows individually.
 - Revoke Health in the Watch app on iPhone → foreground DeuceMate → the Health chip
   flips to Off and the Pulse chip disappears.

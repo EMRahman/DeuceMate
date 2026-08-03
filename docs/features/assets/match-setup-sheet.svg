@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="366" viewBox="0 0 900 366" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+<defs><linearGradient id="primary" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#40CCB5"/><stop offset="1" stop-color="#1485EB"/></linearGradient></defs>
+<rect x="0" y="0" width="900" height="366" rx="10" fill="#14171c"/>
+<text x="32" y="34" font-size="15" font-weight="600" fill="#e6edf3">Match Setup sheet — where the format picker goes</text>
+<text x="32" y="53" font-size="11.5" fill="#8b949e">Reached by tapping the “Singles · Best of 3” row on the start screen. Replaces two full-screen steps in the match-start flow.</text>
+<rect x="48" y="72" width="222" height="266" rx="50" fill="#2a2f38"/>
+<rect x="60" y="84" width="198" height="242" rx="40" fill="#000"/>
+<text x="159" y="107" font-size="13" font-weight="600" fill="#fff" text-anchor="middle">Match Setup</text>
+<rect x="76" y="117" width="166" height="30" rx="9" fill="#1b2029" stroke="#333c48"/>
+<rect x="78" y="119" width="81" height="26" rx="7" fill="url(#primary)"/>
+<text x="118.5" y="136" font-size="11.5" font-weight="600" fill="#fff" text-anchor="middle">Singles</text>
+<text x="200.5" y="136" font-size="11.5" fill="#8b949e" text-anchor="middle">Doubles</text>
+<rect x="76" y="157" width="166" height="42" rx="10" fill="#1b2029" stroke="#40CCB5" stroke-width="1.5"/>
+<text x="86" y="175" font-size="11" font-weight="600" fill="#e6edf3">Best of 3 · Club/League</text>
+<text x="86" y="189" font-size="8.5" fill="#8b949e">Final set: Super Tiebreak to 10</text>
+<path d="M224,173 L228,177 L235,169" fill="none" stroke="#40CCB5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="76" y="207" width="166" height="42" rx="10" fill="#1b2029" stroke="#333c48" stroke-width="1"/>
+<text x="86" y="225" font-size="11" font-weight="600" fill="#e6edf3">Best of 3 (ATP)</text>
+<text x="86" y="239" font-size="8.5" fill="#8b949e">Final set: full set, tiebreak to 7</text>
+<rect x="76" y="257" width="166" height="42" rx="10" fill="#1b2029" stroke="#333c48" stroke-width="1"/>
+<text x="86" y="275" font-size="11" font-weight="600" fill="#e6edf3">Quick 4 Games</text>
+<text x="86" y="289" font-size="8.5" fill="#8b949e">First to 3 · sudden death at 2–2</text>
+<path d="M120,310 L124,314 L128,310" fill="none" stroke="#6e7681" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><text x="166" y="316" font-size="9.5" fill="#6e7681" text-anchor="middle">3 more formats</text>
+<rect x="250" y="112" width="3" height="96" rx="1.5" fill="#3a424e"/>
+<text x="300" y="96" font-size="12.5" font-weight="700" fill="#e6edf3">One sheet, not two screens</text>
+<text x="300" y="114" font-size="11.5" fill="#8b949e">Singles/Doubles moves here from its own full-screen step.</text>
+<text x="300" y="130" font-size="11.5" fill="#8b949e">The six formats are unchanged — same copy, same order.</text>
+<text x="300" y="170" font-size="12.5" font-weight="700" fill="#e6edf3">The pair is remembered</text>
+<text x="300" y="188" font-size="11.5" fill="#8b949e">Persisted on match start in commitServerSelection() — the one</text>
+<text x="300" y="204" font-size="11.5" fill="#8b949e">place both the singles and doubles paths funnel through.</text>
+<text x="300" y="220" font-size="11.5" fill="#8b949e">Hydrated in ScoreViewModel.init, but only when no live match</text>
+<text x="300" y="236" font-size="11.5" fill="#8b949e">was restored, or resuming a Super Tiebreak would rewrite it.</text>
+<text x="300" y="276" font-size="12.5" font-weight="700" fill="#e6edf3">What the flow becomes</text>
+<text x="300" y="294" font-size="11.5" fill="#8b949e">Start Match  →  Warm Up Complete  →  Me / Opponent.</text>
+<text x="300" y="310" font-size="11.5" fill="#8b949e">Who serves first is never remembered — it is a racquet spin</text>
+<text x="300" y="326" font-size="11.5" fill="#8b949e">every match, and pre-selecting it would be wrong (§5.5).</text>
+</svg>
