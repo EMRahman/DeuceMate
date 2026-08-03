@@ -93,10 +93,10 @@
   <g stroke="#4b5563" stroke-width="1" fill="none">
     <path d="M504,205 L540,205 L556,190"/>
     <path d="M504,234 L534,234 L556,258"/>
-    <path d="M504,279 L524,279 L556,330"/>
+    <path d="M364,301 L364,314 L540,314 L558,338"/>
   </g>
   <g fill="#40CCB5">
-    <circle cx="504" cy="205" r="2.2"/><circle cx="504" cy="234" r="2.2"/><circle cx="504" cy="279" r="2.2"/>
+    <circle cx="504" cy="205" r="2.2"/><circle cx="504" cy="234" r="2.2"/><circle cx="364" cy="301" r="2.2"/>
   </g>
 
   <text x="564" y="180" font-size="12.5" font-weight="700" fill="#e6edf3">Remembered match setup</text>
