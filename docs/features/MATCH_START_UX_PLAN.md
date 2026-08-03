@@ -435,11 +435,23 @@ with 10 pt spacing; the card is 58 pt.
 The two ❌ rows are why the prior-art branch reached for a `ScrollView`. Two decisions
 remove the need for one entirely:
 
-- **Past Matches moves into the icon row.** It is a navigational destination of the same
-  class as Settings and Guide, and it is already conditional on having any history. That
-  frees 54 pt (44 + 10), which pays for the 68 pt card with 14 pt of net growth.
-  Trade-off, stated fairly: Past Matches is probably used more often than Guide, and
-  demoting it costs it a label.
+- **Past Matches moves into the icon row — leftmost, and re-iconed.** It is a
+  navigational destination of the same class as Settings and Guide, and it is already
+  conditional on having any history. That frees 54 pt (44 + 10), which pays for the
+  68 pt card with 14 pt of net growth. Three details make the demotion survivable:
+  - **Order is `[history] [⚙︎] [📖]`, not the reverse.** Past Matches is the most-used
+    of the three by a wide margin — Settings and Guide are visited rarely, often not
+    again after the first week — so it takes the leading position and the two utilities
+    stay grouped after it.
+  - **Icon is `clock.arrow.circlepath`**, replacing today's `list.bullet.rectangle`
+    (`HomeView.swift:366`). The list glyph describes the *layout* of the destination;
+    the clock-with-reverse-arrow describes what it *is* — earlier matches. It is the
+    platform-standard "history / recents" symbol (Safari, Photos), so it reads without
+    a label. Available since watchOS 6; the target is watchOS 9
+    (`WATCHOS_DEPLOYMENT_TARGET = 9.0`).
+  - **It keeps its `buttonServerOpponent` blue** while Settings and Guide stay on the
+    muted `ButtonGradients.guide`. Demoting it costs it a text label, so position and
+    colour have to carry the hierarchy the full-width button used to have.
 - **The card is hidden while a match is in progress.** It is a *pre*-match card: mid-match
   the format is locked, and the point-tracking toggle is already `.disabled(matchInProgress)`
   (`HomeView.swift:497`). Showing tracking state you cannot act on is noise.
@@ -519,8 +531,9 @@ presentation on top of Feature B.**
    **both** `loadState()` and `resetMatch()` (§5.4 — *not* in `init`); persist in a small
    `persistMatchSetupDefaults()`.
 4. `HomeView` — the default row (hidden when `matchInProgress`); **Past Matches moves
-   into the icon row** (§6.1); extend the format sheet with Singles/Doubles;
-   `commitServerSelection()` persists; `RootModal.onAppear` pre-resolves `matchTypeChosen`.
+   into the icon row, leftmost, as `clock.arrow.circlepath`** (§6.1); extend the format
+   sheet with Singles/Doubles; `commitServerSelection()` persists; `RootModal.onAppear`
+   pre-resolves `matchTypeChosen`.
 5. Watch tests, one per §5.4 site: cold launch with saved defaults hydrates; a corrupt
    state file (the `catch` path) still hydrates; a restored **live** match is **not**
    overwritten; `resetMatch()` leaves the remembered pair in the saved `AppState`, not

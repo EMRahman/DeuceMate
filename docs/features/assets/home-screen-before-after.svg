@@ -75,13 +75,19 @@
             fill="none" stroke="#ff9f0a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="481" y="238" font-size="10.5" font-weight="700" fill="#ff9f0a" text-anchor="middle">Est.</text>
 
-  <!-- icon row: settings / guide / past matches -->
-  <rect x="338" y="257" width="52" height="44" rx="12" fill="url(#guide)"/>
-  <text x="364" y="285" font-size="16" fill="#fff" text-anchor="middle">⚙</text>
+  <!-- icon row: Past Matches (clock.arrow.circlepath, leftmost) / Settings / Guide -->
+  <rect x="338" y="257" width="52" height="44" rx="12" fill="url(#opp)"/>
+  <g transform="translate(364,280)" fill="none" stroke="#fff" stroke-width="1.7"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M-1.6,-6.2 A6.2,6.2 0 1 1 -5.6,-2.6"/>
+    <path d="M-1.6,-6.2 L0.8,-5.3"/>
+    <path d="M-1.6,-6.2 L0.1,-8.2"/>
+    <path d="M0,-3.4 L0,0 L2.6,1.5"/>
+  </g>
   <rect x="395" y="257" width="52" height="44" rx="12" fill="url(#guide)"/>
-  <text x="421" y="285" font-size="14" fill="#fff" text-anchor="middle">📖</text>
-  <rect x="452" y="257" width="52" height="44" rx="12" fill="url(#opp)"/>
-  <text x="478" y="285" font-size="16" fill="#fff" text-anchor="middle">☰</text>
+  <text x="421" y="285" font-size="16" fill="#fff" text-anchor="middle">⚙</text>
+  <rect x="452" y="257" width="52" height="44" rx="12" fill="url(#guide)"/>
+  <text x="478" y="285" font-size="14" fill="#fff" text-anchor="middle">📖</text>
 
   <!-- ── Leaders + annotations ──────────────────────────────────── -->
   <g stroke="#4b5563" stroke-width="1" fill="none">
@@ -103,10 +109,10 @@
   <text x="564" y="296" font-size="11.5" fill="#8b949e">Tap → Settings. One line, icon + state.</text>
   <text x="564" y="312" font-size="11.5" fill="#6e7681">Format-aware: Perpetual Points shows “—”, not “On”.</text>
 
-  <text x="564" y="344" font-size="12.5" font-weight="700" fill="#e6edf3">Past Matches → icon row</text>
-  <text x="564" y="362" font-size="11.5" fill="#8b949e">Same class as Settings and Guide, and already</text>
-  <text x="564" y="378" font-size="11.5" fill="#8b949e">conditional. Frees 54 pt, so the 68 pt card fits</text>
-  <text x="564" y="394" font-size="11.5" fill="#8b949e">without scrolling — even on 41 mm.</text>
+  <text x="564" y="344" font-size="12.5" font-weight="700" fill="#e6edf3">Past Matches → history icon, leftmost</text>
+  <text x="564" y="362" font-size="11.5" fill="#8b949e">clock.arrow.circlepath, and it keeps its blue — it is</text>
+  <text x="564" y="378" font-size="11.5" fill="#8b949e">the most-used of the three. Frees 54 pt, so the</text>
+  <text x="564" y="394" font-size="11.5" fill="#8b949e">68 pt card fits without scrolling — even on 41 mm.</text>
 
   <!-- ── Footer band ────────────────────────────────────────────── -->
   <line x1="32" y1="420" x2="868" y2="420" stroke="#242a33" stroke-width="1"/>
