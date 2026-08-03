@@ -26,7 +26,7 @@ accurate docs, navigable files, and text-level checks are its substitutes.
 | 3 | Settings | Replace stringly-typed settings keys with typed keys | **High (next up)** | Backlog |
 | 4a | Persistence | Silent save-failure handling (watch + phone) | Low | Backlog |
 | 4b | Persistence | File-protection level on watch saves | Low | **Done** |
-| 5 | UX | Simplify first-run and match-start flow | — | **Parked (product, not code)** |
+| 5 | UX | Simplify first-run and match-start flow | Medium | **Planned** — [`MATCH_START_UX_PLAN.md`](MATCH_START_UX_PLAN.md) |
 | 6 | Concurrency | `PhoneStatsStore` actor / `@MainActor` migration | Low | Backlog |
 | 7 | Stats | Convert formatted string stats to typed `RatioStat` | Medium | Backlog |
 | 8 | Agent docs | Fix `CLAUDE.md` drift (pbxproj claim, ghost files, stale sizes) | High | **Done — this re-audit** |
@@ -231,16 +231,28 @@ choice; recorded here so the tradeoff is visible.
 
 ---
 
-### 5 — Simplify first-run and match-start UX (Parked)
+### 5 — Simplify first-run and match-start UX (Planned)
 
 **Original concern:** The feature set is broad (scoring, HealthKit, compass,
 announcements, iPhone input, manual recovery, AI prompts, graphs). The
 suggestion was to narrow the first-run and match-start flow to: choose format,
 choose server, start.
 
-**Why parked:** This is a product design decision, not a software engineering
+**Why it was parked:** This is a product design decision, not a software engineering
 improvement. The code itself is not the problem. Should be addressed in a
 product/UX conversation rather than a PR.
+
+**Unparked, 3 August 2026.** That conversation has happened and is written up in
+[`MATCH_START_UX_PLAN.md`](MATCH_START_UX_PLAN.md), prompted by the owner's report
+that the start screen gives no way to tell whether point tracking, Health, or Pulse
+Coach are on. The plan narrows the flow from 5 taps to 3 by remembering the last
+match setup, and states the three irreversible tracking facets on the start screen.
+Two implementation PRs are specified there (remembered defaults first — the tracking
+strip is not *correct* without them, because `MatchFormat.perpetualPoints` suppresses
+point tracking regardless of the user's setting).
+
+Status moves to **Done** when both land. Kept at Medium rather than High: it is real
+product value, but nothing is broken and no data is at risk.
 
 ---
 

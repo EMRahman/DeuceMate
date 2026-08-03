@@ -304,10 +304,13 @@ compiler does not connect** (see §5). To add one, keep them consistent:
 - Commit subjects are short and **prefixed with the affected surface**, e.g.
   `[iOS] …`, `[Watch] …`, `[Core] …`, or `docs: …`. Explain the *why*.
 - One concern per PR. Logic change ⇒ tests. Open PRs ready for review.
-- **File added / removed / renamed / repurposed ⇒ update
+- **Production *source* file added / removed / renamed / repurposed ⇒ update
   `docs/architecture/file-inventory.md` in the same PR.** That inventory is the
-  owner's no-code review guardrail; a file missing from it is treated as
-  unreviewed. Update the other `docs/architecture/` diagrams too when a change
+  owner's no-code review guardrail; a source file missing from it is treated as
+  unreviewed. Its scope is exactly what its own header says — "the complete list
+  of production source files" — so `docs/**`, `.github/**`, and assets are **not**
+  inventoried; no `docs/features/*_PLAN.md` has ever been listed there. Adding a
+  design doc or a diagram does not require an inventory entry. Update the other `docs/architecture/` diagrams too when a change
   alters components, sync flows, or the match lifecycle (`docs/architecture/sync-and-data-flow.md`,
   `docs/architecture/match-lifecycle.md`, or the `docs/architecture/README.md` topology diagram as needed).
 - **Keep `CLAUDE.md` and `AGENTS.md` current.** If you notice that a recipe is
