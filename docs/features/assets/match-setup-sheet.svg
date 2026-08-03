@@ -28,8 +28,8 @@
 <text x="300" y="170" font-size="12.5" font-weight="700" fill="#e6edf3">The pair is remembered</text>
 <text x="300" y="188" font-size="11.5" fill="#8b949e">Persisted on match start in commitServerSelection() — the one</text>
 <text x="300" y="204" font-size="11.5" fill="#8b949e">place both the singles and doubles paths funnel through.</text>
-<text x="300" y="220" font-size="11.5" fill="#8b949e">Hydrated in ScoreViewModel.init, but only when no live match</text>
-<text x="300" y="236" font-size="11.5" fill="#8b949e">was restored, or resuming a Super Tiebreak would rewrite it.</text>
+<text x="300" y="220" font-size="11.5" fill="#8b949e">Re-applied at the tail of loadState() and resetMatch() — never</text>
+<text x="300" y="236" font-size="11.5" fill="#8b949e">in init, which runs first and is overwritten by both (§5.4).</text>
 <text x="300" y="276" font-size="12.5" font-weight="700" fill="#e6edf3">What the flow becomes</text>
 <text x="300" y="294" font-size="11.5" fill="#8b949e">Start Match  →  Warm Up Complete  →  Me / Opponent.</text>
 <text x="300" y="310" font-size="11.5" fill="#8b949e">Who serves first is never remembered — it is a racquet spin</text>

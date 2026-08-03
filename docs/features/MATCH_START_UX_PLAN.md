@@ -4,7 +4,7 @@ machine-readable summary (parse this block first)
 status: planned
 author: Claude (Opus 5), design session with the owner
 date: 2026-08-03
-closes_backlog_item: "TECHNICAL_DEBT.md #5 — Simplify first-run and match-start UX (Parked: 'product design decision, not a software engineering improvement… should be addressed in a product/UX conversation'). This document IS that conversation."
+closes_backlog_item: "TECHNICAL_DEBT.md #5 — Simplify first-run and match-start UX. It was Parked on the grounds that it was 'a product design decision… should be addressed in a product/UX conversation rather than a PR'. This document IS that conversation, so #5 moves Parked → Planned (Medium) in this PR, and → Done when both implementation PRs land."
 prior_art_branch: "claude/initial-menu-tracking-settings-buxmcl @ 13ca6026c0ff4ce98ce57f9087232fbe08b44588 — a working prototype of Feature A only. Assessed file-by-file in §7. Keep the Core derivation, revise the presentation, do not merge as-is."
 features:
   - id: A
@@ -35,6 +35,7 @@ scope:
 key_facts:
   - "Taps from start screen to first point today: 5 (Start Match → format → Warm Up Complete → Singles → Me), 6 with Changeover Compass on. Verified against HomeView.swift:337-343 + RootModal.body:66-154."
   - "matchFormat and matchType are @Published on ScoreViewModel (ScoreViewModel.swift:325-326) with NO UserDefaults didSet. They are part of the restored live-match state only; on a cold launch with no match in progress they reset to .singles / .standard and the UI forces a fresh choice anyway."
+  - "THREE sites write matchType/matchFormat, and hydrating in ScoreViewModel.init works at none of them. init runs BEFORE the restore: DeuceMateApp.swift:16 calls loadState() in .onAppear. loadState()'s success path assigns from the saved AppState (1660, 1666) and its catch path hard-writes .singles/.standard (1696-1697), so both exits clobber init. resetMatch() also hard-writes .singles/.standard (1404-1405) and then saveState(), so finishing a match PERSISTS the fallback. Hydrate at the tail of loadState() and the tail of resetMatch() instead — see §5.4."
   - "There is NO in-app toggle for Health tracking. It is the HKHealthStore permission, requested once at launch (DeuceMateApp.swift:17) and revocable only from the Watch app on iPhone. The app can report it, not set it."
   - "Pulse Coach zones are derived at DISPLAY time — PulseCoachInsights.insights(..., maxHR:) takes maxHR as a parameter. Setting a birth year after a match recomputes that match's zones. Pulse calibration is therefore REVERSIBLE; point tracking and Health capture are NOT. This asymmetry drives §4."
   - "PointStat.heartRateBPM / .stepsCumulative are captured live on the watch (PointStat.swift:111,116). No workout session ⇒ those fields are nil forever for that match."
@@ -336,22 +337,46 @@ public struct MatchSetupDefaults: Sendable, Equatable {
 > the documented-exception list in `CLAUDE.md` §0 alongside the announcements aliases.
 > Skipping that leaves a false positive that will confuse the next agent.
 
-### 5.4 Where it is applied — the one subtle ordering rule
+### 5.4 Where it is applied — three sites that all overwrite the pair
 
-`ScoreViewModel.init` restores in-progress live state, which sets `matchFormat` and
-`matchType` (`ScoreViewModel.swift:1041-1042`). The defaults must be hydrated **only
-when no live match was restored**, or resuming a Super Tiebreak would silently rewrite
-it to the remembered Best of 3.
+⚠️ **Do not hydrate in `ScoreViewModel.init`.** It runs *before* the restore, and both
+exits of the restore hard-write the fallbacks, so anything seeded in `init` is silently
+discarded. The three sites, in the order they fire:
 
+| # | Site | What it does to `matchType` / `matchFormat` |
+|---|---|---|
+| 1 | `ScoreViewModel.init` | Leaves the property initialisers — `.singles` / `.standard` (`ScoreViewModel.swift:325-326`) |
+| 2 | `loadState()`, called from `DeuceMateApp.swift:16` `.onAppear` — **after** `init` | **Success path:** assigns from the saved `AppState` (`ScoreViewModel.swift:1660, 1666`). **Catch path:** hard-writes `.singles` / `.standard` (`1696-1697`) |
+| 3 | `resetMatch()` | Hard-writes `.singles` / `.standard` (`1404-1405`), then `saveState()` — so finishing a match *persists* the fallback |
+
+Site 3 is the one that is easy to miss: without it the remembered pair survives launch
+but is destroyed the moment the previous match ends, which is precisely when the next
+match is about to be set up.
+
+**Recipe.** One helper, called at two tails:
+
+```swift
+/// Seeds the next match's setup from the remembered pair. No-op while a match
+/// is live, so resuming a Super Tiebreak is never rewritten to Best of 3.
+private func applyRememberedSetupIfIdle() {
+    guard currentServer == nil, currentMatchStats.isEmpty, history.isEmpty else { return }
+    let d = MatchSetupDefaults.resolve(
+        formatRaw: UserDefaults.standard.string(forKey: MatchSetupDefaults.formatKey),
+        typeRaw:   UserDefaults.standard.string(forKey: MatchSetupDefaults.typeKey))
+    matchFormat = d.format
+    matchType   = d.type
+}
 ```
-ScoreViewModel.init
-  ├─ restore live state ──► matchFormat / matchType set from the saved match  ── STOP
-  └─ no live state ──────► matchFormat / matchType = MatchSetupDefaults.resolve(…)
-```
 
-Hydrating in `init` (not at the Start Match tap) is deliberate: the start-screen card
-and Feature A's format-aware Points chip both read `viewModel.matchFormat` the moment
-the screen appears.
+- **Tail of `loadState()`**, outside the `do`/`catch` so it covers both exits.
+- **Tail of `resetMatch()`**, after the `.singles` / `.standard` writes and **before**
+  `saveState()`, so the persisted `AppState` carries the remembered pair forward and
+  site 2's success path restores it on the next launch. The guard is a no-op there —
+  `resetMatch` has just ended the match — but calling the same helper keeps one rule.
+
+The idle guard is the same triple predicate `RootModal.startMatchTimerIfNeeded` already
+uses to decide whether a match is genuinely new (`HomeView.swift:56-60`) — reuse it
+rather than inventing a second definition of "no match in progress".
 
 Persist on match start — in `commitServerSelection()` (`HomeView.swift:158`), the one
 place both the singles and doubles paths funnel through, and the point at which the
@@ -477,7 +502,7 @@ A working prototype of **Feature A only** (712 insertions, 12 files). Assessment
 ### Add
 - Feature B in its entirety.
 - `KNOWN_LIMITATIONS.md` entry for the share-authorization proxy (§4.4).
-- `TECHNICAL_DEBT.md` #5 status change.
+- `TECHNICAL_DEBT.md` #5 → **Done** (this PR already moved it Parked → Planned).
 
 **Recommendation: do not merge as-is; rebase the Core derivation and rebuild the
 presentation on top of Feature B.**
@@ -490,13 +515,16 @@ presentation on top of Feature B.**
 1. `Core/Settings/MatchSetupDefaults.swift` — keys, `resolve(formatRaw:typeRaw:)`, fallback.
 2. `Core/Tests/MatchSetupDefaultsTests.swift` — absent / empty / unknown / retired raw
    values, and a round-trip for every `MatchFormat` × `MatchType`.
-3. `ScoreViewModel` — hydrate in `init` **only when no live state was restored** (§5.4);
-   persist in a small `persistMatchSetupDefaults()`.
+3. `ScoreViewModel` — one `applyRememberedSetupIfIdle()` helper called at the tail of
+   **both** `loadState()` and `resetMatch()` (§5.4 — *not* in `init`); persist in a small
+   `persistMatchSetupDefaults()`.
 4. `HomeView` — the default row (hidden when `matchInProgress`); **Past Matches moves
    into the icon row** (§6.1); extend the format sheet with Singles/Doubles;
    `commitServerSelection()` persists; `RootModal.onAppear` pre-resolves `matchTypeChosen`.
-5. Watch test: cold launch with saved defaults hydrates; restored live match does **not**
-   get overwritten.
+5. Watch tests, one per §5.4 site: cold launch with saved defaults hydrates; a corrupt
+   state file (the `catch` path) still hydrates; a restored **live** match is **not**
+   overwritten; `resetMatch()` leaves the remembered pair in the saved `AppState`, not
+   `.singles` / `.standard`.
 6. `docs/architecture/file-inventory.md` (new Core file), `CLAUDE.md` §0 key exceptions.
 
 ### PR 2 — `[Watch] State what the next match will record` (Feature A)
@@ -558,7 +586,9 @@ Everything load-bearing is in Core and testable with `swift test` — no simulat
 - `SettingsCopyTests` — `maxLength` still holds.
 
 Watch target (`xcodebuild test`, needs `import DeuceMateCore`):
-- cold launch hydrates defaults; restored live match is not overwritten;
+- cold launch hydrates defaults; a corrupt state file still hydrates; a restored live
+  match is not overwritten; `resetMatch()` persists the remembered pair rather than
+  `.singles` / `.standard` (§5.4 — all three write sites);
 - `commitServerSelection()` persists the pair.
 
 Manual, on a **41 mm** simulator or device — none of these are text-checkable, and the
