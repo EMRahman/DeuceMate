@@ -28,7 +28,16 @@ flowchart LR
 Delivery is pragmatic: live checkpoints go instantly when the phone is reachable
 (and are silently skipped when it isn't — the next checkpoint supersedes them);
 important records are queued so they survive locked screens; large history pushes
-go as file transfers. That strategy lives in `MatchSyncTransport`.
+go as file transfers. That strategy lives in `MatchSyncTransport`. A successfully
+read full-history request ends with the Watch manifest; an unreadable Watch
+archive sends neither history nor a misleading empty manifest. The phone treats
+a received manifest as the successful acknowledgement even when it is empty,
+because the transport intentionally sends no history file for an empty Watch
+archive. The Sync Now result shows both device counts; if the iPhone has archived
+matches and a fresh Watch has none, it directs the user to open a match and choose
+**Sync to Watch** to restore selected records. Watch pairing/installation changes
+are refreshed through `sessionWatchStateDidChange`, rather than remaining frozen
+at activation.
 
 ## 2. Requests & commands — phone → watch, watch decides
 

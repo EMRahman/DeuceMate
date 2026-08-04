@@ -306,10 +306,12 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         error: Error?
     ) {
         DispatchQueue.main.async {
-            self.isPaired = session.isPaired
-            self.isWatchReachable = session.isReachable
-            self.isWatchAppInstalled = session.isWatchAppInstalled
-            self.pendingTransferCount = session.outstandingUserInfoTransfers.count
+            self.updatePublishedWatchState(
+                isPaired: session.isPaired,
+                isWatchAppInstalled: session.isWatchAppInstalled,
+                isReachable: session.isReachable,
+                pendingTransferCount: session.outstandingUserInfoTransfers.count
+            )
             self.finishActivation(state: Self.activationStateLabel(session.activationState))
         }
         if let error {
@@ -328,10 +330,29 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         }
     }
 
+    /// Watch pairing and installation can change after initial activation (most
+    /// notably when the Watch app finishes installing). Refresh the published
+    /// snapshot so Connection Details does not keep showing the activation-time
+    /// value until the phone app is relaunched.
+    func sessionWatchStateDidChange(_ session: WCSession) {
+        DispatchQueue.main.async {
+            self.updatePublishedWatchState(
+                isPaired: session.isPaired,
+                isWatchAppInstalled: session.isWatchAppInstalled,
+                isReachable: session.isReachable,
+                pendingTransferCount: session.outstandingUserInfoTransfers.count
+            )
+        }
+    }
+
     func sessionReachabilityDidChange(_ session: WCSession) {
         DispatchQueue.main.async {
-            self.isWatchReachable = session.isReachable
-            self.pendingTransferCount = session.outstandingUserInfoTransfers.count
+            self.updatePublishedWatchState(
+                isPaired: session.isPaired,
+                isWatchAppInstalled: session.isWatchAppInstalled,
+                isReachable: session.isReachable,
+                pendingTransferCount: session.outstandingUserInfoTransfers.count
+            )
         }
         if session.isReachable {
             requestFullHistorySync()
@@ -383,7 +404,9 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
 
     // MARK: - Private
 
-    private func handle(_ events: [SyncIncomingEvent]) {
+    /// Internal so the iOS target can prove that a decoded empty manifest is a
+    /// completed sync response without constructing a real `WCSession`.
+    func handle(_ events: [SyncIncomingEvent]) {
         var didSync = false
         for event in events {
             switch event {
@@ -405,6 +428,11 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                     Self.cacheManifest(ids)
                     self.updateMirror { WatchMirror.pruned($0, manifest: ids) }
                 }
+                // `MatchSyncTransport.sendHistory` deliberately emits no history
+                // payload for an empty archive. The manifest is therefore the
+                // authoritative completion acknowledgement for every full-sync
+                // request, including a freshly installed Watch with zero matches.
+                didSync = true
             case .history(let records):
                 store?.mergeIncoming(records)
                 DispatchQueue.main.async {
@@ -545,6 +573,20 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
             self.lastSyncDate = Date()
             self.pendingTransferCount = WCSession.default.outstandingUserInfoTransfers.count
         }
+    }
+
+    /// Applies a WatchConnectivity state snapshot on the main thread. Internal
+    /// for focused app-target tests of installation-state transitions.
+    func updatePublishedWatchState(
+        isPaired: Bool,
+        isWatchAppInstalled: Bool,
+        isReachable: Bool,
+        pendingTransferCount: Int
+    ) {
+        self.isPaired = isPaired
+        self.isWatchAppInstalled = isWatchAppInstalled
+        self.isWatchReachable = isReachable
+        self.pendingTransferCount = pendingTransferCount
     }
 
     private static func activationStateLabel(_ state: WCSessionActivationState) -> String {
