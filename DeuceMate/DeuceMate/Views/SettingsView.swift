@@ -118,8 +118,14 @@ struct SettingsView: View {
         case done(success: Bool, message: String)
     }
 
+    private enum SyncStatus: Equatable {
+        case inFlight
+        case succeeded
+        case failed(String)
+    }
+
     @State private var pingStatus: PingStatus?
-    @State private var syncStatus: PingStatus?
+    @State private var syncStatus: SyncStatus?
     @State private var syncRequestedAt: Date?
     @State private var showSyncDetails = false
     @State private var showArchiveExportDisclosure = false
@@ -160,7 +166,7 @@ struct SettingsView: View {
                   let requestedAt = syncRequestedAt,
                   let date = newDate,
                   date >= requestedAt else { return }
-            syncStatus = .done(success: true, message: "Sync completed ✓")
+            syncStatus = .succeeded
             syncRequestedAt = nil
         }
         .alert("Export Match Archive", isPresented: $showArchiveExportDisclosure) {
@@ -376,10 +382,17 @@ struct SettingsView: View {
                         Text("Syncing…")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                    case .done(let success, let message):
+                    case .succeeded:
+                        Text(Self.syncCompletionMessage(
+                            iPhoneCount: store.history.count,
+                            watchCount: syncService.watchMatchIDs.count
+                        ))
+                            .font(.footnote)
+                            .foregroundStyle(.green)
+                    case .failed(let message):
                         Text(message)
                             .font(.footnote)
-                            .foregroundStyle(success ? .green : .red)
+                            .foregroundStyle(.red)
                     }
                 }
 
@@ -636,9 +649,24 @@ struct SettingsView: View {
         syncService.requestFullHistorySync()
         DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
             guard self.syncRequestedAt == now, self.syncStatus == .inFlight else { return }
-            self.syncStatus = .done(success: false, message: "No response from watch")
+            self.syncStatus = .failed("No response from watch")
             self.syncRequestedAt = nil
         }
+    }
+
+    /// Builds the successful Sync Now result from live store/manifest counts so
+    /// a history payload arriving just after its manifest updates the text too.
+    static func syncCompletionMessage(iPhoneCount: Int, watchCount: Int) -> String {
+        let iPhoneMatches = matchCountLabel(iPhoneCount)
+        let watchMatches = matchCountLabel(watchCount)
+        let counts = "Sync complete. iPhone: \(iPhoneMatches). Apple Watch: \(watchMatches)."
+
+        guard iPhoneCount > 0, watchCount == 0 else { return counts }
+        return counts + " A fresh Apple Watch starts empty. To copy a match, open it and choose Sync to Watch."
+    }
+
+    private static func matchCountLabel(_ count: Int) -> String {
+        "\(count) \(count == 1 ? "match" : "matches")"
     }
 
     private var manualArchiveFilename: String {
