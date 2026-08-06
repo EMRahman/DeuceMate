@@ -12,14 +12,114 @@ source, Xcode project and scheme, entitlements, privacy and store metadata,
 compiled products, tests, and a generated archive. They are current repository
 findings, not historical notes copied from an earlier PR.
 
-**Current status: not ready to submit.** Verify the fresh-Watch sync-status fix
-on a new TestFlight build and finalize the App Privacy answer in Item 5 before
-submission. The reproducible physical-device cases for Blockers 2-4 are now
-complete; HealthKit-unavailable remains documented as not manually reproducible
-on supported hardware.
+**Current status: code-complete for the known blockers, but not yet ready to
+press Submit.** Verify the fresh-Watch sync-status fix on one new TestFlight
+release candidate, then finish the App Privacy answer, age rating, screenshots,
+review attachment/notes, and remaining App Store Connect record. The
+reproducible physical-device cases for Blockers 2-4 are complete;
+HealthKit-unavailable remains documented as not manually reproducible on
+supported hardware.
 
 Legend: `[ ]` to do, `[x]` verified, `[~]` partly verified or awaiting a product
 decision.
+
+---
+
+## Next manual pass - 5-6 August 2026
+
+This is the next useful test order after reviewing the current source and the
+4 August device evidence. Production-code changes since the first TestFlight
+pass are limited to the iPhone fresh-Watch synchronization fix in PR #78:
+empty manifests now complete **Sync Now**, Watch installation/reachability state
+refreshes after activation, and successful syncs show both device counts plus
+zero-on-Watch guidance. The Watch sender, scoring engine, HealthKit flow, iCloud
+archive policy, backup exclusion, and export-consent paths did not change.
+
+The full iOS scheme passed again on 5 August 2026 on an iPhone 17 Pro iOS 26.3
+simulator, including the three focused PR #78 tests and the no-Watch manual-entry
+and export UI route. One opt-in marketing-screenshot helper was skipped as
+designed. The remaining risk is the real WatchConnectivity lifecycle, which a
+simulator/unit test cannot prove; the 6 August device pass below subsequently
+verified that behavior.
+
+**OWNER DEVICE VERIFICATION - 6 August 2026:** The owner completed manual steps
+2-9 from the prioritized handoff on physical iPhone and Apple Watch hardware and
+reported that all passed. This covered the fresh empty-Watch state and live
+installation status, empty-manifest **Sync Now** result and counts, selected
+**Sync to Watch** restore, new Watch match transfer without duplication,
+unreachable/reachable recovery, the no-Watch reviewer path, Health-bearing and
+Health-free exports, foreground/background announcements, and local archive use
+with iCloud Drive unavailable. The behavior gate is therefore closed. Because
+build 2 had not yet been assigned when that pass ran, the remaining release step
+is to upload/install the exact build-2 TestFlight candidate and confirm its
+displayed build number and basic launch/sync sanity.
+
+### 1. Prepare one exact release candidate
+
+- [x] Increment `CURRENT_PROJECT_VERSION` from `1` to `2` for both the iPhone app
+  and embedded Watch app in Debug and Release, while keeping
+  `MARKETING_VERSION = 1.0.0`. **Repository update - 6 August 2026.** Test-target
+  build numbers remain at 1 because they are not shipped.
+- [ ] Commit the intended release changes, archive and upload build 2, then
+  install it from TestFlight as an **upgrade** over the previous iPhone build.
+  Confirm iPhone and Watch both display `1.0.0 (2)`, launch successfully, retain
+  the existing archive/settings without duplicates, and complete one basic
+  **Sync Now**. This is a distribution-candidate sanity check, not a repeat of
+  the already-passed full matrix.
+
+### 2. Test the fixed fresh-Watch path first - submission gate
+
+Start with at least two archived iPhone matches and a newly installed Watch app
+with zero Watch matches. Keep iPhone Settings -> Connection Details visible
+where a step specifically asks for live state.
+
+- [x] Remove/reinstall or freshly install the Watch app and verify **Watch App
+  Installed** changes to **Yes** without relaunching the iPhone app. Confirm
+  **Watch Paired**, **Watch Reachable**, and **Pending Transfers** remain
+  truthful rather than frozen at their activation-time values.
+- [x] With the empty Watch app open and reachable, tap **Sync Now**. Within ten
+  seconds it must show **Sync complete**, never **No response from watch**. The
+  message must report the correct non-zero iPhone count, **Apple Watch: 0
+  matches**, and the fresh-Watch **Sync to Watch** guidance.
+- [x] Open one older iPhone match, choose **Sync to Watch**, and confirm exactly
+  that match appears in Watch history. Run **Sync Now** again and verify the
+  counts update (for example, iPhone: 2 matches / Apple Watch: 1 match) and the
+  fresh-Watch guidance disappears.
+- [x] Create a distinct short match on the Watch, exercise score and undo, watch
+  the live iPhone scoreboard update, then finish the match. Confirm it appears
+  exactly once in the iPhone archive, the older restored match is not
+  duplicated, and a final **Sync Now** reports the expected counts.
+- [x] While Connection Details stays open, make the Watch temporarily
+  unreachable, then open the Watch app again. **Watch Reachable** may correctly
+  say **No (normal)** while unavailable, but it must recover without an iPhone
+  relaunch; **Ping Watch** and **Sync Now** must succeed once reachable.
+
+If any of these fail, stop the submission and record the exact iPhone/Watch
+build numbers, which apps were foregrounded, the displayed counts/state, and
+whether the failure recovered after relaunch. If all pass, the only known
+code/device submission gate is cleared.
+
+### 3. Concise final-candidate smoke pass
+
+- [x] On an unpaired/spare iPhone if available, follow the reviewer route:
+  **Manual Match Entry -> history -> detail -> statistics/Points Graph ->
+  export**. It must not wait indefinitely for WatchConnectivity. The automated
+  version of this path already passes, but one TestFlight pass is still useful.
+- [x] Open one Health-bearing archived match and one Health-free match. Confirm
+  a health-bearing export still names the fields present and Cancel stops the
+  share flow; confirm the Health-free export still opens sharing directly.
+- [x] With both apps foregrounded, confirm one live score announcement. Lock or
+  background the iPhone for the next point and confirm it stays silent, then
+  foreground it and confirm announcements resume.
+- [x] Launch the archive with iCloud Drive temporarily unavailable and confirm
+  local history still opens. A destructive clean restore or a repeat of the
+  full signed-out/deletion/backup-exclusion matrix is **not** needed unless the
+  final candidate changes those already-verified code paths.
+
+Do not hold submission for the HealthKit-unavailable cases: supported physical
+hardware does not expose a reproducible way to force `HKHealthStore` itself to
+be unavailable, and grant, denial, partial authorization, and revocation have
+already passed.
 
 ---
 
@@ -213,9 +313,11 @@ Required work:
   if they want to copy selected records back. **Repository fix — 4 August 2026.**
 - [x] Add focused tests for an empty-manifest sync response, Watch installation
   state changes, and the zero-on-Watch restore guidance. **Added 4 August 2026.**
-- [ ] Verify the corrected empty-Watch flow on a new TestFlight build: no false
+- [~] Verify the corrected empty-Watch flow on a new TestFlight build: no false
   error, accurate installation state/counts, selected **Sync to Watch** restore,
-  and normal Watch-to-iPhone transfer of a newly created match.
+  and normal Watch-to-iPhone transfer of a newly created match. **Behavior
+  verified on physical devices - 6 August 2026;** after build 2 is uploaded,
+  only its TestFlight install/build-number and basic launch/sync sanity remain.
 
 ---
 
@@ -378,7 +480,7 @@ Required work:
   available from the match's stored snapshots; after access was granted,
   Per-point avg loaded correctly. The HealthKit-unavailable case remains open.
 
-### 4. Health-derived data needs an iCloud and sharing compliance decision
+### 4. Health-derived data protections implemented; ASC answer pending
 
 **CODEX FINDING:** `ArchiveBackupPolicy` correctly strips the match's five
 HealthKit-derived metrics from the app-managed iCloud archive. Other paths still
@@ -449,9 +551,13 @@ Chosen disclosure posture and remaining work before submission:
   automatic-backup and user-export behavior without the false "never
   transmitted" claim; the per-export disclosure is now documented there too
   (16 July 2026).
-- [ ] Re-audit the final App Privacy answers now that the implementation and
-  consent design are settled (owner step in App Store Connect). Do not submit
-  while the policy and behavior disagree.
+- [ ] In App Store Connect, select **No, we do not collect data from this app**
+  and compare the resulting product-page preview with the final privacy policy
+  before publishing the answer. The codebase audit and Apple's current
+  definition support **Data Not Collected**: DeuceMate has no developer backend
+  or integrated third-party vendor code, and neither the user's personal iCloud
+  container nor an explicit user-directed export gives the developer access to
+  the data. Do not submit while the ASC answer and policy disagree.
 
 ---
 
@@ -499,9 +605,13 @@ Required work:
 - [x] Update the policy's storage locations, file-protection class, and date.
 - [x] Point Settings -> Support & FAQ directly to `docs/support.html` rather
   than the marketing root.
-- [~] "Data Not Collected" may remain the correct App Privacy answer under
-  Apple's developer-access definition, but do not justify it by claiming that
-  no information ever leaves either device.
+- [x] **Data Not Collected** is the recommended App Privacy answer under
+  [Apple's current definition](https://developer.apple.com/app-store/app-privacy-details/).
+  Apple defines collection around off-device data accessible to the developer
+  or integrated third-party vendor code; the source audit found neither. Keep
+  the narrower public explanation: personal iCloud storage and explicit
+  user-directed sharing can move data off-device even though the developer does
+  not collect it.
 
 ### 6. The iPhone experience must be reviewable without a Watch
 
@@ -546,7 +656,7 @@ OS versions, subject to App Store Connect's regional result.
 
 ## Build and test evidence
 
-Codex ran the following checks on 11 and 13 July and 4 August 2026:
+Codex ran the following checks on 11 and 13 July and 4-5 August 2026:
 
 - [x] `swift test`: 345 DeuceMateCore tests passed with zero failures.
 - [x] Watch unit tests, including the StatsStore tests, passed on a Series 11
@@ -572,6 +682,13 @@ Codex ran the following checks on 11 and 13 July and 4 August 2026:
   Pro iOS 26.3.1 simulator, including the new empty-manifest acknowledgement,
   live Watch-installation state, and zero-on-Watch count/guidance tests. The one
   opt-in marketing screenshot helper remained intentionally skipped.
+- [x] On 5 August 2026, the full iOS `DeuceMate` scheme passed again on an
+  iPhone 17 Pro iOS 26.3 simulator from the current checkout. All app unit and
+  UI tests passed; the same opt-in marketing-screenshot helper was skipped as
+  designed.
+- [x] On 6 August 2026, a Release generic-simulator build succeeded after the
+  build-number increment. The generated iPhone app and its embedded Watch app
+  both report `CFBundleShortVersionString = 1.0.0` and `CFBundleVersion = 2`.
 
 Remaining gaps:
 
@@ -588,17 +705,20 @@ Remaining gaps:
   `FileManager.url(forUbiquityContainerIdentifier:)`, which is not injectable;
   its production-container matrix passed on signed hardware by 4 August 2026 but
   remains outside automated coverage.
-- [~] Signed-device verification is in progress. The production TestFlight build
-  has passed first-install iCloud restore, selected iPhone-to-Watch restore,
-  new-match Watch-to-iPhone transfer, health-bearing export consent, and
-  foreground/background announcement behavior. The reproducible HealthKit
-  authorization matrix, previously outstanding iCloud states, and backup
-  exclusion passed on signed hardware by 4 August 2026. The corrected
+- [~] Signed-device verification is substantially complete. The production
+  TestFlight build has passed first-install iCloud restore, selected
+  iPhone-to-Watch restore, new-match Watch-to-iPhone transfer, health-bearing
+  export consent, and foreground/background announcement behavior. The
+  reproducible HealthKit authorization matrix, previously outstanding iCloud
+  states, and backup exclusion passed on signed hardware by 4 August 2026. The
+  corrected
   fresh-Watch sync result and broader connectivity transitions still need a new
   TestFlight build.
-- [ ] Run the full manual matrix on a TestFlight build: fresh install, upgrade,
-  paired/unpaired Watch, signed-in/out of iCloud, iCloud Drive disabled, all
-  HealthKit authorization states, and foreground/background transitions.
+- [~] The broad physical-device matrix has been run across the 1 and 4 August
+  passes. On the final TestFlight candidate, run the focused fresh-Watch,
+  upgrade, connectivity-transition, and concise smoke sequence in **Next manual
+  pass** above. Do not repeat destructive restore/authorization combinations
+  whose code did not change unless the candidate exposes a regression.
 
 Non-blocking Release build warnings to clean up:
 
@@ -636,7 +756,9 @@ Non-blocking Release build warnings to clean up:
 - [x] `ITSAppUsesNonExemptEncryption = false` is declared on both targets.
 - [x] The iPhone target correctly omits `NSHealthUpdateUsageDescription`; it
   reads HealthKit but does not write workouts.
-- [x] App version/build is consistently `1.0.0` / `1` across both targets.
+- [x] App version/build is consistently `1.0.0` / `2` across both production
+  targets in Debug and Release. Test targets remain at build 1 and are not
+  shipped. **Repository update - 6 August 2026.**
 - [x] No third-party package dependencies or developer-controlled backend were
   found.
 - [x] No production force-unwraps were found in the source audit.
@@ -693,7 +815,8 @@ search results.
 
 ### Build and compliance
 
-- [ ] Blockers 1-4 resolved in code, configuration, tests, and public copy.
+- [x] Blockers 1-4 resolved in code, configuration, tests, and public copy;
+  PR #78's final TestFlight device verification remains the separate next gate.
 - [x] Archive and validate with Xcode 26 / the iOS 26 SDK or newer. Submissions
   have required this toolchain since 28 April 2026; see
   [Upcoming Requirements](https://developer.apple.com/news/upcoming-requirements/).
