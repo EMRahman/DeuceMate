@@ -1,7 +1,7 @@
 // LiveMatchScreenshotTests.swift — drives a real live match on the watch via
 // gesture automation (the app's whole live-scoring model is swipe-based), for
-// the docs/screenshots/README.md watch scoreboard (04) and hero composite (01)
-// shots. Opt-in only (DEUCEMATE_CAPTURE_SCREENSHOTS=1): this target is part of
+// App Store and docs screenshots. Opt-in only
+// (DEUCEMATE_CAPTURE_SCREENSHOTS=1): this target is part of
 // the default "DeuceMate Watch App" scheme, and this test takes minutes and
 // mutates live app state, so it must never run as part of an ordinary test
 // pass. Run explicitly via `DEUCEMATE_CAPTURE_SCREENSHOTS=1 xcodebuild test
@@ -61,6 +61,8 @@ final class LiveMatchScreenshotTests: XCTestCase {
             Thread.sleep(forTimeInterval: 1)
         }
 
+        saveScreenshot("03-watch-home")
+
         let startMatch = app.buttons["Start Match"]
         XCTAssertTrue(startMatch.waitForExistence(timeout: 20))
         startMatch.tap()
@@ -69,6 +71,7 @@ final class LiveMatchScreenshotTests: XCTestCase {
             .matching(NSPredicate(format: "label CONTAINS[c] 'Best of 3 Sets (Club'"))
             .firstMatch
         XCTAssertTrue(standardFormat.waitForExistence(timeout: 10))
+        saveScreenshot("02-watch-match-format")
         standardFormat.tap()
 
         let warmUp = app.buttons["Warm Up Complete"]
@@ -113,6 +116,6 @@ final class LiveMatchScreenshotTests: XCTestCase {
             Thread.sleep(forTimeInterval: 1)
         }
 
-        saveScreenshot("04-watch-scoreboard")
+        saveScreenshot("01-watch-live-scoreboard")
     }
 }

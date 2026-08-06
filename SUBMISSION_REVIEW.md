@@ -14,8 +14,8 @@ findings, not historical notes copied from an earlier PR.
 
 **Current status: code-complete for the known blockers, but not yet ready to
 press Submit.** Verify the fresh-Watch sync-status fix on one new TestFlight
-release candidate, then finish the App Privacy answer, age rating, screenshots,
-review attachment/notes, and remaining App Store Connect record. The
+release candidate, then finish the App Privacy answer, age rating, review
+attachment/notes, and remaining App Store Connect record. The
 reproducible physical-device cases for Blockers 2-4 are complete;
 HealthKit-unavailable remains documented as not manually reproducible on
 supported hardware.
@@ -785,15 +785,21 @@ Non-blocking Release build warnings to clean up:
 
 ### Required formats
 
-- [ ] Upload an accepted iPhone 6.9-inch portrait set: 1260 x 2736,
+- [x] Prepare an upload-ready screenshot package under
+  [`docs/app-store-screenshots/`](docs/app-store-screenshots/README.md): five
+  iPhone 6.9-inch PNGs at 1320 x 2868 and four physical Apple Watch Series 7
+  (45 mm) PNGs at 396 x 484. Dimensions and absence of alpha were verified on
+  6 August 2026.
+- [x] Upload an accepted iPhone 6.9-inch portrait set: 1260 x 2736,
   1290 x 2796, or 1320 x 2868 pixels. A separate 6.5-inch set is only required
-  when no 6.9-inch set is supplied.
-- [ ] Upload one consistent accepted Watch size across every localization. Both
-  416 x 496 (Series 10/11) and the existing 396 x 484 size are accepted; a
-  separate 41 mm plus 45 mm set is not required.
-- [ ] Confirm the accepted dimensions in Apple's current
+  when no 6.9-inch set is supplied. **Owner verification — 6 August 2026:** all
+  five 1320 x 2868 screenshots were uploaded to App Store Connect.
+- [x] Upload all four 396 x 484 Series 7 Watch screenshots consistently across
+  every localization. A separate 41 mm plus 45 mm set is not required. **Owner
+  verification — 6 August 2026:** all four screenshots were uploaded.
+- [x] Confirm the accepted dimensions in Apple's current
   [screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/)
-  immediately before capture.
+  immediately before capture. **Verified 6 August 2026.**
 
 ### Recommended shot list
 
@@ -808,6 +814,10 @@ search results.
   provide authentic HealthKit workout data.
 - Record the demo video on real devices where possible: Watch scoring -> iPhone
   live scoreboard -> foreground announcements.
+- The upload package intentionally uses the latest completed match with point
+  statistics from the 6 August full-fidelity archive. Its authentic score,
+  outcomes, steps, calories, heart-rate samples, coaching insights, and Pulse
+  Coach output are shown; no screenshot data was fabricated.
 
 ---
 

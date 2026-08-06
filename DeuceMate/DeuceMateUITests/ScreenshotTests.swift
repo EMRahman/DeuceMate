@@ -1,4 +1,4 @@
-// ScreenshotTests.swift — captures fresh marketing/doc screenshots from a real
+// ScreenshotTests.swift — captures fresh App Store/doc screenshots from a real
 // imported match. Opt-in only (DEUCEMATE_CAPTURE_SCREENSHOTS=1): this target is
 // part of the default "DeuceMate" scheme, so an ungated run would fail on any
 // simulator whose archive isn't seeded with `targetMatchID`. Run explicitly via
@@ -16,11 +16,10 @@ private let screenshotOutputDir = ProcessInfo.processInfo.environment["DEUCEMATE
 
 /// UUID of the match to capture — seeded into the archive beforehand via
 /// `DeuceMateArchiveTool seed`. Override with DEUCEMATE_TARGET_MATCH_ID;
-/// defaults to record #1 (2026-07-15) from the real imported archive used to
-/// capture the currently-committed shots, chosen for its dramatic 3-set
-/// comeback score.
+/// defaults to the latest completed match (2026-08-05) from the real imported
+/// archive used to capture the currently committed App Store upload set.
 private let targetMatchID = ProcessInfo.processInfo.environment["DEUCEMATE_TARGET_MATCH_ID"]
-    ?? "5ABCB95C-1E5E-4554-B2B6-503C7C85F0C0"
+    ?? "44ACB61B-BBF0-444C-86BC-2A0125E0DF6D"
 
 final class ScreenshotTests: XCTestCase {
 
@@ -42,11 +41,15 @@ final class ScreenshotTests: XCTestCase {
     }
 
     @MainActor
-    func test_captureStaleScreenshots() throws {
+    func test_captureAppStoreScreenshots() throws {
         let app = XCUIApplication()
         app.launch()
 
         let matchRow = app.buttons["match-row-\(targetMatchID)"]
+        XCTAssertTrue(app.navigationBars["Matches"].waitForExistence(timeout: 20))
+        // The archive establishes that this is a real product with useful
+        // history, rather than a one-screen score counter.
+        saveScreenshot("05-match-archive")
         for _ in 0..<6 where !matchRow.exists {
             app.swipeUp()
         }
@@ -56,7 +59,13 @@ final class ScreenshotTests: XCTestCase {
         )
         matchRow.tap()
 
-        // --- Expanded Points Graph: 02 (HR+Steps overlays), 07 (Points Won), 08 (Points Lost) ---
+        // Strongest first upload slot: completed score, result, points graph,
+        // and the beginning of the match analysis on one screen.
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 10))
+        Thread.sleep(forTimeInterval: 0.5)
+        saveScreenshot("01-match-overview")
+
+        // --- Expanded Points Graph: HR + steps overlays ---
         let expandButton = app.buttons["expand-points-graph"]
         for _ in 0..<4 where !expandButton.exists {
             app.swipeUp()
@@ -64,37 +73,31 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(expandButton.waitForExistence(timeout: 10))
         expandButton.tap()
 
+        XCTAssertTrue(app.navigationBars["Points Graph"].waitForExistence(timeout: 10))
+        // Add authentic health overlays when the seeded full-fidelity archive
+        // contains them. A score-only archive still produces the base graph.
         let stepsToggle = app.buttons["steps-overlay-toggle"]
-        let hrToggle = app.buttons["heart-rate-overlay-toggle"]
-        XCTAssertTrue(stepsToggle.waitForExistence(timeout: 10))
-        stepsToggle.tap()
-        XCTAssertTrue(hrToggle.waitForExistence(timeout: 5))
-        hrToggle.tap()
-        // Let the chart animation settle before capturing.
+        if stepsToggle.waitForExistence(timeout: 3) {
+            stepsToggle.tap()
+        }
+        let heartRateToggle = app.buttons["heart-rate-overlay-toggle"]
+        if heartRateToggle.waitForExistence(timeout: 3) {
+            heartRateToggle.tap()
+        }
         Thread.sleep(forTimeInterval: 0.5)
-        saveScreenshot("02-points-momentum-graph")
+        saveScreenshot("02-points-momentum")
+        app.navigationBars["Points Graph"].buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["expand-points-graph"].waitForExistence(timeout: 10))
 
-        let pointsWonChip = app.buttons["points-won-chip"]
-        XCTAssertTrue(pointsWonChip.waitForExistence(timeout: 5))
-        pointsWonChip.tap()
-        Thread.sleep(forTimeInterval: 0.3)
-        saveScreenshot("07-points-outcomes-won")
-
-        let pointsLostChip = app.buttons["points-lost-chip"]
-        XCTAssertTrue(pointsLostChip.waitForExistence(timeout: 5))
-        pointsLostChip.tap()
-        Thread.sleep(forTimeInterval: 0.3)
-        saveScreenshot("08-points-outcomes-lost")
-
-        app.buttons["Done"].firstMatch.tap()
-
-        // --- Stats tab, scrolled to Pulse Coach: 05 ---
-        let pulseCoachHeading = app.staticTexts["Pulse Coach"]
-        for _ in 0..<8 where !pulseCoachHeading.exists {
+        // --- Stats tab, scrolled to data-driven coaching insights ---
+        let coachingHeading = app.staticTexts
+            .matching(NSPredicate(format: "label BEGINSWITH 'Coaching Insights'"))
+            .firstMatch
+        for _ in 0..<6 where !coachingHeading.exists {
             app.swipeUp()
         }
-        XCTAssertTrue(pulseCoachHeading.waitForExistence(timeout: 10))
-        saveScreenshot("05-pulse-coach-hr-zones")
+        XCTAssertTrue(coachingHeading.waitForExistence(timeout: 10))
+        saveScreenshot("04-coaching-insights")
 
         // --- Stats tab, scrolled to Outcome Breakdown / Serve: 03 ---
         let outcomeBreakdown = app.staticTexts["Outcome Breakdown"]
@@ -108,5 +111,6 @@ final class ScreenshotTests: XCTestCase {
         // overshooting into the Serve/Return/Break Points sections below it.
         app.swipeUp(velocity: .slow)
         saveScreenshot("03-match-stats")
+
     }
 }
