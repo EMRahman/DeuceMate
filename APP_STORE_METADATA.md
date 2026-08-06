@@ -148,10 +148,11 @@ Game, set, match!
 ### iPhone screenshots (Required)
 
 App Store Connect requires at least one set of iPhone screenshots. Provide the
-6.9" display size; the 6.5" set is optional and recommended.
+6.9" display size; the 6.5" set is required only when a 6.9" set is absent.
 
-- **6.9" display** (iPhone 16 Pro Max — 1320×2868): 1–10 screenshots, 3–6 recommended
-- **6.5" display** (optional — 1284×2778): 1–10 screenshots
+- **6.9" display:** 1–10 screenshots at one accepted portrait size:
+  1260×2736, 1290×2796, or 1320×2868; 3–6 screenshots recommended
+- **6.5" display** (optional when 6.9" is supplied): 1–10 screenshots
 
 Suggested iPhone screenshot content (in order):
 1. Live scoreboard mirroring an in-progress match
@@ -160,10 +161,12 @@ Suggested iPhone screenshot content (in order):
 4. Points timeline graph
 5. Settings showing the spoken-announcements toggle
 
-### Apple Watch screenshots (Required for the watch app)
+### Apple Watch screenshots (Required for the Watch app)
 
-- **45mm** (396×484): 1–10 screenshots, 3–5 recommended
-- **41mm** (368×448): 1–10 screenshots, 3–5 recommended
+- Upload 1–10 screenshots at **one accepted Watch size**, used consistently
+  across every localization; 3–5 screenshots are recommended.
+- Prefer **416×496** (Series 10/11) for a new set, or use the existing
+  **396×484** (Series 7–9) size. Separate 41 mm and 45 mm sets are not required.
 
 Suggested Apple Watch screenshot content (in order):
 1. Main scoring screen during an active match
@@ -221,9 +224,10 @@ When completing the App Privacy questionnaire in App Store Connect:
 
 - DeuceMate has **no developer-controlled servers, analytics, or third-party
   SDKs**. Its automatic archive uses the user's personal iCloud Drive account,
-  but the developer cannot access that archive. "**Data Not Collected**" may
-  therefore remain appropriate under Apple's developer-access definition;
-  confirm the final answer in App Store Connect.
+  but the developer cannot access that archive. Select **No, we do not collect
+  data from this app** in App Store Connect; this matches Apple's definition of
+  collection and the audited implementation. Preview the resulting product-page
+  label against the final privacy policy before publishing it.
 - HealthKit data (heart rate, energy, steps, distance) is read and analysed in
   DeuceMate. HealthKit-derived match fields are excluded from DeuceMate's
   automatic iCloud Drive archive and are never sent to the developer. Maximum
@@ -347,7 +351,7 @@ mail@ehsanrahman.com
 ### Required
 - [ ] All metadata text finalized (name, subtitle, description, keywords)
 - [ ] iPhone screenshots prepared (6.9" required)
-- [ ] Apple Watch screenshots prepared (41mm and 45mm)
+- [ ] Apple Watch screenshots prepared at one accepted size used consistently
 - [ ] Privacy policy page live and accessible (includes HealthKit section)
 - [ ] Support URL or email verified
 - [ ] App Privacy questionnaire completed ("Data Not Collected")
