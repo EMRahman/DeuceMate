@@ -355,7 +355,7 @@ mail@ehsanrahman.com
 - [ ] Privacy policy page live and accessible (includes HealthKit section)
 - [ ] Support URL or email verified
 - [ ] App Privacy questionnaire completed ("Data Not Collected")
-- [ ] Age rating completed via the current questionnaire (expected 9+ — Health/Wellness topics; not 4+)
+- [x] Age rating completed via the current questionnaire — confirmed 9+ (Health/Wellness topics; not 4+) on 6 August 2026
 - [ ] Pricing tier selected (Free)
 - [ ] Territories/regions selected
 - [ ] Build archived from Xcode and uploaded

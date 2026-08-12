@@ -555,16 +555,18 @@ Chosen disclosure posture and remaining work before submission:
   automatic-backup and user-export behavior without the false "never
   transmitted" claim; the per-export disclosure is now documented there too
   (16 July 2026).
-- [x] In App Store Connect, select **No, we do not collect data from this app**
+- [~] In App Store Connect, select **No, we do not collect data from this app**
   and compare the resulting product-page preview with the final privacy policy
   before publishing the answer. The codebase audit and Apple's current
   definition support **Data Not Collected**: DeuceMate has no developer backend
   or integrated third-party vendor code, and neither the user's personal iCloud
   container nor an explicit user-directed export gives the developer access to
-  the data. Do not submit while the ASC answer and policy disagree. **Completed
-  for the 6 August 2026 submission** — App Privacy answers are a mandatory App
-  Store Connect gate to submit; confirm the selected answer was exactly **Data
-  Not Collected** if it wasn't chosen precisely as recommended above.
+  the data. Do not submit while the ASC answer and policy disagree. *Some* App
+  Privacy answer was necessarily submitted for the 6 August 2026 submission —
+  it's a mandatory App Store Connect gate — but which value was selected, and
+  whether the product-page preview was compared against the policy, is
+  unconfirmed. Leave open until the owner confirms the selected answer was
+  exactly **Data Not Collected**.
 
 ---
 
@@ -855,9 +857,10 @@ search results.
   include the hardware demo video. Manual Match Entry is first (see Item 6);
   no demo video was attached for the 6 August 2026 submission — optional per
   Apple's guidance, not a hard requirement.
-- [x] App Privacy answers are based on final behavior, not the old absolute
-  "on-device only" wording. Completed as part of the mandatory App Store
-  Connect submission flow for the 6 August 2026 submission.
+- [~] App Privacy answers are based on final behavior, not the old absolute
+  "on-device only" wording. *Some* answer was necessarily submitted as part of
+  the mandatory App Store Connect submission flow, but the exact selected
+  value is unconfirmed — see the matching item under Blocker 4 above.
 - [x] Current age-rating questionnaire completed and metadata updated to match.
   Confirmed 9+ on 6 August 2026 (see Item 7).
 - [x] EU Digital Services Act trader/non-trader status supplied (declared
@@ -870,10 +873,12 @@ search results.
   the intended iPhone/Watch-only availability.
 - [ ] Accessibility Nutrition Labels claimed only after auditing the supported
   common tasks on both iPhone and Watch.
-- [x] Privacy, Support, and Marketing URLs rechecked while logged out immediately
-  before submission. **Re-verified 12 August 2026:** all three
-  (`emrahman.github.io/DeuceMate/`, `/privacy.html`, `/support.html`) returned
-  HTTP 200 on an unauthenticated request.
+- [~] Privacy, Support, and Marketing URLs rechecked while logged out immediately
+  before submission. Whether this recheck happened during the 6 August 2026
+  submission window is unconfirmed. **Separately re-verified 12 August 2026**
+  (six days after submission, so it doesn't stand in for the pre-submit check):
+  all three (`emrahman.github.io/DeuceMate/`, `/privacy.html`, `/support.html`)
+  returned HTTP 200 on an unauthenticated request.
 - [x] Correct iPhone and Watch screenshot sets uploaded and accepted. Uploaded
   6 August 2026 (see Screenshot and demo-video plan); acceptance confirmed by
   the successful 6 August 2026 submission.
