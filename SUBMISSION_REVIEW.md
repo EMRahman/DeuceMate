@@ -12,13 +12,16 @@ source, Xcode project and scheme, entitlements, privacy and store metadata,
 compiled products, tests, and a generated archive. They are current repository
 findings, not historical notes copied from an earlier PR.
 
-**Current status: code-complete for the known blockers, but not yet ready to
-press Submit.** Verify the fresh-Watch sync-status fix on one new TestFlight
-release candidate, then finish the App Privacy answer, age rating, review
-attachment/notes, and remaining App Store Connect record. The
-reproducible physical-device cases for Blockers 2-4 are complete;
-HealthKit-unavailable remains documented as not manually reproducible on
-supported hardware.
+**Current status: submitted to Apple and pending App Store review (submitted 6
+August 2026).** Build 2 was archived, uploaded, installed via TestFlight as an
+upgrade, and confirmed at `1.0.0 (2)` before submission. The App Privacy
+answer, age-rating questionnaire (calculated 9+, matching the prediction), and
+EU DSA trader/non-trader declaration (non-trader) were completed as part of
+the mandatory App Store Connect submission flow. The reproducible
+physical-device cases for Blockers 2-4 are complete; HealthKit-unavailable
+remains documented as not manually reproducible on supported hardware. No demo
+video was attached to App Review notes — optional per Apple's guidance, not a
+submission requirement.
 
 Legend: `[ ]` to do, `[x]` verified, `[~]` partly verified or awaiting a product
 decision.
@@ -49,10 +52,9 @@ installation status, empty-manifest **Sync Now** result and counts, selected
 **Sync to Watch** restore, new Watch match transfer without duplication,
 unreachable/reachable recovery, the no-Watch reviewer path, Health-bearing and
 Health-free exports, foreground/background announcements, and local archive use
-with iCloud Drive unavailable. The behavior gate is therefore closed. Because
-build 2 had not yet been assigned when that pass ran, the remaining release step
-is to upload/install the exact build-2 TestFlight candidate and confirm its
-displayed build number and basic launch/sync sanity.
+with iCloud Drive unavailable. The behavior gate is therefore closed. Build 2
+was subsequently uploaded and installed via TestFlight as an upgrade, confirmed
+at `1.0.0 (2)`, and submitted to Apple for review on 6 August 2026.
 
 ### 1. Prepare one exact release candidate
 
@@ -60,12 +62,13 @@ displayed build number and basic launch/sync sanity.
   and embedded Watch app in Debug and Release, while keeping
   `MARKETING_VERSION = 1.0.0`. **Repository update - 6 August 2026.** Test-target
   build numbers remain at 1 because they are not shipped.
-- [ ] Commit the intended release changes, archive and upload build 2, then
+- [x] Commit the intended release changes, archive and upload build 2, then
   install it from TestFlight as an **upgrade** over the previous iPhone build.
   Confirm iPhone and Watch both display `1.0.0 (2)`, launch successfully, retain
   the existing archive/settings without duplicates, and complete one basic
   **Sync Now**. This is a distribution-candidate sanity check, not a repeat of
-  the already-passed full matrix.
+  the already-passed full matrix. **Owner verification — confirmed via
+  TestFlight before the 6 August 2026 submission.**
 
 ### 2. Test the fixed fresh-Watch path first - submission gate
 
@@ -313,11 +316,12 @@ Required work:
   if they want to copy selected records back. **Repository fix — 4 August 2026.**
 - [x] Add focused tests for an empty-manifest sync response, Watch installation
   state changes, and the zero-on-Watch restore guidance. **Added 4 August 2026.**
-- [~] Verify the corrected empty-Watch flow on a new TestFlight build: no false
+- [x] Verify the corrected empty-Watch flow on a new TestFlight build: no false
   error, accurate installation state/counts, selected **Sync to Watch** restore,
   and normal Watch-to-iPhone transfer of a newly created match. **Behavior
-  verified on physical devices - 6 August 2026;** after build 2 is uploaded,
-  only its TestFlight install/build-number and basic launch/sync sanity remain.
+  verified on physical devices - 6 August 2026;** build 2's TestFlight
+  install/build-number and basic launch/sync sanity were subsequently confirmed
+  ahead of the 6 August 2026 submission.
 
 ---
 
@@ -551,13 +555,18 @@ Chosen disclosure posture and remaining work before submission:
   automatic-backup and user-export behavior without the false "never
   transmitted" claim; the per-export disclosure is now documented there too
   (16 July 2026).
-- [ ] In App Store Connect, select **No, we do not collect data from this app**
+- [~] In App Store Connect, select **No, we do not collect data from this app**
   and compare the resulting product-page preview with the final privacy policy
   before publishing the answer. The codebase audit and Apple's current
   definition support **Data Not Collected**: DeuceMate has no developer backend
   or integrated third-party vendor code, and neither the user's personal iCloud
   container nor an explicit user-directed export gives the developer access to
-  the data. Do not submit while the ASC answer and policy disagree.
+  the data. Do not submit while the ASC answer and policy disagree. *Some* App
+  Privacy answer was necessarily submitted for the 6 August 2026 submission —
+  it's a mandatory App Store Connect gate — but which value was selected, and
+  whether the product-page preview was compared against the policy, is
+  unconfirmed. Leave open until the owner confirms the selected answer was
+  exactly **Data Not Collected**.
 
 ---
 
@@ -623,7 +632,10 @@ Reviewers may not pair an Apple Watch. The no-Watch review path is
 - [x] Put Manual Match Entry first in the App Review notes' test instructions.
 - [ ] Attach a demo video showing Watch scoring, iPhone live scoreboard, and
   foreground announcements. Apple recommends a video when hardware-specific
-  features are difficult to reproduce during review.
+  features are difficult to reproduce during review. **Not attached for the
+  6 August 2026 submission** — optional per Apple's guidance, not a hard
+  requirement; revisit if this submission is rejected or draws a reviewer
+  question about Watch-specific behavior.
 - [x] Confirm every central iPhone screen has a useful no-Watch state and no
   indefinite connectivity loading state. WatchConnectivity activation now
   leaves the connecting state after at most 10 seconds (and immediately when
@@ -640,13 +652,15 @@ recommendations and calorie tracking. DeuceMate's heart-rate zones, fitness
 coaching, and calorie display mean the calculated rating is likely 9+ on newer
 OS versions, subject to App Store Connect's regional result.
 
-- [ ] Complete the current questionnaire accurately instead of forcing the old
+- [x] Complete the current questionnaire accurately instead of forcing the old
   4+ assumption. See Apple's
   [age-rating definitions](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions).
-- [~] Update `APP_STORE_METADATA.md` to the rating App Store Connect calculates.
-  **16 July 2026:** the metadata now states the expected **9+** (Health/Wellness
-  topics) instead of the stale 4+; replace with the exact ASC-calculated rating
-  once the questionnaire is run.
+  **Owner confirmation — 6 August 2026:** the App Store Connect questionnaire
+  calculated **9+**, matching the Health/Wellness-topics prediction.
+- [x] Update `APP_STORE_METADATA.md` to the rating App Store Connect calculates.
+  **16 July 2026:** the metadata stated the expected **9+** (Health/Wellness
+  topics) instead of the stale 4+. **Confirmed 6 August 2026:** the
+  ASC-calculated rating is 9+, matching the metadata as written.
 - [x] Do not describe DeuceMate as diagnosing or treating a medical condition.
   **Audited 16 July 2026:** no diagnose/treat/medical-condition language in the
   public or in-app copy — the coaching insights are tennis-performance advice
@@ -830,34 +844,53 @@ search results.
 - [x] Archive and validate with Xcode 26 / the iOS 26 SDK or newer. Submissions
   have required this toolchain since 28 April 2026; see
   [Upcoming Requirements](https://developer.apple.com/news/upcoming-requirements/).
-- [ ] Test the validated build on a real iPhone and Apple Watch, then TestFlight.
+- [x] Test the validated build on a real iPhone and Apple Watch, then
+  TestFlight. Verified across the 4-6 August 2026 device passes and the
+  build-2 TestFlight upgrade install ahead of the 6 August 2026 submission.
 - [x] HealthKit and iCloud production capabilities/container verified for the
   iPhone and Watch App IDs and signed products.
 - [x] Final bundle ID `ehsan.DeuceMate` explicitly accepted as permanent.
 
 ### Store record
 
-- [ ] App Review notes start with the no-Watch Manual Match Entry path and include
-  the hardware demo video.
-- [ ] App Privacy answers are based on final behavior, not the old absolute
-  "on-device only" wording.
-- [ ] Current age-rating questionnaire completed and metadata updated to match.
-- [ ] EU Digital Services Act trader/non-trader status supplied. See Apple's
+- [~] App Review notes start with the no-Watch Manual Match Entry path and
+  include the hardware demo video. Manual Match Entry is first (see Item 6);
+  no demo video was attached for the 6 August 2026 submission — optional per
+  Apple's guidance, not a hard requirement.
+- [~] App Privacy answers are based on final behavior, not the old absolute
+  "on-device only" wording. *Some* answer was necessarily submitted as part of
+  the mandatory App Store Connect submission flow, but the exact selected
+  value is unconfirmed — see the matching item under Blocker 4 above.
+- [x] Current age-rating questionnaire completed and metadata updated to match.
+  Confirmed 9+ on 6 August 2026 (see Item 7).
+- [x] EU Digital Services Act trader/non-trader status supplied (declared
+  non-trader). See Apple's
   [DSA guidance](https://developer.apple.com/help/app-store-connect/manage-compliance-information/manage-european-union-digital-services-act-trader-requirements/).
-- [ ] Content Rights question, support contact, copyright, app availability
+- [~] Content Rights question, support contact, copyright, app availability
   (including Mac/Vision compatibility), and manual/automatic release mode set.
+  Content Rights and release mode are mandatory to submit, so both are set;
+  worth a quick spot check that the Mac/Vision-compatibility toggle reflects
+  the intended iPhone/Watch-only availability.
 - [ ] Accessibility Nutrition Labels claimed only after auditing the supported
   common tasks on both iPhone and Watch.
-- [ ] Privacy, Support, and Marketing URLs rechecked while logged out immediately
-  before submission.
-- [ ] Correct iPhone and Watch screenshot sets uploaded and accepted.
+- [~] Privacy, Support, and Marketing URLs rechecked while logged out immediately
+  before submission. Whether this recheck happened during the 6 August 2026
+  submission window is unconfirmed. **Separately re-verified 12 August 2026**
+  (six days after submission, so it doesn't stand in for the pre-submit check):
+  all three (`emrahman.github.io/DeuceMate/`, `/privacy.html`, `/support.html`)
+  returned HTTP 200 on an unauthenticated request.
+- [x] Correct iPhone and Watch screenshot sets uploaded and accepted. Uploaded
+  6 August 2026 (see Screenshot and demo-video plan); acceptance confirmed by
+  the successful 6 August 2026 submission.
 
 ### Final smoke test
 
-- [ ] Fresh install without a paired Watch can create, inspect, and export a
-  manually entered match.
-- [ ] Paired Watch can create a match, live-sync it, finish it, and recover it on
-  iPhone without duplicates.
+- [x] Fresh install without a paired Watch can create, inspect, and export a
+  manually entered match. Verified in the **Concise final-candidate smoke
+  pass** above.
+- [x] Paired Watch can create a match, live-sync it, finish it, and recover it on
+  iPhone without duplicates. Verified in the **Next manual pass** section above
+  (item 2, fourth bullet).
 - [x] A fresh Watch install presents the optional HealthKit request; granting
   access starts or resumes one Tennis workout per match and records only the
   measurements the user authorized. Verified 4 August 2026.
