@@ -415,6 +415,13 @@ struct HomeView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Match setup: \(matchSetupSummary)")
                     .accessibilityHint("Opens format and singles or doubles options")
+
+                    // What this match will actually record — stated before the
+                    // first point, because none of it can be added afterwards.
+                    // Taps to Settings, same as the format row above it.
+                    LiveTrackingStatusStrip(viewModel: viewModel) {
+                        showSettings = true
+                    }
                 }
 
                 if matchInProgress {
@@ -532,6 +539,14 @@ struct HomeView: View {
             NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
+                    // Mirrors the start-screen strip, with room for the detail —
+                    // including Health, which has no in-app toggle and can only
+                    // be granted from the iPhone. Always all three (§4.3).
+                    Text("What This Match Records")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    LiveTrackingStatusRows(viewModel: viewModel)
+                    Divider().padding(.vertical, 4)
                     Toggle(isOn: $viewModel.statsTrackingEnabled) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Track point outcome")
@@ -896,6 +911,9 @@ struct HomeView: View {
         }
         .onAppear {
             hasPastMatches = !StatsStore.shared.loadHistory().isEmpty
+            // Health access can be revoked from the iPhone while the app is
+            // backgrounded, so re-read it whenever the start screen appears.
+            viewModel.workoutManager.refreshHealthAccess()
         }
         .onReceive(NotificationCenter.default.publisher(for: .watchMatchHistoryDidChange)) { _ in
             hasPastMatches = !StatsStore.shared.loadHistory().isEmpty

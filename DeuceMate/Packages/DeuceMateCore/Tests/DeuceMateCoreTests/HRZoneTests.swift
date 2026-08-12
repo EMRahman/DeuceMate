@@ -74,6 +74,39 @@ final class HRZoneTests: XCTestCase {
         XCTAssertEqual(resolved, 190)
     }
 
+    // MARK: - isUsableBirthYear
+
+    func test_isUsableBirthYear_acceptsTheYearsResolveMaxHRActuallyUses() {
+        XCTAssertTrue(HRZone.isUsableBirthYear(1990, currentYear: 2026))
+        XCTAssertTrue(HRZone.isUsableBirthYear(2021, currentYear: 2026))  // age 5
+        XCTAssertTrue(HRZone.isUsableBirthYear(1926, currentYear: 2026))  // age 100
+    }
+
+    func test_isUsableBirthYear_rejectsUnsetFutureAndOutOfRangeAges() {
+        XCTAssertFalse(HRZone.isUsableBirthYear(0, currentYear: 2026))    // "Skip"
+        XCTAssertFalse(HRZone.isUsableBirthYear(2030, currentYear: 2026)) // future
+        XCTAssertFalse(HRZone.isUsableBirthYear(2023, currentYear: 2026)) // age 3
+        XCTAssertFalse(HRZone.isUsableBirthYear(1900, currentYear: 2026)) // age 126
+    }
+
+    func test_isUsableBirthYear_agreesWithResolveMaxHR() {
+        // The predicate exists so the UI can tell "calibrated" from "defaulted";
+        // it must match resolveMaxHR's own acceptance exactly.
+        for year in [0, 1899, 1900, 1901, 1926, 1990, 2021, 2022, 2026, 2030] {
+            let resolved = HRZone.resolveMaxHR(
+                manualOverride: nil,
+                birthYear: year,
+                currentYear: 2026
+            )
+            let usedAge = resolved == 220 - (2026 - year)
+            XCTAssertEqual(
+                HRZone.isUsableBirthYear(year, currentYear: 2026),
+                usedAge,
+                "birth year \(year)"
+            )
+        }
+    }
+
     // MARK: - ceilingBPM(for:maxHR:)
 
     func test_ceilingBPM_at190MaxHR() {

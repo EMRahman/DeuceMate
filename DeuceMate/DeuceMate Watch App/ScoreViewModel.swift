@@ -1,6 +1,7 @@
 //ScoreViewModel.swift
 import Foundation
 import SwiftUI
+import Combine
 import HealthKit
 import CoreLocation
 import DeuceMateCore
@@ -48,6 +49,7 @@ class ScoreViewModel: ObservableObject {
         }
     }
     let workoutManager = WorkoutManager()
+    private var cancellables = Set<AnyCancellable>()
     private var isSyncingChangeover_ = false
     @Published var checkChangeover: Bool = UserDefaults.standard.object(forKey: "checkChangeover") as? Bool ?? false {
         didSet {
@@ -616,6 +618,13 @@ class ScoreViewModel: ObservableObject {
         statsTrackingEnabled = UserDefaults.standard.bool(forKey: "statsTrackingEnabled")
         detailedShotTrackingEnabled = statsTrackingEnabled
 
+        // WorkoutManager is a plain stored property, not an @ObservedObject —
+        // views that only observe `self` (e.g. the tracking strip) would never
+        // redraw when `healthAccess` changes without this forward.
+        workoutManager.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
         // Mirror phone-pushed Pulse Coach settings into the published values.
         NotificationCenter.default.addObserver(
             forName: .pulseCoachSettingsChanged,
@@ -644,6 +653,22 @@ class ScoreViewModel: ObservableObject {
         HRZone.resolveMaxHR(
             manualOverride: userMaxHROverride > 0 ? userMaxHROverride : nil,
             birthYear: userBirthYear > 0 ? userBirthYear : nil
+        )
+    }
+
+    /// The three "what will this match record?" indicators — point tracking
+    /// (format-aware), Health access, and Pulse Coach calibration — resolved
+    /// once here so the start-screen strip and the settings summary can never
+    /// disagree. Derivation itself lives in `MatchTrackingStatus` (Core,
+    /// unit-tested). Always three; the strip collapses Pulse separately via
+    /// `MatchTrackingStatus.collapsingPulseWhenHealthOff(_:)`.
+    var trackingStatuses: [MatchTrackingStatus] {
+        MatchTrackingStatus.all(
+            matchFormat: matchFormat,
+            pointTrackingEnabled: statsTrackingEnabled,
+            healthAccess: workoutManager.healthAccess,
+            birthYear: userBirthYear,
+            maxHROverride: userMaxHROverride
         )
     }
 

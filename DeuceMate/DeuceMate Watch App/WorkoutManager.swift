@@ -1,5 +1,6 @@
 import Foundation
 import HealthKit
+import DeuceMateCore
 
 class WorkoutManager: NSObject, ObservableObject {
     private let healthStore = HKHealthStore()
@@ -10,6 +11,12 @@ class WorkoutManager: NSObject, ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var currentHeartRate: Double? = nil
     @Published private(set) var totalKilocalories: Double? = nil
+    /// Whether a match will record heart rate, steps, and calories. There is no
+    /// in-app toggle for this — it is the system HealthKit permission — so the
+    /// pre-match tracking strip reads it from here. Refreshed after the
+    /// authorization request and whenever the app returns to the foreground,
+    /// since the user can revoke access from the iPhone while the app is away.
+    @Published private(set) var healthAccess: HealthAccess = .notDetermined
     private var lastHeartRatePublishDate: Date?
     private var lastCaloriesPublishDate: Date?
     private let heartRatePublishInterval: TimeInterval = 2.0
@@ -27,7 +34,30 @@ class WorkoutManager: NSObject, ObservableObject {
             HKQuantityType(.distanceWalkingRunning)
         ]
         healthStore.requestAuthorization(toShare: share, read: read) { success, _ in
-            DispatchQueue.main.async { completion(success) }
+            DispatchQueue.main.async {
+                self.refreshHealthAccess()
+                completion(success)
+            }
+        }
+    }
+
+    /// Re-reads the HealthKit permission into `healthAccess`.
+    ///
+    /// Only *share* authorization can be queried — HealthKit deliberately hides
+    /// read authorization so an app cannot infer what the user is hiding. The
+    /// workout share status is the honest proxy: without it no workout session
+    /// is saved, and with it the session runs and collects the samples the user
+    /// allowed. Call on foreground; permissions change outside the app.
+    func refreshHealthAccess() {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            healthAccess = .unavailable
+            return
+        }
+        switch healthStore.authorizationStatus(for: HKQuantityType.workoutType()) {
+        case .sharingAuthorized: healthAccess = .authorized
+        case .sharingDenied:     healthAccess = .denied
+        case .notDetermined:     healthAccess = .notDetermined
+        @unknown default:        healthAccess = .notDetermined
         }
     }
 

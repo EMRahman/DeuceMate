@@ -26,7 +26,7 @@ accurate docs, navigable files, and text-level checks are its substitutes.
 | 3 | Settings | Replace stringly-typed settings keys with typed keys | **High (next up)** | Backlog |
 | 4a | Persistence | Silent save-failure handling (watch + phone) | Low | Backlog |
 | 4b | Persistence | File-protection level on watch saves | Low | **Done** |
-| 5 | UX | Simplify first-run and match-start flow | Medium | **Planned** — [`MATCH_START_UX_PLAN.md`](MATCH_START_UX_PLAN.md) |
+| 5 | UX | Simplify first-run and match-start flow | Medium | **Done** — [`MATCH_START_UX_PLAN.md`](MATCH_START_UX_PLAN.md) |
 | 6 | Concurrency | `PhoneStatsStore` actor / `@MainActor` migration | Low | Backlog |
 | 7 | Stats | Convert formatted string stats to typed `RatioStat` | Medium | Backlog |
 | 8 | Agent docs | Fix `CLAUDE.md` drift (pbxproj claim, ghost files, stale sizes) | High | **Done — this re-audit** |
@@ -231,7 +231,7 @@ choice; recorded here so the tradeoff is visible.
 
 ---
 
-### 5 — Simplify first-run and match-start UX (Planned)
+### 5 — Simplify first-run and match-start UX (Done)
 
 **Original concern:** The feature set is broad (scoring, HealthKit, compass,
 announcements, iPhone input, manual recovery, AI prompts, graphs). The
@@ -251,8 +251,10 @@ Two implementation PRs are specified there (remembered defaults first — the tr
 strip is not *correct* without them, because `MatchFormat.perpetualPoints` suppresses
 point tracking regardless of the user's setting).
 
-Status moves to **Done** when both land. Kept at Medium rather than High: it is real
-product value, but nothing is broken and no data is at risk.
+**Done.** Both PRs landed: `[Watch] Remember the last match setup` (remembered
+format + singles/doubles, `MatchSetupDefaults`) and `[Watch] State what the next
+match will record` (the Points/Health/Pulse tracking strip, `MatchTrackingStatus`).
+Taps from the start screen to the first point: 5 → 3.
 
 ---
 

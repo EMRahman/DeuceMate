@@ -15,6 +15,7 @@ of the sync/persistence paths.
 | # | Area | Limitation | Severity | Status |
 |---|------|------------|----------|--------|
 | 1 | Sync | Live per-point checkpoint has no payload-size guard; long matches freeze the phone's *live* view | Low (live-only; no data loss) | Documented, not scheduled |
+| 2 | Health/Privacy | Pre-match "Health: On" tracking chip can't detect a share-only grant (workout writes allowed, heart-rate reads denied) | Low (uncommon permission combination; strictly better than showing nothing) | Documented, not scheduled |
 
 ---
 
@@ -79,3 +80,40 @@ staleness rather than payload size); revisit them together.
 *reliability* work over this live-view *performance/robustness* gap. Pick up via one
 of the candidate fixes above when live-view robustness in marathon matches becomes a
 priority.
+
+### 2 — Pre-match "Health: On" can't detect a share-only HealthKit grant
+
+**What:** The pre-match tracking strip (`MatchTrackingStatus.healthTracking`,
+`docs/features/MATCH_START_UX_PLAN.md`) reports Health readiness from
+`WorkoutManager.healthAccess`, which is read via
+`HKHealthStore.authorizationStatus(for: HKQuantityType.workoutType())` — the
+**share** authorization for the workout type. HealthKit deliberately does not expose
+**read** authorization for any type, so an app can never ask "will I actually receive
+heart-rate samples?" — only "am I allowed to write a workout?".
+
+**Symptom:** A user who grants workout **write** access but denies **heart-rate
+read** access sees the Health chip say **"On"**, and the match does get a saved
+`HKWorkoutSession` — but per-point heart rate and HR-derived Pulse Coach zones never
+arrive, because the *read* grant that would fetch them was declined. The chip is
+telling the truth about the only thing it can observe (whether a workout will be
+recorded) and cannot see the narrower reason HR specifically will be thin.
+
+**Why it's bounded:** the combination is uncommon — the two permissions are granted
+from the same iOS Health-access sheet, and users who bother to grant one typically
+grant the other. When it does happen, the strip is still strictly better than showing
+nothing: "On" is accurate for the workout/steps/calories that *will* record, just not
+maximally precise about heart rate specifically. There is no read-side signal to fall
+back to pre-match; the only honest per-match confirmation would be checking after the
+first HR sample arrives, which is a live-match affordance, not a pre-match one.
+
+**Candidate fixes (already reasoned about):**
+- **Leave as-is (current choice).** The workout-share proxy is the only pre-match
+  signal HealthKit exposes. Document the gap rather than build UI around a
+  permission state the platform won't report.
+- **Live-match fallback indicator.** If no HR sample has arrived N seconds into a
+  match with Health "On", surface a one-time in-match notice. Deferred: adds live-UI
+  surface for a rare permission combination; revisit if support reports suggest users
+  are actually hitting it.
+
+**Status:** Documented, not scheduled. Revisit only if real-world reports show the
+share-write/read-deny combination is common enough to justify a live-match indicator.
