@@ -9,16 +9,20 @@
 //  remembered pair — not the hard-coded .singles/.standard fallback — into the
 //  saved AppState.
 //
+//  Each test gets its own throwaway UserDefaults(suiteName:) domain via
+//  ScoreViewModel's injectable `userDefaults` initializer parameter, rather than
+//  mutating the real UserDefaults.standard. Swift Testing runs different suites
+//  concurrently by default, and DeuceMate_Watch_AppTests has its own tests that
+//  call resetMatch() — which now reads these same keys — so sharing
+//  UserDefaults.standard would race against a suite this file has no control
+//  over (a real Codex review finding on this feature's first PR).
+//
 
 import Foundation
 import DeuceMateCore
 import Testing
 @testable import DeuceMate_Watch_App
 
-/// Serialized: these tests read/write real `UserDefaults.standard` keys
-/// (`MatchSetupDefaults.formatKey`/`.typeKey`), so running them concurrently
-/// would race on shared global state.
-@Suite(.serialized)
 struct MatchSetupDefaultsWatchTests {
 
     // MARK: - Helpers
@@ -28,51 +32,24 @@ struct MatchSetupDefaultsWatchTests {
             .appendingPathComponent("\(prefix)-\(UUID().uuidString).json")
     }
 
-    /// Sets the remembered-setup UserDefaults pair for the duration of `body`,
-    /// then restores whatever was there before — these are real
-    /// `UserDefaults.standard` keys, so tests must not leak values into each
-    /// other (or a real device).
-    private func withRememberedSetup(
-        format: MatchFormat,
-        type: MatchType,
-        _ body: () throws -> Void
-    ) rethrows {
-        try withRestoredUserDefaults {
-            UserDefaults.standard.set(format.rawValue, forKey: MatchSetupDefaults.formatKey)
-            UserDefaults.standard.set(type.rawValue, forKey: MatchSetupDefaults.typeKey)
-            try body()
-        }
+    /// A private, uniquely-named UserDefaults domain, torn down via
+    /// `teardown(_:)` when the test ends — never the shared `.standard`
+    /// domain other tests/the app read.
+    private func makeIsolatedDefaults() -> (defaults: UserDefaults, suiteName: String) {
+        let suiteName = "matchsetup-defaults-test-\(UUID().uuidString)"
+        return (UserDefaults(suiteName: suiteName)!, suiteName)
     }
 
-    private func withNoRememberedSetup(_ body: () throws -> Void) rethrows {
-        try withRestoredUserDefaults {
-            UserDefaults.standard.removeObject(forKey: MatchSetupDefaults.formatKey)
-            UserDefaults.standard.removeObject(forKey: MatchSetupDefaults.typeKey)
-            try body()
-        }
+    private func teardown(_ suiteName: String) {
+        UserDefaults.standard.removePersistentDomain(forName: suiteName)
     }
 
-    private func withRestoredUserDefaults(_ body: () throws -> Void) rethrows {
-        let defaults = UserDefaults.standard
-        let originalFormat = defaults.string(forKey: MatchSetupDefaults.formatKey)
-        let originalType = defaults.string(forKey: MatchSetupDefaults.typeKey)
-        defer {
-            if let originalFormat {
-                defaults.set(originalFormat, forKey: MatchSetupDefaults.formatKey)
-            } else {
-                defaults.removeObject(forKey: MatchSetupDefaults.formatKey)
-            }
-            if let originalType {
-                defaults.set(originalType, forKey: MatchSetupDefaults.typeKey)
-            } else {
-                defaults.removeObject(forKey: MatchSetupDefaults.typeKey)
-            }
-        }
-        try body()
-    }
-
-    private func makeViewModel(stateURL: URL) -> ScoreViewModel {
-        ScoreViewModel(statsStore: StatsStore(fileURL: makeTempURL("matchsetup-store")), stateFileURL: stateURL)
+    private func makeViewModel(stateURL: URL, defaults: UserDefaults) -> ScoreViewModel {
+        ScoreViewModel(
+            statsStore: StatsStore(fileURL: makeTempURL("matchsetup-store")),
+            stateFileURL: stateURL,
+            userDefaults: defaults
+        )
     }
 
     private func writeAppState(_ state: ScoreViewModel.AppState, to url: URL) throws {
@@ -120,103 +97,119 @@ struct MatchSetupDefaultsWatchTests {
     // MARK: - loadState() hydration
 
     @Test func loadState_absentFile_hydratesFromRememberedDefaults() throws {
-        try withRememberedSetup(format: .quick4Games, type: .doubles) {
-            // Deliberately does not exist on disk — exercises the catch path.
-            let viewModel = makeViewModel(stateURL: makeTempURL("loadstate-absent"))
-            viewModel.loadState()
-            #expect(viewModel.matchFormat == .quick4Games)
-            #expect(viewModel.matchType == .doubles)
-        }
+        let (defaults, suiteName) = makeIsolatedDefaults()
+        defer { teardown(suiteName) }
+        defaults.set(MatchFormat.quick4Games.rawValue, forKey: MatchSetupDefaults.formatKey)
+        defaults.set(MatchType.doubles.rawValue, forKey: MatchSetupDefaults.typeKey)
+
+        // Deliberately does not exist on disk — exercises the catch path.
+        let viewModel = makeViewModel(stateURL: makeTempURL("loadstate-absent"), defaults: defaults)
+        viewModel.loadState()
+        #expect(viewModel.matchFormat == .quick4Games)
+        #expect(viewModel.matchType == .doubles)
     }
 
     @Test func loadState_corruptFile_hydratesFromRememberedDefaults() throws {
-        try withRememberedSetup(format: .superTiebreak, type: .doubles) {
-            let url = makeTempURL("loadstate-corrupt")
-            defer { try? FileManager.default.removeItem(at: url) }
-            try Data("not valid json {{{".utf8).write(to: url)
+        let (defaults, suiteName) = makeIsolatedDefaults()
+        defer { teardown(suiteName) }
+        defaults.set(MatchFormat.superTiebreak.rawValue, forKey: MatchSetupDefaults.formatKey)
+        defaults.set(MatchType.doubles.rawValue, forKey: MatchSetupDefaults.typeKey)
 
-            let viewModel = makeViewModel(stateURL: url)
-            viewModel.loadState()
-            #expect(viewModel.matchFormat == .superTiebreak)
-            #expect(viewModel.matchType == .doubles)
-        }
+        let url = makeTempURL("loadstate-corrupt")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data("not valid json {{{".utf8).write(to: url)
+
+        let viewModel = makeViewModel(stateURL: url, defaults: defaults)
+        viewModel.loadState()
+        #expect(viewModel.matchFormat == .superTiebreak)
+        #expect(viewModel.matchType == .doubles)
     }
 
     @Test func loadState_idleSavedState_hydratesFromRememberedDefaults() throws {
-        try withRememberedSetup(format: .perpetualPoints, type: .singles) {
-            let url = makeTempURL("loadstate-idle")
-            defer { try? FileManager.default.removeItem(at: url) }
-            // The saved state itself carries a different (stale) pair — the point
-            // of this test is that an idle restore defers to the remembered pair.
-            try writeAppState(idleAppState(matchFormat: .standard, matchType: .doubles), to: url)
+        let (defaults, suiteName) = makeIsolatedDefaults()
+        defer { teardown(suiteName) }
+        defaults.set(MatchFormat.perpetualPoints.rawValue, forKey: MatchSetupDefaults.formatKey)
+        defaults.set(MatchType.singles.rawValue, forKey: MatchSetupDefaults.typeKey)
 
-            let viewModel = makeViewModel(stateURL: url)
-            viewModel.loadState()
-            #expect(viewModel.matchFormat == .perpetualPoints)
-            #expect(viewModel.matchType == .singles)
-        }
+        let url = makeTempURL("loadstate-idle")
+        defer { try? FileManager.default.removeItem(at: url) }
+        // The saved state itself carries a different (stale) pair — the point
+        // of this test is that an idle restore defers to the remembered pair.
+        try writeAppState(idleAppState(matchFormat: .standard, matchType: .doubles), to: url)
+
+        let viewModel = makeViewModel(stateURL: url, defaults: defaults)
+        viewModel.loadState()
+        #expect(viewModel.matchFormat == .perpetualPoints)
+        #expect(viewModel.matchType == .singles)
     }
 
     @Test func loadState_liveMatchRestored_isNotOverwritten() throws {
-        try withRememberedSetup(format: .standard, type: .singles) {
-            let url = makeTempURL("loadstate-live")
-            defer { try? FileManager.default.removeItem(at: url) }
-            // A genuinely in-progress match (currentServer set) using a format
-            // that differs from the remembered pair.
-            try writeAppState(liveAppState(matchFormat: .quick4Games, matchType: .doubles), to: url)
+        let (defaults, suiteName) = makeIsolatedDefaults()
+        defer { teardown(suiteName) }
+        defaults.set(MatchFormat.standard.rawValue, forKey: MatchSetupDefaults.formatKey)
+        defaults.set(MatchType.singles.rawValue, forKey: MatchSetupDefaults.typeKey)
 
-            let viewModel = makeViewModel(stateURL: url)
-            viewModel.loadState()
-            #expect(viewModel.currentServer == .me)
-            #expect(viewModel.matchFormat == .quick4Games, "a restored live match must not be rewritten to the remembered pair")
-            #expect(viewModel.matchType == .doubles)
-        }
+        let url = makeTempURL("loadstate-live")
+        defer { try? FileManager.default.removeItem(at: url) }
+        // A genuinely in-progress match (currentServer set) using a format
+        // that differs from the remembered pair.
+        try writeAppState(liveAppState(matchFormat: .quick4Games, matchType: .doubles), to: url)
+
+        let viewModel = makeViewModel(stateURL: url, defaults: defaults)
+        viewModel.loadState()
+        #expect(viewModel.currentServer == .me)
+        #expect(viewModel.matchFormat == .quick4Games, "a restored live match must not be rewritten to the remembered pair")
+        #expect(viewModel.matchType == .doubles)
     }
 
     // MARK: - resetMatch() persistence
 
     @Test func resetMatch_persistsRememberedPair_notHardFallback() throws {
-        try withRememberedSetup(format: .quick4Games, type: .doubles) {
-            let url = makeTempURL("resetmatch")
-            defer { try? FileManager.default.removeItem(at: url) }
-            let viewModel = makeViewModel(stateURL: url)
-            viewModel.currentServer = .me
-            viewModel.matchStartTime = Date()
+        let (defaults, suiteName) = makeIsolatedDefaults()
+        defer { teardown(suiteName) }
+        defaults.set(MatchFormat.quick4Games.rawValue, forKey: MatchSetupDefaults.formatKey)
+        defaults.set(MatchType.doubles.rawValue, forKey: MatchSetupDefaults.typeKey)
 
-            viewModel.resetMatch()
+        let url = makeTempURL("resetmatch")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let viewModel = makeViewModel(stateURL: url, defaults: defaults)
+        viewModel.currentServer = .me
+        viewModel.matchStartTime = Date()
 
-            #expect(viewModel.matchFormat == .quick4Games, "resetMatch() must reseed from the remembered pair, not hard-code .standard")
-            #expect(viewModel.matchType == .doubles, "resetMatch() must reseed from the remembered pair, not hard-code .singles")
+        viewModel.resetMatch()
 
-            // The persisted AppState (written by resetMatch()'s own saveState())
-            // must carry the remembered pair forward too, not the fallback —
-            // otherwise the next launch's loadState() success path would restore
-            // .standard/.singles regardless of what's remembered.
-            let saved = try JSONDecoder().decode(
-                ScoreViewModel.AppState.self,
-                from: Data(contentsOf: url)
-            )
-            #expect(saved.matchFormat == .quick4Games)
-            #expect(saved.matchType == .doubles)
-        }
+        #expect(viewModel.matchFormat == .quick4Games, "resetMatch() must reseed from the remembered pair, not hard-code .standard")
+        #expect(viewModel.matchType == .doubles, "resetMatch() must reseed from the remembered pair, not hard-code .singles")
+
+        // The persisted AppState (written by resetMatch()'s own saveState())
+        // must carry the remembered pair forward too, not the fallback —
+        // otherwise the next launch's loadState() success path would restore
+        // .standard/.singles regardless of what's remembered.
+        let saved = try JSONDecoder().decode(
+            ScoreViewModel.AppState.self,
+            from: Data(contentsOf: url)
+        )
+        #expect(saved.matchFormat == .quick4Games)
+        #expect(saved.matchType == .doubles)
     }
 
     // MARK: - persistMatchSetupDefaults()
 
     @Test func persistMatchSetupDefaults_writesCurrentViewModelState() throws {
-        try withNoRememberedSetup {
-            let viewModel = makeViewModel(stateURL: makeTempURL("persist"))
-            viewModel.matchFormat = .perpetualSuperTiebreak
-            viewModel.matchType = .doubles
+        let (defaults, suiteName) = makeIsolatedDefaults()
+        defer { teardown(suiteName) }
 
-            viewModel.persistMatchSetupDefaults()
+        let viewModel = makeViewModel(stateURL: makeTempURL("persist"), defaults: defaults)
+        viewModel.matchFormat = .perpetualSuperTiebreak
+        viewModel.matchType = .doubles
 
-            let resolved = MatchSetupDefaults.resolve(
-                formatRaw: UserDefaults.standard.string(forKey: MatchSetupDefaults.formatKey),
-                typeRaw: UserDefaults.standard.string(forKey: MatchSetupDefaults.typeKey))
-            #expect(resolved.format == .perpetualSuperTiebreak)
-            #expect(resolved.type == .doubles)
-        }
+        viewModel.persistMatchSetupDefaults()
+
+        let resolved = MatchSetupDefaults.resolve(
+            formatRaw: defaults.string(forKey: MatchSetupDefaults.formatKey),
+            typeRaw: defaults.string(forKey: MatchSetupDefaults.typeKey))
+        #expect(resolved.format == .perpetualSuperTiebreak)
+        #expect(resolved.type == .doubles)
     }
 
     // MARK: - init() never hydrates
@@ -225,10 +218,16 @@ struct MatchSetupDefaultsWatchTests {
     /// path, so hydrating there would just be silently discarded. If a future
     /// edit adds hydration to `init`, this fails.
     @Test func init_neverHydratesFromRememberedDefaults() throws {
-        try withRememberedSetup(format: .quick4Games, type: .doubles) {
-            let viewModel = ScoreViewModel(statsStore: StatsStore(fileURL: makeTempURL("init-store")))
-            #expect(viewModel.matchFormat == .standard)
-            #expect(viewModel.matchType == .singles)
-        }
+        let (defaults, suiteName) = makeIsolatedDefaults()
+        defer { teardown(suiteName) }
+        defaults.set(MatchFormat.quick4Games.rawValue, forKey: MatchSetupDefaults.formatKey)
+        defaults.set(MatchType.doubles.rawValue, forKey: MatchSetupDefaults.typeKey)
+
+        let viewModel = ScoreViewModel(
+            statsStore: StatsStore(fileURL: makeTempURL("init-store")),
+            userDefaults: defaults
+        )
+        #expect(viewModel.matchFormat == .standard)
+        #expect(viewModel.matchType == .singles)
     }
 }

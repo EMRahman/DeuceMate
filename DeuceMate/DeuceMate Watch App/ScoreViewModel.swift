@@ -585,11 +585,21 @@ class ScoreViewModel: ObservableObject {
 
     private let stateFileURL: URL
 
-    init(statsStore: StatsStoring = StatsStore.shared, stateFileURL: URL? = nil) {
+    /// Backing store for the remembered match setup (`MatchSetupDefaults`
+    /// keys) only — every other setting on this class still reads
+    /// `UserDefaults.standard` directly at its `@Published` property
+    /// initializer, which can't be redirected through an injected instance.
+    /// Injectable (defaults to `.standard`) so tests can give each case its
+    /// own isolated domain instead of racing the real one against whichever
+    /// other test suite Swift Testing happens to run concurrently.
+    private let userDefaults: UserDefaults
+
+    init(statsStore: StatsStoring = StatsStore.shared, stateFileURL: URL? = nil, userDefaults: UserDefaults = .standard) {
         self.statsStore = statsStore
         self.stateFileURL = stateFileURL
             ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("appState.json")
+        self.userDefaults = userDefaults
         if FileManager.default.fileExists(atPath: self.stateFileURL.path) {
             do {
                 try BackupExcludedFileWriter.excludeFromBackup(at: self.stateFileURL)
@@ -1382,8 +1392,8 @@ class ScoreViewModel: ObservableObject {
     private func applyRememberedSetupIfIdle() {
         guard currentServer == nil, currentMatchStats.isEmpty, history.isEmpty else { return }
         let defaults = MatchSetupDefaults.resolve(
-            formatRaw: UserDefaults.standard.string(forKey: MatchSetupDefaults.formatKey),
-            typeRaw: UserDefaults.standard.string(forKey: MatchSetupDefaults.typeKey))
+            formatRaw: userDefaults.string(forKey: MatchSetupDefaults.formatKey),
+            typeRaw: userDefaults.string(forKey: MatchSetupDefaults.typeKey))
         matchFormat = defaults.format
         matchType = defaults.type
     }
@@ -1392,8 +1402,8 @@ class ScoreViewModel: ObservableObject {
     /// screen defaults to it. Called from `commitServerSelection()` — the point
     /// both the singles and doubles setup paths funnel through.
     func persistMatchSetupDefaults() {
-        UserDefaults.standard.set(matchFormat.rawValue, forKey: MatchSetupDefaults.formatKey)
-        UserDefaults.standard.set(matchType.rawValue, forKey: MatchSetupDefaults.typeKey)
+        userDefaults.set(matchFormat.rawValue, forKey: MatchSetupDefaults.formatKey)
+        userDefaults.set(matchType.rawValue, forKey: MatchSetupDefaults.typeKey)
     }
 
     func resetMatch() {
