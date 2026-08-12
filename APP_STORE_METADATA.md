@@ -16,7 +16,7 @@ statistics. The submission is the iOS app (`ehsan.DeuceMate`); the watchOS app
 **Subtitle:** Tennis Score Keeper + Stats
 **Primary Category:** Sports
 **Secondary Category:** Utilities
-**Age Rating:** Expected **9+** — calculated by the App Store Connect questionnaire (Health/Wellness topics: heart-rate zones, calorie display, fitness coaching). Do not force the old 4+ assumption; confirm the exact rating in App Store Connect.
+**Age Rating:** **9+** — calculated by the App Store Connect questionnaire (Health/Wellness topics: heart-rate zones, calorie display, fitness coaching), confirmed 6 August 2026.
 **Platforms:** iPhone (iOS 17.0+) with Apple Watch app (watchOS 9.0+)
 
 ---
