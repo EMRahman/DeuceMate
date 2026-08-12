@@ -620,8 +620,15 @@ class ScoreViewModel: ObservableObject {
 
         // WorkoutManager is a plain stored property, not an @ObservedObject —
         // views that only observe `self` (e.g. the tracking strip) would never
-        // redraw when `healthAccess` changes without this forward.
-        workoutManager.objectWillChange
+        // redraw when `healthAccess` changes without this forward. Scoped to
+        // just `$healthAccess` (not the manager's whole `objectWillChange`):
+        // during a live match `currentHeartRate`/`totalKilocalories` publish
+        // every 2–5 seconds, and forwarding those too would invalidate every
+        // view observing the (large, widely-shared) view model on each tick —
+        // HeartRateBadgeView already observes WorkoutManager directly for HR.
+        // dropFirst() skips the initial replay of the current value on subscribe.
+        workoutManager.$healthAccess
+            .dropFirst()
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
 

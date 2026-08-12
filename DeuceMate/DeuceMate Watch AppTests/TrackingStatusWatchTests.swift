@@ -63,10 +63,32 @@ struct TrackingStatusWatchTests {
     /// Regression guard for the prior-art bug: `WorkoutManager` is a plain
     /// stored property on `ScoreViewModel`, not an `@ObservedObject` any view
     /// separately observes, so a view watching only the view model must still
-    /// redraw when `healthAccess` (or any workout-manager `@Published` field)
-    /// changes. `ScoreViewModel.init` forwards `workoutManager.objectWillChange`
-    /// into its own for exactly this reason.
-    @Test func workoutManagerChanges_forwardToViewModelsObjectWillChange() throws {
+    /// redraw when `healthAccess` changes. `ScoreViewModel.init` forwards
+    /// `workoutManager.$healthAccess` into its own `objectWillChange` for
+    /// exactly this reason — scoped to just that property (not the manager's
+    /// whole `objectWillChange`), since during a live match `currentHeartRate`/
+    /// `totalKilocalories` publish every 2–5 seconds and forwarding those too
+    /// would invalidate every view observing the view model on each tick
+    /// (a real Codex review finding on this PR).
+    @Test func healthAccessChanges_forwardToViewModelsObjectWillChange() throws {
+        let viewModel = makeViewModel()
+        var fired = false
+        let cancellable = viewModel.objectWillChange.sink { _ in fired = true }
+        defer { cancellable.cancel() }
+
+        // Every path through refreshHealthAccess() assigns `healthAccess`,
+        // and `@Published` publishes on every write regardless of whether the
+        // new value equals the old one — so this reliably exercises the forward
+        // without depending on this simulator's actual HealthKit permission state.
+        viewModel.workoutManager.refreshHealthAccess()
+
+        #expect(fired == true)
+    }
+
+    /// The forward must be scoped narrowly: poking the workout manager's
+    /// general `objectWillChange` (as opposed to a `healthAccess` write) must
+    /// NOT reach the view model — that was the bug the fix above corrects.
+    @Test func unrelatedWorkoutManagerObjectWillChange_doesNotForward() throws {
         let viewModel = makeViewModel()
         var fired = false
         let cancellable = viewModel.objectWillChange.sink { _ in fired = true }
@@ -74,6 +96,6 @@ struct TrackingStatusWatchTests {
 
         viewModel.workoutManager.objectWillChange.send()
 
-        #expect(fired == true)
+        #expect(fired == false)
     }
 }

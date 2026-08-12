@@ -25,7 +25,7 @@ The scorer. Everything about running a live match happens here.
 | `ScoreViewModel.swift` | 1,940 | The live-match brain. Holds the current score, serve rotation, undo, tiebreak and changeover state; applies the shared scoring rules; manages match start/end, saving, resuming after a crash; holds every synced setting; validates and applies score commands arriving from the phone; seeds/persists the remembered match setup (format + singles/doubles). The single most consequential file in the repo. | Live scoring, settings, sync, compass changeover, Pulse Coach settings, match setup |
 | `ContentView.swift` | 940 | The live scoreboard screen: score display, swipe gestures (up/down = point, left = undo, right = stats), momentum strip, changeover prompts and compass indicator. | Live scoring, compass changeover |
 | `HomeView.swift` | 959 | The start screen and pre-match setup flow: a pre-match card states the remembered Singles/Doubles + format setup (hidden mid-match) and taps through to a combined Match Setup sheet, so Start Match skips straight to who-serves-first; the same card shows the Points/Health/Pulse tracking strip; also handles player names, court-end confirmation for the compass feature, and Past Matches/Settings/Guide as an icon row. | Match setup, tracking status |
-| `TrackingStatusStrip.swift` | ~140 | Paints Core's `MatchTrackingStatus`: the two-or-three-chip Points/Health/Pulse strip on the start screen (single-line icon + state per chip; taps to Settings; Pulse collapses out when Health is off) and the always-three full-width row form used inside Settings. `Live*` wrappers take only the view model — `ScoreViewModel` forwards `WorkoutManager.objectWillChange` into its own, so no separate `@ObservedObject var workoutManager` is needed. | Tracking status |
+| `TrackingStatusStrip.swift` | ~140 | Paints Core's `MatchTrackingStatus`: the two-or-three-chip Points/Health/Pulse strip on the start screen (single-line icon + state per chip; taps to Settings; Pulse collapses out when Health is off) and the always-three full-width row form used inside Settings. `Live*` wrappers take only the view model — `ScoreViewModel` forwards `WorkoutManager.$healthAccess` (not its whole `objectWillChange`, which also ticks with live HR/calories) into its own, so no separate `@ObservedObject var workoutManager` is needed. | Tracking status |
 | `MatchStatsView.swift` | 630 | On-watch statistics screen shown during/after a match: serve, return, break points, errors, rally depth, heart-rate zones; set and player filters. | Stats |
 | `PointCategorySheet.swift` | 260 | The slide-up sheet after each point (when outcome tracking is on): pick how the point ended — winner, forced/unforced error, double fault — then the ending shot. | Point categorisation |
 | `MatchHistoryView.swift` | 220 | The watch's recent-matches list (newest 25): open stats, resume an in-progress match, swipe to delete. | Match history |
@@ -169,10 +169,12 @@ success-with-idle-state and catch exits but never touches a restored live match,
 `resetMatch()` persists the remembered pair — not the hard-coded fallback — into the
 saved `AppState`, and `init` never hydrates), `DeuceMate Watch AppTests/TrackingStatusWatchTests.swift`
 (`ScoreViewModel.trackingStatuses` wires the live matchFormat/settings/`workoutManager.healthAccess`
-into `MatchTrackingStatus.all(...)`, and `WorkoutManager.objectWillChange` forwards into
-the view model's own — the prior-art bug this feature's plan called out: a strip
+into `MatchTrackingStatus.all(...)`, `WorkoutManager.$healthAccess` forwards into
+the view model's own `objectWillChange` — the prior-art bug this feature's plan called out: a strip
 observing only the workout manager looks load-bearing but silently never redraws
-without this forward), `DeuceMateTests/PhoneStatsStoreTests.swift` (canonical migration, sidecar failure
+without this forward — and a negative case confirms the forward stays scoped to
+`healthAccess`, not the manager's whole `objectWillChange` stream, which would
+otherwise fire on every live-match heart-rate tick), `DeuceMateTests/PhoneStatsStoreTests.swift` (canonical migration, sidecar failure
 degradation, import repair, unreadable-main suspension, and backup flags),
 `DeuceMateTests/DeuceMateTests.swift` (iPhone WatchConnectivity activation fallbacks
 and paired/unpaired Manual Entry copy), `DeuceMateTests/MatchExporterTests.swift`
