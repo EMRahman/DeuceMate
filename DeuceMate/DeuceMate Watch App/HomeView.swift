@@ -43,7 +43,6 @@ struct RootView: View {
 struct RootModal: View {
     @EnvironmentObject var viewModel: ScoreViewModel
     @State private var warmupComplete: Bool = false
-    @State private var matchTypeChosen: Bool = false
     @State private var courtSideConfirmed: Bool = false
     @State private var confirmButtonForced: Bool = false
 
@@ -83,27 +82,11 @@ struct RootModal: View {
                     .font(.headline)
                     .buttonStyle(HomeButtonStyle(background: viewModel.selectedTheme.colors.buttonPrimary))
                 }
-            } else if !matchTypeChosen {
-                VStack(spacing: 16) {
-                    Text("Match Type")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    HStack(spacing: 12) {
-                        Button("Singles") {
-                            viewModel.matchType = .singles
-                            matchTypeChosen = true
-                        }
-                        .font(.subheadline)
-                        .buttonStyle(HomeButtonStyle(background: viewModel.selectedTheme.colors.buttonPrimary))
-                        Button("Doubles") {
-                            viewModel.matchType = .doubles
-                            matchTypeChosen = true
-                        }
-                        .font(.subheadline)
-                        .buttonStyle(HomeButtonStyle(background: ButtonGradients.support))
-                    }
-                }
             } else if viewModel.currentServer == nil {
+                // Match Type is pre-resolved before this sheet ever opens — from
+                // the remembered setup, or the .singles fallback on a genuinely
+                // first-ever launch (see MatchSetupDefaults) — so there is no
+                // separate "Match Type" screen here; go straight to the server.
                 if viewModel.matchType == .doubles {
                     doublesServerSelectionView
                 } else {
@@ -125,7 +108,6 @@ struct RootModal: View {
         .onAppear {
             if viewModel.currentServer != nil {
                 warmupComplete = true
-                matchTypeChosen = true
                 // Only skip confirmation if the heading was already locked (or
                 // the feature is off). If the sheet was dismissed mid-confirmation
                 // before lockInitialHeading() ran, courtInitialHeading is still
@@ -153,9 +135,11 @@ struct RootModal: View {
         }
     }
 
-    /// Common server-selection commit step. Starts the match clock and seeds
-    /// the tiebreak rotation for super-tiebreak-only matches.
+    /// Common server-selection commit step. Remembers this setup for next
+    /// time, starts the match clock, and seeds the tiebreak rotation for
+    /// super-tiebreak-only matches.
     private func commitServerSelection() {
+        viewModel.persistMatchSetupDefaults()
         viewModel.startHeadingMonitoring()
         if !viewModel.checkChangeover
             || viewModel.matchFormat.config.fixedDeuceSide
@@ -315,8 +299,7 @@ struct HomeView: View {
     @State private var showInstructions = false
     @State private var showSettings = false
     @State private var showEndMatchConfirmation = false
-    @State private var showStartMatchOptions = false
-    @State private var pendingMatchStart = false
+    @State private var showMatchSetupSheet = false
     @State private var showTrickyRules = false
     @State private var showTrickyPadelRules = false
     @State private var showHistory = false
@@ -330,16 +313,74 @@ struct HomeView: View {
         viewModel.currentServer != nil
     }
 
+    /// "Singles · Best of 3 (Club/League)" — the remembered setup the next
+    /// match will use, shown on the pre-match card.
+    private var matchSetupSummary: String {
+        let type = viewModel.matchType == .doubles ? "Doubles" : "Singles"
+        return "\(type) · \(Self.formatShortSummary(viewModel.matchFormat))"
+    }
+
+    private static func formatShortSummary(_ format: MatchFormat) -> String {
+        switch format {
+        case .standard:               return "Best of 3 (Club/League)"
+        case .bestOf3FullFinalSet:    return "Best of 3 (ATP)"
+        case .quick4Games:            return "Quick 4 Games"
+        case .superTiebreak:          return "Super Tiebreak"
+        case .perpetualSuperTiebreak: return "Perpetual Tiebreak"
+        case .perpetualPoints:        return "Perpetual Points"
+        }
+    }
+
+    /// A Singles/Doubles choice button for the Match Setup sheet. Selecting
+    /// does not dismiss the sheet — the format list underneath still needs a tap.
+    @ViewBuilder
+    private func matchTypeOption(_ type: MatchType, title: String) -> some View {
+        Button {
+            viewModel.matchType = type
+        } label: {
+            Text(title)
+        }
+        .font(.subheadline.weight(.semibold))
+        .buttonStyle(HomeButtonStyle(
+            background: viewModel.matchType == type
+                ? viewModel.selectedTheme.colors.buttonPrimary
+                : ButtonGradients.guide
+        ))
+        .accessibilityAddTraits(viewModel.matchType == type ? .isSelected : [])
+    }
+
+    /// One row in the Match Setup sheet. Tapping sets the format (even the
+    /// already-selected one, marked with a checkmark) and dismisses — there is
+    /// no separate confirm step, matching the sheet's existing tap-to-choose feel.
+    @ViewBuilder
+    private func matchFormatOption(
+        _ format: MatchFormat,
+        title: String,
+        details: String,
+        background: LinearGradient
+    ) -> some View {
+        Button {
+            viewModel.matchFormat = format
+            showMatchSetupSheet = false
+        } label: {
+            MatchFormatLabel(title: title, details: details)
+                .overlay(alignment: .trailing) {
+                    if viewModel.matchFormat == format {
+                        Image(systemName: "checkmark")
+                            .font(.caption2.weight(.bold))
+                            .foregroundColor(.white)
+                    }
+                }
+        }
+        .buttonStyle(HomeButtonStyle(background: background))
+    }
+
     var body: some View {
         VStack {
             Spacer()
             VStack(alignment: .leading, spacing: 10) {
                 Button {
-                    if matchInProgress {
-                        showMatchView = true
-                    } else {
-                        showStartMatchOptions = true
-                    }
+                    showMatchView = true
                 } label: {
                     Label(
                         matchInProgress ? "Resume Match" : "Start Match",
@@ -348,6 +389,33 @@ struct HomeView: View {
                 }
                 .font(.headline)
                 .buttonStyle(HomeButtonStyle(background: viewModel.selectedTheme.colors.buttonPrimary))
+
+                // The remembered setup the next match will use — a PRE-match
+                // card, so it's hidden once a match is in progress (the format
+                // is locked by then; see MATCH_START_UX_PLAN.md §6.1).
+                if !matchInProgress {
+                    Button {
+                        showMatchSetupSheet = true
+                    } label: {
+                        HStack {
+                            Text(matchSetupSummary)
+                                .font(.footnote)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                            Spacer(minLength: 4)
+                            Image(systemName: "chevron.down")
+                                .font(.caption2.weight(.semibold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .frame(maxWidth: .infinity, minHeight: 32)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Match setup: \(matchSetupSummary)")
+                    .accessibilityHint("Opens format and singles or doubles options")
+                }
 
                 if matchInProgress {
                     Button {
@@ -359,17 +427,21 @@ struct HomeView: View {
                     .buttonStyle(HomeButtonStyle(background: ButtonGradients.end))
                 }
 
-                if hasPastMatches {
-                    Button {
-                        showHistory = true
-                    } label: {
-                        Label("Past Matches", systemImage: "list.bullet.rectangle")
-                    }
-                    .font(.headline)
-                    .buttonStyle(HomeButtonStyle(background: viewModel.selectedTheme.colors.buttonServerOpponent))
-                }
-
                 HStack(spacing: 8) {
+                    // Past Matches, Settings, and Guide are all navigational
+                    // destinations of the same class — Past Matches leads
+                    // because it's the most-used of the three by far.
+                    if hasPastMatches {
+                        Button {
+                            showHistory = true
+                        } label: {
+                            Label("Past Matches", systemImage: "clock.arrow.circlepath")
+                                .labelStyle(.iconOnly)
+                        }
+                        .font(.subheadline)
+                        .buttonStyle(HomeButtonStyle(background: viewModel.selectedTheme.colors.buttonServerOpponent))
+                    }
+
                     Button {
                         showSettings = true
                     } label: {
@@ -396,86 +468,61 @@ struct HomeView: View {
         .sheet(isPresented: $showMatchView) {
             RootModal()
         }
-        .sheet(isPresented: $showStartMatchOptions, onDismiss: {
-            if pendingMatchStart {
-                pendingMatchStart = false
-                showMatchView = true
-            }
-        }) {
+        .sheet(isPresented: $showMatchSetupSheet) {
             ZStack {
                 Color.black.ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: 12) {
-                        Text("Match Format")
+                        Text("Match Setup")
                             .font(.headline)
                             .foregroundColor(.white)
                             .multilineTextAlignment(.center)
-                        Button {
-                            viewModel.matchFormat = .standard
-                            pendingMatchStart = true
-                            showStartMatchOptions = false
-                        } label: {
-                            MatchFormatLabel(
-                                title: "Best of 3 Sets (Club / League)",
-                                details: "3 sets · Final set: Super Tiebreak to 10"
-                            )
+
+                        // watchOS has no segmented Picker style, so Singles/
+                        // Doubles is two buttons — the selected one takes the
+                        // theme's primary tint, the other stays muted.
+                        HStack(spacing: 8) {
+                            matchTypeOption(.singles, title: "Singles")
+                            matchTypeOption(.doubles, title: "Doubles")
                         }
-                        .buttonStyle(HomeButtonStyle(background: viewModel.selectedTheme.colors.buttonPrimary))
-                        Button {
-                            viewModel.matchFormat = .bestOf3FullFinalSet
-                            pendingMatchStart = true
-                            showStartMatchOptions = false
-                        } label: {
-                            MatchFormatLabel(
-                                title: "Best of 3 Sets (ATP)",
-                                details: "3 sets · Final set: Full set, tiebreak to 7"
-                            )
-                        }
-                        .buttonStyle(HomeButtonStyle(background: viewModel.selectedTheme.colors.buttonPrimary))
-                        Button {
-                            viewModel.matchFormat = .quick4Games
-                            pendingMatchStart = true
-                            showStartMatchOptions = false
-                        } label: {
-                            MatchFormatLabel(
-                                title: "Quick 4 Games",
-                                details: "First to 3 games · Sudden death point at 2-2"
-                            )
-                        }
-                        .buttonStyle(HomeButtonStyle(background: ButtonGradients.support))
-                        Button {
-                            viewModel.matchFormat = .superTiebreak
-                            pendingMatchStart = true
-                            showStartMatchOptions = false
-                        } label: {
-                            MatchFormatLabel(
-                                title: "Super Tiebreak",
-                                details: "1 set · Single tiebreak to 10 pts"
-                            )
-                        }
-                        .buttonStyle(HomeButtonStyle(background: ButtonGradients.support))
-                        Button {
-                            viewModel.matchFormat = .perpetualSuperTiebreak
-                            pendingMatchStart = true
-                            showStartMatchOptions = false
-                        } label: {
-                            MatchFormatLabel(
-                                title: "Perpetual Tiebreak",
-                                details: "Continuous tiebreak until stopping"
-                            )
-                        }
-                        .buttonStyle(HomeButtonStyle(background: ButtonGradients.support))
-                        Button {
-                            viewModel.matchFormat = .perpetualPoints
-                            pendingMatchStart = true
-                            showStartMatchOptions = false
-                        } label: {
-                            MatchFormatLabel(
-                                title: "Perpetual Points",
-                                details: "Just count points · server alternates every point · no stats or changeovers"
-                            )
-                        }
-                        .buttonStyle(HomeButtonStyle(background: ButtonGradients.support))
+                        .padding(.bottom, 2)
+
+                        matchFormatOption(
+                            .standard,
+                            title: "Best of 3 Sets (Club / League)",
+                            details: "3 sets · Final set: Super Tiebreak to 10",
+                            background: viewModel.selectedTheme.colors.buttonPrimary
+                        )
+                        matchFormatOption(
+                            .bestOf3FullFinalSet,
+                            title: "Best of 3 Sets (ATP)",
+                            details: "3 sets · Final set: Full set, tiebreak to 7",
+                            background: viewModel.selectedTheme.colors.buttonPrimary
+                        )
+                        matchFormatOption(
+                            .quick4Games,
+                            title: "Quick 4 Games",
+                            details: "First to 3 games · Sudden death point at 2-2",
+                            background: ButtonGradients.support
+                        )
+                        matchFormatOption(
+                            .superTiebreak,
+                            title: "Super Tiebreak",
+                            details: "1 set · Single tiebreak to 10 pts",
+                            background: ButtonGradients.support
+                        )
+                        matchFormatOption(
+                            .perpetualSuperTiebreak,
+                            title: "Perpetual Tiebreak",
+                            details: "Continuous tiebreak until stopping",
+                            background: ButtonGradients.support
+                        )
+                        matchFormatOption(
+                            .perpetualPoints,
+                            title: "Perpetual Points",
+                            details: "Just count points · server alternates every point · no stats or changeovers",
+                            background: ButtonGradients.support
+                        )
                     }
                     .padding([.horizontal, .bottom])
                 }
