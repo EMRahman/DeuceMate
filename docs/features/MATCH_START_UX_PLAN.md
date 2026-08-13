@@ -1,9 +1,10 @@
 <!--
 machine-readable summary (parse this block first)
 
-status: planned
+status: implemented
 author: Claude (Opus 5), design session with the owner
 date: 2026-08-03
+implemented_date: 2026-08-12
 closes_backlog_item: "TECHNICAL_DEBT.md #5 — Simplify first-run and match-start UX. It was Parked on the grounds that it was 'a product design decision… should be addressed in a product/UX conversation rather than a PR'. This document IS that conversation, so #5 moves Parked → Planned (Medium) in this PR, and → Done when both implementation PRs land."
 prior_art_branch: "claude/initial-menu-tracking-settings-buxmcl @ 13ca6026c0ff4ce98ce57f9087232fbe08b44588 — a working prototype of Feature A only. Assessed file-by-file in §7. Keep the Core derivation, revise the presentation, do not merge as-is."
 features:
