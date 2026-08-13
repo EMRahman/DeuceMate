@@ -585,11 +585,21 @@ class ScoreViewModel: ObservableObject {
 
     private let stateFileURL: URL
 
-    init(statsStore: StatsStoring = StatsStore.shared, stateFileURL: URL? = nil) {
+    /// Backing store for the remembered match setup (`MatchSetupDefaults`
+    /// keys) only — every other setting on this class still reads
+    /// `UserDefaults.standard` directly at its `@Published` property
+    /// initializer, which can't be redirected through an injected instance.
+    /// Injectable (defaults to `.standard`) so tests can give each case its
+    /// own isolated domain instead of racing the real one against whichever
+    /// other test suite Swift Testing happens to run concurrently.
+    private let userDefaults: UserDefaults
+
+    init(statsStore: StatsStoring = StatsStore.shared, stateFileURL: URL? = nil, userDefaults: UserDefaults = .standard) {
         self.statsStore = statsStore
         self.stateFileURL = stateFileURL
             ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("appState.json")
+        self.userDefaults = userDefaults
         if FileManager.default.fileExists(atPath: self.stateFileURL.path) {
             do {
                 try BackupExcludedFileWriter.excludeFromBackup(at: self.stateFileURL)
@@ -1374,6 +1384,28 @@ class ScoreViewModel: ObservableObject {
         return true
     }
 
+    /// Seeds the next match's setup from the remembered pair. No-op while a
+    /// match is live or mid-restore, so resuming a Super Tiebreak is never
+    /// rewritten to Best of 3. Called at the tail of `loadState()` and
+    /// `resetMatch()` — never in `init`, which runs before either restore path
+    /// and would just be overwritten (see docs/features/MATCH_START_UX_PLAN.md §5.4).
+    private func applyRememberedSetupIfIdle() {
+        guard currentServer == nil, currentMatchStats.isEmpty, history.isEmpty else { return }
+        let defaults = MatchSetupDefaults.resolve(
+            formatRaw: userDefaults.string(forKey: MatchSetupDefaults.formatKey),
+            typeRaw: userDefaults.string(forKey: MatchSetupDefaults.typeKey))
+        matchFormat = defaults.format
+        matchType = defaults.type
+    }
+
+    /// Remembers the just-committed match setup so the next match on the start
+    /// screen defaults to it. Called from `commitServerSelection()` — the point
+    /// both the singles and doubles setup paths funnel through.
+    func persistMatchSetupDefaults() {
+        userDefaults.set(matchFormat.rawValue, forKey: MatchSetupDefaults.formatKey)
+        userDefaults.set(matchType.rawValue, forKey: MatchSetupDefaults.typeKey)
+    }
+
     func resetMatch() {
         workoutManager.stopWorkout()
         finalizeCurrentMatchToStore()
@@ -1411,6 +1443,10 @@ class ScoreViewModel: ObservableObject {
         tiebreakStartDoublesIndex = 0
         clearHistory()
         resetHeadingState()
+        // The guard is a no-op here — the match has just ended, so the idle
+        // triple predicate already holds — but routing through the same
+        // helper keeps one rule for "seed from the remembered setup."
+        applyRememberedSetupIfIdle()
         saveState()
     }
 
@@ -1700,8 +1736,12 @@ class ScoreViewModel: ObservableObject {
             doublesServiceIndex = 0
             tiebreakStartDoublesIndex = 0
         }
+        // Covers both exits above: a restored live match leaves the idle
+        // guard false and is left untouched; anything else (including the
+        // catch path's hard-coded fallback) is seeded from the remembered pair.
+        applyRememberedSetupIfIdle()
     }
-    
+
     func displayedScore(for player: Player) -> String {
         if isMatchComplete() {
             return matchWinner() == .me ? "You Won!" : "Opponent Won!"
