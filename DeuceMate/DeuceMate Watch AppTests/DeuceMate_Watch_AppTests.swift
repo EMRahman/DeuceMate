@@ -357,6 +357,47 @@ struct DeuceMate_Watch_AppTests {
         #expect(viewModel.currentPointsOpponent == 0)
     }
 
+    // MARK: - Ends-Switch Reminder Tests
+
+    @Test func pendingEndsSwitchReminderSurvivesAckAndClearsAfterFirstPoint() throws {
+        let viewModel = makeViewModel(startingServer: .me)
+        viewModel.statsTrackingEnabled = false
+
+        // 6-1 → 7 total games (odd) → switch ends.
+        winGame(viewModel, player: .opponent) // 0-1
+        winGames(viewModel, player: .me, count: 6) // 6-1
+
+        #expect(viewModel.pendingEndsSwitchReminder == true)
+        #expect(viewModel.pendingChangeoverAck != nil)
+
+        viewModel.acknowledgeChangeover() // tap OK
+        #expect(viewModel.pendingChangeoverAck == nil)
+        #expect(viewModel.pendingEndsSwitchReminder == true) // survives the tap
+
+        viewModel.winPoint(player: .me) // first point of the new set
+        #expect(viewModel.pendingEndsSwitchReminder == nil)
+    }
+
+    @Test func pendingEndsSwitchReminderFalseAfterEvenGamesSet() throws {
+        let viewModel = makeViewModel(startingServer: .me)
+        viewModel.statsTrackingEnabled = false
+
+        winGames(viewModel, player: .me, count: 6) // 6-0, 6 total games (even)
+
+        #expect(viewModel.pendingEndsSwitchReminder == false)
+    }
+
+    @Test func pendingEndsSwitchReminderNilForFixedDeuceSideFormat() throws {
+        let viewModel = makeViewModel(startingServer: .me)
+        viewModel.statsTrackingEnabled = false
+        viewModel.matchFormat = .perpetualPoints
+        viewModel.prepareTiebreakOnlySet()
+
+        winTiebreakPoints(viewModel, player: .me, points: 20)
+
+        #expect(viewModel.pendingEndsSwitchReminder == nil)
+    }
+
     // MARK: - Helpers
 
     private func makeViewModel(startingServer: ScoreViewModel.Player) -> ScoreViewModel {

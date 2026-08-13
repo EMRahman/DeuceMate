@@ -570,6 +570,16 @@ class ScoreViewModel: ObservableObject {
         return currentPointsMe == 0 && currentPointsOpponent == 0
     }
 
+    /// Whether the sticky ends-switch reminder should replace the momentum
+    /// strip: `nil` when it doesn't apply, `true`/`false` for switch/stay.
+    /// Fixed-deuce-side formats (Perpetual Points) never change ends.
+    /// Pure derivation of already-persisted state — see
+    /// `docs/features/ENDS_SWITCH_REMINDER_PLAN.md` §7.2.
+    var pendingEndsSwitchReminder: Bool? {
+        guard !matchFormat.config.fixedDeuceSide else { return nil }
+        return ScoringEngine.nextSetRequiresEndsSwitch(scoringState())
+    }
+
     private(set) var history: [HistoryEntry] = []
     /// Momentum points inherited from the record snapshot at resume time.
     /// Merged with live history so the strip doesn't blank out after a resume.

@@ -190,6 +190,26 @@ public enum ScoringEngine {
         return receiverPts >= 3 && receiverPts > serverPts
     }
 
+    /// Whether players must switch ends for the set that's about to start.
+    /// `nil` means the reminder doesn't apply right now (mid-set, before any
+    /// set has finished, heading into a super-tiebreak, or the match is
+    /// over); `true`/`false` means switch/stay. See
+    /// `docs/features/ENDS_SWITCH_REMINDER_PLAN.md` §3.
+    public static func nextSetRequiresEndsSwitch(_ state: ScoringState) -> Bool? {
+        guard state.sets.count >= 2 else { return nil }
+        let upcoming = state.sets[state.sets.count - 1]
+        guard !upcoming.isTieBreak,
+              upcoming.gamesMe == 0,
+              upcoming.gamesOpponent == 0,
+              state.currentPointsMe == 0,
+              state.currentPointsOpponent == 0
+        else { return nil }
+
+        let justFinished = state.sets[state.sets.count - 2]
+        let totalGames = justFinished.gamesMe + justFinished.gamesOpponent
+        return totalGames % 2 == 1
+    }
+
     public static func tiebreakTargetPoints(
         forSetAt index: Int,
         in setScores: [SetScore],
