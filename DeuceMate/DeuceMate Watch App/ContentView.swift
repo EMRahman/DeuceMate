@@ -169,9 +169,18 @@ struct ContentView: View {
                 }
 
                 if !viewModel.isMatchComplete() {
-                    MomentumBadgeView(recentPoints: viewModel.history.suffix(8).map { $0.player })
-                        .padding(.top, 4)
-                        .padding(.horizontal, 8)
+                    ZStack {
+                        if let shouldSwitch = viewModel.pendingEndsSwitchReminder {
+                            EndsSwitchReminderBanner(shouldSwitch: shouldSwitch)
+                                .transition(.opacity)
+                        } else {
+                            MomentumBadgeView(recentPoints: viewModel.history.suffix(8).map { $0.player })
+                                .transition(.opacity)
+                        }
+                    }
+                    .padding(.top, 4)
+                    .padding(.horizontal, 8)
+                    .animation(.easeInOut(duration: 0.25), value: viewModel.pendingEndsSwitchReminder)
                 }
 
                 VStack(spacing: 4) {
@@ -613,6 +622,45 @@ struct MomentumBadgeView: View {
             return Color.white.opacity(0.15)
         }
         return recentPoints[filledIndex] == .me ? p.me : p.opponent
+    }
+}
+
+// MARK: - EndsSwitchReminderBanner
+
+/// Sticky, non-blocking reminder of whether players switch ends for the set
+/// that's about to start. Takes the momentum strip's slot (see
+/// `docs/features/ENDS_SWITCH_REMINDER_PLAN.md` §5) so swapping the two
+/// doesn't reflow the screen.
+struct EndsSwitchReminderBanner: View {
+    let shouldSwitch: Bool
+
+    var body: some View {
+        HStack(spacing: 5) {
+            // Reuses the changeover popup's own symbols (🔁 👥 / 🔁 🎾, see
+            // ScoringEngine.handleSideChangesAfterSet) so the sticky reminder
+            // doesn't introduce a new glyph vocabulary.
+            Text(shouldSwitch ? "🔁 👥" : "🔁 🎾")
+                .font(.system(size: 10))
+            Text(shouldSwitch ? "Players change ends" : "Balls change ends")
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .foregroundStyle(shouldSwitch ? Color.orange : Color.yellow)
+        .frame(maxWidth: .infinity)
+        // 1 pt of vertical padding around an 11 pt line box == the momentum
+        // strip's 15 pt height, so swapping one for the other reflows
+        // nothing. Measured on 40/42/46/49 mm — see §5; don't grow this
+        // without re-running that sweep.
+        .padding(.vertical, 1)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill((shouldSwitch ? Color.orange : Color.yellow).opacity(0.16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke((shouldSwitch ? Color.orange : Color.yellow).opacity(0.55), lineWidth: 1)
+                )
+        )
     }
 }
 

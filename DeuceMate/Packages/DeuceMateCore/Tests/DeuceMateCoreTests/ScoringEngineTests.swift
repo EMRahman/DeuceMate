@@ -206,6 +206,84 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertNil(ScoringEngine.gameScoreSnapshotAtPointStart(state))
     }
 
+    // MARK: - Ends-switch reminder
+
+    func test_nextSetRequiresEndsSwitchNilBeforeAnySetCompletes() {
+        var state = ScoringState(currentServer: .me)
+        point(&state, player: .me)
+        XCTAssertNil(ScoringEngine.nextSetRequiresEndsSwitch(state))
+    }
+
+    func test_nextSetRequiresEndsSwitchTrueAfterOddGamesSet() {
+        // 6-1 → 7 total games (odd) → switch
+        var state = ScoringState(currentServer: .me)
+        winGame(&state, player: .me, count: 5)
+        winGame(&state, player: .opponent, count: 1)
+        for _ in 0..<3 { point(&state, player: .me) }
+        state = ScoringEngine.pointWon(by: .me, in: state).state
+
+        XCTAssertEqual(state.sets.count, 2)
+        XCTAssertEqual(ScoringEngine.nextSetRequiresEndsSwitch(state), true)
+    }
+
+    func test_nextSetRequiresEndsSwitchFalseAfterEvenGamesSet() {
+        // 6-0 → 6 total games (even) → stay
+        var state = ScoringState(currentServer: .me)
+        winGame(&state, player: .me, count: 5)
+        for _ in 0..<3 { point(&state, player: .me) }
+        state = ScoringEngine.pointWon(by: .me, in: state).state
+
+        XCTAssertEqual(state.sets.count, 2)
+        XCTAssertEqual(ScoringEngine.nextSetRequiresEndsSwitch(state), false)
+    }
+
+    func test_nextSetRequiresEndsSwitchTrueAfterTiebreakDecidedSet() {
+        // A tiebreak winner always records loserGames + 1 games, so the
+        // finished set's total is always odd — switching is a certainty,
+        // not just a common case (see plan §3).
+        var state = ScoringState(currentServer: .me)
+        for _ in 0..<6 { winGame(&state, player: .me); winGame(&state, player: .opponent) }
+        XCTAssertEqual(state.sets.first?.isTieBreak, true)
+        winTiebreakPoints(&state, player: .me, points: 7)
+
+        XCTAssertEqual(state.sets.count, 2)
+        XCTAssertEqual(ScoringEngine.nextSetRequiresEndsSwitch(state), true)
+    }
+
+    func test_nextSetRequiresEndsSwitchNilBeforeMatchDecidingSuperTiebreak() {
+        // 1-1 sets in .standard → the "next set" is a super tiebreak, not a
+        // regular set; the one-time switch/stay reminder doesn't apply
+        // (deferred scope, see plan §6).
+        var state = ScoringState(currentServer: .me)
+        winGame(&state, player: .me, count: 6)
+        winGame(&state, player: .opponent, count: 6)
+
+        XCTAssertEqual(state.sets.count, 3)
+        XCTAssertEqual(state.sets[2].isTieBreak, true)
+        XCTAssertNil(ScoringEngine.nextSetRequiresEndsSwitch(state))
+    }
+
+    func test_nextSetRequiresEndsSwitchNilAfterFirstPointOfNewSet() {
+        var state = ScoringState(currentServer: .me)
+        winGame(&state, player: .me, count: 5)
+        winGame(&state, player: .opponent, count: 1)
+        for _ in 0..<3 { point(&state, player: .me) }
+        state = ScoringEngine.pointWon(by: .me, in: state).state
+        XCTAssertEqual(ScoringEngine.nextSetRequiresEndsSwitch(state), true)
+
+        point(&state, player: .me)
+        XCTAssertNil(ScoringEngine.nextSetRequiresEndsSwitch(state))
+    }
+
+    func test_nextSetRequiresEndsSwitchNilOnceMatchComplete() {
+        var state = ScoringState(currentServer: .me)
+        winGame(&state, player: .me, count: 6)
+        winGame(&state, player: .me, count: 6)
+
+        XCTAssertTrue(ScoringEngine.isMatchComplete(state))
+        XCTAssertNil(ScoringEngine.nextSetRequiresEndsSwitch(state))
+    }
+
     // MARK: - Changeover events
 
     func test_changeoverReasonAfterOddAndEvenGamesInSet() {
