@@ -363,6 +363,25 @@ iPhone companion that is the scoreboard and the archive:
   per-match and per-set statistics (serve, return, break points, winners and
   errors, pressure points, rally patterns), an interactive points-momentum
   timeline, and export of a match as text or as a self-contained HTML report.
+- Point-level capture, which is what separates this from a scoreboard: as each
+  point ends, the scorer can record in two taps on the Watch how the point was
+  won or lost — Winner, Unforced Error, Forced Error or Double Fault — and how
+  far the rally got before it ended: Serve, Return, S+1 (the server's first
+  ball after the return), or Rally. These have to be captured at the moment the
+  point ends, on the wrist, because nobody can reconstruct them afterwards. The
+  iPhone then crosses those two dimensions with the score situation — serve
+  number, break points, pressure points, set — to surface patterns the score
+  alone cannot show, such as a player losing most points to their own unforced
+  errors on the S+1 ball rather than to the opponent's winners.
+- Coaching hand-off: from that point-level record the app composes a
+  structured, readable coaching prompt on the device and offers it for the user
+  to copy. A player who wants a second opinion can paste it into whichever AI
+  assistant they already use. That combination — rally-depth and outcome data
+  captured live, then turned into something a player can actually be coached
+  on — is unusual for a scoring app; most record only the score, which is why a
+  recreational player normally finishes a match with no idea why they lost it.
+  The prompt is composed entirely by the app's own code and is complete on its
+  own; see item 5 for what is and is not sent anywhere.
 - Optional fitness: with the user's HealthKit permission, a match is recorded
   as a Tennis workout with heart rate, calories, steps and distance, and the
   app shows heart-rate-zone analysis for the match.
@@ -372,8 +391,10 @@ matches without an umpire, coaches tracking a student's match, and padel
 players (the scoring system is the same). Age rating 9+ (health and wellness
 topics). No expertise beyond knowing tennis is required.
 
-Value: an accurate, undoable score on the wrist during play, and an honest
-record of the match afterwards — free, with no account, no ads and no data
+Value: an accurate, undoable score on the wrist during play; an honest record
+of the match afterwards; and, from the point-level data, a concrete answer to
+"why did I lose that match?" that a club player would otherwise only get from a
+coach watching courtside — free, with no account, no ads and no data
 collection.
 
 4. HOW TO SET UP AND ACCESS THE MAIN FEATURES
@@ -454,8 +475,10 @@ it to the clipboard, and — only if the user taps one — opens ChatGPT, Claude
 Gemini, Perplexity, Copilot, Poe or Grok at its public URL. DeuceMate transmits
 nothing itself, holds no API key or account with any of those providers, and no
 data leaves the device unless the user pastes it there. This is a convenience
-on top of the match report, not part of the app's core functionality; every
-statistic and insight in the app is derived locally in the app's own code.
+on top of a report the app has already finished writing. No feature depends on
+it: the prompt is composed on device and is complete on its own, and every
+statistic and insight in the app — including the point outcomes and rally
+depths described in item 3 — is derived locally in the app's own code.
 
 6. REGIONAL DIFFERENCES
 
