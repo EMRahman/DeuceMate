@@ -310,8 +310,9 @@ Regarding the specific flows listed in your request:
 - Prompts requesting access to sensitive data or device capabilities: every
   prompt the app can present is shown in the recording, in context —
   (a) the HealthKit authorization sheet on Apple Watch at first launch,
-  (b) the HealthKit authorization sheet on iPhone when match analysis first
-      reads heart-rate samples,
+  (b) the HealthKit authorization sheet on iPhone, which appears when the
+      "Per-point avg" heart-rate series is selected in a match's Points Graph
+      or Pulse Coach section — the only place the iPhone reads Health data,
   (c) the optional "When In Use" location prompt on Apple Watch, which appears
       only if the user enables the "Check Changeover" compass feature.
   DeuceMate does not use App Tracking Transparency (it collects no data and
@@ -385,10 +386,20 @@ A. Reviewing on iPhone WITHOUT an Apple Watch (fastest complete path):
       empty state.
    2. Tap "Manual Match Entry", enter any score (for example 6-4, 6-3), and
       save. This creates a real match record on the phone.
-   3. Tap the saved match to open it: statistics tabs, set-by-set breakdown,
-      the points timeline graph, and the share/export menu are all live.
-   4. Tap the share icon to export the match as text or as an interactive HTML
-      report, and open the AI Coach card to see the generated coaching prompt.
+   3. Tap the saved match to open it. Manual entry captures the final score
+      rather than individual points, so this match shows the set-by-set
+      breakdown, match duration, storage information, the AI Coach card and
+      the full share/export menu, while the two point-level sections show
+      their intentional empty states — "No Points to Graph" in the Points
+      Graph section, and "No point-by-point statistics were recorded for this
+      match." Those messages are correct behaviour rather than a defect: point
+      statistics, the outcome breakdowns and the momentum timeline exist only
+      for matches scored point by point on the Apple Watch. The attached
+      recording shows that full flow on physical hardware, which is the part
+      of the app a reviewer without an Apple Watch cannot reach.
+   4. Tap the share icon to export the match as text or as a self-contained
+      interactive HTML report, and open the AI Coach card to see the generated
+      coaching prompt.
    5. Settings covers spoken announcements, iPhone Input, Watch sync details,
       and Backup & Transfer (manual archive export/import).
 
@@ -490,8 +501,8 @@ mail@ehsanrahman.com
 
 Apple's request is specific: **physical devices, latest OS, starts with launching
 the app, and shows every permission prompt in context.** watchOS has no built-in
-screen recorder, so record the Watch with a second camera and the iPhone with
-iOS Screen Recording, then join the two segments into one file.
+screen recorder, so film the Watch with a second camera while screen-recording
+the iPhone, then cut the four segments below into one file.
 
 **Before recording — reset so the permission prompts actually appear:**
 1. Delete DeuceMate from the iPhone (this removes the Watch app too), then
@@ -500,24 +511,41 @@ iOS Screen Recording, then join the two segments into one file.
 3. Do not open the app before recording starts — the recording must begin with
    the launch.
 
-**Segment A — Apple Watch (filmed):** Home Screen → tap the DeuceMate icon →
-HealthKit authorization sheet (allow) → start screen with the setup card and the
-Points/Health/Pulse tracking strip → Match Setup sheet → Start Match → choose
-first server → score points with swipe up / swipe down through deuce and
-advantage to win a game → categorize a point in the sheet → swipe left to undo
-and show the score restored → the ends-switch reminder → live stats →
-Settings → enable Check Changeover → the "When In Use" location prompt → the
-compass hint → finish the match.
+**Run both recorders for the whole session.** The Watch match must still be
+live when the iPhone segment is filmed: finishing a match calls
+`ScoreViewModel.resetMatch()`, which calls `clearActiveMatch()` on the sync
+service, so the iPhone live scoreboard disappears the instant the match ends.
+Film in the order below and cut afterwards. Use the Standard match format —
+Perpetual Points fixes the deuce side and never engages the compass.
 
-**Segment B — iPhone (screen recording):** Home Screen → launch DeuceMate →
-live scoreboard mirroring the Watch match → HealthKit authorization sheet when
-match analysis first reads heart rate → archive list showing the finished match
-→ match detail statistics and set breakdown → points timeline with the outcome
-filters and the heart-rate overlay, tapping a point to show its full score →
-AI Coach card → share/export, including the health-data disclosure prompt before
-a health-bearing export → Settings, toggling "Announce scores aloud" and letting
-one announcement play audibly → Manual Match Entry, saving a match and opening
-it, to show the complete no-Watch path.
+**Segment A — Apple Watch (filmed), match left in progress:** Home Screen →
+tap the DeuceMate icon → HealthKit authorization sheet (allow) → start screen
+with the setup card and the Points/Health/Pulse tracking strip → Settings →
+enable Check Changeover → back to the start screen → Match Setup sheet →
+Start Match → choose first server. The "When In Use" location prompt fires at
+the first game start once Check Changeover is on; show it and the compass hint.
+Then score points with swipe up / swipe down through deuce and advantage to win
+a game → categorize a point in the sheet → swipe left to undo and show the
+score restored → the ends-switch reminder → live stats. **Do not finish the
+match yet.**
+
+**Segment B — iPhone (screen recording), while that match is still live:**
+Home Screen → launch DeuceMate → the live scoreboard mirroring the Watch →
+score another point or two on the Watch so the mirroring is visibly live →
+Settings, toggle "Announce scores aloud" and let one announcement play audibly.
+
+**Segment C — back to the Apple Watch:** finish the match. The iPhone live
+scoreboard clears at this point, which is expected.
+
+**Segment D — iPhone (screen recording):** archive list showing the finished
+match → match detail statistics and set breakdown → points timeline with the
+outcome filters, tapping a point to show its full pre-point score → **switch
+the heart-rate series control from "Raw" to "Per-point avg"** — this is the
+only action that requests Health access on iPhone, so the HealthKit
+authorization sheet appears here and nowhere else → AI Coach card →
+share/export, including the health-data disclosure prompt before a
+health-bearing export → Manual Match Entry, saving a match and opening it, to
+show the no-Watch reviewer path and its two intentional empty states.
 
 Keep it in real time with no jump cuts across a prompt, aim for three to five
 minutes, and export H.264 at 1080p so the file stays inside the Resolution
