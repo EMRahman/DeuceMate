@@ -347,7 +347,10 @@ Simulators were used additionally for the automated test suites only
 Problem: keeping score in club and recreational tennis is unreliable. Players
 lose track of the score mid-set, argue about it, forget who serves, forget
 which end to change on, and finish a match with no record of how they actually
-played.
+played. I built DeuceMate after trying existing scoring apps and finding them
+not dependable enough to trust with a real match — a crash or a force-quit
+could take the entire score with it, which leaves a player worse off than a
+paper scorecard.
 
 DeuceMate solves that with an Apple Watch app that is the scorer, plus an
 iPhone companion that is the scoreboard and the archive:
@@ -359,6 +362,18 @@ iPhone companion that is the scoreboard and the archive:
   to change ends. Undo restores the exact prior state, point by point, back to
   the first point of the match (on a match resumed from History, undo covers
   the points played since the resume).
+- The score survives the app, which is the design goal the scoring model was
+  built around rather than a feature added later. Every state change — each
+  point won or lost, each point categorization, each undo, each second-serve
+  toggle — writes the complete match state to disk atomically before returning,
+  and the same call pushes an in-progress checkpoint to the iPhone over
+  WatchConnectivity, so a second copy already exists off the Watch. The file
+  uses until-first-unlock protection so it stays writable with the Watch locked
+  or off the wrist mid-match. On relaunch the app reloads that state and
+  carries on, down to reopening the point-categorization sheet if the app was
+  killed while it was open. This is directly testable during review: force-quit
+  DeuceMate mid-match and reopen it — the score, the server, and the match
+  clock all come back intact.
 - Interrupted matches survive: tennis gets stopped by rain, darkness, a court
   booking running out, or a flat battery. Ending an unfinished match stores it
   as in-progress rather than discarding it, and it stays in History marked with
