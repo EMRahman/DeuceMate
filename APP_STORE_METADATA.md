@@ -526,9 +526,13 @@ Gemini, Perplexity, Copilot, Poe or Grok at its public URL. DeuceMate transmits
 nothing itself, holds no API key or account with any of those providers, and no
 data leaves the device unless the user pastes it there. This is a convenience
 on top of a report the app has already finished writing. No feature depends on
-it: the prompt is composed on device and is complete on its own, and every
-statistic and insight in the app — including the point outcomes and rally
-depths described in item 3 — is derived locally in the app's own code.
+it: the prompt is composed on device and is complete on its own. The point
+outcomes and rally depths described in item 3 are classifications the person
+scoring the match records themselves, two taps per point; everything built on
+top of them — the statistics, the serve categories such as Ace and Serve Forced
+Error, the momentum chart, and the coaching prompt itself — is computed locally
+in the app's own code. Nothing in the app is inferred, generated, or scored by
+an outside service.
 
 6. REGIONAL DIFFERENCES
 
