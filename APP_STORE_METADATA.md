@@ -270,79 +270,258 @@ When completing the App Privacy questionnaire in App Store Connect:
 
 ---
 
-## Review Notes for Apple (Recommended)
+## App Review Information — Notes (Guideline 2.1 information request)
+
+Apple's Guideline 2.1 "Information Needed" template asks seven questions and
+requires a screen recording captured on physical hardware. The block below
+answers all seven. Paste it into **App Store Connect → App Review Information →
+Notes** for every submission, and send the same text — with the recording
+attached — as the Resolution Center reply when Apple asks.
+
+Before sending, replace the two `<…>` OS placeholders with the exact versions
+shown in **Settings → General → About** on each device, and confirm both devices
+are on the latest public release (Apple asks for "the latest operating system").
 
 ```
-Thank you for reviewing DeuceMate!
+Thank you for reviewing DeuceMate. All seven items are answered below, and the
+same text is now in the App Review Information Notes field.
 
-APP OVERVIEW
-DeuceMate is a tennis scoring app: an iPhone app bundled with an Apple Watch
-app. Scoring is done on the Apple Watch. The iPhone app is a companion for a
-live scoreboard, spoken score announcements, match history, and statistics.
+1. SCREEN RECORDING
 
-HOW TO TEST
-- No account or login is required. Core scoring and match review work offline;
-  personal iCloud Drive backup and user-initiated sharing use the relevant
-  Apple or third-party service.
-- Without an Apple Watch, tap Manual Match Entry on the iPhone archive screen,
-  save the match, then open it to review statistics, graphs, and export options.
-- On the Apple Watch: start a match, choose the first server, then swipe up to
-  score for yourself, swipe down for the opponent, swipe left to undo.
-- On the iPhone: the companion app shows match history and statistics, and (if
-  paired with the watch during a live match) a live scoreboard.
+A screen recording is attached to this reply. It was captured on physical
+hardware running the latest public operating systems — iPhone 16 (iOS <version>)
+and Apple Watch Series 7 45 mm (watchOS <version>) — begins with launching the
+app from the Home Screen, and follows the typical user flow through the core
+features: starting and scoring a match on Apple Watch, the live iPhone
+scoreboard, the match archive, per-match statistics and the points timeline,
+export, and the no-Watch Manual Match Entry path.
 
-HEALTHKIT (OPTIONAL)
-On its first launch, the Apple Watch app requests optional HealthKit access.
-The watchOS authorization prompt normally appears only until the reviewer makes
-a choice. Once authorized, every match automatically starts or resumes one
-"Tennis" workout and reads heart rate, active and resting energy, step count,
-and walking/running distance. There is no separate in-app HealthKit switch;
-access is controlled through the system Health settings. The app remains fully
-usable if the reviewer denies or later revokes access. Maximum heart rate for
-heart-rate zones is estimated from an optional birth year the user enters in the
-app (or a manual value), not read from HealthKit.
+Regarding the specific flows listed in your request:
 
-HealthKit-derived measurements are stored locally so the user can review match
-fitness analysis. DeuceMate strips heart rate, steps, distance, and calories
-from its automatic app-managed iCloud Drive archive. The developer operates no
-backend and cannot access this data.
+- Account registration, login, account deletion: not applicable. DeuceMate has
+  no accounts and no login of any kind. Nothing is gated behind identity.
+- Paid content, purchases, subscriptions: not applicable. The app is free with
+  no in-app purchases, no subscriptions, no ads, and no locked features.
+- User-generated content: not applicable. There is no social layer, no feed, no
+  user-to-user content, and no content published to other users, so reporting
+  and blocking mechanisms do not apply. The only content is the user's own
+  match data, stored on their own devices; they can delete any match from the
+  archive, which is shown in the recording.
+- Prompts requesting access to sensitive data or device capabilities: every
+  prompt the app can present is shown in the recording, in context —
+  (a) the HealthKit authorization sheet on Apple Watch at first launch,
+  (b) the HealthKit authorization sheet on iPhone when match analysis first
+      reads heart-rate samples,
+  (c) the optional "When In Use" location prompt on Apple Watch, which appears
+      only if the user enables the "Check Changeover" compass feature.
+  DeuceMate does not use App Tracking Transparency (it collects no data and
+  does no tracking), and does not request camera, microphone, photos,
+  contacts, calendar, notifications, or Bluetooth access.
 
-A user can deliberately export a match to share it with another person or an
-AI/LLM for match analysis, or create a manual archive backup. Those
-user-initiated exports may include HealthKit-derived measurements and are
-handled by the recipient, storage location, or AI service selected by the
-user. Before such an export leaves the device, DeuceMate presents an in-app
-disclosure naming exactly which measurements it contains and the destination,
-and proceeds only if the user confirms; exports of matches without recorded
-health data skip the prompt. Local app data may separately be included in
-Apple's encrypted, system-managed device backup according to the user's device
-backup settings.
+The app is fully usable if every one of those prompts is denied.
 
-LOCATION (OPTIONAL — Apple Watch)
-The optional "Check Changeover" feature requests "When In Use" location on
-watchOS to read the compass heading angle only. No GPS coordinates, no location
-history, no movement tracking. If the feature is not enabled, no location
-permission is requested.
+2. DEVICES AND OPERATING SYSTEMS TESTED BEFORE SUBMISSION
 
-SPOKEN ANNOUNCEMENTS (iPhone — foreground only)
-The optional "Announce scores aloud" feature speaks score announcements on the
-iPhone while the app is on screen. The app declares NO audio background mode and
-never keeps an audio session alive in the background: an announcement is spoken
-only while DeuceMate is in the foreground, and is skipped if the phone is locked
-or the app is backgrounded. The audio session is activated only for the duration
-of each spoken score (ducking other audio) and released immediately after.
+Physical devices:
+- iPhone 16 — iOS <version> (TestFlight build 1.0.0 (2))
+- Apple Watch Series 7, 45 mm — watchOS <version>, paired with the iPhone above
+- The same iPhone 16 with no Apple Watch paired, to verify the review path for
+  a reviewer who has no Apple Watch
 
-PRIVACY
-The developer collects no user data and operates no backend. The app uses no
-analytics, advertising, or third-party SDKs. Watch ↔ iPhone sync uses
-Apple's WatchConnectivity; the automatic stripped archive uses the user's
-personal iCloud Drive account; and all other sharing is explicitly initiated
-by the user.
+Physical-device testing covered: first-launch HealthKit authorization on both
+devices and continued operation after denial; a full live match scored on the
+Watch with the iPhone mirroring it; Watch-to-iPhone match transfer and the
+Sync Now / Sync to Watch flows, including a fresh Watch with an empty history;
+recovery after the Watch became unreachable and reachable again; spoken
+announcements in the foreground and their suppression when backgrounded or
+locked; matches exported with and without recorded health data, including the
+in-app health-data disclosure prompt; and normal operation with iCloud Drive
+unavailable.
 
-Thank you!
+Simulators were used additionally for the automated test suites only
+(iPhone 17 Pro on iOS 26.3, Apple Watch Series 11 46 mm on watchOS 26.2).
+
+3. WHAT THE APP DOES, AND FOR WHOM
+
+Problem: keeping score in club and recreational tennis is unreliable. Players
+lose track of the score mid-set, argue about it, forget who serves, forget
+which end to change on, and finish a match with no record of how they actually
+played.
+
+DeuceMate solves that with an Apple Watch app that is the scorer, plus an
+iPhone companion that is the scoreboard and the archive:
+
+- Apple Watch (primary): swipe up to award yourself a point, swipe down for
+  your opponent, swipe left to undo. The app applies the rules of tennis —
+  love/15/30/40, deuce and advantage, games, sets, standard and super
+  tiebreaks, singles and doubles serving order — and shows who serves and when
+  to change ends. Undo restores the exact prior state, all the way back to the
+  first point of the match.
+- iPhone (companion): a live scoreboard mirroring the Watch in real time,
+  optional spoken umpire-style score announcements, an unlimited match archive,
+  per-match and per-set statistics (serve, return, break points, winners and
+  errors, pressure points, rally patterns), an interactive points-momentum
+  timeline, and export of a match as text or as a self-contained HTML report.
+- Optional fitness: with the user's HealthKit permission, a match is recorded
+  as a Tennis workout with heart rate, calories, steps and distance, and the
+  app shows heart-rate-zone analysis for the match.
+
+Target audience: recreational and club tennis players scoring their own
+matches without an umpire, coaches tracking a student's match, and padel
+players (the scoring system is the same). Age rating 9+ (health and wellness
+topics). No expertise beyond knowing tennis is required.
+
+Value: an accurate, undoable score on the wrist during play, and an honest
+record of the match afterwards — free, with no account, no ads and no data
+collection.
+
+4. HOW TO SET UP AND ACCESS THE MAIN FEATURES
+
+No login credentials are required — there are no accounts. No sample files are
+needed. Nothing is gated, and no feature requires a network connection.
+
+A. Reviewing on iPhone WITHOUT an Apple Watch (fastest complete path):
+   1. Launch DeuceMate on iPhone. The archive shows a "No Apple Watch Paired"
+      empty state.
+   2. Tap "Manual Match Entry", enter any score (for example 6-4, 6-3), and
+      save. This creates a real match record on the phone.
+   3. Tap the saved match to open it: statistics tabs, set-by-set breakdown,
+      the points timeline graph, and the share/export menu are all live.
+   4. Tap the share icon to export the match as text or as an interactive HTML
+      report, and open the AI Coach card to see the generated coaching prompt.
+   5. Settings covers spoken announcements, iPhone Input, Watch sync details,
+      and Backup & Transfer (manual archive export/import).
+
+B. Reviewing with a paired Apple Watch (the intended experience):
+   1. Open DeuceMate on the Apple Watch. Accept or decline the HealthKit
+      prompt — both paths work.
+   2. The start screen shows the remembered match setup; tap it to change
+      format or singles/doubles, then tap Start Match and choose who serves.
+   3. Swipe up to score a point for yourself, swipe down for the opponent,
+      swipe left to undo. Play through a few points to reach deuce, then win a
+      game and a set.
+   4. Optionally categorize a point (winner, forced error, unforced error, and
+      the ending shot) in the sheet that follows a point.
+   5. On iPhone, the live scoreboard mirrors the Watch. Enable "Announce
+      scores aloud" in iPhone Settings to hear the score spoken while the app
+      is on screen.
+   6. End the match on the Watch; it transfers to the iPhone archive, where
+      the full statistics are available as in path A.
+
+C. Optional features and where to find them:
+   - Check Changeover (Apple Watch → Settings): enables the compass hint for
+     which end to take. This is the only feature that requests location.
+   - iCloud backup indicator (iPhone → archive): shows whether the archive has
+     been backed up to the user's own iCloud Drive.
+   - Backup & Transfer (iPhone → Settings): manual export and import of the
+     archive as a file the user controls.
+
+5. EXTERNAL SERVICES, TOOLS AND PLATFORMS USED
+
+None. DeuceMate uses no third-party services, SDKs, frameworks or libraries of
+any kind, and no developer-operated server or backend exists. There is no
+analytics, no advertising, no attribution, no crash reporting, no
+authentication provider, no payment processor, and no AI or machine-learning
+service involved in delivering any feature. The app contains no networking code
+and makes no network requests of its own; all scoring and all statistics are
+computed on device.
+
+The only frameworks used are Apple's, all on-device or user-account-scoped:
+- HealthKit — the Tennis workout and heart rate, energy, steps and distance
+- WatchConnectivity — Watch-to-iPhone sync (peer-to-peer, no server)
+- iCloud Drive / CloudKit ubiquity container — a backup copy of the match
+  archive in the user's own iCloud account, which the developer cannot access.
+  HealthKit-derived measurements are stripped from this automatic backup.
+- AVFoundation speech synthesis — on-device text-to-speech for the spoken score
+- Core Location — the compass heading angle only, for the optional Check
+  Changeover feature. No GPS coordinates, no location history, no tracking.
+- SwiftUI, Swift Charts, Foundation
+
+One optional, entirely user-initiated hand-off involves third parties: the AI
+Coach card generates a text coaching prompt from the user's own match, copies
+it to the clipboard, and — only if the user taps one — opens ChatGPT, Claude,
+Gemini, Perplexity, Copilot, Poe or Grok at its public URL. DeuceMate transmits
+nothing itself, holds no API key or account with any of those providers, and no
+data leaves the device unless the user pastes it there. This is a convenience
+on top of the match report, not part of the app's core functionality; every
+statistic and insight in the app is derived locally in the app's own code.
+
+6. REGIONAL DIFFERENCES
+
+None. DeuceMate behaves identically in every region. There is a single English
+user interface with no localizations, no region-gated features or content, no
+region-specific data sources, and no server that could vary by geography. The
+app is free in all territories with no in-app purchases, so there is no pricing
+or availability variation. The rules of tennis scoring the app implements are
+the same worldwide. The optional Health and compass features behave the same
+everywhere and depend only on the permissions the individual user grants.
+
+7. REGULATED INDUSTRY AND THIRD-PARTY MATERIAL
+
+Neither applies.
+
+Regulated industry: DeuceMate is a sports scorekeeping app, not a medical or
+health-regulated product. With the user's HealthKit permission it displays
+heart rate, calories, steps, distance and heart-rate zones as fitness
+information about a tennis workout. It makes no medical claims, does not
+diagnose, treat, monitor or manage any condition, gives no medical or dietary
+advice, and its coaching insights are tennis-performance suggestions
+(for example, serve placement or shot selection). No health, financial,
+gambling, or other regulated activity is offered.
+
+Third-party material: the app contains no protected third-party content. The
+rules of tennis scoring are not proprietary material. There is no team,
+player, tournament, league or broadcaster branding, no third-party logos,
+trademarks, images, audio, video or data feeds, and no claimed or implied
+affiliation with the ITF, ATP, WTA, USTA or any governing body or event. All
+source code, artwork, app icon, and copy are original and owned by me. The AI
+app names in the optional hand-off described in item 5 appear only as plain
+text labels naming the destination app, with no logos or marks used.
+
+Please let me know if anything further would help the review.
+
 Ehsan Rahman
 mail@ehsanrahman.com
 ```
+
+---
+
+## Demo screen recording — capture plan
+
+Apple's request is specific: **physical devices, latest OS, starts with launching
+the app, and shows every permission prompt in context.** watchOS has no built-in
+screen recorder, so record the Watch with a second camera and the iPhone with
+iOS Screen Recording, then join the two segments into one file.
+
+**Before recording — reset so the permission prompts actually appear:**
+1. Delete DeuceMate from the iPhone (this removes the Watch app too), then
+   reinstall the exact submitted TestFlight build.
+2. Confirm both devices are on the latest public iOS/watchOS release.
+3. Do not open the app before recording starts — the recording must begin with
+   the launch.
+
+**Segment A — Apple Watch (filmed):** Home Screen → tap the DeuceMate icon →
+HealthKit authorization sheet (allow) → start screen with the setup card and the
+Points/Health/Pulse tracking strip → Match Setup sheet → Start Match → choose
+first server → score points with swipe up / swipe down through deuce and
+advantage to win a game → categorize a point in the sheet → swipe left to undo
+and show the score restored → the ends-switch reminder → live stats →
+Settings → enable Check Changeover → the "When In Use" location prompt → the
+compass hint → finish the match.
+
+**Segment B — iPhone (screen recording):** Home Screen → launch DeuceMate →
+live scoreboard mirroring the Watch match → HealthKit authorization sheet when
+match analysis first reads heart rate → archive list showing the finished match
+→ match detail statistics and set breakdown → points timeline with the outcome
+filters and the heart-rate overlay, tapping a point to show its full score →
+AI Coach card → share/export, including the health-data disclosure prompt before
+a health-bearing export → Settings, toggling "Announce scores aloud" and letting
+one announcement play audibly → Manual Match Entry, saving a match and opening
+it, to show the complete no-Watch path.
+
+Keep it in real time with no jump cuts across a prompt, aim for three to five
+minutes, and export H.264 at 1080p so the file stays inside the Resolution
+Center attachment limit.
 
 ---
 
@@ -361,9 +540,15 @@ mail@ehsanrahman.com
 - [ ] Build archived from Xcode and uploaded
 - [ ] Build tested on a real iPhone + Apple Watch (not just simulator)
 - [ ] TestFlight review pass
+- [ ] App Review Information → Notes filled in with the seven-item block above
+- [ ] Demo screen recording captured on physical devices per the capture plan
+  above, and attached to the submission or its Resolution Center thread.
+  Apple's Guideline 2.1 "Information Needed" template requests it for new app
+  submissions; DeuceMate was rejected under it in August 2026 for its absence.
 
 ### Recommended
-- [ ] App preview video created
+- [ ] App preview video created (separate from the review recording — this one
+  is the marketing video shown on the product page)
 - [ ] Friends/family beta tested via TestFlight
 - [ ] Support page with FAQ created
 
