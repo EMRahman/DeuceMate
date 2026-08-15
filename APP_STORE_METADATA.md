@@ -292,9 +292,10 @@ A screen recording is attached to this reply. It was captured on physical
 hardware running the latest public operating systems — iPhone 16 (iOS <version>)
 and Apple Watch Series 7 45 mm (watchOS <version>) — begins with launching the
 app from the Home Screen, and follows the typical user flow through the core
-features: starting and scoring a match on Apple Watch, the live iPhone
-scoreboard, the match archive, per-match statistics and the points timeline,
-export, and the no-Watch Manual Match Entry path.
+features: starting and scoring a match on Apple Watch, a force-quit and
+relaunch mid-match showing the score, server and clock restored intact, the
+live iPhone scoreboard, the match archive, per-match statistics and the points
+timeline, export, and the no-Watch Manual Match Entry path.
 
 Regarding the specific flows listed in your request:
 
@@ -598,8 +599,15 @@ Start Match → choose first server. The "When In Use" location prompt fires at
 the first game start once Check Changeover is on; show it and the compass hint.
 Then score points with swipe up / swipe down through deuce and advantage to win
 a game → categorize a point in the sheet → swipe left to undo and show the
-score restored → the ends-switch reminder → live stats. **Do not finish the
-match yet.**
+score restored → the ends-switch reminder → live stats.
+
+Then, still in Segment A, demonstrate the crash-safety claim from item 3:
+force-quit DeuceMate on the Watch (hold the side button until the power screen
+appears, then hold the Digital Crown until the app quits) and relaunch it. The
+start screen comes back reading **"Resume Match"** rather than "Start Match";
+tap it and hold on the restored scoreboard long enough to show the score, the
+server and the match clock intact. Score another point afterwards so the match
+is visibly still live. **Do not finish the match yet.**
 
 **Segment B — iPhone (screen recording), while that match is still live:**
 Home Screen → launch DeuceMate → the live scoreboard mirroring the Watch →
