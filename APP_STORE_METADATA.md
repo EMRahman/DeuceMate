@@ -292,9 +292,10 @@ A screen recording is attached to this reply. It was captured on physical
 hardware running the latest public operating systems — iPhone 16 (iOS <version>)
 and Apple Watch Series 7 45 mm (watchOS <version>) — begins with launching the
 app from the Home Screen, and follows the typical user flow through the core
-features: starting and scoring a match on Apple Watch, the live iPhone
-scoreboard, the match archive, per-match statistics and the points timeline,
-export, and the no-Watch Manual Match Entry path.
+features: starting and scoring a match on Apple Watch, a force-quit and
+relaunch mid-match showing the score, server and clock restored intact, the
+live iPhone scoreboard, the match archive, per-match statistics and the points
+timeline, export, and the no-Watch Manual Match Entry path.
 
 Regarding the specific flows listed in your request:
 
@@ -347,7 +348,10 @@ Simulators were used additionally for the automated test suites only
 Problem: keeping score in club and recreational tennis is unreliable. Players
 lose track of the score mid-set, argue about it, forget who serves, forget
 which end to change on, and finish a match with no record of how they actually
-played.
+played. I built DeuceMate after trying existing scoring apps and finding them
+not dependable enough to trust with a real match — a crash or a force-quit
+could take the entire score with it, which leaves a player worse off than a
+paper scorecard.
 
 DeuceMate solves that with an Apple Watch app that is the scorer, plus an
 iPhone companion that is the scoreboard and the archive:
@@ -356,24 +360,91 @@ iPhone companion that is the scoreboard and the archive:
   your opponent, swipe left to undo. The app applies the rules of tennis —
   love/15/30/40, deuce and advantage, games, sets, standard and super
   tiebreaks, singles and doubles serving order — and shows who serves and when
-  to change ends. Undo restores the exact prior state, all the way back to the
-  first point of the match.
+  to change ends. Undo restores the exact prior state, point by point, back to
+  the first point of the match (on a match resumed from History, undo covers
+  the points played since the resume).
+- The score survives the app, which is the design goal the scoring model was
+  built around rather than a feature added later. Every state change — each
+  point won or lost, each point categorization, each undo, each second-serve
+  toggle — writes the complete match state to disk atomically before returning,
+  and the same call pushes an in-progress checkpoint to the iPhone over
+  WatchConnectivity, so a second copy already exists off the Watch. The file
+  uses until-first-unlock protection so it stays writable with the Watch locked
+  or off the wrist mid-match. On relaunch the app reloads that state and
+  carries on, down to reopening the point-categorization sheet if the app was
+  killed while it was open. This is directly testable during review: force-quit
+  DeuceMate mid-match and reopen it — the score, the server, and the match
+  clock all come back intact.
+- Interrupted matches survive: tennis gets stopped by rain, darkness, a court
+  booking running out, or a flat battery. Ending an unfinished match stores it
+  as in-progress rather than discarding it, and it stays in History marked with
+  its point count. Resuming restores the full match state — set scores, the
+  current game score, who is serving, the doubles service order and position
+  within it, tiebreak serving state, whether the server is on a second serve,
+  and the accumulated match and per-set clocks — and reattaches the Tennis
+  workout, so play continues exactly where it stopped rather than from a
+  guessed score. If a match was never tracked at all, or its record was lost,
+  Manual Match Entry on the iPhone adds it to the archive afterwards as a
+  score-only record so the player's history stays complete.
 - iPhone (companion): a live scoreboard mirroring the Watch in real time,
   optional spoken umpire-style score announcements, an unlimited match archive,
   per-match and per-set statistics (serve, return, break points, winners and
   errors, pressure points, rally patterns), an interactive points-momentum
   timeline, and export of a match as text or as a self-contained HTML report.
+- Point-level capture, which is what separates this from a scoreboard: as each
+  point ends, the scorer can record in two taps on the Watch how the point was
+  won or lost — Winner, Unforced Error, Forced Error or Double Fault — and how
+  far the rally got before it ended: Serve, Return, S+1 (the server's first
+  ball after the return), or Rally. These have to be captured at the moment the
+  point ends, on the wrist, because nobody can reconstruct them afterwards. The
+  iPhone then crosses those two dimensions with the score situation — serve
+  number, break points, pressure points, set — to surface patterns the score
+  alone cannot show, such as a player losing most points to their own unforced
+  errors on the S+1 ball rather than to the opponent's winners.
+- Coaching hand-off: from that point-level record the app composes a
+  structured, readable coaching prompt on the device and offers it for the user
+  to copy. A player who wants a second opinion can paste it into whichever AI
+  assistant they already use. That combination — rally-depth and outcome data
+  captured live, then turned into something a player can actually be coached
+  on — is unusual for a scoring app; most record only the score, which is why a
+  recreational player normally finishes a match with no idea why they lost it.
+  The prompt is composed entirely by the app's own code and is complete on its
+  own; see item 5 for what is and is not sent anywhere.
 - Optional fitness: with the user's HealthKit permission, a match is recorded
   as a Tennis workout with heart rate, calories, steps and distance, and the
   app shows heart-rate-zone analysis for the match.
+
+Seeing the whole match at once (the Points Graph): the iPhone plots both
+players' running point totals across the entire match on a single chart, with
+shaded bands marking each set and each tiebreak. Any categorized point can be
+overlaid on those curves as a symbol and filtered by three independent
+families — how the point ended (Winner, Unforced Error, Forced Error, Double
+Fault), the serve it was played on (first serve, second serve, ace, double
+fault, forced error off the serve), and how deep the rally got (Serve, Return,
+S+1, Rally) — for either player, with each filter chip carrying its own count
+and the rally-depth chips showing that phase's won–lost split. Optional
+heart-rate and step overlays sit on a second axis, and dragging along the chart
+reports the full pre-point score and who was serving at that moment.
+
+This view exists because the macro view of a match is the one a player cannot
+reconstruct from memory. Nobody holds two hours of points in their head, so the
+things that actually decided the match are the first to disappear: the run of
+eight straight points that turned a set, unforced errors clustering on second
+serve, nearly every lost point ending on the return, a stretch of dropped games
+that lines up with a heart-rate spike. Each of those is obvious in seconds as a
+shape on the chart and effectively impossible to recall unaided afterwards. It
+is the same point-level data behind the coaching prompt described above — the
+graph is for seeing the pattern, the prompt is for asking about it.
 
 Target audience: recreational and club tennis players scoring their own
 matches without an umpire, coaches tracking a student's match, and padel
 players (the scoring system is the same). Age rating 9+ (health and wellness
 topics). No expertise beyond knowing tennis is required.
 
-Value: an accurate, undoable score on the wrist during play, and an honest
-record of the match afterwards — free, with no account, no ads and no data
+Value: an accurate, undoable score on the wrist during play; an honest record
+of the match afterwards; and, from the point-level data, a concrete answer to
+"why did I lose that match?" that a club player would otherwise only get from a
+coach watching courtside — free, with no account, no ads and no data
 collection.
 
 4. HOW TO SET UP AND ACCESS THE MAIN FEATURES
@@ -454,8 +525,14 @@ it to the clipboard, and — only if the user taps one — opens ChatGPT, Claude
 Gemini, Perplexity, Copilot, Poe or Grok at its public URL. DeuceMate transmits
 nothing itself, holds no API key or account with any of those providers, and no
 data leaves the device unless the user pastes it there. This is a convenience
-on top of the match report, not part of the app's core functionality; every
-statistic and insight in the app is derived locally in the app's own code.
+on top of a report the app has already finished writing. No feature depends on
+it: the prompt is composed on device and is complete on its own. The point
+outcomes and rally depths described in item 3 are classifications the person
+scoring the match records themselves, two taps per point; everything built on
+top of them — the statistics, the serve categories such as Ace and Serve Forced
+Error, the momentum chart, and the coaching prompt itself — is computed locally
+in the app's own code. Nothing in the app is inferred, generated, or scored by
+an outside service.
 
 6. REGIONAL DIFFERENCES
 
@@ -526,8 +603,15 @@ Start Match → choose first server. The "When In Use" location prompt fires at
 the first game start once Check Changeover is on; show it and the compass hint.
 Then score points with swipe up / swipe down through deuce and advantage to win
 a game → categorize a point in the sheet → swipe left to undo and show the
-score restored → the ends-switch reminder → live stats. **Do not finish the
-match yet.**
+score restored → the ends-switch reminder → live stats.
+
+Then, still in Segment A, demonstrate the crash-safety claim from item 3:
+force-quit DeuceMate on the Watch (hold the side button until the power screen
+appears, then hold the Digital Crown until the app quits) and relaunch it. The
+start screen comes back reading **"Resume Match"** rather than "Start Match";
+tap it and hold on the restored scoreboard long enough to show the score, the
+server and the match clock intact. Score another point afterwards so the match
+is visibly still live. **Do not finish the match yet.**
 
 **Segment B — iPhone (screen recording), while that match is still live:**
 Home Screen → launch DeuceMate → the live scoreboard mirroring the Watch →
