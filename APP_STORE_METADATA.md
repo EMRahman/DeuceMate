@@ -356,8 +356,20 @@ iPhone companion that is the scoreboard and the archive:
   your opponent, swipe left to undo. The app applies the rules of tennis —
   love/15/30/40, deuce and advantage, games, sets, standard and super
   tiebreaks, singles and doubles serving order — and shows who serves and when
-  to change ends. Undo restores the exact prior state, all the way back to the
-  first point of the match.
+  to change ends. Undo restores the exact prior state, point by point, back to
+  the first point of the match (on a match resumed from History, undo covers
+  the points played since the resume).
+- Interrupted matches survive: tennis gets stopped by rain, darkness, a court
+  booking running out, or a flat battery. Ending an unfinished match stores it
+  as in-progress rather than discarding it, and it stays in History marked with
+  its point count. Resuming restores the full match state — set scores, the
+  current game score, who is serving, the doubles service order and position
+  within it, tiebreak serving state, whether the server is on a second serve,
+  and the accumulated match and per-set clocks — and reattaches the Tennis
+  workout, so play continues exactly where it stopped rather than from a
+  guessed score. If a match was never tracked at all, or its record was lost,
+  Manual Match Entry on the iPhone adds it to the archive afterwards as a
+  score-only record so the player's history stays complete.
 - iPhone (companion): a live scoreboard mirroring the Watch in real time,
   optional spoken umpire-style score announcements, an unlimited match archive,
   per-match and per-set statistics (serve, return, break points, winners and
