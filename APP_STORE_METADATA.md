@@ -386,6 +386,28 @@ iPhone companion that is the scoreboard and the archive:
   as a Tennis workout with heart rate, calories, steps and distance, and the
   app shows heart-rate-zone analysis for the match.
 
+Seeing the whole match at once (the Points Graph): the iPhone plots both
+players' running point totals across the entire match on a single chart, with
+shaded bands marking each set and each tiebreak. Any categorized point can be
+overlaid on those curves as a symbol and filtered by three independent
+families — how the point ended (Winner, Unforced Error, Forced Error, Double
+Fault), the serve it was played on (first serve, second serve, ace, double
+fault, forced error off the serve), and how deep the rally got (Serve, Return,
+S+1, Rally) — for either player, with each filter chip carrying its own count
+and the rally-depth chips showing that phase's won–lost split. Optional
+heart-rate and step overlays sit on a second axis, and dragging along the chart
+reports the full pre-point score and who was serving at that moment.
+
+This view exists because the macro view of a match is the one a player cannot
+reconstruct from memory. Nobody holds two hours of points in their head, so the
+things that actually decided the match are the first to disappear: the run of
+eight straight points that turned a set, unforced errors clustering on second
+serve, nearly every lost point ending on the return, a stretch of dropped games
+that lines up with a heart-rate spike. Each of those is obvious in seconds as a
+shape on the chart and effectively impossible to recall unaided afterwards. It
+is the same point-level data behind the coaching prompt described above — the
+graph is for seeing the pattern, the prompt is for asking about it.
+
 Target audience: recreational and club tennis players scoring their own
 matches without an umpire, coaches tracking a student's match, and padel
 players (the scoring system is the same). Age rating 9+ (health and wellness
