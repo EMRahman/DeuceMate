@@ -289,11 +289,11 @@ same text is now in the App Review Information Notes field.
 1. SCREEN RECORDING
 
 A screen recording is attached to this reply. It was captured on physical
-hardware running the latest public operating systems — iPhone 16 (iOS <version>)
-and Apple Watch Series 7 45 mm (watchOS <version>) — begins with launching the
+hardware running the latest public operating systems — iPhone 16 (iOS 26.6)
+and Apple Watch Series 7 45 mm (watchOS 26.6) — begins with launching the
 app from the Home Screen, and follows the typical user flow through the core
 features: starting and scoring a match on Apple Watch, a force-quit and
-relaunch mid-match showing the score, server and clock restored intact, the
+relaunch mid-match showing the score, server and match timer restored intact, the
 live iPhone scoreboard, the match archive, per-match statistics and the points
 timeline, export, and the no-Watch Manual Match Entry path.
 
@@ -325,8 +325,8 @@ The app is fully usable if every one of those prompts is denied.
 2. DEVICES AND OPERATING SYSTEMS TESTED BEFORE SUBMISSION
 
 Physical devices:
-- iPhone 16 — iOS <version> (TestFlight build 1.0.0 (2))
-- Apple Watch Series 7, 45 mm — watchOS <version>, paired with the iPhone above
+- iPhone 16 — iOS 26.6 (TestFlight build 1.0.0 (3))
+- Apple Watch Series 7, 45 mm — watchOS 26.6, paired with the iPhone above
 - The same iPhone 16 with no Apple Watch paired, to verify the review path for
   a reviewer who has no Apple Watch
 
@@ -374,18 +374,22 @@ iPhone companion that is the scoreboard and the archive:
   carries on, down to reopening the point-categorization sheet if the app was
   killed while it was open. This is directly testable during review: force-quit
   DeuceMate mid-match and reopen it — the score, the server, and the match
-  clock all come back intact.
-- Interrupted matches survive: tennis gets stopped by rain, darkness, a court
-  booking running out, or a flat battery. Ending an unfinished match stores it
-  as in-progress rather than discarding it, and it stays in History marked with
+  timer all come back intact.
+- Interrupted matches survive: tennis gets stopped by rain, darkness, or a
+  court booking running out. Ending an unfinished match stores it as
+  in-progress rather than discarding it, and it stays in History marked with
   its point count. Resuming restores the full match state — set scores, the
   current game score, who is serving, the doubles service order and position
   within it, tiebreak serving state, whether the server is on a second serve,
-  and the accumulated match and per-set clocks — and reattaches the Tennis
+  and the accumulated match and per-set timers — and reattaches the Tennis
   workout, so play continues exactly where it stopped rather than from a
-  guessed score. If a match was never tracked at all, or its record was lost,
-  Manual Match Entry on the iPhone adds it to the archive afterwards as a
-  score-only record so the player's history stays complete.
+  guessed score. A flat Watch battery doesn't go through that flow — nothing
+  was explicitly ended — but the same autosave means the match is exactly
+  where it left off once the Watch is recharged and relaunched. If the score
+  was kept by hand in the meantime, or the Watch record was lost outright,
+  Manual Match Entry on the iPhone reconstructs the score so far and pushes it
+  to the Watch as an in-progress match, so the player can pick up live scoring
+  again rather than just logging a final result.
 - iPhone (companion): a live scoreboard mirroring the Watch in real time,
   optional spoken umpire-style score announcements, an unlimited match archive,
   per-match and per-set statistics (serve, return, break points, winners and
@@ -610,7 +614,7 @@ force-quit DeuceMate on the Watch (hold the side button until the power screen
 appears, then hold the Digital Crown until the app quits) and relaunch it. The
 start screen comes back reading **"Resume Match"** rather than "Start Match";
 tap it and hold on the restored scoreboard long enough to show the score, the
-server and the match clock intact. Score another point afterwards so the match
+server and the match timer intact. Score another point afterwards so the match
 is visibly still live. **Do not finish the match yet.**
 
 **Segment B — iPhone (screen recording), while that match is still live:**
