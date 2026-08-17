@@ -13,16 +13,19 @@ compiled products, tests, and a generated archive. They are current repository
 findings, not historical notes copied from an earlier PR.
 
 **Current status: rejected under Guideline 2.1 - Information Needed (August
-2026); response prepared, resubmission pending.** Apple cited no bug, crash, or
-guideline violation in the app itself. The rejection is the standard new-app
-information request: a screen recording captured on a physical device running
-the latest OS, plus six written answers (devices tested, app description and
-audience, setup instructions, external services, regional differences, and
-regulated-industry/third-party-material status). The seven-item response and the
-recording capture plan are in
+2026); Resolution Center reply sent 17 August 2026, Apple's decision pending.**
+Apple cited no bug, crash, or guideline violation in the app itself. The
+rejection is the standard new-app information request: a screen recording
+captured on a physical device running the latest OS, plus six written answers
+(devices tested, app description and audience, setup instructions, external
+services, regional differences, and regulated-industry/third-party-material
+status). The seven-item response sent on 17 August 2026 and the recording
+capture plan are in
 [`APP_STORE_METADATA.md`](APP_STORE_METADATA.md#app-review-information--notes-guideline-21-information-request);
-paste that block into App Review Information -> Notes for every future
-submission.
+that block links the recording on YouTube rather than attaching a file; the
+video has since been taken down and the link is marked `<video removed>`
+pending a replacement. Update the OS versions, TestFlight build number, and
+the recording link before reusing it for a future submission.
 
 Build 2 was archived, uploaded, installed via TestFlight as an
 upgrade, and confirmed at `1.0.0 (2)` before submission. The App Privacy
@@ -33,7 +36,8 @@ physical-device cases for Blockers 2-4 are complete; HealthKit-unavailable
 remains documented as not manually reproducible on supported hardware. No demo
 video was attached to the App Review notes for the 6 August submission; the 2.1
 information request subsequently asked for one, so a physical-device recording
-is now a required part of the resubmission.
+was captured and linked (rather than attached) in the 17 August 2026
+Resolution Center reply.
 
 Legend: `[ ]` to do, `[x]` verified, `[~]` partly verified or awaiting a product
 decision.
@@ -642,16 +646,17 @@ Reviewers may not pair an Apple Watch. The no-Watch review path is
 - [x] Manual Match Entry is reachable from the "No Apple Watch Paired" empty
   state in `PastMatchesView.swift`.
 - [x] Put Manual Match Entry first in the App Review notes' test instructions.
-- [ ] Attach a demo video showing Watch scoring, iPhone live scoreboard, and
-  foreground announcements. **Now required, not optional.** It was not attached
-  for the 6 August 2026 submission, and Apple's Guideline 2.1 information
-  request explicitly asked for a screen recording captured on a physical device
-  running the latest OS, beginning with app launch and showing every sensitive
-  data prompt. Follow the capture plan in
-  [`APP_STORE_METADATA.md`](APP_STORE_METADATA.md#demo-screen-recording--capture-plan):
-  watchOS has no screen recorder, so film the Watch segment and screen-record
-  the iPhone segment, and reinstall the build first so the HealthKit and
-  location prompts actually appear on camera.
+- [x] Provide a demo video showing Watch scoring, iPhone live scoreboard, and
+  foreground announcements. It was not attached for the 6 August 2026
+  submission, and Apple's Guideline 2.1 information request explicitly asked
+  for a screen recording captured on a physical device running the latest OS,
+  beginning with app launch and showing every sensitive data prompt. Captured
+  per the capture plan in
+  [`APP_STORE_METADATA.md`](APP_STORE_METADATA.md#demo-screen-recording--capture-plan)
+  and linked (rather than attached, to stay under the Resolution Center
+  attachment limit) in the 17 August 2026 Resolution Center reply. That video
+  has since been taken down; the link is marked `<video removed>` in
+  `APP_STORE_METADATA.md` pending a replacement.
 - [x] Confirm every central iPhone screen has a useful no-Watch state and no
   indefinite connectivity loading state. WatchConnectivity activation now
   leaves the connecting state after at most 10 seconds (and immediately when
@@ -869,10 +874,12 @@ search results.
 
 ### Store record
 
-- [~] App Review notes start with the no-Watch Manual Match Entry path and
+- [x] App Review notes start with the no-Watch Manual Match Entry path and
   include the hardware demo video. Manual Match Entry is first (see Item 6);
-  no demo video was attached for the 6 August 2026 submission — optional per
-  Apple's guidance, not a hard requirement.
+  no demo video was attached for the 6 August 2026 submission, but the
+  17 August 2026 Resolution Center reply links the physical-device recording
+  (see Item 6; the video has since been taken down and the link is marked
+  `<video removed>` pending a replacement).
 - [~] App Privacy answers are based on final behavior, not the old absolute
   "on-device only" wording. *Some* answer was necessarily submitted as part of
   the mandatory App Store Connect submission flow, but the exact selected
