@@ -111,7 +111,7 @@ Start scoring like a pro with DeuceMate. Game, set, match!
 
 ## What's New (4000 characters max)
 
-### Version 1.0.1 - Watch match-start improvements and archive fixes
+### Version 1.1.0 - Watch match-start improvements and archive fixes
 
 ```
 Thanks for the early feedback on DeuceMate — this update is built on it.
@@ -127,6 +127,8 @@ NEW ON APPLE WATCH
   on anything that isn't.
 
 FIXED
+• The Health chip on the start screen now turns on as soon as you grant
+  access, instead of staying amber until the next time you open the app.
 • Swipe a match in the iPhone archive, tap Delete, and the confirmation now
   stays on screen until you answer it. It previously appeared and vanished
   straight away, so a match couldn't be deleted by swiping.
@@ -152,8 +154,11 @@ Game, set, match!
 > never went to users. So everything merged after 6 August reaches users for
 > the first time in 1.0.1 — the remembered match setup (#83), the pre-match
 > tracking strip (#84), and the sticky ends-switch reminder (#88), alongside
-> this release's archive fixes (#93). Confirmed against App Store Connect by
-> the owner on 19 August 2026.
+> this release's archive and Health-chip fixes. Confirmed against App Store
+> Connect by the owner on 19 August 2026, who also observed build 3 sitting in
+> TestFlight. Three features made this a minor release, not a patch — hence
+> **1.1.0**, with the build number continuing at 4 because build 3 is already
+> consumed in App Store Connect.
 
 ---
 
