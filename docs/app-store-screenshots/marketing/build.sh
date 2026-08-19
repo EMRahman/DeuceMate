@@ -39,7 +39,7 @@ trap 'rm -rf "$STAGE"' EXIT
 echo "==> Staging sources in $STAGE"
 cp "$HERE/ad.css" "$STAGE/"
 cp "$HERE"/ad-*.html "$STAGE/"
-cp "$SHOTS/watch-45mm/01-watch-live-scoreboard.png" "$STAGE/src-watch-live.png"
+cp "$SHOTS/watch-45mm/03-watch-live-scoreboard.png" "$STAGE/src-watch-live.png"
 cp "$SHOTS/iphone-6.9/05-match-archive.png"         "$STAGE/src-iphone-archive.png"
 cp "$DOCS/screenshots/09-ai-coach-launcher.png"     "$STAGE/src-iphone-aicoach.png"
 # Ad 2 uses a dark-mode capture that exists only for these frames — see
