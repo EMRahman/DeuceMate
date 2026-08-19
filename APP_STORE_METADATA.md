@@ -129,6 +129,9 @@ NEW ON APPLE WATCH
 FIXED
 • The Health chip on the start screen now turns on as soon as you grant
   access, instead of staying amber until the next time you open the app.
+• A match you just finished on your Watch is marked as stored on both
+  devices straight away, instead of briefly reading "iPhone only" until
+  the next sync.
 • Swipe a match in the iPhone archive, tap Delete, and the confirmation now
   stays on screen until you answer it. It previously appeared and vanished
   straight away, so a match couldn't be deleted by swiping.
@@ -144,7 +147,7 @@ shapes what comes next.
 Game, set, match!
 ```
 
-**Character count:** ~1,220 characters
+**Character count:** ~1,390 characters
 
 > **Scope — why the three Watch items are here.** The released 1.0.0 is
 > **build 2**, cut on 6 August 2026 (`[iOS] Prepare build 2 submission

@@ -42,14 +42,29 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     /// relaunch while the watch is unreachable.
     @Published private(set) var watchMirror: [MatchRecord] = PhoneMatchSyncService.loadCachedMirror()
 
-    /// Ids the watch is known to hold: its reported manifest unioned with the
-    /// local mirror. The mirror can briefly contain a record whose id hasn't yet
-    /// appeared in the manifest (the watch sends the record and the manifest as
-    /// separate messages), so the union is the reliable "on watch" signal for
-    /// storage-location badging — using `watchMatchIDs` alone would mislabel such
-    /// a mirror-only row as "iPhone only" until the manifest catches up.
+    /// Ids the phone has received a record for, whether or not that record was
+    /// complete. The mirror deliberately holds only *completed* records, and the
+    /// watch only lists a match in its manifest once the match has finished and
+    /// been appended to its history — but it streams an in-progress checkpoint
+    /// every point. So between the first checkpoint and the completed payload
+    /// landing, neither of the other two sources knows the watch holds the match,
+    /// and the row is badged "iPhone only" even though it came from the watch.
+    /// A received record is proof, so it counts here.
+    ///
+    /// Reconciled against every authoritative manifest via
+    /// `MatchStorageResolver.reportedIDsSurvivingManifest`, so a match deleted on
+    /// the watch stops counting. In-memory only: a checkpoint arrives per point,
+    /// so this re-establishes itself within one point of a relaunch, and it must
+    /// never outlive the session as a stale claim about watch storage.
+    @Published private(set) var reportedWatchIDs: Set<UUID> = []
+
+    /// Ids the watch is known to hold: its reported manifest, unioned with the
+    /// local mirror and with everything the watch has sent us a record for. Each
+    /// source alone has a blind spot — the manifest lags a live match, the mirror
+    /// excludes in-progress records, and `reportedWatchIDs` is session-scoped —
+    /// so the union is the reliable "on watch" signal for storage badging.
     var onWatchIDs: Set<UUID> {
-        watchMatchIDs.union(watchMirror.map(\.id))
+        watchMatchIDs.union(watchMirror.map(\.id)).union(reportedWatchIDs)
     }
     /// Mirror of the watch's current pending-point categorization, or nil when
     /// no point is awaiting classification. Set whenever the watch enters,
@@ -426,6 +441,15 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                 DispatchQueue.main.async {
                     self.watchMatchIDs = ids
                     Self.cacheManifest(ids)
+                    // Authoritative for everything the watch has saved, so it also
+                    // retires optimistic ids it no longer lists (deleted on the
+                    // watch) while sparing the live match, which is legitimately
+                    // absent from the watch's history until it finishes.
+                    self.reportedWatchIDs = MatchStorageResolver.reportedIDsSurvivingManifest(
+                        reported: self.reportedWatchIDs,
+                        manifest: ids,
+                        activeMatchID: self.activeMatchID
+                    )
                     self.updateMirror { WatchMirror.pruned($0, manifest: ids) }
                 }
                 // `MatchSyncTransport.sendHistory` deliberately emits no history
@@ -436,6 +460,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
             case .history(let records):
                 store?.mergeIncoming(records)
                 DispatchQueue.main.async {
+                    self.reportedWatchIDs.formUnion(records.map(\.id))
                     self.updateMirror {
                         WatchMirror.merged(existing: $0, incoming: records, manifest: self.watchMatchIDs)
                     }
@@ -444,6 +469,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
             case .singleMatch(let record):
                 store?.mergeIncoming(record)
                 DispatchQueue.main.async {
+                    self.reportedWatchIDs.insert(record.id)
                     self.updateMirror {
                         WatchMirror.merged(existing: $0, incoming: [record], manifest: self.watchMatchIDs)
                     }
