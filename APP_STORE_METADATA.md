@@ -147,7 +147,7 @@ shapes what comes next.
 Game, set, match!
 ```
 
-**Character count:** ~1,390 characters
+**Character count:** ~1,520 characters
 
 > **Scope — why the three Watch items are here.** The released 1.0.0 is
 > **build 2**, cut on 6 August 2026 (`[iOS] Prepare build 2 submission
@@ -155,7 +155,7 @@ Game, set, match!
 > answered by the 17 August Resolution Center reply, not a new binary; build 3
 > was a TestFlight-only build cut on 16 August to film the demo recording and
 > never went to users. So everything merged after 6 August reaches users for
-> the first time in 1.0.1 — the remembered match setup (#83), the pre-match
+> the first time in 1.1.0 — the remembered match setup (#83), the pre-match
 > tracking strip (#84), and the sticky ends-switch reminder (#88), alongside
 > this release's archive and Health-chip fixes. Confirmed against App Store
 > Connect by the owner on 19 August 2026, who also observed build 3 sitting in
