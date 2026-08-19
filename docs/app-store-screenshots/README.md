@@ -56,15 +56,28 @@ mix in the older 6.3/6.5-inch files from `docs/screenshots/` for this slot.
 
 Directory: [`watch-45mm/`](./watch-45mm/)
 
-All four PNGs are **396 x 484**, portrait, with no alpha. They were captured
+All six PNGs are **396 x 484**, portrait, with no alpha. They were captured
 manually on a physical Apple Watch Series 7 45 mm.
 
-1. `01-watch-live-scoreboard.png` - the primary live-scoring experience
-2. `02-watch-match-format.png` - match-format setup
-3. `03-watch-home.png` - start, settings, and guide entry points
-4. `04-watch-past-matches.png` - synced match history and statistics access
+1. `01-watch-home.png` - start screen: remembered setup row and the
+   Points / Health / Pulse tracking chips
+2. `02-watch-match-setup.png` - the Singles/Doubles + format sheet
+3. `03-watch-live-scoreboard.png` - the primary live-scoring experience
+4. `04-watch-changeover-prompt.png` - the set-complete changeover modal
+5. `05-watch-changeover-sticky.png` - the sticky ends reminder that follows it
+6. `06-watch-past-matches.png` - synced match history and statistics access
 
-All four were uploaded into the same 396 x 484 Watch set.
+Reordered for 1.1.0 to run in the order a player meets them — set up, score,
+change ends, review — rather than leading with the scoreboard. Items 1, 2, 4
+and 5 are the 1.1.0 features; `03` and `06` carry over unchanged from the
+6 August set (`03` is the former `01-watch-live-scoreboard.png`, renamed).
+
+> **`03-watch-live-scoreboard.png` is a build input.** The App Store ad frame
+> `01-watch-and-iphone.png` composites it, so `marketing/build.sh` reads it by
+> path. Renaming it again breaks that build — loudly, at the staging `cp`, not
+> silently — so update `marketing/build.sh` and its README in the same change.
+
+All six were uploaded into the same 396 x 484 Watch set.
 
 ## Validation performed
 

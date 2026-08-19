@@ -57,7 +57,7 @@ Output is byte-for-byte identical across runs.
 
 | Staged as | From |
 |---|---|
-| `src-watch-live.png` | `../watch-45mm/01-watch-live-scoreboard.png` |
+| `src-watch-live.png` | `../watch-45mm/03-watch-live-scoreboard.png` |
 | `src-iphone-archive.png` | `../iphone-6.9/05-match-archive.png` |
 | `src-iphone-graph.png` | `sources/points-graph-dark.png` |
 | `src-iphone-aicoach.png` | `../../screenshots/09-ai-coach-launcher.png` |
