@@ -120,11 +120,10 @@ h2.title { font-size: clamp(1.9rem, 4.4vw, 2.9rem); font-weight: 800; }
 }
 .btn-ghost:hover { transform: translateY(-2px); border-color: rgba(255,255,255,.22); background: rgba(255,255,255,.1); }
 .btn-block { width: 100%; }
-.btn-disabled {
-  background: var(--glass-2); color: var(--muted); border: 1px solid var(--line);
-  box-shadow: none; cursor: not-allowed;
-}
-.btn-disabled:hover { transform: none; box-shadow: none; background: var(--glass-2); }
+/* Compact — the persistent download CTA in the top nav. */
+.btn-sm { font-size: .92rem; padding: 9px 16px; border-radius: 11px; }
+/* Oversized — the primary "Download on the App Store" call to action. */
+.btn-lg { font-size: 1.08rem; padding: 16px 30px; border-radius: 15px; }
 
 /* --- Top nav -------------------------------------------------------------- */
 .nav {
@@ -440,6 +439,10 @@ details.faq .body a { color: var(--green); }
   .shot-strip, .shot-strip.cols-2, .shot-strip.cols-3 { grid-template-columns: 1fr; }
   .hero-actions .btn { width: 100%; }
   .trust-row { gap: 10px 22px; }
+  /* Keep the nav download CTA next to the brand and hamburger without wrapping. */
+  .nav-cta { gap: 8px; }
+  .nav-cta .btn-sm { font-size: .86rem; padding: 8px 13px; }
+  .nav-dl-extra { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

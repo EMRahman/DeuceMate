@@ -5,7 +5,9 @@
 [![Platform](https://img.shields.io/badge/platform-watchOS%209.0%2B%20%7C%20iOS%2017.0%2B-blue.svg)]()
 [![Swift](https://img.shields.io/badge/Swift-5.9-orange.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![App Store](https://img.shields.io/badge/App%20Store-In%20Review-yellow.svg)]()
+[![App Store](https://img.shields.io/badge/App%20Store-Download-0D96F6.svg)](https://apps.apple.com/app/id6757105622)
+
+### 📲 [Download DeuceMate on the App Store](https://apps.apple.com/app/id6757105622) — free, no ads, no tracking
 
 DeuceMate is a lightweight, native Apple Watch app for scoring tennis matches in real time, bundled with an **iPhone companion app** for live score viewing, umpire-style announcements, and a complete match archive with detailed statistics. Built from the ground up with SwiftUI, it delivers a fast, reliable scoring experience without the bloat, crashes, or privacy concerns of existing alternatives.
 
@@ -67,9 +69,9 @@ The developer does not collect or receive data from DeuceMate and operates no ba
 
 ## Requirements & Installation
 
+- **App Store:** [Download DeuceMate](https://apps.apple.com/app/id6757105622) — free, no in-app purchases
 - Apple Watch Series 4 or later (including SE and Ultra), watchOS 9.0+
-- iPhone running iOS 17.0+ (the watch app is bundled with the iOS app)
-- **App Store:** submitted to Apple and currently in review
+- iPhone running iOS 17.0+ (the watch app is bundled with the iOS app, so installing on iPhone installs both)
 
 ## Support & Feedback
 
@@ -109,4 +111,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Built with ❤️ for tennis players worldwide 🎾**
 
-*This project showcases production-quality native iOS/watchOS development. DeuceMate is currently in App Store review.*
+*This project showcases production-quality native iOS/watchOS development. DeuceMate is [live on the App Store](https://apps.apple.com/app/id6757105622).*

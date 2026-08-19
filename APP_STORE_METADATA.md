@@ -111,6 +111,40 @@ Start scoring like a pro with DeuceMate. Game, set, match!
 
 ## What's New (4000 characters max)
 
+### Version 1.0.1 - Match archive fixes
+
+```
+Thanks for the early feedback on DeuceMate! This update fixes a problem in
+the iPhone match archive.
+
+FIXED
+• Swipe a match, tap Delete, and the confirmation now stays on screen until
+  you answer it. It previously appeared and vanished straight away, so a
+  match couldn't be deleted by swiping.
+
+IMPROVED
+• Matches kept on both your iPhone and Apple Watch can now be deleted in a
+  single swipe — no need to remove the Watch copy first. A full swipe still
+  only frees up Watch space, so your archive is never deleted by accident.
+
+Found something? Tap Settings → Support & FAQ to get in touch. Your feedback
+shapes what comes next.
+
+Game, set, match!
+```
+
+**Character count:** ~700 characters
+
+> **Scope check before submitting.** These notes assume the released 1.0.0 was
+> **build 3** — the build documented under "Devices and operating systems tested"
+> below, submitted with the Guideline 2.1 information response. On that
+> assumption the sticky ends-switch reminder ([Watch] PR #88) already reached
+> users in 1.0.0 and is deliberately **not** listed here. If 1.0.0 shipped as
+> build 2 instead, the ends-switch reminder is new to users and needs its own
+> bullet above. Confirm the live build in App Store Connect before pasting.
+
+---
+
 ### Version 1.0.0 - Initial Release
 
 ```
