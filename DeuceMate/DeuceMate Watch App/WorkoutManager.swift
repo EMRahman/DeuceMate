@@ -35,9 +35,31 @@ class WorkoutManager: NSObject, ObservableObject {
         ]
         healthStore.requestAuthorization(toShare: share, read: read) { success, _ in
             DispatchQueue.main.async {
-                self.refreshHealthAccess()
+                self.settleHealthAccessAfterAuthorization()
                 completion(success)
             }
+        }
+    }
+
+    /// Re-reads the share status until it stops saying `.notDetermined`.
+    ///
+    /// This completion is the *only* chance the app gets to notice a fresh
+    /// grant: the scene never leaves `.active` for a system sheet, so
+    /// `DeuceMateApp`'s `scenePhase` refresh doesn't fire, and the start
+    /// screen's `onAppear` already ran before the sheet was answered. When the
+    /// status isn't readable yet at this instant, a single read here leaves the
+    /// tracking strip showing a yellow "Ask" until the next launch — the
+    /// reported bug. `HealthAccessSettlePolicy` (Core, tested) owns the bounded
+    /// schedule; re-reading also republishes `healthAccess`, so the strip
+    /// redraws even if it somehow missed the first value.
+    private func settleHealthAccessAfterAuthorization(attempt: Int = 0) {
+        refreshHealthAccess()
+        guard let delay = HealthAccessSettlePolicy.nextRetryDelay(
+            attempt: attempt,
+            access: healthAccess
+        ) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.settleHealthAccessAfterAuthorization(attempt: attempt + 1)
         }
     }
 
