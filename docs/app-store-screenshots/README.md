@@ -56,8 +56,10 @@ mix in the older 6.3/6.5-inch files from `docs/screenshots/` for this slot.
 
 Directory: [`watch-45mm/`](./watch-45mm/)
 
-All six PNGs are **396 x 484**, portrait, with no alpha. They were captured
-manually on a physical Apple Watch Series 7 45 mm.
+All six PNGs are **396 x 484**, portrait, with no alpha. All were captured
+manually on a physical Apple Watch Series 7 45 mm — the four new 1.1.0 shots
+on 19 August 2026, the two carried over on 6 August 2026. None are simulator
+captures.
 
 1. `01-watch-home.png` - start screen: remembered setup row and the
    Points / Health / Pulse tracking chips

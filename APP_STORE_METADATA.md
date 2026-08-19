@@ -345,7 +345,61 @@ When completing the App Privacy questionnaire in App Store Connect:
 
 ---
 
+## App Review Information — Notes (version updates)
+
+**Use this for an update to an already-approved app.** The Guideline 2.1 block
+below it is the *new-app* response and must not be pasted as-is: it points at a
+demo video that has been taken down and names TestFlight `1.0.0 (3)`.
+
+App Review Information persists across versions in App Store Connect, so the
+previous submission's text is probably still sitting in the field — check it
+rather than assuming the field is empty.
+
+Used for the 1.1.0 submission (19 August 2026). 1,391 of 4,000 characters.
+
+```
+This is a maintenance update to a previously approved app. No new
+permissions, no accounts, no in-app purchases, no ads, no tracking.
+
+WHAT CHANGED IN 1.1.0
+- Apple Watch: the "change ends" reminder now persists on the scoreboard until
+  the first point of the next set; the last match format and singles/doubles
+  choice are remembered; the start screen states whether point tracking, Health
+  and Pulse Coach will record the match.
+- Fixes: the Health indicator now updates as soon as access is granted; a
+  just-finished match is correctly shown as stored on both devices; the
+  delete-confirmation in the iPhone archive stays on screen until answered.
+
+REVIEWING WITHOUT AN APPLE WATCH
+The iPhone app is fully usable on its own. On an iPhone with no Watch paired,
+the Matches screen offers "Enter a match manually" (pencil icon, top left) —
+that creates a match you can open, review and export, exercising the archive,
+statistics, points timeline and export flows without any Watch involvement.
+
+PERMISSIONS
+HealthKit (Watch at first launch; iPhone for per-point heart rate) and location
+(Watch "Check Changeover" compass) are all optional. The app remains fully
+usable with every prompt denied. No ATT, camera, mic, photos, contacts,
+calendar, notifications or Bluetooth.
+
+Devices tested: iPhone 16 (iOS 26.6) and Apple Watch Series 7 45mm
+(watchOS 26.6), plus the same iPhone unpaired.
+```
+
+The no-Watch paragraph is the one that earns its place: this is a Watch-first
+app and a reviewer may not have an Apple Watch. It names the exact affordance
+(`ManualMatchEntryView`, reached from the Matches screen's pencil icon) that
+lets the whole app be exercised without one. Update the OS versions if the
+review hardware changes.
+
+---
+
 ## App Review Information — Notes (Guideline 2.1 information request)
+
+> **Archived — the new-app response. Do not paste as-is for an update.** It
+> references a removed video (`<video removed>`) and TestFlight `1.0.0 (3)`.
+> Use the version-update note above, or restore the recording link and refresh
+> the build/OS numbers first.
 
 Apple's Guideline 2.1 "Information Needed" template asks seven questions and
 requires a screen recording captured on physical hardware. The block below is
