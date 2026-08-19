@@ -24,8 +24,29 @@ statistics. The submission is the iOS app (`ehsan.DeuceMate`); the watchOS app
 ## Promotional Text (170 characters max)
 
 ```
-Score tennis on Apple Watch, then review live scores, spoken announcements, and full match stats on iPhone. Free forever. No ads.
+Score on Apple Watch, tag how every point ended, then hand the match to your favourite AI for real coaching. Free forever. No ads, no tracking.
 ```
+
+**Character count:** 143 characters. Live on the store from the 1.1.0
+submission (19 August 2026); the previous line was "Score tennis on Apple
+Watch, then review live scores, spoken announcements, and full match stats on
+iPhone. Free forever. No ads."
+
+Two deliberate choices here:
+
+- **"your favourite AI"**, not "ChatGPT, Claude or Gemini". The Description
+  above uses the same generic phrasing, and promotional text renders directly
+  on top of it — naming the apps in one and not the other reads as an
+  oversight. (Naming them is permissible; guideline 2.3.10 is about rival
+  *platforms*. This is a consistency choice, not a compliance one.)
+- **"tag how every point ended"** — outcome tracking is opt-in and costs two
+  taps per point, so the copy says it is something the player does, not
+  something the app infers on its own.
+
+Promotional text is the **only** App Store copy that can be changed without
+submitting a new version for review, so it is the right home for anything
+time-sensitive. Update it here whenever it is changed on the store, or this
+file starts lying about what users actually see.
 
 ---
 
