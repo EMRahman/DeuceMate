@@ -111,16 +111,25 @@ Start scoring like a pro with DeuceMate. Game, set, match!
 
 ## What's New (4000 characters max)
 
-### Version 1.0.1 - Match archive fixes
+### Version 1.0.1 - Watch match-start improvements and archive fixes
 
 ```
-Thanks for the early feedback on DeuceMate! This update fixes a problem in
-the iPhone match archive.
+Thanks for the early feedback on DeuceMate — this update is built on it.
+
+NEW ON APPLE WATCH
+• The ends-switch reminder now sticks around. After a set finishes, it stays
+  on the scoreboard until the first point of the next set, so you can check
+  whether you're changing ends without undoing a point to see it again.
+• Faster match starts. DeuceMate remembers your last format and your singles
+  or doubles choice, so Start Match goes straight to who serves first.
+• Know what's being recorded before you play. The start screen now shows
+  whether point tracking, Health and Pulse Coach are on — and how to switch
+  on anything that isn't.
 
 FIXED
-• Swipe a match, tap Delete, and the confirmation now stays on screen until
-  you answer it. It previously appeared and vanished straight away, so a
-  match couldn't be deleted by swiping.
+• Swipe a match in the iPhone archive, tap Delete, and the confirmation now
+  stays on screen until you answer it. It previously appeared and vanished
+  straight away, so a match couldn't be deleted by swiping.
 
 IMPROVED
 • Matches kept on both your iPhone and Apple Watch can now be deleted in a
@@ -133,15 +142,18 @@ shapes what comes next.
 Game, set, match!
 ```
 
-**Character count:** ~700 characters
+**Character count:** ~1,220 characters
 
-> **Scope check before submitting.** These notes assume the released 1.0.0 was
-> **build 3** — the build documented under "Devices and operating systems tested"
-> below, submitted with the Guideline 2.1 information response. On that
-> assumption the sticky ends-switch reminder ([Watch] PR #88) already reached
-> users in 1.0.0 and is deliberately **not** listed here. If 1.0.0 shipped as
-> build 2 instead, the ends-switch reminder is new to users and needs its own
-> bullet above. Confirm the live build in App Store Connect before pasting.
+> **Scope — why the three Watch items are here.** The released 1.0.0 is
+> **build 2**, cut on 6 August 2026 (`[iOS] Prepare build 2 submission
+> candidate`). The Guideline 2.1 rejection was an *information* request
+> answered by the 17 August Resolution Center reply, not a new binary; build 3
+> was a TestFlight-only build cut on 16 August to film the demo recording and
+> never went to users. So everything merged after 6 August reaches users for
+> the first time in 1.0.1 — the remembered match setup (#83), the pre-match
+> tracking strip (#84), and the sticky ends-switch reminder (#88), alongside
+> this release's archive fixes (#93). Confirmed against App Store Connect by
+> the owner on 19 August 2026.
 
 ---
 
