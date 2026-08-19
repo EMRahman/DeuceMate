@@ -44,10 +44,14 @@ struct PastMatchesView: View {
     /// match is also on the watch, issues a watch-side delete — so it's gone
     /// everywhere. The everyday "Remove from Watch" only frees watch space (the
     /// iPhone keeps its copy) and is never routed here.
-    private struct PendingDelete: Identifiable {
+    ///
+    /// This is a snapshot taken at the moment of the tap: the confirmation dialog
+    /// renders from it alone, so it survives the row it came from being torn down
+    /// (see the dialog's placement note in `body`) and the warning text can't drift
+    /// from what `performPermanentDelete` will actually do.
+    private struct PendingDelete {
         let record: MatchRecord
         let onWatch: Bool
-        var id: UUID { record.id }
     }
 
     private static let dateFormatter: DateFormatter = {
@@ -208,6 +212,33 @@ struct PastMatchesView: View {
                     return ", latest \(Self.dateFormatter.string(from: date))"
                 }()
                 Text("Found a backup with \(preview.recordCount) match\(preview.recordCount == 1 ? "" : "es")\(dateStr). Restore it to this iPhone?")
+            }
+            // Deliberately attached here, at screen level, and NOT to the row it
+            // concerns: tapping a `.swipeActions` button closes the swipe, which
+            // reconfigures the underlying list cell and tears down any presentation
+            // anchored inside it — the confirmation would flash up and dismiss
+            // itself before the user could answer. Rendering from the `PendingDelete`
+            // snapshot keeps it independent of the row's lifetime. It also means one
+            // dialog for the whole archive instead of one per row.
+            .confirmationDialog(
+                "Delete permanently?",
+                isPresented: Binding(
+                    get: { pendingDelete != nil },
+                    set: { if !$0 { pendingDelete = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: pendingDelete
+            ) { pending in
+                Button("Delete Permanently", role: .destructive) {
+                    performPermanentDelete(pending)
+                }
+                Button("Cancel", role: .cancel) { pendingDelete = nil }
+            } message: { pending in
+                if pending.onWatch {
+                    Text("This deletes the match from iPhone and Apple Watch for good — this can't be undone.")
+                } else {
+                    Text("This deletes the match from iPhone for good — this can't be undone.")
+                }
             }
             .onChange(of: store.pendingRestorePreview) { _, preview in
                 if preview != nil { showRestorePrompt = true }
@@ -384,32 +415,14 @@ struct PastMatchesView: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("match-row-\(record.id.uuidString)")
         // Full-swipe is reserved for the safe, recoverable "Remove from Watch" (only
-        // on `.both`). `.phoneOnly` and `.watchOnly` offer only permanent deletion,
-        // which must go through the confirmation dialog — so no full-swipe there.
+        // offered on `.both`, where it is the first-declared action). Permanent
+        // deletion is never a full-swipe outcome: it always takes a deliberate tap
+        // plus the confirmation dialog.
         .swipeActions(edge: .trailing, allowsFullSwipe: location == .both) {
             rowDeleteSwipe(for: record, location: location, onWatch: onWatch)
         }
         .contextMenu {
             rowContextActions(for: record, location: location, onWatch: onWatch)
-        }
-        .confirmationDialog(
-            "Delete permanently?",
-            isPresented: Binding(
-                get: { pendingDelete?.id == record.id },
-                set: { if !$0 && pendingDelete?.id == record.id { pendingDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete Permanently", role: .destructive) {
-                if let pending = pendingDelete { performPermanentDelete(pending) }
-            }
-            Button("Cancel", role: .cancel) { pendingDelete = nil }
-        } message: {
-            if onWatch {
-                Text("This deletes the match from iPhone and Apple Watch for good — this can't be undone.")
-            } else {
-                Text("This deletes the match from iPhone for good — this can't be undone.")
-            }
         }
     }
 
@@ -428,18 +441,17 @@ struct PastMatchesView: View {
     private func rowDeleteSwipe(for record: MatchRecord, location: MatchStorageLocation, onWatch: Bool) -> some View {
         switch location {
         case .both:
-            // Recoverable free-up-space: the iPhone keeps its archive copy; only the
-            // watch copy is dropped. "Sync to Watch" can push it back later.
+            // Declared first, so it sits outermost on the trailing edge and is the
+            // action a full swipe triggers — keeping that gesture on the recoverable
+            // free-up-space one: the iPhone keeps its archive copy and only the watch
+            // copy is dropped, and "Sync to Watch" can push it back later.
             removeFromWatchButton(record)
                 .tint(.orange)
+            deleteSwipeButton(record, onWatch: onWatch)
         case .phoneOnly, .watchOnly:
-            // The only remaining action is permanent deletion, gated behind the dialog.
-            Button(role: .destructive) {
-                pendingDelete = PendingDelete(record: record, onWatch: onWatch)
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-            .tint(.red)
+            // Nothing to free up on the watch, so permanent deletion is the only
+            // action left. Full-swipe is off for these rows (see `pastMatchRow`).
+            deleteSwipeButton(record, onWatch: onWatch)
         }
     }
 
@@ -479,12 +491,35 @@ struct PastMatchesView: View {
         }
     }
 
+    /// Swipe-action flavour of permanent deletion. Titled just "Delete" because a
+    /// swipe button has no room for the full phrase; the dialog it opens carries the
+    /// "permanently" warning. The context menu, which has the room, uses
+    /// `deletePermanentlyButton`.
+    @ViewBuilder
+    private func deleteSwipeButton(_ record: MatchRecord, onWatch: Bool) -> some View {
+        Button(role: .destructive) {
+            requestPermanentDelete(record, onWatch: onWatch)
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
+        .tint(.red)
+    }
+
     @ViewBuilder
     private func deletePermanentlyButton(_ record: MatchRecord, onWatch: Bool) -> some View {
         Button(role: .destructive) {
-            pendingDelete = PendingDelete(record: record, onWatch: onWatch)
+            requestPermanentDelete(record, onWatch: onWatch)
         } label: {
             Label("Delete Permanently", systemImage: "trash")
+        }
+    }
+
+    /// Stages the permanent-delete confirmation, deferred to the next runloop so the
+    /// swipe close — or the context menu's dismissal — finishes animating first.
+    /// Presenting into a live UIKit transition can drop the dialog outright.
+    private func requestPermanentDelete(_ record: MatchRecord, onWatch: Bool) {
+        DispatchQueue.main.async {
+            pendingDelete = PendingDelete(record: record, onWatch: onWatch)
         }
     }
 

@@ -91,6 +91,71 @@ final class DeuceMateUITests: XCTestCase {
         )
     }
 
+    /// Regression: the permanent-delete confirmation used to be attached to the
+    /// archive row itself, so tapping the swipe action closed the swipe, tore down
+    /// the cell the dialog was anchored in, and dismissed it a moment after it
+    /// appeared — the match could never be deleted by swiping. It survived only on
+    /// the long-press path, which doesn't reconfigure the cell.
+    ///
+    /// No Watch is needed to reproduce it: the simulator is unpaired, so every
+    /// archive row resolves to `.phoneOnly` and its swipe offers exactly "Delete"
+    /// (with full-swipe off, so the swipe reveals the button rather than firing it).
+    @MainActor
+    func testSwipeDeleteConfirmationStaysUntilAnswered() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        // Seed a throwaway match to act on, the same way the export test does.
+        let manualEntry = app.buttons["Manual match entry"]
+        XCTAssertTrue(manualEntry.waitForExistence(timeout: 10))
+        manualEntry.tap()
+
+        let save = app.buttons["Save Match"]
+        for _ in 0..<6 where !save.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        save.tap()
+
+        // Manual entry stamps the match with `Date()`, so it sorts newest-first.
+        let newestMatch = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'match-row-'")
+        ).firstMatch
+        XCTAssertTrue(newestMatch.waitForExistence(timeout: 5))
+        // Pin the identifier: after the delete, `firstMatch` would happily resolve
+        // to whatever row took its place and the assertion would pass vacuously.
+        let rowIdentifier = newestMatch.identifier
+
+        newestMatch.swipeLeft()
+        let deleteAction = app.buttons["Delete"].firstMatch
+        XCTAssertTrue(deleteAction.waitForExistence(timeout: 5))
+        deleteAction.tap()
+
+        let confirm = app.buttons["Delete Permanently"].firstMatch
+        XCTAssertTrue(
+            confirm.waitForExistence(timeout: 5),
+            "Swiping to Delete should raise the permanent-delete confirmation"
+        )
+
+        // The heart of it: the dialog must still be there a beat later. An inverted
+        // expectation reports the disappearance itself rather than a bare sleep.
+        let vanished = expectation(
+            for: NSPredicate(format: "exists == false"),
+            evaluatedWith: confirm
+        )
+        vanished.isInverted = true
+        wait(for: [vanished], timeout: 3)
+
+        // Confirming still deletes — which also leaves no test match behind for the
+        // seed-gated test below.
+        confirm.tap()
+        let rowGone = expectation(
+            for: NSPredicate(format: "exists == false"),
+            evaluatedWith: app.buttons[rowIdentifier]
+        )
+        wait(for: [rowGone], timeout: 5)
+    }
+
     /// Positive counterpart to the skip-when-empty gate above: a match that DOES
     /// carry HealthKit data must surface the "Share health data?" disclosure before
     /// anything leaves the device. Health only exists on a real watch-recorded

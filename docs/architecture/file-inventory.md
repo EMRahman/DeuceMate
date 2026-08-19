@@ -46,7 +46,7 @@ matches; it does not score them (except by sending validated commands to the wat
 |---|---:|---|---|
 | `Views/PointsGraphView.swift` | 1,870 | The interactive match chart: points momentum over time with counted Me/Opp filters for outcomes, serving categories and ending shots, plus optional heart-rate and steps overlays; pinch-zoom, fullscreen, touch-to-inspect. Its selection summary shows the same pre-point full match score, game score, serving side, and set-relative point number as the Points tab. | Stats & graphs |
 | `Views/MatchDetailView.swift` | ~1,160 | One match's detail page: score summary, stats tabs, the graph, coaching sections, storage-location and iCloud badges, and the export / AI-coach actions — including "Share Interactive Web Page", a self-contained `.html` file (built off-thread, shared via the system share sheet) the opponent can open in any browser. Text/HTML share actions **and the AI Coach hand-off** route through one per-export HealthKit disclosure (`HealthExportConsent`, Blocker 4): a shared "Share health data?" alert (via `PendingHealthDisclosure`) when the match carries health data — Share → `UIActivityViewController` (`ShareSheet`), Continue → the AI Coach sheet; health-free matches proceed directly. Its Points tab rows show the full pre-point match score and serving side with a combined accessibility label. | Stats, AI export, web export, archive, health/privacy |
-| `Views/PastMatchesView.swift` | ~705 | The archive list: all matches newest-first, live-match row, badges showing whether a match lives on the watch, the phone, or both; swipe-to-delete; pull a watch-only match to the phone; free up watch space. Set scores use Core's canonical formatter. | Archive, sync |
+| `Views/PastMatchesView.swift` | ~745 | The archive list: all matches newest-first, live-match row, badges showing whether a match lives on the watch, the phone, or both; swipe-to-delete; pull a watch-only match to the phone; free up watch space. Set scores use Core's canonical formatter. Permanent deletion is confirmed by a single screen-level dialog rendered from a `PendingDelete` snapshot — never anchored inside a row, whose teardown when a swipe closes would dismiss it — and full-swipe stays reserved for the recoverable "Remove from Watch". | Archive, sync |
 | `Views/LiveScoreboardView.swift` | 490 | Full-screen landscape scoreboard for spectators, fed live from the watch. With "iPhone Input" on, swipes here send score commands to the watch. | Live scoreboard, iPhone input |
 | `Views/SettingsView.swift` | 819 | Settings screen: Watch sync status/counts and fresh-Watch restore guidance, announcements, theme, outcome tracking, changeover compass, heart-rate settings, player name, skill level (NTRP), manual archive export/import, iCloud backup, About (version + tappable privacy-policy / support / contact links). | Settings, manual archive backup |
 | `Views/ManualMatchEntryView.swift` | 440 | Form to reconstruct a match by hand (paper scorecard, watch mishap); the result is saved into the phone archive and a copy is sent to the watch so it can be resumed there. | Manual entry |
@@ -185,9 +185,11 @@ between `HealthExportConsent.presentFields` and what each export string actually
 emits — the `MatchExporter` half of the disclosure↔export cross-check, which must
 live in the iOS target because Core cannot import app-side code),
 `DeuceMateUITests/DeuceMateUITests.swift`
-(Manual Entry -> history -> truthful detail empty states -> export, and both the
+(Manual Entry -> history -> truthful detail empty states -> export, both the
 negative skip-when-empty and the seed-gated positive "Share health data?" consent
-gates), two remaining
+gates, and the archive's swipe -> Delete permanent-delete confirmation staying up
+until it is answered — the regression guarding the dialog against being re-anchored
+inside a list row, where closing the swipe dismisses it), two remaining
 UI-test placeholders (`DeuceMate Watch AppUITests/DeuceMate_Watch_AppUITests.swift`,
 `DeuceMateUITests/DeuceMateUITestsLaunchTests.swift`), plus three screenshot-capture
 suites (not regression tests — see `docs/screenshots/README.md`):
