@@ -48,4 +48,31 @@ public enum MatchStorageResolver {
     ) -> Set<UUID> {
         watchIDs.subtracting(phoneIDs)
     }
+
+    /// Narrow the phone's optimistic "the watch sent us a record for this match"
+    /// set once an authoritative manifest arrives.
+    ///
+    /// The watch streams a checkpoint for the live match on every point, but only
+    /// lists a match in its *manifest* after the match finishes and is appended to
+    /// its history. Those checkpoints are proof the watch holds the match, so the
+    /// phone badges from them too — without that, a match the phone learned about
+    /// from checkpoints reads "iPhone only" until the completed payload lands,
+    /// which is a visible wrong badge right after a match ends.
+    ///
+    /// A manifest is authoritative for everything the watch has **saved**, so any
+    /// optimistic id it omits has since been deleted there and must be dropped.
+    /// The live match is the one legitimate omission — it is not in the watch's
+    /// history yet — so it survives on `activeMatchID`.
+    ///
+    /// - Parameters:
+    ///   - reported: ids the phone has received a record for, complete or not.
+    ///   - manifest: the watch's freshly reported set of saved ids.
+    ///   - activeMatchID: the live match, or nil when no match is in progress.
+    public static func reportedIDsSurvivingManifest(
+        reported: Set<UUID>,
+        manifest: Set<UUID>,
+        activeMatchID: UUID?
+    ) -> Set<UUID> {
+        reported.filter { manifest.contains($0) || $0 == activeMatchID }
+    }
 }
