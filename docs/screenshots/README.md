@@ -30,6 +30,21 @@ shots so the gallery feels cohesive; only `06-themes.png` shows multiple themes.
 | 12 | `12-ai-coach-raw-data.png` | Same prompt, scrolled to the bottom — the full point-by-point raw data table. | same |
 | 13 | `13-web-export-points.png` | Interactive **HTML web export**, Points tab — the momentum chart, outcome/serving/ending-shot pills, and point-by-point list. | `Packages/DeuceMateCore/Sources/DeuceMateCore/WebExport/` |
 | 14 | `14-web-export-stats.png` | Interactive **HTML web export**, Stats tab (the default view) — the Me-vs-Opponent comparison bar, set filters, and match statistics. | same |
+| 15 | `15-watch-start-tracking.png` | Watch **start screen** — Start Match above the remembered `Singles · Best of 3` setup row, with the Points / Health / Pulse tracking chips beneath it. Capture with all three reading **On**, which needs HealthKit granted and a birth year (or max-HR override) set. | `DeuceMate/DeuceMate Watch App/HomeView.swift`, `TrackingStatusStrip.swift` |
+| 16 | `16-watch-match-setup.png` | Watch **Match Setup sheet** — the Singles/Doubles choice above the format list, with a format selected and its detail line visible. Reached by tapping the setup row in 15. | `DeuceMate/DeuceMate Watch App/HomeView.swift` |
+| 17 | `17-watch-changeover-prompt.png` | The **set-complete changeover modal** ("Set complete — players change ends" + OK). The prompt half of the ends-switch story; pairs with 18. Committed for the App Store set, where the prompt → sticky before/after is worth showing; **not** currently used by the site or README, which show only the sticky half. | `DeuceMate/DeuceMate Watch App/ContentView.swift` (`ChangeoverAckOverlay`) |
+| 18 | `18-watch-changeover-sticky.png` | The **sticky ends reminder** on the live scoreboard after the modal is dismissed — the banner sits in the momentum strip's slot until the first point of the next set. | `DeuceMate/DeuceMate Watch App/ContentView.swift` |
+
+> **15–18 are manual captures** (see "Manual-only shots" below) — the automation
+> drives a live match, not the start screen, the setup sheet, or a set boundary.
+> Shoot them at the **same 396×484** size as `04`: the App Store requires one
+> consistent Watch size, so moving to 416×496 (Series 10/11) means redoing every
+> Watch shot together, not just the new ones.
+>
+> `17`/`18` each have a **balls-change-ends** counterpart as well as the
+> players variant committed here. The site and README use the players pair,
+> because "which end do I stand on" is the question the reminder exists to
+> answer; reshoot the balls variants only if a surface needs both.
 
 ## How to capture
 
@@ -157,7 +172,7 @@ occasionally get stuck mid-boot and need a fresh `xcrun simctl shutdown` +
 (doesn't need pairing at all) and leave `01` as whatever is already committed
 rather than force a broken composite.
 
-### Manual-only shots (06, and a true `01` composite)
+### Manual-only shots (06, 15–18, and a true `01` composite)
 
 1. Run the iPhone scheme on a Pro-class iPhone simulator and the watch scheme
    on an Apple Watch simulator; play out a demo match.
@@ -166,3 +181,17 @@ rather than force a broken composite.
    **Apple device frames** (Apple Design Resources) and place them side by
    side in an image editor — unframed screenshots look unfinished.
 4. Save the file here under the exact name in the table above (PNG).
+
+For the Watch feature shots (15–18), the states are reached in this order from
+one sitting, which is also the order they tell the story in:
+
+1. **15** — on the start screen before starting anything. Grant HealthKit and
+   set a birth year first, or the Health and Pulse chips won't read `On`.
+2. **16** — tap the `Singles · Best of 3` row on that screen.
+3. **17** — play a set to completion; the changeover modal appears by itself.
+4. **18** — tap **OK** on that modal. The banner stays until the first point of
+   the next set, so capture before scoring again.
+
+Note that `04` is *not* superseded by `18`: the sticky banner occupies the
+momentum strip's slot while it is showing, so `04` remains the shot for the
+ordinary scoreboard, with the strip and a richer mid-match score.
