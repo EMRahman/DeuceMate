@@ -59,8 +59,13 @@ Output is byte-for-byte identical across runs.
 |---|---|
 | `src-watch-live.png` | `../watch-45mm/01-watch-live-scoreboard.png` |
 | `src-iphone-archive.png` | `../iphone-6.9/05-match-archive.png` |
-| `src-iphone-graph.png` | `../iphone-6.9/02-points-momentum.png` |
+| `src-iphone-graph.png` | `sources/points-graph-dark.png` |
 | `src-iphone-aicoach.png` | `../../screenshots/09-ai-coach-launcher.png` |
+
+`sources/` holds captures that exist **only** for these frames. The dark Points
+Graph lives there rather than replacing `../iphone-6.9/02-points-momentum.png`,
+which stays the light 1320 x 2868 capture uploaded as a raw screenshot in its
+own right.
 
 Replacing a source screenshot means re-running the build; the frames are not
 edited by hand and nothing here is retouched.
@@ -77,10 +82,22 @@ so before uploading:
   score cannot be read there, the frame has failed at its real job — scale the
   type or the devices up and re-run.
 
-## A known judgement call
+## Light and dark, and why they are mixed
 
-Frames 01 and 02 embed light-mode screenshots; 03 embeds a dark-mode one. On the
-dark backdrop this reads as deliberate contrast rather than an inconsistency,
-and the AI Coach screen is genuinely more striking dark. If it ever looks wrong
-in the live gallery, recapture `09-ai-coach-launcher.png` in light mode at
-1320 x 2868 and re-run — no layout change needed.
+Frames 02 and 03 embed dark-mode screenshots; **01 is deliberately light**, and
+that is not an oversight.
+
+Both were built and compared at thumbnail size, which is where most people see
+a store screenshot. Ad 01's entire job is to say *Apple Watch scorer, iPhone
+companion* — and it only does that if a viewer registers **two** devices. The
+bright phone behind the dark Watch is what makes that read at 300px wide. In the
+dark version the two merge into one slab, even with the Watch's rim and glow
+pushed up to compensate. At full size dark looks more premium; at thumbnail size
+it loses the point of the frame, so light wins on the size that matters.
+
+Ads 02 and 03 have no such job — a single device, no separation to preserve — so
+they take the dark captures, which sit with the backdrop instead of punching a
+white slab through it.
+
+If ad 01 is ever revisited, compare at thumbnail size before deciding; full-size
+review will mislead you here.
