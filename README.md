@@ -16,6 +16,8 @@ DeuceMate is a lightweight, native Apple Watch app for scoring tennis matches in
 | <img src="docs/screenshots/04-watch-scoreboard.png" width="260" alt="Apple Watch live scoreboard"> | <img src="docs/screenshots/01-hero-watch-iphone.png" width="380" alt="iPhone companion showing the live score"> |
 |:--:|:--:|
 | **Gesture-first scoring, right on your wrist.** | **Watch it live on your phone — same score, real time.** |
+| <img src="docs/screenshots/15-watch-start-tracking.png" width="260" alt="Apple Watch start screen showing the remembered Singles / Best of 3 setup and the Points, Health and Pulse tracking chips"> | <img src="docs/screenshots/18-watch-changeover-sticky.png" width="260" alt="Apple Watch scoreboard with a sticky Players change ends reminder above the score"> |
+| **Start in three taps — and see what the match will record.** | **The changeover reminder that stays put.** |
 | <img src="docs/screenshots/02-points-momentum-graph.png" width="380" alt="Points momentum graph with heart rate and steps"> | <img src="docs/screenshots/03-match-stats.png" width="380" alt="Side-by-side match statistics"> |
 | **See your momentum — overlaid with heart rate and movement.** | **Pro-level analytics — 20+ stats, side by side.** |
 | <img src="docs/screenshots/07-points-outcomes-won.png" width="380" alt="Points graph filtered to points won"> | <img src="docs/screenshots/08-points-outcomes-lost.png" width="380" alt="Points graph filtered to points lost"> |
@@ -52,6 +54,8 @@ This project also showcases my ability to ship production-quality native iOS/wat
 | Swipe right | Open live stats view |
 
 - **Complete tennis scoring** — games, sets, tiebreaks, deuce/advantage, automatic server rotation, break-point detection, and side-change prompts with a compass court-end badge. Six match formats; singles and doubles with full service-order management.
+- **Straight into the match** — the watch remembers your last format and singles/doubles choice, so Start Match goes directly to who serves first, and a pre-match strip states up front whether point tracking, Health, and Pulse Coach will record this match.
+- **A changeover reminder that stays put** — after a set, the "change ends" notice persists on the scoreboard until the first point of the next set, so you can check it whenever you look down instead of undoing a point to see it again.
 - **Bulletproof state** — full undo stack across game and set boundaries; in-progress matches survive backgrounding, notifications, and overnight pauses.
 - **iPhone companion** — stadium-style live scoreboard, umpire-style spoken announcements, optional swipe-to-score iPhone Input, manual match entry, and an unlimited on-device archive.
 - **Point outcome tracking** — tag every point with a cause and ending shot to unlock serve, return, break-point, pressure, rally-depth, and score-state analytics, filterable per set or whole match.
