@@ -8,7 +8,9 @@
 #   screenshots/ -> marketing screenshots shown on the landing page
 #
 # The internal feature-planning docs under docs/features/ are NOT part of the
-# public site and are excluded from the published build.
+# public site and are excluded from the published build. So is the App Store
+# advertisement-frame build under app-store-screenshots/marketing/ — that HTML
+# is a render source for PNGs, not a page anyone should be able to browse to.
 title: DeuceMate
 description: >-
   A reliable, privacy-focused tennis scoring app for Apple Watch with an iPhone
@@ -16,3 +18,5 @@ description: >-
 exclude:
   - features/
   - features/**
+  - app-store-screenshots/marketing/
+  - app-store-screenshots/marketing/**

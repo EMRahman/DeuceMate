@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<!-- Ad 3 — the AI coach hand-off. The source screenshot is dark mode, unlike
+     ads 1 and 2; on this backdrop that reads as intent rather than accident,
+     and the "Open in ChatGPT / Claude / Gemini" rows are the whole point of the
+     frame, so the device is placed to keep those three rows near centre. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DeuceMate — AI coach</title>
+<link rel="stylesheet" href="ad.css">
+<style>
+  /* This headline is the longest of the three. At the shared 74px it breaks to
+     three lines and the subhead crowds the phone's top edge, so drop it enough
+     to hold two lines — the copy matters more than matching type size exactly. */
+  .headline { font-size: 62px; }
+
+  /* Height = width * 2.1679 (1179x2556 source); placed so the three
+     "Open in ..." rows sit near the centre of the frame. */
+  .phone-main {
+    width: 480px;                /* -> ~1043px tall, bleeds just past 1434 */
+    top: 400px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  /* The dark screenshot would otherwise disappear into the dark backdrop —
+     lift it with a slightly brighter rim than the shared .phone rule. */
+  .phone-main.on-dark {
+    border-color: rgba(255,255,255,.20);
+    box-shadow:
+      0 46px 90px -20px rgba(0,0,0,.9),
+      0 0 60px -10px rgba(79,155,255,.28);
+  }
+</style>
+</head>
+<body>
+
+  <div class="copy">
+    <h1 class="headline">Hand your match to an <span class="accent">AI coach</span>.</h1>
+    <p class="subhead">One tap to ChatGPT, Claude or Gemini.</p>
+  </div>
+
+  <div class="stage">
+    <div class="phone phone-main on-dark">
+      <img src="src-iphone-aicoach.png" alt="">
+    </div>
+  </div>
+
+</body>
+</html>

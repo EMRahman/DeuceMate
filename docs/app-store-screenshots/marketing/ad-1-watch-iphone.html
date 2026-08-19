@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!-- Ad 1 — the companion story: the Watch scores, the iPhone keeps everything.
+     This is the frame that has to land, because nothing else in the gallery
+     tells a shopper browsing on an iPhone that this is a Watch app at all.
+     The Watch is deliberately oversized relative to true scale and sits in
+     front of the phone: at search-result thumbnail size the score has to read.
+
+     Image filenames are flat and local — build.sh stages them beside this file
+     because WKWebView's read access is scoped to the HTML's own directory. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DeuceMate — Watch + iPhone</title>
+<link rel="stylesheet" href="ad.css">
+<style>
+  /* Tops are measured from the top of the frame (see .stage in ad.css).
+     Phone height = width * 2.1727 (1320x2868 source); it runs past 1434 so it
+     bleeds off the bottom edge. Watch height = width * 1.2222 (396x484). */
+  .phone-main {
+    width: 480px;                /* -> 1043px tall, bottom at 1443: bleeds 9px */
+    top: 400px;
+    right: 24px;
+  }
+  .watch-main {
+    width: 320px;                /* -> 391px tall */
+    top: 960px;
+    left: 18px;
+  }
+</style>
+</head>
+<body>
+
+  <div class="copy">
+    <h1 class="headline">Score on your <span class="accent">wrist</span>.</h1>
+    <p class="subhead">Every match, kept on your iPhone.</p>
+  </div>
+
+  <div class="stage">
+    <div class="phone phone-main">
+      <img src="src-iphone-archive.png" alt="">
+    </div>
+    <div class="watch watch-main">
+      <img src="src-watch-live.png" alt="">
+    </div>
+  </div>
+
+</body>
+</html>

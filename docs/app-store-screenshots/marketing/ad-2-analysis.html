@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<!-- Ad 2 — match analysis. One phone, centred and large, because the momentum
+     graph is the product's most distinctive image and it needs the pixels.
+     Positioned so the chart itself sits in the upper half of the device and the
+     filter pills bleed off the bottom edge — a shopper should see the graph,
+     not a shrunk-to-fit whole screen.
+
+     Uses a DARK capture (sources/points-graph-dark.png): it sits with the
+     backdrop instead of punching a white slab through it, and the coloured
+     outcome markers on the line read far better than the light version's.
+
+     The subhead names outcomes rather than heart rate and steps because this
+     capture has those overlays switched off. If it is ever reshot with Heart
+     Rate and Steps enabled, restore "Every point, with heart rate and steps." —
+     the stronger claim, and true again at that point. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DeuceMate — Match analysis</title>
+<link rel="stylesheet" href="ad.css">
+<style>
+  /* Height = width * 2.1679 (1179x2556 source); bottom lands past 1434 so the
+     filter pills crop off the edge rather than shrinking the graph to fit. */
+  .phone-main {
+    width: 480px;                /* -> ~1043px tall, bleeds just past 1434 */
+    top: 400px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+</style>
+</head>
+<body>
+
+  <div class="copy">
+    <h1 class="headline">See where the match <span class="accent">turned</span>.</h1>
+    <p class="subhead">Every point, and how each one ended.</p>
+  </div>
+
+  <div class="stage">
+    <div class="phone phone-main">
+      <img src="src-iphone-graph.png" alt="">
+    </div>
+  </div>
+
+</body>
+</html>

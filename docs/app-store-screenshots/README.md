@@ -1,8 +1,37 @@
 # App Store screenshot upload package
 
-Captured on 6 August 2026 from the current codebase and physical Watch hardware.
-These are raw product screenshots with no device frames, marketing overlays, or
-alpha channel. They were uploaded to App Store Connect in filename order.
+Two kinds of asset live here:
+
+- **Advertisement frames** ([`iphone-6.9-marketing/`](./iphone-6.9-marketing/)) —
+  three art-directed frames with headlines and device framing, generated from
+  [`marketing/`](./marketing/). These lead the gallery.
+- **Raw product screenshots** (`iphone-6.9/`, `watch-45mm/`) — captured 6 August
+  2026 from the current codebase and physical Watch hardware, with no device
+  frames, marketing overlays, or alpha channel.
+
+## iPhone upload order (8 slots)
+
+The App Store shows roughly the first three screenshots in search results, so
+the ad frames take those slots and the raw captures follow for anyone who taps
+through. All eight are 1320 x 2868 with no alpha — a set must be one size.
+
+| # | File | Kind |
+|---|------|------|
+| 1 | `iphone-6.9-marketing/01-watch-and-iphone.png` | ad — Watch scorer + iPhone companion |
+| 2 | `iphone-6.9-marketing/02-match-analysis.png` | ad — momentum graph |
+| 3 | `iphone-6.9-marketing/03-ai-coach.png` | ad — AI coach hand-off |
+| 4 | `iphone-6.9/01-match-overview.png` | raw |
+| 5 | `iphone-6.9/02-points-momentum.png` | raw |
+| 6 | `iphone-6.9/03-match-stats.png` | raw |
+| 7 | `iphone-6.9/04-coaching-insights.png` | raw |
+| 8 | `iphone-6.9/05-match-archive.png` | raw |
+
+Slot 1 exists because nothing in the previous all-iPhone gallery told a shopper
+browsing on an iPhone that this is an **Apple Watch** app — the single most
+important fact about the product.
+
+The Watch set keeps its four raw captures unchanged: Apple shows those in the
+Watch section, where framing a Watch inside a drawn Watch adds nothing.
 
 ## iPhone 6.9-inch
 
