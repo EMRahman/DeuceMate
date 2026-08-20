@@ -79,6 +79,12 @@
 
           <!-- Setup -->
           <div class="setup-card" data-setup>
+            <h3>Match type</h3>
+            <div class="opt-grid" style="grid-template-columns:1fr 1fr;">
+              <button type="button" class="opt" data-matchtype="singles" aria-pressed="true">Singles</button>
+              <button type="button" class="opt" data-matchtype="doubles" aria-pressed="false">Doubles</button>
+            </div>
+
             <h3>Choose a match format</h3>
             <div class="opt-grid">
               <button type="button" class="opt" data-format="standard">Best of 3 Sets (Club / League)<small>3 sets · Final set: Super Tiebreak to 10</small></button>
@@ -90,9 +96,14 @@
             </div>
 
             <h3>Who serves first?</h3>
-            <div class="opt-grid">
+            <div class="opt-grid" data-singles-server>
               <button type="button" class="opt" data-server="me">You</button>
               <button type="button" class="opt" data-server="opponent">Opponent</button>
+            </div>
+            <div class="opt-grid" data-doubles-server hidden style="grid-template-columns:repeat(3,1fr);">
+              <button type="button" class="opt" data-doubles-server-btn="me" aria-pressed="true">Me</button>
+              <button type="button" class="opt" data-doubles-server-btn="partner" aria-pressed="false">Partner</button>
+              <button type="button" class="opt" data-doubles-server-btn="opponentS1" aria-pressed="false">Opponent</button>
             </div>
 
             <h3>Point tracking</h3>
@@ -152,6 +163,16 @@
                       <div class="changeover-symbol" data-changeover-symbol></div>
                       <div class="changeover-reason" data-changeover-reason></div>
                       <button type="button" class="changeover-ok" data-changeover-ok>OK</button>
+                    </div>
+                  </div>
+
+                  <div class="changeover" data-doubles-decision hidden role="dialog" aria-modal="true" aria-label="Who serves next?">
+                    <div class="changeover-card">
+                      <div class="changeover-symbol">Who serves next?</div>
+                      <div class="doubles-decision-buttons">
+                        <button type="button" class="changeover-ok" data-doubles-decision-me>Me</button>
+                        <button type="button" class="changeover-ok" data-doubles-decision-partner>Partner</button>
+                      </div>
                     </div>
                   </div>
 
@@ -231,7 +252,7 @@
       <a href="support.html">Support</a>
       <a href="privacy.html">Privacy</a>
     </nav>
-    <p class="fine">© 2026 Ehsan Rahman · This browser demo plays singles only and is for fun — the Apple Watch app is the real scorer. DeuceMate is not affiliated with Apple Inc.</p>
+    <p class="fine">© 2026 Ehsan Rahman · This browser demo is for fun — the Apple Watch app is the real scorer. DeuceMate is not affiliated with Apple Inc.</p>
   </div>
 </footer>
 
