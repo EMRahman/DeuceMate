@@ -219,8 +219,12 @@
 }
 .stats-note { text-align: center; font-size: .64rem; color: rgba(255,255,255,.4); margin-top: 2px; }
 
-.stats-ratio { text-align: center; padding: 6px 0 10px; }
-.stats-ratio .val { font-size: 1.05rem; font-weight: 800; color: #fff; }
+.stats-ratio { display: flex; align-items: center; gap: 8px; padding: 6px 0 10px; }
+.stats-ratio .val { font-size: .92rem; font-weight: 800; min-width: 42px; }
+.stats-ratio .val.me { color: #33c282; text-align: right; }
+.stats-ratio .val.opp { color: #428aed; text-align: left; }
+.stats-ratio .mid { flex: 1; text-align: center; }
+.stats-ratio .cap-title { font-size: .68rem; color: rgba(255,255,255,.75); font-weight: 700; }
 .stats-ratio .cap { font-size: .6rem; color: rgba(255,255,255,.45); margin-top: 1px; }
 
 /* Points Won — two-segment (not centre-split) header bar. */

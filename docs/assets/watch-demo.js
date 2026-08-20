@@ -1030,16 +1030,30 @@
     var fr = window.DeuceMateTracking.countComparisonFracs(meCount, oppCount);
     return comparisonRowEl(label, String(meCount), null, fr.meFrac, String(oppCount), null, fr.oppFrac);
   }
-  function ratioRowEl(caption, winners, unforcedErrors) {
+  // Three-column layout (mirrors MatchStatsView's ratio row: me.wueRatio /
+  // centered title+caption / opp.wueRatio) -- not a comparisonRow, since
+  // there's no meaningful bar for a ratio, but both sides still need to be
+  // shown side by side per the Me-vs-Opp contract the rest of this view holds.
+  function ratioRowEl(title, caption, meWinners, meUnforcedErrors, oppWinners, oppUnforcedErrors) {
+    var T = window.DeuceMateTracking;
     var div = document.createElement("div");
     div.className = "stats-ratio";
-    var val = document.createElement("div");
-    val.className = "val";
-    val.textContent = window.DeuceMateTracking.winToUnforcedRatioText(winners, unforcedErrors);
+    var meVal = document.createElement("span");
+    meVal.className = "val me";
+    meVal.textContent = T.winToUnforcedRatioText(meWinners, meUnforcedErrors);
+    var mid = document.createElement("div");
+    mid.className = "mid";
+    var capTitle = document.createElement("div");
+    capTitle.className = "cap-title";
+    capTitle.textContent = title;
     var cap = document.createElement("div");
     cap.className = "cap";
     cap.textContent = caption;
-    div.appendChild(val); div.appendChild(cap);
+    mid.appendChild(capTitle); mid.appendChild(cap);
+    var oppVal = document.createElement("span");
+    oppVal.className = "val opp";
+    oppVal.textContent = T.winToUnforcedRatioText(oppWinners, oppUnforcedErrors);
+    div.appendChild(meVal); div.appendChild(mid); div.appendChild(oppVal);
     return div;
   }
 
@@ -1078,7 +1092,8 @@
       sec.appendChild(statsEmptyEl("Outcome tracking not collected for this match."));
       return sec;
     }
-    sec.appendChild(ratioRowEl("Win:Unforced Err · aim for > 1.0", me.myWinners, me.myUnforcedErrors));
+    sec.appendChild(ratioRowEl("Win:Unforced Err", "aim for > 1.0",
+      me.myWinners, me.myUnforcedErrors, me.opponentWinners, me.opponentUnforcedErrors));
     sec.appendChild(countComparisonRow("Winners", me.myWinners, me.opponentWinners));
     sec.appendChild(countComparisonRow("Unforced Errors", me.myUnforcedErrors, me.opponentUnforcedErrors));
     sec.appendChild(countComparisonRow("Forced Errors", me.myForcedErrors, me.opponentForcedErrors));
