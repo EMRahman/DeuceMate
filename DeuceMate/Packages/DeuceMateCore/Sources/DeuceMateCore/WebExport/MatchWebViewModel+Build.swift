@@ -400,23 +400,19 @@ extension MatchWebViewModel {
     }
 
     static func durationSeconds(_ record: MatchRecord) -> TimeInterval {
-        if record.matchElapsedSeconds > 0 { return record.matchElapsedSeconds }
-        if let end = record.endTime { return end.timeIntervalSince(record.startTime) }
-        return 0
+        MatchDurations.matchElapsedSeconds(record) ?? 0
     }
 
-    static func minutesString(_ seconds: TimeInterval) -> String { "\(Int(seconds) / 60) min" }
+    static func minutesString(_ seconds: TimeInterval) -> String {
+        MatchDurations.minutesString(seconds)
+    }
 
     static func countAndPct(_ num: Int, _ total: Int) -> String {
-        guard total > 0 else { return "0" }
-        let p = Int((Double(num) / Double(total)) * 100.0)
-        return "\(num) (\(p)%)"
+        StatFormatting.countAndPercent(num, of: total)
     }
 
     static func fractionAndPct(_ num: Int, _ den: Int) -> String {
-        guard den > 0 else { return "0/0" }
-        let p = Int((Double(num) / Double(den)) * 100.0)
-        return "\(num)/\(den) (\(p)%)"
+        StatFormatting.fractionAndPercent(num, den)
     }
 
     /// Bar fill fraction (0…1) for a percentage row, or `nil` when there is no
