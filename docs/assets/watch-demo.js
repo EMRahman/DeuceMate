@@ -281,8 +281,12 @@
     // ScoringEngine.swift): walks the 4-slot rotation from
     // doublesTiebreakStartIndex using the same point-pair-parity shape as
     // the team-level formula above, just as an additive offset into the
-    // array instead of a 2-value toggle.
-    if (state.matchType === "doubles" && state.doublesServiceOrder.length) {
+    // array instead of a 2-value toggle. Gated on !needsDoublesTeamServerDecision,
+    // same as gameWon's advance -- tiebreak-only formats (superTiebreak,
+    // perpetualSuperTiebreak, perpetualPoints) never call gameWon at all, so
+    // without this the "Who serves next?" ambiguity (which slot is "me" vs
+    // "partner") would get silently walked past starting as early as point 2.
+    if (state.matchType === "doubles" && state.doublesServiceOrder.length && !state.needsDoublesTeamServerDecision) {
       var offset;
       if (state.cfg.fixedDeuceSide) offset = np - 1;
       else offset = np === 1 ? 0 : (Math.floor((np - 2) / 2) + 1);
@@ -731,9 +735,15 @@
   });
 
   // Mirrors ContentView's `needsDoublesTeamServerDecision && gameCount > 0`
-  // trigger for the overlay above.
+  // trigger for the overlay above -- extended for tiebreak-only formats
+  // (superTiebreak, perpetualSuperTiebreak, perpetualPoints), which never
+  // call gameWon at all, so gameCount alone would never surface the
+  // decision. Those formats' equivalent boundary is the first tiebreak
+  // point (the "me"/"partner" ambiguity is needed starting with point 2's
+  // server, so it must resolve right after point 1).
   function doublesDecisionPending() {
-    return !!state && state.matchType === "doubles" && state.needsDoublesTeamServerDecision && state.gameCount > 0;
+    if (!state || state.matchType !== "doubles" || !state.needsDoublesTeamServerDecision) return false;
+    return state.cfg.playRegularSets ? state.gameCount > 0 : state.pointCountInTiebreak > 0;
   }
 
   // True while any input that would change score/tracking state should be
@@ -1556,12 +1566,15 @@
     var change = events.filter(function (e) { return e.t === "changeover"; })[0];
 
     // "Who serves next?" (plan §Phase 6) takes priority over any changeover
-    // tied to this same game boundary -- drop the changeover for this
-    // boundary (matches the match-end changeover already being dropped
-    // above) and show the doubles overlay instead. render() is called
+    // tied to this same boundary -- drop the changeover (matches the
+    // match-end changeover already being dropped above) and show the
+    // doubles overlay instead. Not gated on the `game` event: tiebreak-only
+    // formats (superTiebreak, perpetualSuperTiebreak, perpetualPoints) never
+    // emit one, so doublesDecisionPending() itself (which already accounts
+    // for that case) is the only correct condition here. render() is called
     // explicitly since this can run from the 0.4s deferred-sheet-commit
     // timer, which has no other render() in its own call chain.
-    if (game && doublesDecisionPending()) { render(); return; }
+    if (doublesDecisionPending()) { render(); return; }
 
     // Game/set-won toasts are a demo-only aid the watch doesn't have (plan
     // §F) -- kept as transient toasts. A changeover, if any, opens the
