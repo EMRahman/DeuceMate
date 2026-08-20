@@ -236,6 +236,44 @@ Persisted JSON must decode old data forever. Update **all** of:
 5. Add/extend a test in `MatchRecordCodingTests.swift` (round-trip + decode of
    old JSON without the new key).
 
+### Retire a case in a persisted enum  ⚠️ never delete — the schema is additive-only
+`MatchFormat`, `MatchType`, `Player`, `DoublesServer`, `PointOutcome` and
+`EndingShot` all reach persisted JSON — `appState.json`, `matchHistory.json`, the
+phone's canonical archive, its iCloud backup copy, and the WatchConnectivity wire
+format. **Removing or renaming a case is a breaking schema change, not a
+refactor.** None of them has an unknown-value fallback in its `Codable`
+conformance, and `decodeIfPresent` does *not* protect you: it returns `nil` for a
+*missing* key but **throws** for a key that is present with an unrecognised raw
+value.
+
+The blast radius is the whole file, not the one record: both archives decode
+`[MatchRecord]` in a single `decode` call, so one point in one old match fails the
+decode of every match. On the phone that quarantines `matchHistory.json` to
+`.corrupt` and shows an empty archive; on the watch `loadHistoryOrNil()` returns
+`nil`, which correctly refuses to overwrite but also silently stops appending new
+matches.
+
+**To retire a case, keep it decodable and hide it:**
+1. Leave the `case` and its raw value in place, permanently. Mark it
+   `@available(*, deprecated, message: "Retired <date>; kept for archive decoding")`
+   if you want compiler pressure at *write* sites.
+2. Remove it from the user-facing list, not from the type — the existing pattern
+   is `PointOutcome.userSelectable`, a hand-written subset that keeps
+   `.uncategorized` decodable while never offering it in the picker. `MatchFormat`
+   is not `CaseIterable` and its picker is a hand-written list of
+   `matchFormatOption(...)` calls in `HomeView.swift`, so hiding a format is a
+   one-line deletion there.
+3. Keep every exhaustive `switch` compiling with a sensible label ("Retired
+   format" beats a wrong one — never fall back to `.standard`, which would
+   re-render an old match's score in the wrong shape).
+4. Pin the raw values in a test so a future deletion fails in Xcode rather than
+   on a user's wrist. `ScoreTypesTests.test_doublesServer_rawValuesArePersistedIdentifiers`
+   is the model to copy.
+
+If a case genuinely must stop decoding, that is a schema migration: bump the
+version, write the migration, and say so in the PR. See
+`docs/features/TECHNICAL_DEBT.md` #18.
+
 ### Add a `MatchFormat`
 1. Add the `case` to `MatchFormat` in `ScoreTypes.swift`.
 2. Add its `MatchFormatConfig` in the `config` switch (rules are data-driven —
@@ -243,6 +281,8 @@ Persisted JSON must decode old data forever. Update **all** of:
    `MatchFormatConfig` flag over `if format == .x` scattered in views).
 3. Grep for exhaustive `switch` on `MatchFormat` and update labels/UI.
 4. Add a `SimulatedGameStatsTests`-style test exercising the new rules.
+
+Adding a case is safe; **removing one is not** — see the retire recipe above.
 
 ### Add a synced setting / wire key  ⚠️ magic-string coupling
 A setting name currently lives as a **literal string in 2–3 places that the
@@ -287,6 +327,15 @@ compiler does not connect** (see §5). To add one, keep them consistent:
   `"liveAnnouncementsEnabled"` phone-local; see §4). (A typed `AppSettingKey`
   enum sharing the `MatchSyncKey` raw values is planned to remove this trap —
   `docs/features/TECHNICAL_DEBT.md` #3 and #10.)
+- **Deleting a case from a persisted enum silently breaks every archive that
+  contains it.** `MatchFormat`, `MatchType`, `Player`, `DoublesServer`,
+  `PointOutcome` and `EndingShot` are all written to disk and to the wire, none
+  has an unknown-value fallback, and `decodeIfPresent` throws (not `nil`) on a
+  present-but-unrecognised value. Worse, both archives decode `[MatchRecord]`
+  atomically, so one old point takes down the whole file. The schema is
+  **additive-only** — retire a case by hiding it from the UI, never by removing
+  it. See §4 "Retire a case in a persisted enum" and
+  `docs/features/TECHNICAL_DEBT.md` #18.
 - **Very large files** (`ScoreViewModel` ~1.9k, `PointsGraphView` ~1.9k,
   `MatchDetailView` ~1.1k, `ContentView`/`HomeView`/`PastMatchesView`
   ~0.7–0.9k). Don't load them whole. `PointsGraphView` and `MatchDetailView`
