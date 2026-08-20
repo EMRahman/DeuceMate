@@ -64,7 +64,7 @@ matches; it does not score them (except by sending validated commands to the wat
 | `DeuceMateApp.swift` | 50 | The iPhone app's entry point: wires up the archive store, sync service and announcer; resumes initial restore or backup push whenever the app returns to the foreground. | App plumbing |
 | `ContentView.swift` | 15 | The navigation root — essentially just opens the archive list. | App plumbing |
 
-## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (46 files)
+## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (44 files)
 
 The rulebook both apps use. No screens; pure logic — which makes it the cheapest
 place to test and the safest place to change.
