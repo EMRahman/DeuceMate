@@ -1,6 +1,6 @@
 # Interactive Browser Demo — Watch-App Parity Plan
 
-**Status:** Phases 1–2 shipped (tracking foundation + second-serve context; the post-point categorisation sheet). Phases 3–6 planned, not started.
+**Status:** Phases 1–3 shipped (tracking foundation + second-serve context; the post-point categorisation sheet; the live stats view). Phases 4–6 planned, not started.
 **Audience:** an AI coding agent implementing this incrementally (phase by phase,
 one PR per phase). The plan is deliberately prescriptive — exact strings, colors,
 ordering, and conditional rules are spelled out so the implementer does not need
@@ -36,13 +36,13 @@ second-serve gesture, the post-point categorisation sheet, and a live stats view
 |---|---|---|
 | Scoring engine (6 formats, tiebreaks, server rotation, side changes) | `ScoringEngine.swift` | ✅ ported faithfully (`watch-demo.js` top half) |
 | Score display (set cells, point badge, AD, super-TB hiding rules) | `ContentView.swift` | ✅ ported |
-| Undo | full game-state rollback incl. pending categorisation | ⚠️ scoring only — no stats to roll back yet |
+| Undo | full game-state rollback incl. pending categorisation | ✅ ported (Phase 1) — rolls back score, 2nd-serve flag, and stats together |
 | Momentum strip (last 8 points) | shown while match in progress, hidden when complete | ⚠️ present but never hidden |
-| Second-serve context | double-tap score card → yellow "2" badge on server ball; drives Double Fault availability | ❌ missing |
-| Break-point capture | computed per point, stamped on the point record (no scoreboard badge) | ⚠️ `isBreakPoint()` exists in JS, unused |
-| Post-point categorisation sheet | 2-step modal after every point when tracking on | ❌ missing — the headline gap |
-| Point records (`PointStat`) | outcome, ending shot, 2nd-serve, BP, score snapshot per point | ❌ missing |
-| Live stats view | swipe right → sectioned Me/Opp comparison | ❌ missing |
+| Second-serve context | double-tap score card → yellow "2" badge on server ball; drives Double Fault availability | ✅ ported (Phase 1) |
+| Break-point capture | computed per point, stamped on the point record (no scoreboard badge) | ✅ ported (Phase 1/2) — stamped on each `PointStat` |
+| Post-point categorisation sheet | 2-step modal after every point when tracking on | ✅ ported (Phase 2) |
+| Point records (`PointStat`) | outcome, ending shot, 2nd-serve, BP, score snapshot per point | ✅ ported (Phase 1/2) |
+| Live stats view | swipe right → sectioned Me/Opp comparison | ✅ ported (Phase 3) |
 | Match-complete panel | "You Won! 🏆" / "Opponent Won" + Match Complete + stats affordance | ⚠️ plain banner, no stats |
 | Changeover prompts | blocking "OK" overlay with 🔁 symbol + reason at every changeover boundary (not setting-gated) | ⚠️ transient toasts with different copy ("Change ends", "New balls soon") |
 | First-game gesture hint | faint "↑ Win ↓ Lose / ← Undo → Stats" until first game ends | ❌ missing (static hint below the watch instead) |

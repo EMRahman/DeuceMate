@@ -183,6 +183,85 @@
   .sheet-btn { transition: none; }
 }
 
+/* ---- Live stats overlay — mirrors MatchStatsView.swift + MatchStatsSummary.swift -- */
+.stats-overlay {
+  position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column;
+  background: #101316; border-radius: 50px / 44px; overflow: hidden;
+}
+.stats-overlay[hidden] { display: none; } /* see .banner[hidden] note above */
+.stats-head { position: relative; text-align: center; padding: 16px 36px 8px 14px; flex: none; }
+.stats-close {
+  position: absolute; right: 8px; top: 10px; background: none; border: 0; color: rgba(255,255,255,.7);
+  font-size: 15px; font-weight: 700; cursor: pointer; padding: 4px 8px; line-height: 1;
+}
+.stats-title { font-size: .9rem; font-weight: 800; color: #fff; }
+.stats-format { font-size: .65rem; color: rgba(255,255,255,.5); margin-top: 2px; }
+.stats-setfilter {
+  display: flex; gap: 4px; overflow-x: auto; padding: 6px 12px 8px; flex: none;
+}
+.stats-setfilter[hidden] { display: none; }
+.stats-setbtn {
+  flex: none; cursor: pointer; font: inherit; font-weight: 700; font-size: .68rem; color: rgba(255,255,255,.75);
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); border-radius: 999px;
+  padding: 4px 11px;
+}
+.stats-setbtn[aria-pressed="true"] { background: #33c282; border-color: #33c282; color: #052015; }
+.stats-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 0 14px; }
+.stats-section { padding: 10px 14px 4px; }
+.stats-section-title {
+  font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+  color: rgba(255,255,255,.55); margin-bottom: 4px;
+}
+.stats-divider { height: 1px; background: rgba(255,255,255,.1); margin: 4px 14px; }
+.stats-empty {
+  flex: 1; display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 30px 22px; color: rgba(255,255,255,.55); font-size: .8rem; line-height: 1.5;
+}
+.stats-note { text-align: center; font-size: .64rem; color: rgba(255,255,255,.4); margin-top: 2px; }
+
+.stats-ratio { display: flex; align-items: center; gap: 8px; padding: 6px 0 10px; }
+.stats-ratio .val { font-size: .92rem; font-weight: 800; min-width: 42px; }
+.stats-ratio .val.me { color: #33c282; text-align: right; }
+.stats-ratio .val.opp { color: #428aed; text-align: left; }
+.stats-ratio .mid { flex: 1; text-align: center; }
+.stats-ratio .cap-title { font-size: .68rem; color: rgba(255,255,255,.75); font-weight: 700; }
+.stats-ratio .cap { font-size: .6rem; color: rgba(255,255,255,.45); margin-top: 1px; }
+
+/* Points Won — two-segment (not centre-split) header bar. */
+.pw-heads, .pw-foot { display: flex; align-items: center; font-size: .62rem; color: rgba(255,255,255,.5); }
+.pw-heads { font-weight: 800; }
+.pw-side { flex: 0 0 auto; min-width: 34px; }
+.pw-heads .pw-side:last-child, .pw-foot .pw-side:last-child { text-align: right; }
+.pw-title, .pw-total { flex: 1; text-align: center; }
+.pw-bar {
+  display: flex; height: 9px; border-radius: 5px; overflow: hidden;
+  background: rgba(255,255,255,.08); margin: 4px 0;
+}
+.pw-seg.me { background: #33c282; }
+.pw-seg.opp { background: #428aed; }
+.pw-foot { margin-top: 2px; }
+
+/* Every other row — centre-split bar, shared by percent and raw-count rows. */
+.cmp-row { margin: 7px 0; }
+.cmp-label { font-size: .68rem; color: rgba(255,255,255,.55); margin-bottom: 3px; }
+.cmp-body { display: flex; align-items: center; gap: 6px; }
+.cmp-val { font-weight: 800; font-size: .76rem; min-width: 28px; }
+.cmp-val.mev { color: #33c282; text-align: right; }
+.cmp-val.oppv { color: #428aed; text-align: left; }
+.splitbar {
+  flex: 1; display: flex; height: 8px; border-radius: 4px; overflow: hidden;
+  background: rgba(255,255,255,.08);
+}
+.cmp-half { flex: 1; position: relative; }
+.cmp-half .fill { position: absolute; top: 0; bottom: 0; }
+.cmp-half.me .fill { right: 0; background: #33c282; }
+.cmp-half.opp .fill { left: 0; background: #428aed; }
+.cmp-sep { width: 1px; background: rgba(255,255,255,.2); }
+.cmp-subrow {
+  display: flex; justify-content: space-between; font-size: .6rem;
+  color: rgba(255,255,255,.4); margin-top: 2px;
+}
+
 /* ---- Controls below the watch ------------------------------------------- */
 .demo-controls { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 26px; }
 .pt-buttons { display: flex; gap: 12px; }

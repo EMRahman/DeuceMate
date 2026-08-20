@@ -137,6 +137,16 @@
                   </div>
 
                   <div class="sheet" data-sheet hidden role="dialog" aria-modal="true" aria-label="Categorize the point"></div>
+
+                  <div class="stats-overlay" data-stats hidden role="dialog" aria-modal="true" aria-label="Match stats">
+                    <div class="stats-head">
+                      <button type="button" class="stats-close" data-stats-close aria-label="Close stats">✕</button>
+                      <div class="stats-title" data-stats-title></div>
+                      <div class="stats-format" data-stats-format></div>
+                    </div>
+                    <div class="stats-setfilter" data-stats-setfilter hidden></div>
+                    <div class="stats-body" data-stats-body></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -149,6 +159,7 @@
               <div class="util-buttons">
                 <button type="button" class="util-btn" data-undo>↶ Undo</button>
                 <button type="button" class="util-btn" data-secondserve>2nd serve</button>
+                <button type="button" class="util-btn" data-stats-toggle>📊 Stats</button>
                 <button type="button" class="util-btn" data-reset>↻ New match</button>
               </div>
             </div>
