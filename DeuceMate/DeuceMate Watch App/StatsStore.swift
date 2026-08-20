@@ -8,8 +8,13 @@ private let statsStoreLogger = Logger(subsystem: "com.deucemate.persistence", ca
 /// JSON-backed `StatsStoring` implementation for the watch target. Persists to
 /// `matchHistory.json` in the app's Documents directory. All file I/O is
 /// funnelled through a serial queue to prevent read/write races.
-final class StatsStore: StatsStoring {
+final class StatsStore: StatsStoring, PersistenceOutcomeReporting {
     static let shared = StatsStore()
+
+    /// Installed by `ScoreViewModel` so a failed write or an unreadable archive
+    /// reaches the screen instead of only the unified log — for a scoring app a
+    /// dropped write is lost match data. Called on the main queue.
+    var onPersistenceOutcome: ((PersistenceOutcome) -> Void)?
 
     /// Maximum number of matches retained on the watch. Older matches are
     /// trimmed on append; the phone keeps everything it ever received. The value
@@ -52,13 +57,19 @@ final class StatsStore: StatsStoring {
     }
 
     func saveHistory(_ records: [MatchRecord]) {
-        queue.sync { _writeUnsafe(records) }
+        _ = queue.sync { _writeUnsafe(records) }
     }
 
     func appendMatch(_ record: MatchRecord) {
         queue.sync {
             guard var records = _loadHistoryUnsafe() else {
                 statsStoreLogger.error("appendMatch skipped: match history unreadable; refusing to overwrite")
+                // The archive is intact but this finished match did not join it,
+                // which is the same consequence as a failed write.
+                report(.failed(PersistenceFailure(
+                    operation: .saveMatchHistory,
+                    detail: "appendMatch skipped: match history unreadable"
+                )))
                 return
             }
             records.removeAll { $0.id == record.id }
@@ -75,6 +86,10 @@ final class StatsStore: StatsStoring {
         queue.sync {
             guard var records = _loadHistoryUnsafe() else {
                 statsStoreLogger.error("removeMatch skipped: match history unreadable; refusing to overwrite")
+                report(.failed(PersistenceFailure(
+                    operation: .saveMatchHistory,
+                    detail: "removeMatch skipped: match history unreadable"
+                )))
                 return
             }
             records.removeAll { $0.id == id }
@@ -103,16 +118,25 @@ final class StatsStore: StatsStoring {
     private func _loadHistoryUnsafe() -> [MatchRecord]? {
         do {
             let data = try Data(contentsOf: fileURL)
-            return try JSONDecoder().decode([MatchRecord].self, from: data)
+            let records = try JSONDecoder().decode([MatchRecord].self, from: data)
+            report(.succeeded(.readMatchHistory))
+            return records
         } catch CocoaError.fileReadNoSuchFile {
+            // No history yet is the normal first-run state, not a failure.
+            report(.succeeded(.readMatchHistory))
             return []
         } catch {
             statsStoreLogger.error("Failed to read or decode match history: \(error.localizedDescription, privacy: .public)")
+            report(.failed(PersistenceFailure(
+                operation: .readMatchHistory,
+                detail: error.localizedDescription
+            )))
             return nil
         }
     }
 
-    private func _writeUnsafe(_ records: [MatchRecord]) {
+    @discardableResult
+    private func _writeUnsafe(_ records: [MatchRecord]) -> Bool {
         do {
             // Class B protection (until-first-unlock): background WatchConnectivity
             // deliveries can run this while the watch is locked/off-wrist, and the
@@ -120,8 +144,22 @@ final class StatsStore: StatsStoring {
             // write. Health-bearing watch history is also excluded from device
             // backup after every atomic replacement.
             try BackupExcludedFileWriter.write(records, to: fileURL)
+            report(.succeeded(.saveMatchHistory))
+            return true
         } catch {
             statsStoreLogger.error("Failed to write match history: \(error.localizedDescription, privacy: .public)")
+            report(.failed(PersistenceFailure(
+                operation: .saveMatchHistory,
+                detail: error.localizedDescription
+            )))
+            return false
         }
+    }
+
+    /// Hop to main before handing an outcome to the UI: every call site above
+    /// runs on the store's serial I/O queue.
+    private func report(_ outcome: PersistenceOutcome) {
+        guard let onPersistenceOutcome else { return }
+        DispatchQueue.main.async { onPersistenceOutcome(outcome) }
     }
 }

@@ -1,6 +1,7 @@
 //ContentView.swift
 import SwiftUI
 import WatchKit
+import DeuceMateCore
 
 struct ContentView: View {
     @EnvironmentObject var viewModel: ScoreViewModel
@@ -341,6 +342,20 @@ struct ContentView: View {
                 }
                 .transition(.opacity)
                 .animation(.easeInOut(duration: 0.2), value: viewModel.pendingChangeoverAck != nil)
+            }
+        }
+        // The critical persistence failure — a live checkpoint that isn't
+        // reaching disk — happens *during* play, on this screen. Scoring is
+        // never interrupted for it: a tap-to-dismiss chip in the corner, not a
+        // banner or an alert. Warning-level failures (an incomplete history
+        // list) wait for the start screen's banner instead.
+        .overlay(alignment: .topTrailing) {
+            if let warning = viewModel.persistenceHealth.warning, warning.severity == .critical {
+                PersistenceWarningChip(warning: warning) {
+                    viewModel.acknowledgePersistenceWarning()
+                }
+                .padding(.trailing, 4)
+                .transition(.opacity)
             }
         }
         .overlay {
@@ -978,6 +993,28 @@ struct DoublesTeamServerDecisionOverlay: View {
             )
             .padding(.horizontal, 12)
         }
+    }
+}
+
+/// The in-play form of a persistence warning: one symbol, tap to dismiss, no
+/// layout of its own so it can't push the scoreboard around or swallow a
+/// scoring swipe. The full copy rides on the accessibility label — the detail
+/// belongs on the start screen banner, which has room for it.
+private struct PersistenceWarningChip: View {
+    let warning: PersistenceWarning
+    let onDismiss: () -> Void
+
+    var body: some View {
+        Button(action: onDismiss) {
+            Image(systemName: warning.systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(5)
+                .background(Color.red.opacity(0.85), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(warning.title). \(warning.message)")
+        .accessibilityHint("Double tap to dismiss")
     }
 }
 

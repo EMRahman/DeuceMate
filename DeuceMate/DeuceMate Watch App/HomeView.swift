@@ -379,6 +379,15 @@ struct HomeView: View {
         VStack {
             Spacer()
             VStack(alignment: .leading, spacing: 10) {
+                // Persistence failures are otherwise invisible: scoring keeps
+                // working while nothing reaches disk, so the warning sits above
+                // Start/Resume Match where it can't be missed.
+                if let warning = viewModel.persistenceHealth.warning {
+                    PersistenceWarningBanner(warning: warning) {
+                        viewModel.acknowledgePersistenceWarning()
+                    }
+                }
+
                 Button {
                     showMatchView = true
                 } label: {
@@ -920,6 +929,45 @@ struct HomeView: View {
         }
     }
 
+}
+
+/// Non-blocking banner for a failed save/restore. Tapping dismisses it; the
+/// next failure raises it again.
+private struct PersistenceWarningBanner: View {
+    let warning: PersistenceWarning
+    let onDismiss: () -> Void
+
+    private var tint: Color {
+        warning.severity == .critical ? .red : .orange
+    }
+
+    var body: some View {
+        Button(action: onDismiss) {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: warning.systemImage)
+                    .font(.caption)
+                    .foregroundColor(tint)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(warning.title)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundColor(.white)
+                    Text(warning.message)
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.75))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(tint.opacity(0.18))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(warning.title). \(warning.message)")
+        .accessibilityHint("Double tap to dismiss")
+    }
 }
 
 private struct MatchFormatLabel: View {

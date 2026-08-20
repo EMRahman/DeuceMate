@@ -24,7 +24,7 @@ accurate docs, navigable files, and text-level checks are its substitutes.
 | 1 | Architecture | Extract scoring engine into pure Core reducer | High | **Done** |
 | 2 | Sync | Add `lastModified` to `MatchRecord` for merge policy | Medium | Backlog |
 | 3 | Settings | Replace stringly-typed settings keys with typed keys | **High (next up)** | Backlog |
-| 4a | Persistence | Silent save-failure handling (watch + phone) | Low | Backlog |
+| 4a | Persistence | Silent save-failure handling (watch + phone) | Low | **Done** |
 | 4b | Persistence | File-protection level on watch saves | Low | **Done** |
 | 5 | UX | Simplify first-run and match-start flow | Medium | **Done** — [`MATCH_START_UX_PLAN.md`](MATCH_START_UX_PLAN.md) |
 | 6 | Concurrency | `PhoneStatsStore` actor / `@MainActor` migration | Low | Backlog |
@@ -155,24 +155,56 @@ submission blocker.
 
 ---
 
-### 4a — Silent save-failure handling
+### 4a — Silent save-failure handling (Done)
 
-**What:** The watch's live-state save failure path is a `print` inside
-`#if DEBUG` (`ScoreViewModel.swift:1625`) — completely invisible in a release
-build. The two history stores do log failures through `os.Logger`
-(`StatsStore.swift:74–76` on the watch, `PhoneStatsStore.swift:293` on the
-phone), which reaches the unified log but is never surfaced in-app. For a
-scoring app where a failed save means lost match data, failures should be
-visible to the user (at minimum a brief in-app banner on the next active
-interaction).
+**What:** The watch's live-state save failure path was a `print` inside
+`#if DEBUG` — completely invisible in a release build. Both history stores did
+log through `os.Logger`, which reaches the unified log but was never surfaced
+in-app. For a scoring app where a failed save means lost match data, failures
+have to be visible to the user.
 
-**Proposed fix:** Expose a `@Published var lastSaveError: Error?` (or similar)
-on the view model; show a non-blocking warning in the UI if a save has failed
-since the last successful one. Does not need to be intrusive — a small
-indicator on the history or settings screen is enough.
+**Done:** `Persistence/PersistenceHealth.swift` (Core) owns the shared
+vocabulary — `PersistenceOperation` (with a `.warning`/`.critical` severity per
+operation), `PersistenceFailure`, `PersistenceOutcome`, and a `PersistenceHealth`
+reducer that keeps exactly the one failure worth showing: a critical "nothing
+reached disk" is never displaced by a lower-severity read warning, equal severity
+takes the newest, and a success clears only its *own* operation (so a history
+write can't clear a live-match save failure). A repeat of the failure already
+shown updates the held detail but reports no visible change — the live checkpoint
+is written on every point, so republishing would redraw the scoreboard per point
+for a message already on screen. `PersistenceWarning` carries the user-facing
+copy, so the watch and phone banners can't drift.
 
-**Why low:** Saves rarely fail in practice. This is a hardening measure rather
-than a fix for an active bug.
+Wiring: `StatsStore` reports read/write outcomes via `PersistenceOutcomeReporting`
+(an append it refuses because the archive is unreadable counts as a *save*
+failure — the finished match did not reach disk); `ScoreViewModel` folds those
+plus its own live-state save/restore results into a published `persistenceHealth`,
+rendered as a dismissible banner above Start/Resume Match plus — for critical
+failures, which are the ones that occur mid-match — a dismissible corner chip on
+the live scoreboard, since the start screen is not on screen while scoring;
+`PhoneStatsStore` publishes the same type for failed canonical writes, writes suspended after an
+unreadable archive, and quarantined corrupt files, rendered above the archive
+list in `PastMatchesView`. The `#if DEBUG` prints are gone — those paths now log
+through `os.Logger` *and* report.
+
+A restore is treated as critical, not cosmetic: the match the user was scoring is
+out of the app's view, and `loadState()`'s catch resets every field before the
+next point writes a fresh checkpoint. So a state file that exists but cannot be
+decoded is moved to an `.unreadable` sibling *before* the reset — the bytes a
+future migration or a support request could recover the match from outlive the
+overwrite. That move is best effort (the app must still start) but a failure is
+logged, because it means the original is still in the write path.
+
+**Tests added:** `PersistenceHealthTests` (Core, precedence, critical
+classification, repeat suppression + copy), `LiveStateRecoveryWatchTests` (the
+unreadable-state quarantine, its survival of the following save, and
+publish-once-per-persistent-failure), plus reporting/health cases in
+`StatsStoreTests` and `PhoneStatsStoreTests`.
+
+**Deliberately still log-only:** best-effort paths whose failure has no user
+action and no data consequence — backup-exclusion reapplication (retried on the
+next write), the watch-mirror cache (refilled by the next sync), corrupt-file
+quarantine, workout-session setup, and export writes.
 
 ---
 

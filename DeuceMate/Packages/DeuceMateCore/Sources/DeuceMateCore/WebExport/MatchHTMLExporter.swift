@@ -6,6 +6,9 @@
 // Pure and platform-neutral so it is directly unit-testable in the Core package
 // with no app/bundle dependency.
 import Foundation
+import os
+
+private let exportLogger = Logger(subsystem: "com.deucemate.export", category: "MatchHTMLExporter")
 
 public enum MatchHTMLExporter {
 
@@ -26,7 +29,16 @@ public enum MatchHTMLExporter {
     static func encode(_ vm: MatchWebViewModel) -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        let data = (try? encoder.encode(vm)) ?? Data("{}".utf8)
+        let data: Data
+        do {
+            data = try encoder.encode(vm)
+        } catch {
+            // `{}` keeps the page valid and the no-JavaScript static fallback
+            // still renders the match, so this stays non-throwing — but a
+            // silently interactive-less export must be diagnosable.
+            exportLogger.error("Failed to encode match web view model; exporting static fallback only: \(error.localizedDescription, privacy: .public)")
+            data = Data("{}".utf8)
+        }
         let raw = String(decoding: data, as: UTF8.self)
         return scriptSafe(raw)
     }

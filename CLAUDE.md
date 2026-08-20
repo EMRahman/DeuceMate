@@ -88,7 +88,12 @@ Data-flow invariants — **internalise these before touching sync or persistence
   archive" rule holds on _both_ stores:** the watch `StatsStore` also returns
   `nil` (not `[]`) from an unreadable/corrupt read via `loadHistoryOrNil()`, and
   its `appendMatch`/`removeMatch` and the sync manifest/full-history pushes bail
-  rather than overwriting or broadcasting the emptiness.
+  rather than overwriting or broadcasting the emptiness. The same rule extends to
+  the watch's live-match state: `ScoreViewModel.loadState()` resets every field
+  when the file can't be decoded, so it first moves the unreadable file to an
+  `.unreadable` sibling — otherwise the next point's checkpoint write destroys
+  the only copy of the interrupted match. **Never let a failed read be followed
+  by a write to the same path.**
 - **Settings sync bidirectionally, last-write-wins.** Match data does not.
 - **Persisted match JSON must stay backward-compatible forever** (see §4).
 
@@ -132,15 +137,16 @@ anything portable; no `.pbxproj` change needed — the package globs its sources
 | `Settings/MatchTrackingStatus.swift` | The pre-match "what will this match record?" rule: point tracking (format-aware — `—` when `MatchFormat.config.disablesPointTracking`), Health access, and Pulse Coach resolved to `.on`/`.partial`/`.off` plus label, SF Symbol, and fix-it copy. `HealthAccess` is the portable mirror of the HealthKit permission (the watch maps `HKHealthStore` onto it — Core stays HealthKit-free). `collapsingPulseWhenHealthOff(_:)` drops the redundant Pulse chip when Health is off (the strip's rule; Settings always shows all three). Drives the watch start-screen tracking strip and its settings summary. |
 | `Settings/ICloudBackupCopy.swift` | The global "backed up to iCloud?" indicator (label + SF Symbol + resolution rule) shown on the iPhone archive. Six cases: `backedUp`, `notBackedUp`, `unavailable`, `restoring`, `pendingRestore` (backup found, user prompt open), `pendingUpload` (pushed but daemon not yet confirmed upload). `current(isEnabled:isAvailable:isRestoring:hasPendingRestore:isUploaded:)`. |
 | `Persistence/StatsStoring.swift` | Persistence protocol + JSON codec; both apps implement it (file-backed JSON). |
+| `Persistence/PersistenceHealth.swift` | The shared "a save or read of the user's match data failed and the user should be told" vocabulary: `PersistenceOperation` (+ `.warning`/`.critical` severity), `PersistenceFailure`, `PersistenceOutcome`, `PersistenceOutcomeReporting` (the store-side hook), `PersistenceWarning` (the only user-facing copy — raw error text stays in the log), and the `PersistenceHealth` reducer. Precedence is tested, not assumed: a critical failure is never displaced by a warning, a success clears only its own operation, and a repeat of the failure already shown reports no visible change (the live checkpoint writes on every point). Rendered by the watch start-screen banner + live-scoreboard chip and the iPhone archive banner. |
 
 **Watch app — `DeuceMate Watch App/`:**
 
 | File | Lines | What |
 |------|------:|------|
-| `ScoreViewModel.swift` | ~1947 | Live match state + synced settings; delegates scoring rules to Core's `ScoringEngine` (see §1); seeds/persists the remembered match setup (`applyRememberedSetupIfIdle()`/`persistMatchSetupDefaults()`, called from `loadState()`/`resetMatch()` tails and `HomeView`'s `commitServerSelection()` — never from `init`, which runs before either restore path); `trackingStatuses` resolves Core's `MatchTrackingStatus.all(...)` and forwards `WorkoutManager.$healthAccess` (not its whole `objectWillChange` — that would also fire on every live-match HR/calorie tick) into its own `objectWillChange` in `init`, so views watching only the view model still redraw on Health-access changes without extra redraws during play. ⚠️ Almost no `MARK:` anchors yet — `Grep` for the symbol and read a bounded range. |
+| `ScoreViewModel.swift` | ~2054 | Live match state + synced settings; delegates scoring rules to Core's `ScoringEngine` (see §1); seeds/persists the remembered match setup (`applyRememberedSetupIfIdle()`/`persistMatchSetupDefaults()`, called from `loadState()`/`resetMatch()` tails and `HomeView`'s `commitServerSelection()` — never from `init`, which runs before either restore path); `trackingStatuses` resolves Core's `MatchTrackingStatus.all(...)` and forwards `WorkoutManager.$healthAccess` (not its whole `objectWillChange` — that would also fire on every live-match HR/calorie tick) into its own `objectWillChange` in `init`, so views watching only the view model still redraw on Health-access changes without extra redraws during play. ⚠️ Almost no `MARK:` anchors yet — `Grep` for the symbol and read a bounded range. |
 | `HomeView.swift` | ~959 | Match setup / start screen: a pre-match card states the remembered Singles/Doubles + format setup (hidden mid-match) and taps through to a combined Match Setup sheet, so Start Match skips straight to who-serves-first; the same card carries the Points/Health/Pulse tracking strip, and the Settings sheet opens with the always-three row form. ⚠️ No `MARK:` anchors yet. |
 | `TrackingStatusStrip.swift` | ~140 | Paints Core's `MatchTrackingStatus`: the pre-match strip (single-line icon+state chips, tap to Settings, Pulse collapsed out when Health is off) and the full-width Settings rows (always all three). |
-| `ContentView.swift` | ~941 | Live scoreboard + gesture handling. |
+| `ContentView.swift` | ~980 | Live scoreboard + gesture handling, plus the corner chip for *critical* persistence failures (a checkpoint that isn't reaching disk happens here, not on the start screen). |
 | `MatchStatsView.swift` | ~630 | On-watch live stats. |
 | `Sync/WatchMatchSyncService.swift` | ~289 | Watch side of `WatchConnectivity`. |
 | `PointCategorySheet.swift`, `WorkoutManager.swift`, `MatchHistoryView.swift`, `StatsStore.swift`, `BackupExcludedFileWriter.swift`, `AppTheme.swift` | | Categorisation UI, HealthKit workout (`WorkoutManager` also publishes `healthAccess`, refreshed on foreground and in `HomeView.onAppear`), backup-excluded history/live-state persistence, theming. |

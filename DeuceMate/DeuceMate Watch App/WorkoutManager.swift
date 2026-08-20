@@ -1,6 +1,9 @@
 import Foundation
 import HealthKit
+import os
 import DeuceMateCore
+
+private let workoutLogger = Logger(subsystem: "com.deucemate.health", category: "WorkoutManager")
 
 class WorkoutManager: NSObject, ObservableObject {
     private let healthStore = HKHealthStore()
@@ -98,10 +101,19 @@ class WorkoutManager: NSObject, ObservableObject {
             session?.delegate = self
             builder?.delegate = self
             session?.startActivity(with: startDate)
-            builder?.beginCollection(withStart: startDate) { _, _ in }
+            builder?.beginCollection(withStart: startDate) { started, error in
+                if !started, let error {
+                    workoutLogger.error("Workout data collection did not start: \(error.localizedDescription, privacy: .public)")
+                }
+            }
             DispatchQueue.main.async { self.isRunning = true }
         } catch {
-            // Non-fatal: app continues without workout session
+            // Non-fatal for scoring — the match continues without Health data,
+            // and the pre-match tracking strip already tells the user whether
+            // Health is available — but the failure itself must be diagnosable.
+            workoutLogger.error("Failed to start workout session: \(error.localizedDescription, privacy: .public)")
+            session = nil
+            builder = nil
         }
     }
 
@@ -157,11 +169,23 @@ extension WorkoutManager: HKWorkoutSessionDelegate {
         guard toState == .ended else { return }
         let b = finalizingBuilder
         finalizingBuilder = nil
-        b?.endCollection(withEnd: date) { _, _ in
-            b?.finishWorkout { _, _ in }
+        b?.endCollection(withEnd: date) { ended, error in
+            if !ended, let error {
+                workoutLogger.error("Failed to end workout collection: \(error.localizedDescription, privacy: .public)")
+            }
+            // Still attempt the save: a failed endCollection can leave a
+            // partially collected workout that finishWorkout can persist.
+            b?.finishWorkout { workout, error in
+                if workout == nil, let error {
+                    workoutLogger.error("Failed to save workout to Health: \(error.localizedDescription, privacy: .public)")
+                }
+            }
         }
     }
     func workoutSession(_ session: HKWorkoutSession, didFailWithError error: Error) {
+        // Scoring is unaffected; only Health metrics stop. Log the underlying
+        // error instead of discarding it with the session.
+        workoutLogger.error("Workout session failed: \(error.localizedDescription, privacy: .public)")
         DispatchQueue.main.async { self.isRunning = false }
     }
 }

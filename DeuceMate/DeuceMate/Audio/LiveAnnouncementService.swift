@@ -105,8 +105,15 @@ final class LiveAnnouncementService: ObservableObject {
         // mid-utterance), so a cancelled announcement can't strand the session
         // active and ducking other audio.
         guard !synthesizer.isSpeaking else { return }
-        try? AVAudioSession.sharedInstance().setActive(
-            false, options: .notifyOthersOnDeactivation)
+        do {
+            try AVAudioSession.sharedInstance().setActive(
+                false, options: .notifyOthersOnDeactivation)
+        } catch {
+            // A stranded active session keeps other audio ducked, so the user
+            // may hear the symptom; nothing in-app can fix it, but it must not
+            // be invisible when diagnosing "music stays quiet after a point".
+            logger.error("Failed to deactivate audio session: \(error.localizedDescription, privacy: .public)")
+        }
     }
 }
 
