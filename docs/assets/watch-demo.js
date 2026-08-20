@@ -5,10 +5,9 @@
    the app's shared Swift engine:
      Packages/DeuceMateCore/Sources/DeuceMateCore/Scoring/ScoringEngine.swift
      Packages/DeuceMateCore/Sources/DeuceMateCore/Models/ScoreTypes.swift
-   The demo plays SINGLES only (the watch also handles doubles four-player
-   service rotation); everything else — points, games, sets, tiebreaks, super
-   tiebreaks, server rotation, side-changes and all six formats — mirrors the
-   real engine so the experience matches the app.
+   Points, games, sets, tiebreaks, super tiebreaks, server rotation,
+   side-changes and all six formats — including doubles' four-player service
+   rotation — mirror the real engine so the experience matches the app.
    ========================================================================== */
 (function () {
   "use strict";
@@ -54,6 +53,11 @@
   }
   function lastSet(state) { return state.sets[state.sets.length - 1]; }
   function other(p) { return p === "me" ? "opponent" : "me"; }
+
+  /* ---- Doubles (plan §Phase 6, mirrors DoublesServer in ScoreTypes.swift):
+     four individual servers, two per team. `.team` and `.displayName`. ---- */
+  var DOUBLES_TEAM = { me: "me", partner: "me", opponentS1: "opponent", opponentS2: "opponent" };
+  var DOUBLES_DISPLAY_NAME = { me: "Me", partner: "Partner", opponentS1: "S1", opponentS2: "S2" };
   function clone(state) { var copy = JSON.parse(JSON.stringify(state)); copy.cfg = state.cfg; return copy; }
 
   /* ---- Pure helpers (mirror ScoringEngine static functions) ---- */
@@ -160,6 +164,15 @@
     var totalGames = set.gamesMe + set.gamesOpponent;
     state.gameCount++;
     state.currentServer = other(state.currentServer);
+    // Mirrors ScoringEngine.swift's gameWon: doubles rotation advances in
+    // lock-step with the team flip above, every game, UNLESS a "Who serves
+    // next?" decision is still pending (the very first game after Opponent
+    // was chosen to serve first) -- the rotation stays pinned at index 0
+    // until resolveDoublesTeamServer() runs.
+    if (state.matchType === "doubles" && state.doublesServiceOrder.length && !state.needsDoublesTeamServerDecision) {
+      state.doublesServiceIndex = (state.doublesServiceIndex + 1) % state.doublesServiceOrder.length;
+      state.doublesServer = state.doublesServiceOrder[state.doublesServiceIndex];
+    }
 
     var cfg = state.cfg, tbAt = cfg.regularSetTiebreakAtGames;
     if (set.gamesMe === tbAt && set.gamesOpponent === tbAt) {
@@ -167,6 +180,7 @@
       state.pointCountInTiebreak = 0;
       state.tiebreakStartServer = state.currentServer;
       state.tiebreakFirstPointReceiver = other(state.currentServer);
+      if (state.matchType === "doubles") state.doublesTiebreakStartIndex = state.doublesServiceIndex;
       events.push({
         t: "changeover", symbol: "Tiebreak 🔁 🎾",
         reason: cfg.tiebreakRequiresTwoPointLead ? "tiebreakBegins" : "suddenDeathBegins", games: tbAt
@@ -179,6 +193,7 @@
       if (lastSet(state) && lastSet(state).isTieBreak) {
         state.tiebreakStartServer = state.currentServer;
         state.tiebreakFirstPointReceiver = other(state.currentServer);
+        if (state.matchType === "doubles") state.doublesTiebreakStartIndex = state.doublesServiceIndex;
       }
       return;
     }
@@ -225,10 +240,19 @@
       completeSet(state, me > opp ? "me" : "opponent", set, events);
       sideChangeAfterTiebreakSet(totalGamesTB, playersChangeTB, lastBallHolder, nextServer, events);
       if (state.tiebreakFirstPointReceiver) state.currentServer = state.tiebreakFirstPointReceiver;
+      // Doubles: the next set's starting server is whoever comes right after
+      // the player who started THIS tiebreak (doublesTiebreakStartIndex+1) --
+      // not wherever the rotation happened to land on the tiebreak's last
+      // point (mirrors ScoringEngine.swift's tiebreak-set-end handoff).
+      if (state.matchType === "doubles" && state.doublesServiceOrder.length) {
+        state.doublesServiceIndex = (state.doublesTiebreakStartIndex + 1) % state.doublesServiceOrder.length;
+        state.doublesServer = state.doublesServiceOrder[state.doublesServiceIndex];
+      }
       state.tiebreakStartServer = null; state.tiebreakFirstPointReceiver = null;
       if (lastSet(state) && lastSet(state).isTieBreak) {
         state.tiebreakStartServer = state.currentServer;
         state.tiebreakFirstPointReceiver = other(state.currentServer);
+        if (state.matchType === "doubles") state.doublesTiebreakStartIndex = state.doublesServiceIndex;
       }
       return;
     }
@@ -252,6 +276,20 @@
     if (np === 1) state.currentServer = start;
     else if (state.cfg.fixedDeuceSide) state.currentServer = np % 2 === 1 ? start : oth;
     else { var pair = Math.floor((np - 2) / 2); state.currentServer = pair % 2 === 0 ? oth : start; }
+
+    // Doubles tiebreak serving (mirrors advanceTiebreakServerForNextPoint,
+    // ScoringEngine.swift): walks the 4-slot rotation from
+    // doublesTiebreakStartIndex using the same point-pair-parity shape as
+    // the team-level formula above, just as an additive offset into the
+    // array instead of a 2-value toggle.
+    if (state.matchType === "doubles" && state.doublesServiceOrder.length) {
+      var offset;
+      if (state.cfg.fixedDeuceSide) offset = np - 1;
+      else offset = np === 1 ? 0 : (Math.floor((np - 2) / 2) + 1);
+      var idx = (state.doublesTiebreakStartIndex + offset) % state.doublesServiceOrder.length;
+      state.doublesServiceIndex = idx;
+      state.doublesServer = state.doublesServiceOrder[idx];
+    }
   }
 
   function completeSet(state, winner, finishedSet, events) {
@@ -323,7 +361,16 @@
       pointCountInTiebreak: 0,
       tiebreakStartServer: null,
       tiebreakFirstPointReceiver: null,
-      lastTiebreakPointServer: null
+      lastTiebreakPointServer: null,
+      // Doubles (plan §Phase 6, mirrors ScoreViewModel's doubles fields).
+      // Always present, even for singles, so nothing downstream needs an
+      // undefined check -- applyDoublesSetup() overwrites these for doubles.
+      matchType: "singles",
+      doublesServiceOrder: [],
+      doublesServiceIndex: 0,
+      doublesServer: null,
+      needsDoublesTeamServerDecision: false,
+      doublesTiebreakStartIndex: 0
     };
     if (!cfg.playRegularSets) {
       state.sets.push(newSet(true));
@@ -333,6 +380,53 @@
       state.sets.push(newSet(false));
     }
     return state;
+  }
+
+  /* ---- Doubles match setup (mirrors startDoublesMatch, ScoreViewModel.swift):
+     call after freshState(format, DOUBLES_TEAM[doublesFirstServer]) so the
+     regular team-level state (sets/tiebreak seeding) is already correct;
+     this layers the 4-player rotation on top. `doublesFirstServer` is
+     "me"|"partner"|"opponentS1" (the demo's 3-button picker never offers
+     opponentS2 first, matching HomeView.swift). ---- */
+  function applyDoublesSetup(state, doublesFirstServer) {
+    state.matchType = "doubles";
+    state.doublesServiceIndex = 0;
+    state.needsDoublesTeamServerDecision = false;
+    switch (doublesFirstServer) {
+      case "me":
+        state.doublesServiceOrder = ["me", "opponentS1", "partner", "opponentS2"];
+        break;
+      case "partner":
+        state.doublesServiceOrder = ["partner", "opponentS1", "me", "opponentS2"];
+        break;
+      case "opponentS1":
+        state.doublesServiceOrder = ["opponentS1", "me", "opponentS2", "partner"]; // provisional
+        state.needsDoublesTeamServerDecision = true;
+        break;
+    }
+    state.doublesServer = state.doublesServiceOrder[0];
+    state.currentServer = DOUBLES_TEAM[doublesFirstServer];
+    // If this format starts life already inside a tiebreak (superTiebreak
+    // etc.), the doubles tiebreak-serving rotation needs its start index too
+    // -- mirrors the same freshState branch that seeds tiebreakStartServer.
+    if (!state.cfg.playRegularSets) state.doublesTiebreakStartIndex = state.doublesServiceIndex;
+  }
+
+  // Mirrors resolveDoublesTeamServer (ScoreViewModel.swift): answers the
+  // "Who serves next?" decision after the opponents' provisional first game.
+  function resolveDoublesTeamServer(state, chosenServer) {
+    if (!state.needsDoublesTeamServerDecision) return;
+    state.needsDoublesTeamServerDecision = false;
+    if (chosenServer === "partner") {
+      var firstServer = state.doublesServiceOrder[0];
+      var otherOpponent = firstServer === "opponentS1" ? "opponentS2" : "opponentS1";
+      state.doublesServiceOrder = [firstServer, "partner", otherOpponent, "me"];
+    }
+    // If "me" chosen: no rebuild needed, the provisional order already has
+    // "me" at index 1.
+    state.doublesServiceIndex = 1;
+    state.doublesServer = state.doublesServiceOrder[1];
+    state.currentServer = DOUBLES_TEAM[state.doublesServer];
   }
 
   /* ---- Display helpers ---- */
@@ -412,7 +506,9 @@
       freshState: freshState, pointWon: pointWon, isMatchComplete: isMatchComplete,
       matchWinner: matchWinner, completedSets: completedSets, isBreakPoint: isBreakPoint,
       regularPointStrings: regularPointStrings, lastSet: lastSet,
-      isDecidingSuperTiebreak: isDecidingSuperTiebreak
+      isDecidingSuperTiebreak: isDecidingSuperTiebreak,
+      applyDoublesSetup: applyDoublesSetup, resolveDoublesTeamServer: resolveDoublesTeamServer,
+      DOUBLES_TEAM: DOUBLES_TEAM, DOUBLES_DISPLAY_NAME: DOUBLES_DISPLAY_NAME
     };
   }
 
@@ -428,6 +524,13 @@
     play: root.querySelector("[data-play]"),
     formatBtns: root.querySelectorAll("[data-format]"),
     serverBtns: root.querySelectorAll("[data-server]"),
+    matchTypeBtns: root.querySelectorAll("[data-matchtype]"),
+    singlesServerRow: root.querySelector("[data-singles-server]"),
+    doublesServerRow: root.querySelector("[data-doubles-server]"),
+    doublesServerBtns: root.querySelectorAll("[data-doubles-server-btn]"),
+    doublesDecision: root.querySelector("[data-doubles-decision]"),
+    doublesDecisionMe: root.querySelector("[data-doubles-decision-me]"),
+    doublesDecisionPartner: root.querySelector("[data-doubles-decision-partner]"),
     start: root.querySelector("[data-start]"),
     screen: root.querySelector("[data-screen]"),
     toast: root.querySelector("[data-toast]"),
@@ -469,6 +572,11 @@
 
   var chosenFormat = root.getAttribute("data-format") || "standard";
   var chosenServer = root.getAttribute("data-server") || "me";
+  // Doubles (plan §Phase 6): "singles"|"doubles" and, for doubles, who
+  // serves first -- "me"|"partner"|"opponentS1" (the setup picker's third
+  // button is always "Opponent" -> opponentS1, mirrors HomeView.swift).
+  var chosenMatchType = "singles";
+  var chosenDoublesServer = "me";
   var state = null;
   var history = [];   // undo stack of prior states: {snapshot, momentum, secondServe, statsLen}
   var momentum = [];  // last point winners
@@ -525,6 +633,27 @@
       b.addEventListener("click", function () { chosenServer = b.getAttribute("data-server"); select(el.serverBtns, "data-server", chosenServer); });
     });
     select(el.serverBtns, "data-server", chosenServer);
+  }
+  if (el.doublesServerBtns.length) {
+    el.doublesServerBtns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        chosenDoublesServer = b.getAttribute("data-doubles-server-btn");
+        select(el.doublesServerBtns, "data-doubles-server-btn", chosenDoublesServer);
+      });
+    });
+    select(el.doublesServerBtns, "data-doubles-server-btn", chosenDoublesServer);
+  }
+  if (el.matchTypeBtns.length) {
+    el.matchTypeBtns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        chosenMatchType = b.getAttribute("data-matchtype");
+        select(el.matchTypeBtns, "data-matchtype", chosenMatchType);
+        var isDoubles = chosenMatchType === "doubles";
+        if (el.singlesServerRow) el.singlesServerRow.hidden = isDoubles;
+        if (el.doublesServerRow) el.doublesServerRow.hidden = !isDoubles;
+      });
+    });
+    select(el.matchTypeBtns, "data-matchtype", chosenMatchType);
   }
 
   if (el.start) el.start.addEventListener("click", startMatch);
@@ -589,12 +718,30 @@
     openStats();
   });
 
+  /* "Who serves next?" (plan §Phase 6, mirrors DoublesTeamServerDecisionOverlay):
+     same stopPropagation reasoning as the other overlays above. */
+  if (el.doublesDecision) el.doublesDecision.addEventListener("click", function (e) { e.stopPropagation(); });
+  if (el.doublesDecisionMe) el.doublesDecisionMe.addEventListener("click", function () {
+    resolveDoublesTeamServer(state, "me");
+    render();
+  });
+  if (el.doublesDecisionPartner) el.doublesDecisionPartner.addEventListener("click", function () {
+    resolveDoublesTeamServer(state, "partner");
+    render();
+  });
+
+  // Mirrors ContentView's `needsDoublesTeamServerDecision && gameCount > 0`
+  // trigger for the overlay above.
+  function doublesDecisionPending() {
+    return !!state && state.matchType === "doubles" && state.needsDoublesTeamServerDecision && state.gameCount > 0;
+  }
+
   // True while any input that would change score/tracking state should be
   // blocked -- reused by the tap/swipe/keyboard handlers and by the
   // live-preview gating below (plan §UI state machine, extended with §F's
-  // changeover overlay).
+  // changeover overlay and §Phase 6's doubles decision).
   function scoringBlocked() {
-    return !state || isMatchComplete(state) || !!sheetStep || statsOpen || !!changeoverInfo;
+    return !state || isMatchComplete(state) || !!sheetStep || statsOpen || !!changeoverInfo || doublesDecisionPending();
   }
 
   if (el.screen) {
@@ -667,6 +814,7 @@
   if (useKeyboard) document.addEventListener("keydown", function (e) {
     if (!el.play || el.play.hidden) return;
     if (e.key.toLowerCase() === "r") { startMatch(); e.preventDefault(); return; }
+    if (doublesDecisionPending()) return; // real <button>s handle their own Enter/Space once focused
     if (changeoverInfo) {
       if (e.key === "Enter" || e.key === " ") { ackChangeover(); e.preventDefault(); }
       return;
@@ -685,10 +833,10 @@
 
   /* Guards mirror ScoreViewModel.toggleSecondServe: no-op when tracking is
      off, in Perpetual Points (disablesPointTracking), while the
-     categorisation sheet, stats overlay, or changeover overlay is open, or
-     once the match is complete. */
+     categorisation sheet, stats overlay, changeover overlay, or doubles
+     decision is open, or once the match is complete. */
   function canToggleSecondServe() {
-    return !!state && !isMatchComplete(state) && trackingEnabled && !state.cfg.disablesPointTracking && !sheetStep && !statsOpen && !changeoverInfo;
+    return !!state && !isMatchComplete(state) && trackingEnabled && !state.cfg.disablesPointTracking && !sheetStep && !statsOpen && !changeoverInfo && !doublesDecisionPending();
   }
   function toggleSecondServe() {
     if (!canToggleSecondServe()) return;
@@ -696,8 +844,19 @@
     render();
   }
 
+  // Mirrors MatchStatsView's " · Singles"/" · Doubles" format-line suffix
+  // (also used by the in-app footer).
+  function matchTypeSuffix(st) {
+    return st.matchType === "doubles" ? " · Doubles" : " · Singles";
+  }
+
   function startMatch() {
-    state = freshState(chosenFormat, chosenServer);
+    if (chosenMatchType === "doubles") {
+      state = freshState(chosenFormat, DOUBLES_TEAM[chosenDoublesServer]);
+      applyDoublesSetup(state, chosenDoublesServer);
+    } else {
+      state = freshState(chosenFormat, chosenServer);
+    }
     history = [];
     momentum = [];
     isOnSecondServe = false;
@@ -728,7 +887,7 @@
 
   function tickFooter() {
     if (!el.foot || !state || isMatchComplete(state)) return;
-    el.foot.textContent = FORMAT_LABELS[state.format] + " · Singles" + elapsedTimerText();
+    el.foot.textContent = FORMAT_LABELS[state.format] + matchTypeSuffix(state) + elapsedTimerText();
   }
 
   // Plan §G: "🕐 mm:ss" -- deliberately simpler than the watch's "N m N s"/
@@ -816,7 +975,7 @@
     // or changeover overlay is open (a left-swipe there should do nothing,
     // not undo a point the viewer can't currently see change / while
     // scoring input is meant to be fully blocked).
-    if (!history.length || sheetStep || statsOpen || changeoverInfo) return;
+    if (!history.length || sheetStep || statsOpen || changeoverInfo || doublesDecisionPending()) return;
     rollbackLastPoint();
     if (deferredToastTimer) { clearTimeout(deferredToastTimer); deferredToastTimer = null; }
     deferredToastEvents = null;
@@ -1060,7 +1219,7 @@
     return !!state && trackingEnabled && !state.cfg.disablesPointTracking;
   }
   function canOpenStats() {
-    return !!state && !sheetStep && !changeoverInfo;
+    return !!state && !sheetStep && !changeoverInfo && !doublesDecisionPending();
   }
   function openStats() {
     if (!canOpenStats()) return;
@@ -1241,7 +1400,7 @@
 
     var heads = document.createElement("div");
     heads.className = "pw-heads";
-    var meSide = document.createElement("span"); meSide.className = "pw-side"; meSide.textContent = "Me";
+    var meSide = document.createElement("span"); meSide.className = "pw-side"; meSide.textContent = state.matchType === "doubles" ? "Our" : "Me";
     var title = document.createElement("span"); title.className = "pw-title"; title.textContent = "Points Won";
     var oppSide = document.createElement("span"); oppSide.className = "pw-side"; oppSide.textContent = "Opp";
     heads.appendChild(meSide); heads.appendChild(title); heads.appendChild(oppSide);
@@ -1364,7 +1523,7 @@
     el.stats.hidden = !statsOpen;
     if (!statsOpen) return;
     if (el.statsTitle) el.statsTitle.textContent = isMatchComplete(state) ? "Match Stats" : "Live Stats";
-    if (el.statsFormat) el.statsFormat.textContent = FORMAT_LABELS[state.format] + " · Singles";
+    if (el.statsFormat) el.statsFormat.textContent = FORMAT_LABELS[state.format] + matchTypeSuffix(state);
     buildStatsSetFilter();
     buildStatsBody();
   }
@@ -1392,13 +1551,22 @@
       if (el.banner) el.banner.hidden = false; else showToast(iWon ? "You win! 🎾" : "Opponent wins");
       return;
     }
+    var setEvt = events.filter(function (e) { return e.t === "setWon"; })[0];
+    var game = events.filter(function (e) { return e.t === "gameWon"; })[0];
+    var change = events.filter(function (e) { return e.t === "changeover"; })[0];
+
+    // "Who serves next?" (plan §Phase 6) takes priority over any changeover
+    // tied to this same game boundary -- drop the changeover for this
+    // boundary (matches the match-end changeover already being dropped
+    // above) and show the doubles overlay instead. render() is called
+    // explicitly since this can run from the 0.4s deferred-sheet-commit
+    // timer, which has no other render() in its own call chain.
+    if (game && doublesDecisionPending()) { render(); return; }
+
     // Game/set-won toasts are a demo-only aid the watch doesn't have (plan
     // §F) -- kept as transient toasts. A changeover, if any, opens the
     // blocking overlay; the two can coexist (e.g. a set-won toast alongside
     // the tiebreak-begins overlay that immediately follows it).
-    var setEvt = events.filter(function (e) { return e.t === "setWon"; })[0];
-    var game = events.filter(function (e) { return e.t === "gameWon"; })[0];
-    var change = events.filter(function (e) { return e.t === "changeover"; })[0];
     if (setEvt) showToast(setEvt.winner === "me" ? "Set — you" : "Set — opponent");
     else if (game) showToast(game.winner === "me" ? "Game — you" : "Game — opponent");
     else showToast(null);
@@ -1439,9 +1607,14 @@
 
     // Server: a tennis ball on the serving row, a faint circle otherwise.
     // A yellow "2" badge overlays the ball while isOnSecondServe is set
-    // (plan §A, mirrors ContentView.serverIndicator ~L470-479).
-    setServerIcon(el.meServer, state.currentServer === "me", state.currentServer === "me" && isOnSecondServe);
-    setServerIcon(el.oppServer, state.currentServer === "opponent", state.currentServer === "opponent" && isOnSecondServe);
+    // (plan §A, mirrors ContentView.serverIndicator ~L470-479). In doubles,
+    // the serving team's ball also carries a small black capsule naming the
+    // individual server (plan §Phase 6, mirrors DoublesServer.displayName).
+    var isDoubles = state.matchType === "doubles";
+    setServerIcon(el.meServer, state.currentServer === "me", state.currentServer === "me" && isOnSecondServe,
+      isDoubles && state.currentServer === "me" ? DOUBLES_DISPLAY_NAME[state.doublesServer] : null);
+    setServerIcon(el.oppServer, state.currentServer === "opponent", state.currentServer === "opponent" && isOnSecondServe,
+      isDoubles && state.currentServer === "opponent" ? DOUBLES_DISPLAY_NAME[state.doublesServer] : null);
 
     // Per-player score cells (completed sets neutral, current set highlighted).
     buildCells(el.meCells, state, "me");
@@ -1475,7 +1648,7 @@
     }
 
     if (el.foot) {
-      el.foot.textContent = FORMAT_LABELS[state.format] + " · Singles" + (isMatchComplete(state) ? "" : elapsedTimerText());
+      el.foot.textContent = FORMAT_LABELS[state.format] + matchTypeSuffix(state) + (isMatchComplete(state) ? "" : elapsedTimerText());
     }
 
     // First-game gesture hint (plan §G, mirrors ContentView's
@@ -1488,13 +1661,15 @@
     renderSheet();
     renderStats();
     renderChangeover();
+    if (el.doublesDecision) el.doublesDecision.hidden = !doublesDecisionPending();
 
     // All scoring input is blocked while the categorisation sheet, the stats
-    // overlay, or the changeover overlay is open (plan §UI state machine) —
-    // "New match" is the one exception (unguarded). The stats toggle itself
-    // stays enabled while open so it can still close the overlay.
+    // overlay, the changeover overlay, or the doubles decision is open (plan
+    // §UI state machine) — "New match" is the one exception (unguarded).
+    // The stats toggle itself stays enabled while open so it can still close
+    // the overlay.
     var over = isMatchComplete(state);
-    var blocked = !!sheetStep || statsOpen || !!changeoverInfo;
+    var blocked = !!sheetStep || statsOpen || !!changeoverInfo || doublesDecisionPending();
     if (el.undo) el.undo.disabled = !history.length || blocked;
     if (el.ptMe) el.ptMe.disabled = over || blocked;
     if (el.ptOpp) el.ptOpp.disabled = over || blocked;
@@ -1505,12 +1680,12 @@
     if (el.statsToggle) el.statsToggle.disabled = !canOpenStats();
   }
 
-  function setServerIcon(node, isServer, showSecondBadge) {
+  function setServerIcon(node, isServer, showSecondBadge, doublesName) {
     if (!node) return;
     node.innerHTML = "";
     if (isServer) {
       node.appendChild(document.createTextNode("🎾"));
-      node.setAttribute("aria-label", showSecondBadge ? "Serving, second serve" : "Serving");
+      node.setAttribute("aria-label", (doublesName ? "Serving: " + doublesName : "Serving") + (showSecondBadge ? ", second serve" : ""));
       node.removeAttribute("aria-hidden");
       node.classList.remove("idle");
       if (showSecondBadge) {
@@ -1519,6 +1694,17 @@
         badge.textContent = "2";
         badge.setAttribute("aria-hidden", "true");
         node.appendChild(badge);
+      }
+      // Doubles server-name capsule (plan §Phase 6, mirrors serverIndicator's
+      // DoublesServer.displayName capsule) -- positioned below the ball,
+      // distinct from the 2nd-serve badge's top-trailing position, so the
+      // two never collide.
+      if (doublesName) {
+        var capsule = document.createElement("span");
+        capsule.className = "w-doubles-name";
+        capsule.textContent = doublesName;
+        capsule.setAttribute("aria-hidden", "true");
+        node.appendChild(capsule);
       }
     } else {
       node.setAttribute("aria-hidden", "true");

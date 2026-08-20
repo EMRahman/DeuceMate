@@ -96,6 +96,14 @@
   font-size: 8px; font-weight: 800; line-height: 1;
   display: flex; align-items: center; justify-content: center;
 }
+/* Doubles server-name capsule (plan §Phase 6, mirrors serverIndicator's
+   DoublesServer.displayName capsule) — below the ball, not top-trailing
+   like the 2nd-serve badge above, so the two never collide. */
+.w-doubles-name {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 2px;
+  background: rgba(0,0,0,.65); color: #fff; font-size: 7px; font-weight: 800;
+  line-height: 1; padding: 2px 4px; border-radius: 999px; white-space: nowrap;
+}
 .w-name { font-weight: 800; font-size: .92rem; color: #fff; margin-right: auto; }
 .w-cells { display: flex; align-items: center; gap: 4px; }
 .w-cell {
@@ -236,6 +244,10 @@
   background: rgba(51,194,130,.12); border: 1px solid rgba(51,194,130,.5);
   border-radius: 10px; padding: 9px;
 }
+/* "Who serves next?" (plan §Phase 6) reuses .changeover/.changeover-card/
+   .changeover-ok, just with two side-by-side buttons instead of one. */
+.doubles-decision-buttons { display: flex; gap: 8px; width: 100%; }
+.doubles-decision-buttons .changeover-ok { flex: 1; width: auto; }
 
 /* ---- Live stats overlay — mirrors MatchStatsView.swift + MatchStatsSummary.swift -- */
 .stats-overlay {

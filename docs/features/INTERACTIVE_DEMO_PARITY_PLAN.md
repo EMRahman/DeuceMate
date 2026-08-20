@@ -1,6 +1,6 @@
 # Interactive Browser Demo — Watch-App Parity Plan
 
-**Status:** Phases 1–5 shipped (tracking foundation + second-serve context; the post-point categorisation sheet; the live stats view; the completion panel, changeover overlay, and fit-&-finish polish; the copy refresh). Phase 6 (optional) not started.
+**Status:** All phases shipped, including the optional Phase 6 (tracking foundation + second-serve context; the post-point categorisation sheet; the live stats view; the completion panel, changeover overlay, and fit-&-finish polish; the copy refresh; doubles' 4-player service rotation).
 **Audience:** an AI coding agent implementing this incrementally (phase by phase,
 one PR per phase). The plan is deliberately prescriptive — exact strings, colors,
 ordering, and conditional rules are spelled out so the implementer does not need
@@ -47,7 +47,7 @@ second-serve gesture, the post-point categorisation sheet, and a live stats view
 | Changeover prompts | blocking "OK" overlay with 🔁 symbol + reason at every changeover boundary (not setting-gated) | ✅ ported (Phase 4) |
 | First-game gesture hint | faint "↑ Win ↓ Lose / ← Undo → Stats" until first game ends | ✅ ported (Phase 4) |
 | Swipe live-preview | target row lights green/red while finger is down | ✅ ported (Phase 4) — touch drag + a preview-only mouse-drag equivalent for desktop |
-| Doubles (4-player rotation) | full support | ❌ singles only (footer says so) |
+| Doubles (4-player rotation) | full support | ✅ ported (Phase 6) |
 | HR / compass / calories / themes / phone sync | various | ❌ out of scope for the demo (see Non-goals) |
 
 ---
