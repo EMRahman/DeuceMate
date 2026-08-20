@@ -38,6 +38,7 @@ accurate docs, navigable files, and text-level checks are its substitutes.
 | 14 | Hygiene | Force-unwrap in `PointsGraphView`; placeholder test targets | Low | **14a done**; 14b backlog |
 | 15 | i18n | Localization (all UI copy is hardcoded English) | — | **Parked (product, not code)** |
 | 16 | Health/Privacy | Drop HealthKit date-of-birth read; user-entered birth year; remove dead computed max-HR path | High | **Done** |
+| 18 | Persistence | Persisted enums are additive-only; archives decode atomically | Medium | Rule documented; guards backlog |
 
 ---
 
@@ -569,3 +570,68 @@ values this cleanup prepared for now live in the phone's backup-excluded Health
 sidecar rather than its normally backed-up canonical history. The watch history
 and live-state files are also marked backup-excluded after every save. See
 `HealthSidecarPolicy`, `PhoneStatsStore`, and `SUBMISSION_REVIEW.md` Blocker 4.
+
+---
+
+### 18 — Persisted enums are additive-only; archives decode atomically
+
+**What:** Six enums reach persisted JSON — `MatchFormat`, `MatchType`, `Player`,
+`DoublesServer`, `PointOutcome`, `EndingShot` — and none has an unknown-value
+fallback in its `Codable` conformance. Removing or renaming a case makes every
+file that contains the old raw value undecodable.
+
+`decodeIfPresent` is not a defence: it returns `nil` for a *missing* key but
+throws for a key that is present with an unrecognised value.
+
+**Why it matters more than it looks — the decode is atomic.** Both archives
+decode `[MatchRecord]` in a single call (`StatsStore._loadHistoryUnsafe`,
+`PhoneStatsStore.readCanonicalFile`), so **one** point in **one** old match takes
+down **every** match in the file. A format played twice a year ago costs the
+whole archive. The cascade, worst first:
+
+1. **Phone archive quarantined.** `readCanonicalFile` moves `matchHistory.json`
+   aside to `.corrupt` and the store starts from an empty list.
+2. **iCloud backup overwritten.** `pushBackupOnQueue` builds its snapshot
+   straight from `records` with no emptiness floor, and `lastPushedSnapshot` is
+   per-process — so the next push writes the now-empty archive over the backup.
+   This is the only irreversible hop; everything else leaves a file on disk.
+3. **Watch archive invisible and silently read-only.** `loadHistoryOrNil()`
+   returns `nil`; the refuse-to-overwrite guard correctly protects the file, but
+   `appendMatch` then bails, so every subsequently finished match is dropped
+   without a word.
+4. **Live match reset.** `loadState()`'s catch resets in-memory state and the
+   next `saveState()` overwrites `appState.json`.
+
+**Rule (documented):** `CLAUDE.md` §4 now carries a "Retire a case in a persisted
+enum" recipe — keep the case decodable forever, hide it from the user-facing list
+(`PointOutcome.userSelectable` is the existing pattern), and never fall back to a
+wrong value such as `.standard`, which would re-render an old match's score in
+the wrong shape.
+
+**Guards still backlog, cheapest first:**
+
+- **Pin the raw values in tests.** `ScoreTypesTests.test_doublesServer_rawValuesArePersistedIdentifiers`
+  (added in #104) already does this for `DoublesServer` — extend the pattern to
+  the other five. Deterministic, zero runtime cost, fails in Xcode before the
+  code reaches a device. This is the real fix; the rest is defence in depth.
+- **Floor the backup push.** Guard `pushBackupOnQueue` against writing an empty
+  or sharply smaller snapshot over a non-empty backup. Small, and it protects
+  against every future cause of archive loss, not just this one.
+- **Decode the archive element-wise.** A `Lossy<T>` wrapper
+  (`init(from:) { value = try? T(from: decoder) }`) over `[MatchRecord]` removes
+  the amplifier — 24 of 25 matches survive instead of none. Count the drops and
+  surface them rather than compacting silently.
+- **Reconsider `.corrupt` vs `.unreadable` on the phone.** `CanonicalRead`
+  already has a non-destructive hard stop (`.unreadable` suspends writes and
+  leaves the file untouched). A well-formed file the app merely cannot map is
+  arguably that case, not a quarantine.
+
+**Not the answer:** a `fatalError` in the catch. `loadState()` runs on every
+launch, so the bad value on disk produces a crash loop whose only user-side
+remedy is deleting the app — which takes the sandbox, and the `.corrupt` file,
+with it. `assertionFailure()` gives the same signal in Debug and compiles away in
+Release.
+
+**Key files:** `ScoreTypes.swift`, `PointStat.swift`, `StatsStore.swift`,
+`PhoneStatsStore.swift` (`readCanonicalFile`, `pushBackupOnQueue`),
+`ScoreViewModel.swift` (`AppState`, `loadState`).
