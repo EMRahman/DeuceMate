@@ -614,9 +614,22 @@ the wrong shape.
   (added in #104) already does this for `DoublesServer` — extend the pattern to
   the other five. Deterministic, zero runtime cost, fails in Xcode before the
   code reaches a device. This is the real fix; the rest is defence in depth.
-- **Floor the backup push.** Guard `pushBackupOnQueue` against writing an empty
-  or sharply smaller snapshot over a non-empty backup. Small, and it protects
-  against every future cause of archive loss, not just this one.
+- **Floor the backup push — but qualify the floor by tombstones.**
+  `pushBackupOnQueue` builds its snapshot straight from `records` with no floor,
+  so a corrupt-load `[]` can overwrite a good backup. A naive "never push an
+  empty or smaller snapshot" guard would be **wrong**: `deletePermanently`
+  legitimately shrinks the record set — deleting the only match yields
+  `records: []` — and that emptiness has to reach iCloud, or a fresh install
+  restores matches the user deleted. The rule is whether the shrinkage is
+  *explained*: every id that disappeared since the state being overwritten
+  should appear in `snapshot.tombstones`. Unexplained shrinkage is the
+  corrupt-archive case — withhold and report it. Two details that make this
+  tractable: `backupSnapshot` already filters records by tombstones and carries
+  the tombstone set, and `initialRestore` unions local with backup tombstones
+  and filters backup records by the union — so the tombstone file is purely
+  additive and should always be written, even when the record write is withheld.
+  (`lastPushedSnapshot` is per-process, so a first push after launch has no
+  in-memory baseline to diff against and must read the remote or skip the check.)
 - **Decode the archive element-wise.** A `Lossy<T>` wrapper
   (`init(from:) { value = try? T(from: decoder) }`) over `[MatchRecord]` removes
   the amplifier — 24 of 25 matches survive instead of none. Count the drops and
