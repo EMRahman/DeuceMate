@@ -205,11 +205,25 @@ public final class MatchSyncTransport {
         session.queueUserInfo([MatchSyncKey.liveAnnouncement: text])
     }
 
+    /// Data-at-rest class for the staged copy of a file transfer. The staged file
+    /// holds full match records, so it gets the same protection as the canonical
+    /// stores; protection stops at first unlock (not `.completeFileProtection`)
+    /// because background WatchConnectivity delivery can run while the device is
+    /// locked. Unavailable outside iOS/watchOS, where the package builds for the
+    /// macOS test host.
+    private static var stagedFileWriteOptions: Data.WritingOptions {
+        #if os(iOS) || os(watchOS)
+        return [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+        #else
+        return [.atomic]
+        #endif
+    }
+
     private func transferAsFile(_ data: Data, key: String) {
         let tmpURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(key)-\(UUID().uuidString).json")
         do {
-            try data.write(to: tmpURL)
+            try data.write(to: tmpURL, options: Self.stagedFileWriteOptions)
             session.transferFile(at: tmpURL, metadata: ["key": key])
             // WCSession copies the file internally; clean up our temp copy.
             DispatchQueue.global().asyncAfter(deadline: .now() + 5) {

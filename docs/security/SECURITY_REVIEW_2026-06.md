@@ -113,10 +113,9 @@ These are low-priority and intentionally left as-is for now:
 - **iCloud container id is personalised** (`iCloud.ehsan.DeuceMate`). Consider a
   team-generic identifier before a wide public release. Functional, not a
   vulnerability.
-- **Temp HTML export file** is written to a sandboxed temporary location and
+- ~~**Temp HTML export file** is written to a sandboxed temporary location and
   immediately handed to the share sheet, but without an explicit
-  `.completeFileProtection` attribute. The sandbox + ephemerality make this low
-  risk; an explicit protection class would be belt-and-suspenders.
+  `.completeFileProtection` attribute.~~ **Fixed in the August 2026 pass (§7.1).**
 - **The stringly-typed `UserDefaults`/`MatchSyncKey` coupling** (tracked in
   `docs/features/TECHNICAL_DEBT.md` #3/#10) is a correctness/maintainability
   trap, not a security one, but a typed `AppSettingKey` enum would also remove a
@@ -132,3 +131,61 @@ These are low-priority and intentionally left as-is for now:
   code changes were verified statically per `CLAUDE.md` §0 (types in scope,
   exhaustive switches, no plain `decode` introduced for persisted fields). The
   owner should run the package test suite locally to confirm.
+
+---
+
+## 7. August 2026 re-scan
+
+A second full sweep for the usual web-app vulnerability classes (hardcoded
+secrets, SQL injection, unvalidated input, insecure dependencies, permissive
+CORS, exposed debug endpoints, missing auth checks) plus the iOS/watchOS
+equivalents. **No critical or high findings.** Most of those classes do not
+exist here: no secrets or tokens of any kind in source, plists, entitlements or
+CI; no SQL / Core Data / raw predicates in production code; zero package
+dependencies (`Package.swift` declares none) so no vulnerable transitive tree;
+no server, so no CORS surface, no debug endpoints, and no authentication layer
+to bypass — the only trust boundary is phone→watch, still correctly gated
+(§3.4). The `.github` workflow is a no-op placeholder with no secrets and no
+untrusted-input steps. Input bounds from §4 are all still in place.
+
+Three defence-in-depth items were hardened:
+
+### 7.1 Data-at-rest on staged export / transfer files
+The canonical stores carry
+`.completeFileProtectionUntilFirstUserAuthentication`, but two derived copies of
+the same match data did not:
+
+- `MatchDetailView` writes the interactive HTML export (full record, including
+  HealthKit-derived values) to `temporaryDirectory` with plain `.atomic` — the
+  item accepted in §5 above.
+- `MatchSyncTransport.transferAsFile` stages full history JSON in
+  `temporaryDirectory` with no options at all before handing it to
+  `WCSession.transferFile`.
+
+Both now write with
+`[.atomic, .completeFileProtectionUntilFirstUserAuthentication]`, matching the
+stores. The transport is in the cross-platform Core package, so the protection
+option is applied under `#if os(iOS) || os(watchOS)` (the macOS test host keeps
+plain `.atomic`).
+
+### 7.2 Content-Security-Policy on the exported page
+The export already loads zero external resources (invariant-tested), but the
+shared HTML file had no policy enforcing that at open time. The page now ships
+`default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';
+base-uri 'none'; form-action 'none'` — exactly what the hand-written inline
+viewer needs. A future edit that adds a fetch, a form post, a `<base>`, or an
+external asset now fails in the browser instead of silently shipping an egress
+path in a file users share.
+
+### 7.3 `esc()` now escapes quotes
+Every current call site places `esc()` output in element content, where escaping
+`& < >` is sufficient. It now also escapes `"` and `'`, so the helper stays safe
+if a value is ever interpolated into a quoted attribute instead — the cheap
+fix for the one way the export's injection story could regress.
+
+### 7.4 Verification
+Still no Swift/Xcode toolchain in this environment (`CLAUDE.md` §0): the changes
+were verified statically and covered by two new `MatchWebExportTests` cases
+(CSP presence, `esc` quote escaping). The owner should run
+`xcodebuild test -scheme DeuceMateCoreTests -destination "platform=macOS"`
+locally to confirm.
