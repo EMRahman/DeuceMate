@@ -57,9 +57,11 @@
         Play the watch scorer <span class="grad-text">right here</span>
       </h1>
       <p class="lede" style="max-width:56ch;margin:16px auto 0;">
-        This is the same tennis logic that runs on the Apple&nbsp;Watch — points, games,
-        sets, tiebreaks and server rotation, faithfully ported to your browser.
-        Pick a format and start scoring.
+        This is the same tennis logic that runs on the Apple&nbsp;Watch — score points,
+        games, sets and tiebreaks with full server rotation, categorise how each
+        point ended just like the watch does, and watch a live stats breakdown
+        build as you play (Perpetual Points just counts points, with no tracking
+        or stats). Pick a format and start scoring.
       </p>
       <p class="sim-note">
         ⚠️ This is a <strong>simulated browser demo</strong> to give you a feel for how scoring works —
@@ -79,12 +81,12 @@
           <div class="setup-card" data-setup>
             <h3>Choose a match format</h3>
             <div class="opt-grid">
-              <button type="button" class="opt" data-format="standard">Best of 3<small>Deciding set: 10-point super tiebreak</small></button>
-              <button type="button" class="opt" data-format="bestOf3FullFinalSet">Best of 3 · full final set<small>Final set played out, 7-point tiebreak at 6–6</small></button>
-              <button type="button" class="opt" data-format="superTiebreak">10-point tiebreak<small>One super tiebreak decides it</small></button>
-              <button type="button" class="opt" data-format="quick4Games">Quick 4 games<small>First to 3 games; sudden death at 2–2</small></button>
-              <button type="button" class="opt" data-format="perpetualSuperTiebreak">Perpetual tiebreak<small>Endless tiebreak — keep rallying</small></button>
-              <button type="button" class="opt" data-format="perpetualPoints">Perpetual points<small>Running point counter, never ends</small></button>
+              <button type="button" class="opt" data-format="standard">Best of 3 Sets (Club / League)<small>3 sets · Final set: Super Tiebreak to 10</small></button>
+              <button type="button" class="opt" data-format="bestOf3FullFinalSet">Best of 3 Sets (ATP)<small>3 sets · Final set: Full set, tiebreak to 7</small></button>
+              <button type="button" class="opt" data-format="superTiebreak">Super Tiebreak<small>1 set · Single tiebreak to 10 pts</small></button>
+              <button type="button" class="opt" data-format="quick4Games">Quick 4 Games<small>First to 3 games · Sudden death point at 2-2</small></button>
+              <button type="button" class="opt" data-format="perpetualSuperTiebreak">Perpetual Tiebreak<small>Continuous tiebreak until stopping</small></button>
+              <button type="button" class="opt" data-format="perpetualPoints">Perpetual Points<small>Just count points · server alternates every point · no stats or changeovers</small></button>
             </div>
 
             <h3>Who serves first?</h3>
@@ -186,13 +188,17 @@
       <p class="demo-hint">
         On the watch face: <strong>tap the top half</strong> (or swipe up) for your point,
         <strong>bottom half</strong> (or swipe down) for the opponent — the scoreboard card
-        itself doesn't score. Swipe left to undo.<br>
+        itself doesn't score. Swipe left to undo, right for live stats.<br>
+        <strong>Point tracking is on by default</strong> (except in Perpetual Points,
+        which just counts points) — each point ends with a quick Double&nbsp;Fault /
+        Winner / Forced&nbsp;Error / Unforced&nbsp;Error tap-through, the same
+        categorisation the watch uses to build its stats.<br>
         <strong>Double-tap the scoreboard</strong> (or press <span class="kbd">2</span>, or the
         "2nd serve" button) to flag a second serve before scoring the point — a yellow
         "2" badge marks the server and clears automatically after the next point.<br>
         Keyboard: <span class="kbd">↑</span> your point · <span class="kbd">↓</span> opponent ·
-        <span class="kbd">U</span> undo · <span class="kbd">R</span> new match ·
-        <span class="kbd">2</span> 2nd serve.<br>
+        <span class="kbd">U</span> undo · <span class="kbd">S</span> stats ·
+        <span class="kbd">R</span> new match · <span class="kbd">2</span> 2nd serve.<br>
         The tennis ball marks the server; the strip shows the last 8 points.
       </p>
 
