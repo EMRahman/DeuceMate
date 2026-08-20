@@ -218,6 +218,93 @@ final class MatchRecordCodingTests: XCTestCase {
         XCTAssertEqual(decoded.stats[1].stepsCumulative, 47)
         XCTAssertEqual(decoded.totalSteps, 53)
     }
+
+    // MARK: - MatchRecord decoded from the original persisted shape
+
+    /// The oldest archived shape: only the keys that have never had a default.
+    /// Every `decodeIfPresent` fallback in `MatchRecord.init(from:)` is asserted
+    /// here so a future field can't quietly become required (§4 recipe).
+    func test_matchRecord_decodesEarliestArchiveShapeWithAllDefaults() throws {
+        let legacyJSON = """
+        {
+          "id": "33333333-4444-5555-6666-777777777777",
+          "startTime": 1700000000,
+          "setScores": [{"id":"44444444-5555-6666-7777-888888888888",
+                         "gamesMe":6,"gamesOpponent":2,"isTieBreak":false,
+                         "tieBreakPointsMe":0,"tieBreakPointsOpponent":0}],
+          "stats": [],
+          "currentPointsMe": 0,
+          "currentPointsOpponent": 0,
+          "gameCount": 0,
+          "pointCountInTiebreak": 0
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(MatchRecord.self, from: legacyJSON)
+
+        XCTAssertEqual(decoded.setScores.count, 1)
+        XCTAssertNil(decoded.endTime)
+        XCTAssertNil(decoded.iWon)
+        XCTAssertNil(decoded.currentServer)
+        XCTAssertNil(decoded.tiebreakStartServer)
+        XCTAssertNil(decoded.tiebreakFirstPointReceiver)
+        XCTAssertNil(decoded.lastTiebreakPointServer)
+        XCTAssertNil(decoded.doublesServer)
+        XCTAssertFalse(decoded.isOnSecondServe)
+        XCTAssertEqual(decoded.matchType, .singles)
+        XCTAssertEqual(decoded.matchFormat, .standard)
+        XCTAssertEqual(decoded.doublesServiceOrder, [])
+        XCTAssertEqual(decoded.doublesServiceIndex, 0)
+        XCTAssertEqual(decoded.tiebreakStartDoublesIndex, 0)
+        XCTAssertEqual(decoded.matchElapsedSeconds, 0)
+        XCTAssertEqual(decoded.setElapsedSeconds, [:])
+        XCTAssertEqual(decoded.recentPoints, [])
+        // Momentum predates its own flag, so archives without it stay enabled.
+        XCTAssertTrue(decoded.momentumEnabled)
+        // Health fields are optional and absent on a pre-HealthKit archive.
+        XCTAssertNil(decoded.totalSteps)
+        XCTAssertNil(decoded.totalDistanceMeters)
+        XCTAssertNil(decoded.totalCaloriesKcal)
+    }
+
+    func test_matchRecord_decodeIgnoresRetiredKeys() throws {
+        // A key the app no longer knows about (written by a newer build, or a
+        // since-removed field) must not fail the decode of an archived match.
+        let json = """
+        {
+          "id": "55555555-6666-7777-8888-999999999999",
+          "startTime": 1700000000,
+          "setScores": [],
+          "stats": [],
+          "currentPointsMe": 1,
+          "currentPointsOpponent": 2,
+          "gameCount": 3,
+          "pointCountInTiebreak": 0,
+          "someRetiredFlag": true
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(MatchRecord.self, from: json)
+        XCTAssertEqual(decoded.currentPointsMe, 1)
+        XCTAssertEqual(decoded.currentPointsOpponent, 2)
+        XCTAssertEqual(decoded.gameCount, 3)
+    }
+
+    func test_matchRecord_fillingMissingHealthData_ignoresADifferentMatch() {
+        let target = MatchRecord(startTime: Date(timeIntervalSince1970: 1_000),
+                                 setScores: [], stats: [], iWon: true)
+        let other = MatchRecord(startTime: Date(timeIntervalSince1970: 1_000),
+                                setScores: [], stats: [], iWon: true,
+                                totalSteps: 999, totalDistanceMeters: 999,
+                                totalCaloriesKcal: 999)
+
+        let filled = target.fillingMissingHealthData(from: other)
+
+        XCTAssertEqual(filled, target)
+        XCTAssertNil(filled.totalSteps)
+        XCTAssertNil(filled.totalDistanceMeters)
+        XCTAssertNil(filled.totalCaloriesKcal)
+    }
 }
 
 /// Wraps the static helpers on StatsStoring for testing.
