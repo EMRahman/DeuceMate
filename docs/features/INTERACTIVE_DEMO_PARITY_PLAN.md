@@ -1,6 +1,6 @@
 # Interactive Browser Demo — Watch-App Parity Plan
 
-**Status:** Phases 1–2 shipped (tracking foundation + second-serve context; the post-point categorisation sheet). Phases 3–6 planned, not started.
+**Status:** Phases 1–3 shipped (tracking foundation + second-serve context; the post-point categorisation sheet; the live stats view). Phases 4–6 planned, not started.
 **Audience:** an AI coding agent implementing this incrementally (phase by phase,
 one PR per phase). The plan is deliberately prescriptive — exact strings, colors,
 ordering, and conditional rules are spelled out so the implementer does not need
