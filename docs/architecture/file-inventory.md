@@ -64,7 +64,7 @@ matches; it does not score them (except by sending validated commands to the wat
 | `DeuceMateApp.swift` | 50 | The iPhone app's entry point: wires up the archive store, sync service and announcer; resumes initial restore or backup push whenever the app returns to the foreground. | App plumbing |
 | `ContentView.swift` | 15 | The navigation root — essentially just opens the archive list. | App plumbing |
 
-## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (42 files)
+## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (46 files)
 
 The rulebook both apps use. No screens; pure logic — which makes it the cheapest
 place to test and the safest place to change.
@@ -129,13 +129,13 @@ iOS/watchOS app targets). See `docs/screenshots/README.md` for usage.
 | `DeuceMateArchiveTool/main.swift` | ~120 | CLI over `ManualMatchArchiveBackup`/`MatchHTMLExporter`: `list` inspects an archive JSON file (index, UUID, date, format, duration, set scores, stat count), `webexport` renders one match's interactive HTML export to disk, `seed` writes a decoded archive into a simulator app container's canonical `MatchArchive/` files (via `HealthSidecarPolicy`) for visual QA of the import feature without driving the file-picker UI. | Manual archive backup, Web export, tooling |
 | `DeuceMateWebSnapshot/main.swift` | ~150 | macOS-only headless renderer: loads a local HTML file (or wraps a plain `.txt` file in a simple styled dark page) into an off-screen `WKWebView`, runs a sequence of steps — click a button by label (e.g. the web export's Stats/Points tab toggle) or `scroll:<0-100>` to a percentage of the page height — capturing a PNG via `WKWebView.takeSnapshot` after each step. No macOS Screen Recording permission needed since it's an in-process view snapshot, not a display capture. Generic; not DeuceMate-specific. | Web export, AI-coach prompt, tooling |
 
-## 4. Tests (50 files)
+## 4. Tests (55 files)
 
 Tests are the correctness record. The interesting ones all live against the shared
 package (no simulator needed). Red flags in any PR: tests deleted, skipped, or
 expected values rewritten to make a failure pass — that requires explicit approval.
 
-**Package tests — `DeuceMate/Packages/DeuceMateCore/Tests/DeuceMateCoreTests/` (36 files):**
+**Package tests — `DeuceMate/Packages/DeuceMateCore/Tests/DeuceMateCoreTests/` (41 files):**
 
 | File | Covers |
 |---|---|
@@ -163,6 +163,9 @@ expected values rewritten to make a failure pass — that requires explicit appr
 | `MatchTrackingStatusTests.swift` | The pre-match tracking indicators: each facet's on/degraded/off resolution, format-suppressed point tracking (Perpetual Points → `—` regardless of the toggle), Health `notDetermined` vs. denied vs. unavailable, Pulse Coach calibration (including age 30 resolving to 190 without being mistaken for the default, and the retroactive-recompute copy), `collapsingPulseWhenHealthOff` keeping/dropping Pulse correctly, and chip copy/width invariants. |
 | `HealthAccessSettlePolicyTests.swift` | The post-authorization re-read schedule: an undetermined status walks the delays in order and then stops, any conclusive status stops immediately, the window stays short and backs off, and the reported bug's shape — undetermined at the completion, authorized on a later read — settles rather than polling on. |
 | `HealthExportConsentTests.swift` | The per-export health disclosure: present-fields per perspective (zones recorder-only, empty ⇒ skip), disclosure copy fidelity and recipient clauses, and agreement between `presentFields(.me)` and the recorder-framed HTML export's health blocks. |
+| `PointStatTests.swift` | The point atom's own queries and identifiers: `isDoubleFault`, `wasServing`/`wasWonBy`, stable raw-value ids across `PointOutcome`/`EndingShot`/`ServingPointCategory`, `strippingHealthData` (tennis facts survive, only the five HealthKit-derived fields drop), `fillingMissingHealthData` never overwriting a non-nil value, and legacy `PendingPointInfo` JSON without `isBreakPoint`/`gameScoreAtStart`. |
+| `ScoreTypesTests.swift` | The shared score vocabulary: `DoublesServer.team`/`displayName` for all four cases, `SetScore` defaults and round-trip identity, and the raw values pinned as persisted identifiers — the guard that makes deleting a case fail in Xcode rather than on a user's wrist (see `CLAUDE.md` §4 "Retire a case in a persisted enum"). |
+| `StatsStoringCodecTests.swift` | The shared JSON codec both stores persist through — full-fidelity round trip, empty history, and rejection of corrupt or key-missing data. Drives the real `StatsStoring.encode/decode` rather than a local copy. |
 | `SimulatedGameStatsTests.swift` | Simulates realistic whole matches to exercise stats end-to-end. |
 | `MatchWebExportTests.swift` | The interactive HTML export: view-model shape, mirrored outcome/serving/ending-shot counts, serving-category rules and palette, full per-point match score + server rendering, realistic completed-set integration, recorder-only HR, pointer dragging, and self-contained output. |
 

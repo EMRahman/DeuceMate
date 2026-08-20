@@ -437,36 +437,6 @@ identical.
 
 ---
 
-### 17 — De-duplicate stats scaffolding into Core (Done)
-
-**What was duplicated:** four rules were each re-implemented per surface, with
-nothing pointing at the twins:
-
-- The `All / per-set` filter enum and its "a deciding super-tiebreak reads TB"
-  label rule (iOS `MatchDetailView`, watch `MatchStatsView`, web export).
-- Set/match duration resolution — recorded value first, else the span between
-  the set's first and last tracked point (both stats screens, text export, web
-  export).
-- The `count (percent)` / `made/attempted (percent)` strings and the
-  comparison-row fraction/percent/count triple (both stats screens, both
-  exports).
-- The watch's compact hyphen-separated score line, built twice (stats header
-  and history rows) plus a third partial copy for in-progress matches.
-
-**Fix:** `Stats/SetFilter.swift`, `Stats/MatchDurations.swift`,
-`Stats/StatFormatting.swift` (incl. `RatioDisplay`) and
-`Stats/CompactScoreLine.swift` in Core; every call site now delegates. The
-deliberate difference between the exports (percentages truncated) and the
-points-won headers (rounded) is preserved as two named functions rather than
-two unexplained expressions, and the watch's narrow labels are a `LabelStyle`
-on the shared enum.
-
-**Key files:** the four new Core files; `MatchDetailView`, `MatchExporter`,
-watch `MatchStatsView` / `MatchHistoryView`, `MatchWebViewModel+Build`,
-`MatchWebViewModel+Comparison`.
-
----
-
 ### 12 — Extract the point-categorisation flow state machine into Core
 
 **What:** `PointCategorySheet.swift` (watch, 261 lines) and
@@ -601,6 +571,36 @@ values this cleanup prepared for now live in the phone's backup-excluded Health
 sidecar rather than its normally backed-up canonical history. The watch history
 and live-state files are also marked backup-excluded after every save. See
 `HealthSidecarPolicy`, `PhoneStatsStore`, and `SUBMISSION_REVIEW.md` Blocker 4.
+
+---
+
+### 17 — De-duplicate stats scaffolding into Core (Done)
+
+**What was duplicated:** four rules were each re-implemented per surface, with
+nothing pointing at the twins:
+
+- The `All / per-set` filter enum and its "a deciding super-tiebreak reads TB"
+  label rule (iOS `MatchDetailView`, watch `MatchStatsView`, web export).
+- Set/match duration resolution — recorded value first, else the span between
+  the set's first and last tracked point (both stats screens, text export, web
+  export).
+- The `count (percent)` / `made/attempted (percent)` strings and the
+  comparison-row fraction/percent/count triple (both stats screens, both
+  exports).
+- The watch's compact hyphen-separated score line, built twice (stats header
+  and history rows) plus a third partial copy for in-progress matches.
+
+**Fix:** `Stats/SetFilter.swift`, `Stats/MatchDurations.swift`,
+`Stats/StatFormatting.swift` (incl. `RatioDisplay`) and
+`Stats/CompactScoreLine.swift` in Core; every call site now delegates. The
+deliberate difference between the exports (percentages truncated) and the
+points-won headers (rounded) is preserved as two named functions rather than
+two unexplained expressions, and the watch's narrow labels are a `LabelStyle`
+on the shared enum.
+
+**Key files:** the four new Core files; `MatchDetailView`, `MatchExporter`,
+watch `MatchStatsView` / `MatchHistoryView`, `MatchWebViewModel+Build`,
+`MatchWebViewModel+Comparison`.
 
 ---
 
