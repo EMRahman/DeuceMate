@@ -290,4 +290,37 @@ final class ArchiveBackupPolicyTests: XCTestCase {
         XCTAssertEqual(result.stats.first?.heartRateBPM, 156)
         XCTAssertEqual(result.stats.first?.stepsCumulative, 42)
     }
+
+    // MARK: - Restore prompt preview
+
+    func test_backupPreview_reportsCountAndNewestMatchDate() {
+        let newest = Date(timeIntervalSince1970: 3_000)
+        let preview = ArchiveBackupPolicy.BackupPreview.from(records: [
+            makeRecord(startTime: Date(timeIntervalSince1970: 1_000)),
+            makeRecord(startTime: newest),
+            makeRecord(startTime: Date(timeIntervalSince1970: 2_000))
+        ])
+
+        XCTAssertEqual(preview.recordCount, 3)
+        XCTAssertEqual(preview.newestMatchDate, newest)
+    }
+
+    func test_backupPreview_ofEmptyBackupHasNoDate() {
+        let preview = ArchiveBackupPolicy.BackupPreview.from(records: [])
+        XCTAssertEqual(preview.recordCount, 0)
+        XCTAssertNil(preview.newestMatchDate)
+    }
+
+    func test_sortedNewestFirst_isStableForIdenticalStartTimes() {
+        // Ties fall back to a deterministic order so the archive list (and the
+        // preview's newest date) can't flip between reads.
+        let start = Date(timeIntervalSince1970: 5_000)
+        let records = (0..<4).map { _ in makeRecord(startTime: start) }
+
+        let first = ArchiveBackupPolicy.sortedNewestFirst(records)
+        let second = ArchiveBackupPolicy.sortedNewestFirst(records.reversed())
+
+        XCTAssertEqual(Set(first.map(\.id)), Set(records.map(\.id)))
+        XCTAssertEqual(first.map(\.id), second.map(\.id))
+    }
 }

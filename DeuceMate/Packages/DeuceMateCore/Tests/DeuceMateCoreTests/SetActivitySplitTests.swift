@@ -121,4 +121,44 @@ final class SetActivitySplitTests: XCTestCase {
         XCTAssertTrue(split.steps.isEmpty)
         XCTAssertTrue(split.calories.isEmpty)
     }
+
+    func test_emptyWhenMatchHasNoSets() {
+        // A no-games format (or a match abandoned before its first set) has
+        // nothing to attribute totals to.
+        let split = SetActivitySplit(
+            setCount: 0,
+            stats: [point(set: 0, at: 0, steps: 100)],
+            setElapsedSeconds: [0: 600],
+            totalSteps: 500,
+            totalCaloriesKcal: 250
+        )
+        XCTAssertTrue(split.steps.isEmpty)
+        XCTAssertTrue(split.calories.isEmpty)
+    }
+
+    func test_emptyWhenNoDurationsAndNoPointsToWeightBy() {
+        // Totals exist but there is no signal — no per-point samples, no
+        // per-set durations, no recorded points — so nothing is invented.
+        let split = SetActivitySplit(
+            setCount: 2,
+            stats: [],
+            setElapsedSeconds: [:],
+            totalSteps: 800,
+            totalCaloriesKcal: 400
+        )
+        XCTAssertTrue(split.steps.isEmpty)
+        XCTAssertTrue(split.calories.isEmpty)
+    }
+
+    func test_zeroTotalsAreTreatedAsNoData() {
+        let split = SetActivitySplit(
+            setCount: 1,
+            stats: [point(set: 0, at: 0, steps: nil)],
+            setElapsedSeconds: [0: 600],
+            totalSteps: 0,
+            totalCaloriesKcal: 0
+        )
+        XCTAssertTrue(split.steps.isEmpty)
+        XCTAssertTrue(split.calories.isEmpty)
+    }
 }
