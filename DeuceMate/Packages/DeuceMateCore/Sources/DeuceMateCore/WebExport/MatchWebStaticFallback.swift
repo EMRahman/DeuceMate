@@ -413,10 +413,14 @@ extension MatchHTMLExporter {
 
     private static func fmt(_ d: Double) -> String { String(format: "%.1f", d) }
 
-    /// Minimal HTML-text escaping for values placed in element content.
+    /// HTML escaping for interpolated values. Callers place these in element
+    /// content today; the quote escapes keep the helper safe if a value is ever
+    /// interpolated into a quoted attribute instead.
     static func esc(_ s: String) -> String {
         s.replacingOccurrences(of: "&", with: "&amp;")
          .replacingOccurrences(of: "<", with: "&lt;")
          .replacingOccurrences(of: ">", with: "&gt;")
+         .replacingOccurrences(of: "\"", with: "&quot;")
+         .replacingOccurrences(of: "'", with: "&#39;")
     }
 }

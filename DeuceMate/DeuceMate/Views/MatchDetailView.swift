@@ -627,8 +627,16 @@ struct MatchDetailView: View {
                     : MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .opponent, playerNTRP: ntrp)
                 let h = MatchHTMLExporter.html(for: record, maxHR: maxHR, aiPromptMe: aiMe, aiPromptOpponent: aiOpp)
                 let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-                do { try Data(h.utf8).write(to: url, options: .atomic); return url }
-                catch { return nil }
+                // The shared page carries the full match record, including
+                // HealthKit-derived values, so the staged file gets the same
+                // data-at-rest class as the canonical archive.
+                do {
+                    try Data(h.utf8).write(
+                        to: url,
+                        options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+                    )
+                    return url
+                } catch { return nil }
             }.value
             let (s, f, so, fo, url) = await (summary, full, summaryOpp, fullOpp, htmlURL)
             exportSummary = s; exportFull = f; exportSummaryOpp = so; exportFullOpp = fo

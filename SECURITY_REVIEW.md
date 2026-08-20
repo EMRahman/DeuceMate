@@ -1,5 +1,10 @@
 # Security Review — DeuceMate (Apple Watch)
 
+> Superseded for whole-app scope by
+> [`docs/security/SECURITY_REVIEW_2026-06.md`](docs/security/SECURITY_REVIEW_2026-06.md),
+> which also covers the iPhone companion, the Core package, and the HTML export.
+> This document is kept as the original watch-only review.
+
 ## Scope
 
 Reviewed application source and configuration files:
@@ -20,7 +25,7 @@ This is a low-risk offline app with no direct network stack, no third-party SDKs
 ### Low severity findings
 1. **Both persisted JSON files lacked explicit iOS/watchOS Data Protection on write**.
    - `appState.json` (current match state) and `matchHistory.json` (completed/parked matches with timestamped `PointStat` records) are persisted to app documents as JSON. While neither file contains credentials, `matchHistory.json` accumulates a time-ordered record of user activity across sessions, making data-at-rest protection a meaningful privacy control for both.
-   - **Fix applied:** write options for both files now include `.completeFileProtection` — `ScoreViewModel.saveState()` and `StatsStore._writeUnsafe()` use `[.atomic, .completeFileProtection]`.
+   - **Fix applied:** write options for both files now include a data-protection class — `ScoreViewModel.saveState()` and `StatsStore._writeUnsafe()` write through `BackupExcludedFileWriter` with `[.atomic, .completeFileProtectionUntilFirstUserAuthentication]`. Protection stops at first unlock rather than `.completeFileProtection` because background WatchConnectivity delivery can write while the watch is locked (see `docs/features/TECHNICAL_DEBT.md`).
 
 2. **Error logs previously emitted raw error details**.
    - Runtime errors were printed directly, which can expose internal file paths or implementation details in logs.

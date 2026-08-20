@@ -1026,6 +1026,31 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertTrue(escaped.contains("<\\/script>"))
     }
 
+    /// The page ships a Content-Security-Policy that matches what it actually
+    /// needs: inline script/style only, everything else denied. It backs the
+    /// "loads zero external resources" invariant at runtime, so a shared export
+    /// can never be made to fetch or post anywhere.
+    func test_html_carriesRestrictiveContentSecurityPolicy() {
+        let html = MatchHTMLExporter.html(for: makeRecord(),
+                                          aiPromptMe: "ME PROMPT", aiPromptOpponent: "OPP PROMPT")
+        XCTAssertTrue(html.contains("http-equiv=\"Content-Security-Policy\""))
+        XCTAssertTrue(html.contains("default-src 'none'"))
+        XCTAssertTrue(html.contains("script-src 'unsafe-inline'"))
+        XCTAssertTrue(html.contains("style-src 'unsafe-inline'"))
+        XCTAssertTrue(html.contains("base-uri 'none'"))
+        XCTAssertTrue(html.contains("form-action 'none'"))
+        // The policy itself must not open a network egress channel.
+        XCTAssertFalse(html.contains("connect-src"))
+    }
+
+    /// `esc` escapes quotes as well as the angle brackets and ampersand, so an
+    /// interpolated value stays inert if a future call site places it inside a
+    /// quoted attribute rather than element content.
+    func test_esc_escapesQuotesAndMarkup() {
+        let escaped = MatchHTMLExporter.esc("<b>a & \"b\" 'c'</b>")
+        XCTAssertEqual(escaped, "&lt;b&gt;a &amp; &quot;b&quot; &#39;c&#39;&lt;/b&gt;")
+    }
+
     // MARK: - Helpers
 
     private func occurrences(of needle: String, in haystack: String) -> Int {
