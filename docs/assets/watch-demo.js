@@ -167,8 +167,10 @@
       state.pointCountInTiebreak = 0;
       state.tiebreakStartServer = state.currentServer;
       state.tiebreakFirstPointReceiver = other(state.currentServer);
-      events.push({ t: "tiebreakStarted" });
-      events.push({ t: "changeover", text: cfg.tiebreakRequiresTwoPointLead ? "Tiebreak!" : "Sudden death!" });
+      events.push({
+        t: "changeover", symbol: "Tiebreak 🔁 🎾",
+        reason: cfg.tiebreakRequiresTwoPointLead ? "tiebreakBegins" : "suddenDeathBegins", games: tbAt
+      });
       state.sets.push(set);
       return;
     } else if (isNormalSetComplete(cfg, set.gamesMe, set.gamesOpponent)) {
@@ -183,7 +185,13 @@
 
     state.currentPointsMe = 0; state.currentPointsOpponent = 0;
     events.push({ t: "gameWon", winner: player });
-    if (totalGames > 0) events.push({ t: "changeover", text: totalGames % 2 === 1 ? "Change ends" : "New balls soon" });
+    // Mirrors handleSideChangesAfterGame (ScoringEngine.swift): no event for
+    // the very first game of a set (0 games played before it).
+    if (totalGames > 0) {
+      events.push(totalGames % 2 === 1
+        ? { t: "changeover", symbol: "🔁 👥", reason: "oddGames" }
+        : { t: "changeover", symbol: "🔁 🎾", reason: "evenGames" });
+    }
     state.sets.push(set);
   }
 
@@ -208,8 +216,14 @@
         if (me > opp) set.gamesMe = cfg.regularSetTiebreakWinAtGames;
         else set.gamesOpponent = cfg.regularSetTiebreakWinAtGames;
       }
+      // Mirrors handleSideChangesAfterTiebreakSetEnd (ScoringEngine.swift):
+      // read before completeSet/the tiebreak-state reset below clear them.
+      var totalGamesTB = set.gamesMe + set.gamesOpponent;
+      var playersChangeTB = totalGamesTB % 2 === 1;
+      var lastBallHolder = state.lastTiebreakPointServer;
+      var nextServer = state.tiebreakFirstPointReceiver;
       completeSet(state, me > opp ? "me" : "opponent", set, events);
-      events.push({ t: "changeover", text: "Change ends" });
+      sideChangeAfterTiebreakSet(totalGamesTB, playersChangeTB, lastBallHolder, nextServer, events);
       if (state.tiebreakFirstPointReceiver) state.currentServer = state.tiebreakFirstPointReceiver;
       state.tiebreakStartServer = null; state.tiebreakFirstPointReceiver = null;
       if (lastSet(state) && lastSet(state).isTieBreak) {
@@ -220,7 +234,14 @@
     }
 
     events.push({ t: "tiebreakPoint" });
-    if (!cfg.fixedDeuceSide && state.pointCountInTiebreak % 6 === 0) events.push({ t: "changeover", text: "Change ends" });
+    // Mirrors updateTiebreak's changeover branch (ScoringEngine.swift ~L371-381):
+    // the 6-point boundary wins and is skipped for fixedDeuceSide formats, so
+    // Perpetual Points falls straight to the odd-point branch every odd point.
+    if (!cfg.fixedDeuceSide && state.pointCountInTiebreak % 6 === 0) {
+      events.push({ t: "changeover", symbol: "🔁 🎾 👥", reason: "tiebreakSixPoints" });
+    } else if (state.pointCountInTiebreak % 2 === 1) {
+      events.push({ t: "changeover", symbol: "🔁 🎾", reason: "tiebreakOddPoint" });
+    }
     advanceTiebreakServer(state);
     state.sets.push(set);
   }
@@ -258,8 +279,34 @@
     state.currentPointsMe = 0; state.currentPointsOpponent = 0;
   }
 
+  // Mirrors handleSideChangesAfterSet (ScoringEngine.swift): a plain
+  // (non-tiebreak) set completion — players change on an odd total, balls
+  // move on an even total.
   function sideChangeAfterSet(totalGames, events) {
-    events.push({ t: "changeover", text: totalGames % 2 === 1 ? "Change ends" : "New balls soon" });
+    events.push(totalGames % 2 === 1
+      ? { t: "changeover", symbol: "🔁 👥", reason: "setCompletePlayers" }
+      : { t: "changeover", symbol: "🔁 🎾", reason: "setCompleteBalls" });
+  }
+
+  // Mirrors handleSideChangesAfterTiebreakSetEnd (ScoringEngine.swift): a
+  // tiebreak-decided set completion needs both whether players change ends
+  // (same odd/even-total rule) AND whether the balls, now possibly on the
+  // "wrong" side after that player swap, still need to move independently to
+  // reach the next game's server. Without both tiebreak-serving-rotation
+  // inputs (can't happen once a tiebreak has started and served at least one
+  // point), falls back to the plain rule.
+  function sideChangeAfterTiebreakSet(totalGames, playersChangeEnds, lastBallHolder, nextServer, events) {
+    if (!lastBallHolder || !nextServer) { sideChangeAfterSet(totalGames, events); return; }
+    var ballsOwnerAfterSwap = playersChangeEnds ? other(lastBallHolder) : lastBallHolder;
+    var ballsNeedToMove = ballsOwnerAfterSwap !== nextServer;
+    if (playersChangeEnds && ballsNeedToMove) {
+      events.push({ t: "changeover", symbol: "🔁 🎾 👥", reason: "setCompletePlayersAndBalls" });
+    } else if (playersChangeEnds) {
+      events.push({ t: "changeover", symbol: "🔁 👥", reason: "setCompletePlayers" });
+    } else if (ballsNeedToMove) {
+      events.push({ t: "changeover", symbol: "🔁 🎾", reason: "setCompleteBalls" });
+    }
+    // (players don't change, balls already in place) -> no event, matching Swift.
   }
 
   /* ---- Initial state for a chosen format + first server ---- */
@@ -341,6 +388,24 @@
     perpetualPoints: "Perpetual points"
   };
 
+  /* ---- Changeover reason copy (plan §F, mirrors ScoreViewModel.swift's
+     reason strings verbatim -- exact en-dash "–", not a hyphen). The two
+     games-at-N-N cases interpolate the event's `games` field. ---- */
+  var CHANGEOVER_REASON_TEXT = {
+    oddGames: "Odd games – players change ends",
+    evenGames: "Even games – balls change ends",
+    setCompletePlayers: "Set complete – players change ends",
+    setCompleteBalls: "Set complete – balls change ends",
+    setCompletePlayersAndBalls: "Set complete – players & balls change ends",
+    tiebreakSixPoints: "Every 6 tiebreak points – players & balls change ends",
+    tiebreakOddPoint: "Odd tiebreak point – balls change ends"
+  };
+  function changeoverReasonText(change) {
+    if (change.reason === "tiebreakBegins") return "Games at " + change.games + "-" + change.games + " – tiebreak begins";
+    if (change.reason === "suddenDeathBegins") return "Games at " + change.games + "-" + change.games + " – sudden death point";
+    return CHANGEOVER_REASON_TEXT[change.reason];
+  }
+
   /* Expose the pure engine (handy for debugging and tests). */
   if (typeof window !== "undefined") {
     window.DeuceMateScoring = {
@@ -378,7 +443,13 @@
     momentum: root.querySelector("[data-momentum]"),
     foot: root.querySelector("[data-foot]"),
     banner: root.querySelector("[data-banner]"),
-    bannerText: root.querySelector("[data-banner-text]"),
+    bannerTitle: root.querySelector("[data-banner-title]"),
+    viewStats: root.querySelector("[data-view-stats]"),
+    changeover: root.querySelector("[data-changeover]"),
+    changeoverSymbol: root.querySelector("[data-changeover-symbol]"),
+    changeoverReason: root.querySelector("[data-changeover-reason]"),
+    changeoverOk: root.querySelector("[data-changeover-ok]"),
+    firstGameHint: root.querySelector("[data-first-game-hint]"),
     undo: root.querySelector("[data-undo]"),
     reset: root.querySelector("[data-reset]"),
     again: root.querySelector("[data-again]"),
@@ -412,6 +483,20 @@
   // Live stats overlay (plan §D, mirrors MatchStatsView.swift).
   var statsOpen = false;
   var statsSetFilter = null; // null = "All", else a set index
+
+  // Changeover overlay (plan §F, mirrors ChangeoverAckOverlay): {symbol, reason}
+  // while blocking for acknowledgement, else null. Queued behind the sheet via
+  // the existing deferredToastTimer machinery -- applyEvents is the one place
+  // that opens it, same choke point the sheet-commit delay already funnels through.
+  var changeoverInfo = null;
+
+  // First-game gesture hint (plan §G, mirrors ContentView's hasCompletedFirstGame).
+  var hasCompletedFirstGame = false;
+
+  // Footer elapsed timer (plan §G) and swipe/drag live-preview (plan §G).
+  var matchStartTime = null;
+  var footerTimer = null;
+  var livePreviewTarget = null; // "me" | "opponent" | null, while a touch/pointer drag is past the threshold
 
   // Categorisation sheet (plan §B/§C, mirrors PointCategorySheet.swift).
   // sheetStep is 1|2|null; null means the sheet is closed and all normal
@@ -494,25 +579,85 @@
      listener, which would otherwise misfire on the same click. */
   if (el.stats) el.stats.addEventListener("click", function (e) { e.stopPropagation(); });
 
+  /* Same reasoning again: the "OK" button clears changeoverInfo synchronously
+     before the click bubbles to el.screen. */
+  if (el.changeover) el.changeover.addEventListener("click", function (e) { e.stopPropagation(); });
+  if (el.changeoverOk) el.changeoverOk.addEventListener("click", ackChangeover);
+  if (el.viewStats) el.viewStats.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (el.banner) el.banner.hidden = true;
+    openStats();
+  });
+
+  // True while any input that would change score/tracking state should be
+  // blocked -- reused by the tap/swipe/keyboard handlers and by the
+  // live-preview gating below (plan §UI state machine, extended with §F's
+  // changeover overlay).
+  function scoringBlocked() {
+    return !state || isMatchComplete(state) || !!sheetStep || statsOpen || !!changeoverInfo;
+  }
+
   if (el.screen) {
     /* Tap zones on the watch face: top half = you, bottom half = opponent.
        Taps inside the scoreboard card are handled above and never score. */
     el.screen.addEventListener("click", function (e) {
-      if ((el.banner && !el.banner.hidden) || sheetStep || statsOpen) return;
+      if ((el.banner && !el.banner.hidden) || scoringBlocked()) return;
       var rect = el.screen.getBoundingClientRect();
       award((e.clientY - rect.top) < rect.height / 2 ? "me" : "opponent");
     });
 
+    // Live-preview tint (plan §G, mirrors ContentView's livePreviewTarget):
+    // vertical drag past the threshold previews Me/Opp; horizontal drag
+    // (undo/stats) has no row to tint, so it just clears any preview.
+    function previewFromDrag(dx, dy) {
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) { setLivePreview(null); return; }
+      setLivePreview(Math.abs(dy) > 40 ? (dy < 0 ? "me" : "opponent") : null);
+    }
+    function setLivePreview(target) {
+      if (livePreviewTarget === target) return;
+      livePreviewTarget = target;
+      if (el.meRow) el.meRow.classList.toggle("live-preview", target === "me");
+      if (el.oppRow) el.oppRow.classList.toggle("live-preview", target === "opponent");
+    }
+
     /* Swipe support (up = you, down = opponent, left = undo, right = stats). */
     var touch = null;
-    el.screen.addEventListener("touchstart", function (e) { touch = e.changedTouches[0]; }, { passive: true });
+    el.screen.addEventListener("touchstart", function (e) {
+      touch = scoringBlocked() ? null : e.changedTouches[0];
+    }, { passive: true });
+    el.screen.addEventListener("touchmove", function (e) {
+      if (!touch) return;
+      var t = e.changedTouches[0];
+      previewFromDrag(t.clientX - touch.clientX, t.clientY - touch.clientY);
+    }, { passive: true });
     el.screen.addEventListener("touchend", function (e) {
+      setLivePreview(null);
       if (!touch) return;
       var t = e.changedTouches[0], dx = t.clientX - touch.clientX, dy = t.clientY - touch.clientY;
       if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) { if (dx < 0) undo(); else toggleStatsGesture(); touch = null; e.preventDefault(); return; }
       if (Math.abs(dy) > 40) { award(dy < 0 ? "me" : "opponent"); touch = null; e.preventDefault(); return; }
       touch = null;
     }, { passive: false });
+    el.screen.addEventListener("touchcancel", function () { touch = null; setLivePreview(null); }, { passive: true });
+
+    // Pointer-drag equivalent for desktop (plan §G): preview-only -- mouse
+    // scoring stays exclusively on the click handler above (a native `click`
+    // always follows `mouseup` regardless of drag distance, so triggering
+    // award()/undo() from the drag itself would double-count the point).
+    var mouseDrag = null;
+    el.screen.addEventListener("mousedown", function (e) {
+      if (e.button !== 0 || scoringBlocked()) return;
+      mouseDrag = { x: e.clientX, y: e.clientY };
+    });
+    window.addEventListener("mousemove", function (e) {
+      if (!mouseDrag) return;
+      previewFromDrag(e.clientX - mouseDrag.x, e.clientY - mouseDrag.y);
+    });
+    window.addEventListener("mouseup", function () {
+      if (!mouseDrag) return;
+      mouseDrag = null;
+      setLivePreview(null);
+    });
   }
 
   /* Keyboard shortcuts (only on instances that opt in via data-keyboard).
@@ -522,6 +667,10 @@
   if (useKeyboard) document.addEventListener("keydown", function (e) {
     if (!el.play || el.play.hidden) return;
     if (e.key.toLowerCase() === "r") { startMatch(); e.preventDefault(); return; }
+    if (changeoverInfo) {
+      if (e.key === "Enter" || e.key === " ") { ackChangeover(); e.preventDefault(); }
+      return;
+    }
     if (statsOpen) {
       if (e.key === "Escape" || e.key.toLowerCase() === "s") { closeStats(); e.preventDefault(); }
       return;
@@ -536,10 +685,10 @@
 
   /* Guards mirror ScoreViewModel.toggleSecondServe: no-op when tracking is
      off, in Perpetual Points (disablesPointTracking), while the
-     categorisation sheet or stats overlay is open, or once the match is
-     complete. */
+     categorisation sheet, stats overlay, or changeover overlay is open, or
+     once the match is complete. */
   function canToggleSecondServe() {
-    return !!state && !isMatchComplete(state) && trackingEnabled && !state.cfg.disablesPointTracking && !sheetStep && !statsOpen;
+    return !!state && !isMatchComplete(state) && trackingEnabled && !state.cfg.disablesPointTracking && !sheetStep && !statsOpen && !changeoverInfo;
   }
   function toggleSecondServe() {
     if (!canToggleSecondServe()) return;
@@ -560,6 +709,8 @@
     sheetOutcome = null;
     sheetBusy = false;
     deferredEvents = null;
+    changeoverInfo = null;
+    hasCompletedFirstGame = false;
     if (sheetCommitTimer) { clearTimeout(sheetCommitTimer); sheetCommitTimer = null; }
     if (deferredToastTimer) { clearTimeout(deferredToastTimer); deferredToastTimer = null; }
     deferredToastEvents = null;
@@ -567,11 +718,31 @@
     if (el.setup) el.setup.hidden = true;
     el.play.hidden = false;
     showToast(null);
+
+    matchStartTime = Date.now();
+    if (footerTimer) clearInterval(footerTimer);
+    footerTimer = setInterval(tickFooter, 1000);
+
     render();
   }
 
+  function tickFooter() {
+    if (!el.foot || !state || isMatchComplete(state)) return;
+    el.foot.textContent = FORMAT_LABELS[state.format] + " · Singles" + elapsedTimerText();
+  }
+
+  // Plan §G: "🕐 mm:ss" -- deliberately simpler than the watch's "N m N s"/
+  // "N h N m N s" (calories, also part of the watch footer, are impossible
+  // in a browser and omitted per the plan's non-goals).
+  function elapsedTimerText() {
+    if (!matchStartTime) return "";
+    var secs = Math.max(0, Math.floor((Date.now() - matchStartTime) / 1000));
+    var m = Math.floor(secs / 60), s = secs % 60;
+    return " · 🕐 " + (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+  }
+
   function award(player) {
-    if (!state || isMatchComplete(state) || sheetStep || statsOpen) return;
+    if (scoringBlocked()) return;
 
     // Resolve any still-pending deferred toast from the previous point's
     // sheet commit before this point's sheet can open — otherwise it could
@@ -642,9 +813,10 @@
   function undo() {
     // Blocked while a sheet is open (plan §UI state machine) — use the
     // sheet's own "Undo point" button instead. Also blocked while the stats
-    // overlay is open (a left-swipe there should do nothing, not undo a
-    // point the viewer can't currently see change).
-    if (!history.length || sheetStep || statsOpen) return;
+    // or changeover overlay is open (a left-swipe there should do nothing,
+    // not undo a point the viewer can't currently see change / while
+    // scoring input is meant to be fully blocked).
+    if (!history.length || sheetStep || statsOpen || changeoverInfo) return;
     rollbackLastPoint();
     if (deferredToastTimer) { clearTimeout(deferredToastTimer); deferredToastTimer = null; }
     deferredToastEvents = null;
@@ -888,7 +1060,7 @@
     return !!state && trackingEnabled && !state.cfg.disablesPointTracking;
   }
   function canOpenStats() {
-    return !!state && !sheetStep;
+    return !!state && !sheetStep && !changeoverInfo;
   }
   function openStats() {
     if (!canOpenStats()) return;
@@ -898,6 +1070,11 @@
   }
   function closeStats() {
     statsOpen = false;
+    // "View stats" (§E) hides the completion banner to open the overlay --
+    // restore it on close so the match-complete panel (and its Play again
+    // button) isn't gone for good; a mid-match close has nothing to restore
+    // (the banner was never shown), so this only fires post-match.
+    if (state && isMatchComplete(state) && el.banner) el.banner.hidden = false;
     render();
   }
   function toggleStatsButton() {
@@ -1192,26 +1369,40 @@
     buildStatsBody();
   }
 
+  // Mirrors ContentView's match-complete panel (plan §E): "You Won! 🏆" green
+  // / "Opponent Won" white85%, "Match Complete" subtitle, a "📊 View stats"
+  // affordance gated on tracking having actually produced stats (mirrors
+  // `hasStats = statsTrackingEnabled && !currentMatchStats.isEmpty`).
+  // Any changeover tied to the match-ending point itself is intentionally
+  // dropped (matches the demo's prior behavior and real tennis semantics —
+  // there's nothing left to change ends for once the match is over).
   function applyEvents(events) {
     var winner = matchWinner(state);
     var matchEvt = events.filter(function (e) { return e.t === "matchWon"; })[0];
     if (matchEvt || (winner && isMatchComplete(state))) {
       var w = matchEvt ? matchEvt.winner : winner;
-      var msg = w === "me" ? "You win! 🎾" : "Opponent wins";
-      if (el.bannerText) el.bannerText.textContent = msg;
-      if (el.banner) el.banner.hidden = false; else showToast(msg);
+      var iWon = w === "me";
+      if (el.bannerTitle) {
+        el.bannerTitle.textContent = iWon ? "You Won! 🏆" : "Opponent Won";
+        el.bannerTitle.classList.toggle("win", iWon);
+        el.bannerTitle.classList.toggle("loss", !iWon);
+      }
+      var hasStats = statsTrackingEnabled() && stats.length > 0;
+      if (el.viewStats) el.viewStats.hidden = !hasStats;
+      if (el.banner) el.banner.hidden = false; else showToast(iWon ? "You win! 🎾" : "Opponent wins");
       return;
     }
-    // Pick the most significant transient toast.
+    // Game/set-won toasts are a demo-only aid the watch doesn't have (plan
+    // §F) -- kept as transient toasts. A changeover, if any, opens the
+    // blocking overlay; the two can coexist (e.g. a set-won toast alongside
+    // the tiebreak-begins overlay that immediately follows it).
     var setEvt = events.filter(function (e) { return e.t === "setWon"; })[0];
-    var tb = events.filter(function (e) { return e.t === "tiebreakStarted"; })[0];
     var game = events.filter(function (e) { return e.t === "gameWon"; })[0];
     var change = events.filter(function (e) { return e.t === "changeover"; })[0];
     if (setEvt) showToast(setEvt.winner === "me" ? "Set — you" : "Set — opponent");
-    else if (tb) showToast(change ? change.text : "Tiebreak!");
     else if (game) showToast(game.winner === "me" ? "Game — you" : "Game — opponent");
-    else if (change) showToast(change.text);
     else showToast(null);
+    if (change) openChangeover(change);
   }
 
   function showToast(text) {
@@ -1221,6 +1412,23 @@
     el.toast.textContent = text;
     el.toast.hidden = false;
     toastTimer = setTimeout(function () { if (el.toast) el.toast.hidden = true; }, 1900);
+  }
+
+  // ---- Changeover overlay (plan §F, mirrors ChangeoverAckOverlay) ----
+  function openChangeover(change) {
+    changeoverInfo = { symbol: change.symbol, reason: changeoverReasonText(change) };
+    render();
+  }
+  function ackChangeover() {
+    changeoverInfo = null;
+    render();
+  }
+  function renderChangeover() {
+    if (!el.changeover) return;
+    el.changeover.hidden = !changeoverInfo;
+    if (!changeoverInfo) return;
+    if (el.changeoverSymbol) el.changeoverSymbol.textContent = changeoverInfo.symbol;
+    if (el.changeoverReason) el.changeoverReason.textContent = changeoverInfo.reason;
   }
 
   function render() {
@@ -1249,29 +1457,44 @@
       if (el.oppPts) el.oppPts.textContent = watchPointLabel(state, "opponent");
     }
 
-    // Momentum strip (last 8 points, oldest first).
+    // Momentum strip (last 8 points, oldest first) — hidden once the match
+    // completes (plan §G, mirrors ContentView ~L171: the whole slot is
+    // omitted, not just dimmed).
     if (el.momentum) {
-      el.momentum.innerHTML = "";
-      for (var i = 0; i < 8; i++) {
-        var pip = document.createElement("span");
-        pip.className = "w-pip";
-        var idx = momentum.length - 8 + i;
-        if (idx >= 0) pip.classList.add(momentum[idx] === "me" ? "me" : "opp");
-        el.momentum.appendChild(pip);
+      el.momentum.hidden = isMatchComplete(state);
+      if (!el.momentum.hidden) {
+        el.momentum.innerHTML = "";
+        for (var i = 0; i < 8; i++) {
+          var pip = document.createElement("span");
+          pip.className = "w-pip";
+          var idx = momentum.length - 8 + i;
+          if (idx >= 0) pip.classList.add(momentum[idx] === "me" ? "me" : "opp");
+          el.momentum.appendChild(pip);
+        }
       }
     }
 
-    if (el.foot) el.foot.textContent = FORMAT_LABELS[state.format] + " · Singles";
+    if (el.foot) {
+      el.foot.textContent = FORMAT_LABELS[state.format] + " · Singles" + (isMatchComplete(state) ? "" : elapsedTimerText());
+    }
+
+    // First-game gesture hint (plan §G, mirrors ContentView's
+    // hasCompletedFirstGame): visible until the first game completes or the
+    // match ends (covers tiebreak-only formats where gameCount never moves),
+    // then stays gone for the rest of the match.
+    if (!hasCompletedFirstGame && (state.gameCount > 0 || isMatchComplete(state))) hasCompletedFirstGame = true;
+    if (el.firstGameHint) el.firstGameHint.hidden = hasCompletedFirstGame;
 
     renderSheet();
     renderStats();
+    renderChangeover();
 
-    // All scoring input is blocked while the categorisation sheet or the
-    // stats overlay is open (plan §UI state machine) — "New match" is the
-    // one exception (unguarded). The stats toggle itself stays enabled while
-    // open so it can still close the overlay.
+    // All scoring input is blocked while the categorisation sheet, the stats
+    // overlay, or the changeover overlay is open (plan §UI state machine) —
+    // "New match" is the one exception (unguarded). The stats toggle itself
+    // stays enabled while open so it can still close the overlay.
     var over = isMatchComplete(state);
-    var blocked = !!sheetStep || statsOpen;
+    var blocked = !!sheetStep || statsOpen || !!changeoverInfo;
     if (el.undo) el.undo.disabled = !history.length || blocked;
     if (el.ptMe) el.ptMe.disabled = over || blocked;
     if (el.ptOpp) el.ptOpp.disabled = over || blocked;

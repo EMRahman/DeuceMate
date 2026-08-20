@@ -128,15 +128,30 @@
                     </div>
                   </div>
 
+                  <div class="first-game-hint" data-first-game-hint aria-hidden="true">
+                    <div>↑ Win&nbsp;&nbsp;↓ Lose</div>
+                    <div>← Undo&nbsp;&nbsp;→ Stats</div>
+                  </div>
+
                   <div class="w-momentum" data-momentum aria-hidden="true"></div>
                   <div class="w-foot" data-foot></div>
 
-                  <div class="banner" data-banner hidden>
-                    <div class="banner-text" data-banner-text></div>
+                  <div class="banner" data-banner hidden role="dialog" aria-modal="true" aria-label="Match complete">
+                    <div class="banner-title" data-banner-title></div>
+                    <div class="banner-sub">Match Complete</div>
+                    <button type="button" class="btn btn-stats" data-view-stats hidden>📊 View stats</button>
                     <button type="button" class="btn btn-primary" data-again>Play again</button>
                   </div>
 
                   <div class="sheet" data-sheet hidden role="dialog" aria-modal="true" aria-label="Categorize the point"></div>
+
+                  <div class="changeover" data-changeover hidden role="dialog" aria-modal="true" aria-label="Changeover">
+                    <div class="changeover-card">
+                      <div class="changeover-symbol" data-changeover-symbol></div>
+                      <div class="changeover-reason" data-changeover-reason></div>
+                      <button type="button" class="changeover-ok" data-changeover-ok>OK</button>
+                    </div>
+                  </div>
 
                   <div class="stats-overlay" data-stats hidden role="dialog" aria-modal="true" aria-label="Match stats">
                     <div class="stats-head">
