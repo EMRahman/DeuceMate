@@ -48,19 +48,6 @@ struct MatchStatsView: View {
         self.totalCaloriesKcal = totalCaloriesKcal
     }
 
-    private enum SetFilter: Hashable {
-        case all
-        case set(Int)
-
-        func label(matchFormat: MatchFormat) -> String {
-            switch self {
-            case .all: return "All"
-            case .set(let i):
-                return matchFormat.config.isDecidingSuperTiebreak(setIndex: i) ? "TB" : "S\(i + 1)"
-            }
-        }
-    }
-
     private var meColor:  Color { viewModel.selectedTheme.colors.me }
     private var oppColor: Color { viewModel.selectedTheme.colors.opponent }
 
@@ -68,9 +55,7 @@ struct MatchStatsView: View {
     private var opponentLabel: String { "Opp" }
 
     private var availableSetFilters: [SetFilter] {
-        var result: [SetFilter] = [.all]
-        for index in 0..<setScores.count { result.append(.set(index)) }
-        return result
+        SetFilter.filters(setCount: setScores.count)
     }
 
     private var filteredStats: [PointStat] {
@@ -156,7 +141,7 @@ struct MatchStatsView: View {
                     HStack(spacing: 4) {
                         ForEach(availableSetFilters, id: \.self) { f in
                             Button { setFilter = f } label: {
-                                Text(f.label(matchFormat: matchFormat))
+                                Text(f.label(matchFormat: matchFormat, style: .short))
                                     .font(.system(size: 11, weight: .semibold))
                                     .padding(.vertical, 3)
                                     .frame(maxWidth: .infinity)
@@ -201,10 +186,7 @@ struct MatchStatsView: View {
     }
 
     private var setsForDuration: [Int] {
-        switch setFilter {
-        case .all: return Array(0..<setScores.count)
-        case .set(let i): return [i]
-        }
+        setFilter.setIndices(setCount: setScores.count)
     }
 
     private var shouldShowStatControls: Bool {
@@ -219,46 +201,10 @@ struct MatchStatsView: View {
 
         // In-progress: all-but-last are completed sets; last is the current set.
         if let record = resumableRecord {
-            let cfg = matchFormat.config
-            var parts: [String] = []
-            for (index, set) in setScores.dropLast().enumerated() {
-                if cfg.isDecidingSuperTiebreak(setIndex: index) && set.isTieBreak {
-                    parts.append("\(set.tieBreakPointsMe)-\(set.tieBreakPointsOpponent)")
-                } else if set.isTieBreak && set.gamesMe + set.gamesOpponent > 0 {
-                    parts.append("\(set.gamesMe)-\(set.gamesOpponent)(\(set.tieBreakPointsMe)-\(set.tieBreakPointsOpponent))")
-                } else if set.isTieBreak {
-                    parts.append("\(set.tieBreakPointsMe)-\(set.tieBreakPointsOpponent)")
-                } else {
-                    parts.append("\(set.gamesMe)-\(set.gamesOpponent)")
-                }
-            }
-            if let current = setScores.last {
-                if current.isTieBreak {
-                    parts.append("TB \(current.tieBreakPointsMe)-\(current.tieBreakPointsOpponent)")
-                } else {
-                    parts.append("\(current.gamesMe)-\(current.gamesOpponent)")
-                    if let gs = MatchRecord.gameScoreString(mePoints: record.currentPointsMe, oppPoints: record.currentPointsOpponent) {
-                        parts.append("(\(gs))")
-                    }
-                }
-            }
-            return parts.isEmpty ? nil : parts.joined(separator: "  ")
+            return CompactScoreLine.inProgress(record)
         }
 
-        // Completed match.
-        let cfg = matchFormat.config
-        let parts = setScores.enumerated().map { (index, set) -> String in
-            if cfg.isDecidingSuperTiebreak(setIndex: index) && set.isTieBreak {
-                return "\(set.tieBreakPointsMe)-\(set.tieBreakPointsOpponent)"
-            }
-            if set.isTieBreak && set.gamesMe + set.gamesOpponent > 0 {
-                return "\(set.gamesMe)-\(set.gamesOpponent)(\(set.tieBreakPointsMe)-\(set.tieBreakPointsOpponent))"
-            } else if set.isTieBreak {
-                return "\(set.tieBreakPointsMe)-\(set.tieBreakPointsOpponent)"
-            }
-            return "\(set.gamesMe)-\(set.gamesOpponent)"
-        }
-        return parts.joined(separator: "  ")
+        return CompactScoreLine.completed(setScores: setScores, matchFormat: matchFormat)
     }
 
     @ViewBuilder
@@ -270,7 +216,7 @@ struct MatchStatsView: View {
         if (!toShow.isEmpty && hasData) || hasActivity {
             VStack(spacing: 2) {
                 ForEach(toShow, id: \.self) { i in
-                    setDurationRow(for: i, label: toShow.count > 1 ? "\(SetFilter.set(i).label(matchFormat: matchFormat)) Duration" : "Duration")
+                    setDurationRow(for: i, label: toShow.count > 1 ? "\(SetFilter.set(i).label(matchFormat: matchFormat, style: .short)) Duration" : "Duration")
                 }
                 if let steps = displayedSteps, steps > 0 {
                     statRow("Steps", steps.formatted())
@@ -287,22 +233,16 @@ struct MatchStatsView: View {
     private func setDurationRow(for setIndex: Int, label: String) -> some View {
         let isFinished = setIndex < setScores.count - 1 || matchIsComplete || resumableRecord != nil
         if isFinished {
-            if let storedSecs = setElapsedSeconds[setIndex] {
-                statRow(label, "\(Int(storedSecs) / 60) m")
-            } else {
-                let setPoints = stats.filter { $0.setIndex == setIndex }
-                if let firstTS = setPoints.map(\.timestamp).min() {
-                    let lastTS = setPoints.map(\.timestamp).max() ?? firstTS
-                    statRow(label, "\(Int(lastTS.timeIntervalSince(firstTS)) / 60) m")
-                }
+            if let secs = MatchDurations.setElapsedSeconds(
+                setIndex: setIndex, stats: stats, stored: setElapsedSeconds
+            ) {
+                statRow(label, MatchDurations.minutesString(secs, unit: "m"))
             }
         } else if let sessionStart = currentSetSessionStart {
             let prior = setElapsedSeconds[setIndex] ?? 0
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 let total = prior + max(0, ctx.date.timeIntervalSince(sessionStart))
-                let mins = Int(total) / 60
-                let secs = Int(total) % 60
-                statRow(label, "\(mins) m \(secs) s")
+                statRow(label, MatchDurations.minutesSecondsString(total))
             }
         }
     }
@@ -374,12 +314,14 @@ struct MatchStatsView: View {
         meNum: Int, meDen: Int,
         oppNum: Int, oppDen: Int
     ) -> some View {
-        let meFrac  = meDen  > 0 ? Double(meNum)  / Double(meDen)  : 0.0
-        let oppFrac = oppDen > 0 ? Double(oppNum) / Double(oppDen) : 0.0
-        let meText  = meDen  > 0 ? "\(Int((meFrac  * 100).rounded()))%" : "—"
-        let oppText = oppDen > 0 ? "\(Int((oppFrac * 100).rounded()))%" : "—"
-        let meLabel  = meDen  > 0 ? "\(meNum)/\(meDen)"  : nil
-        let oppLabel = oppDen > 0 ? "\(oppNum)/\(oppDen)" : nil
+        let me  = RatioDisplay(numerator: meNum,  denominator: meDen)
+        let opp = RatioDisplay(numerator: oppNum, denominator: oppDen)
+        let meFrac  = me.fraction
+        let oppFrac = opp.fraction
+        let meText  = me.percentText
+        let oppText = opp.percentText
+        let meLabel  = me.countText
+        let oppLabel = opp.countText
 
         VStack(spacing: 2) {
             Text(label)

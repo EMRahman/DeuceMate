@@ -41,19 +41,6 @@ struct MatchDetailView: View {
 
     private enum Tab { case stats, points }
 
-    private enum SetFilter: Hashable {
-        case all
-        case set(Int)
-
-        func label(matchFormat: MatchFormat) -> String {
-            switch self {
-            case .all: return "All"
-            case .set(let i):
-                return matchFormat.config.isDecidingSuperTiebreak(setIndex: i) ? "TB" : "Set \(i + 1)"
-            }
-        }
-    }
-
     private var meColor:  Color { theme.colors.me }
     private var oppColor: Color { theme.colors.opponent }
 
@@ -184,9 +171,7 @@ struct MatchDetailView: View {
 
 
     private var availableSetFilters: [SetFilter] {
-        var result: [SetFilter] = [.all]
-        for i in 0..<record.setScores.count { result.append(.set(i)) }
-        return result
+        SetFilter.filters(setCount: record.setScores.count)
     }
 
     private var filteredStats: [PointStat] {
@@ -927,22 +912,11 @@ struct MatchDetailView: View {
 
     @ViewBuilder
     private var setDurationRows: some View {
-        let indices: [Int] = {
-            switch setFilter {
-            case .all: return Array(0..<record.setScores.count)
-            case .set(let i): return [i]
-            }
-        }()
+        let indices = setFilter.setIndices(setCount: record.setScores.count)
         ForEach(indices, id: \.self) { i in
             let label = indices.count > 1 ? "\(SetFilter.set(i).label(matchFormat: record.matchFormat)) Duration" : "Duration"
-            if let secs = record.setElapsedSeconds[i] {
-                statRow(label, "\(Int(secs) / 60) min")
-            } else {
-                let pts = record.stats.filter { $0.setIndex == i }
-                if let first = pts.map(\.timestamp).min(),
-                   let last  = pts.map(\.timestamp).max() {
-                    statRow(label, "\(Int(last.timeIntervalSince(first)) / 60) min")
-                }
+            if let secs = MatchDurations.setElapsedSeconds(record, setIndex: i) {
+                statRow(label, MatchDurations.minutesString(secs))
             }
         }
     }
@@ -955,8 +929,8 @@ struct MatchDetailView: View {
         let meWon  = meSummary.pointsWon
         let oppWon = total - meWon
         if total > 0 {
-            let mePct  = Int((Double(meWon)  / Double(total) * 100).rounded())
-            let oppPct = Int((Double(oppWon) / Double(total) * 100).rounded())
+            let mePct  = StatFormatting.roundedPercent(meWon,  of: total)
+            let oppPct = StatFormatting.roundedPercent(oppWon, of: total)
             VStack(spacing: 6) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 1) {
@@ -1063,12 +1037,14 @@ struct MatchDetailView: View {
         meNum: Int, meDen: Int,
         oppNum: Int, oppDen: Int
     ) -> some View {
-        let meFrac  = meDen  > 0 ? Double(meNum)  / Double(meDen)  : 0.0
-        let oppFrac = oppDen > 0 ? Double(oppNum) / Double(oppDen) : 0.0
-        let meText  = meDen  > 0 ? "\(Int((meFrac  * 100).rounded()))%" : "—"
-        let oppText = oppDen > 0 ? "\(Int((oppFrac * 100).rounded()))%" : "—"
-        let meLabel  = meDen  > 0 ? "\(meNum)/\(meDen)"  : nil
-        let oppLabel = oppDen > 0 ? "\(oppNum)/\(oppDen)" : nil
+        let me  = RatioDisplay(numerator: meNum,  denominator: meDen)
+        let opp = RatioDisplay(numerator: oppNum, denominator: oppDen)
+        let meFrac  = me.fraction
+        let oppFrac = opp.fraction
+        let meText  = me.percentText
+        let oppText = opp.percentText
+        let meLabel  = me.countText
+        let oppLabel = opp.countText
 
         VStack(spacing: 3) {
             Text(label)

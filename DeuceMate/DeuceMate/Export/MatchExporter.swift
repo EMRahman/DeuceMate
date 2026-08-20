@@ -313,7 +313,7 @@ nonisolated struct MatchExporter {
             let scoreStr = isTiebreakOnly ? "\(baseScore) tiebreak" : baseScore
             let durationStr: String
             if let secs = record.setElapsedSeconds[i], secs > 0 {
-                durationStr = "  (\(durationString(secs)))"
+                durationStr = "  (\(MatchDurations.minutesString(secs)))"
             } else {
                 durationStr = ""
             }
@@ -520,38 +520,24 @@ nonisolated struct MatchExporter {
         return "\(padded)\(value)"
     }
 
-    /// "76  (54%)" — used for points won/lost.
+    /// "76  (54%)" — used for points won/lost. The double gap keeps the
+    /// fixed-column layout readable.
     private static func countAndPct(_ num: Int, _ total: Int) -> String {
-        guard total > 0 else { return "0" }
-        let p = Int((Double(num) / Double(total)) * 100.0)
-        return "\(num)  (\(p)%)"
+        StatFormatting.countAndPercent(num, of: total, gap: "  ")
     }
 
     /// "3/8  (38%)" — used for break points.
     private static func fractionAndPct(_ num: Int, _ den: Int) -> String {
-        guard den > 0 else { return "0/0" }
-        let p = Int((Double(num) / Double(den)) * 100.0)
-        return "\(num)/\(den)  (\(p)%)"
-    }
-
-    private static func durationString(_ seconds: TimeInterval) -> String {
-        "\(Int(seconds) / 60) min"
+        StatFormatting.fractionAndPercent(num, den, gap: "  ")
     }
 
     private static func totalDurationString(record: MatchRecord) -> String {
-        let total: TimeInterval
-        if record.matchElapsedSeconds > 0 {
-            total = record.matchElapsedSeconds
-        } else if let end = record.endTime {
-            total = end.timeIntervalSince(record.startTime)
-        } else {
-            return "—"
-        }
+        guard let total = MatchDurations.matchElapsedSeconds(record) else { return "—" }
 
-        var parts = ["\(durationString(total)) total"]
+        var parts = ["\(MatchDurations.minutesString(total)) total"]
         for i in 0..<record.setScores.count {
             if let secs = record.setElapsedSeconds[i], secs > 0 {
-                parts.append("Set \(i + 1): \(durationString(secs))")
+                parts.append("Set \(i + 1): \(MatchDurations.minutesString(secs))")
             }
         }
         return parts.joined(separator: "  |  ")

@@ -27,7 +27,7 @@ extension MatchWebViewModel {
     }
 
     static func setLabel(_ record: MatchRecord, _ i: Int) -> String {
-        record.matchFormat.config.isDecidingSuperTiebreak(setIndex: i) ? "TB" : "Set \(i + 1)"
+        SetFilter.set(i).label(matchFormat: record.matchFormat)
     }
 
     private static func filterView(_ record: MatchRecord, key: String, label: String,
@@ -49,7 +49,7 @@ extension MatchWebViewModel {
         let total = meFull.totalPoints
         let meWon = meFull.pointsWon
         let oppWon = total - meWon
-        func pct(_ n: Int) -> Int { total > 0 ? Int((Double(n) / Double(total) * 100).rounded()) : 0 }
+        func pct(_ n: Int) -> Int { StatFormatting.roundedPercent(n, of: total) }
         return PointsWonVM(meWon: meWon, oppWon: oppWon, total: total, mePct: pct(meWon), oppPct: pct(oppWon))
     }
 
@@ -61,13 +61,8 @@ extension MatchWebViewModel {
         let indices: [Int] = setIndex.map { [$0] } ?? Array(record.setScores.indices)
         for i in indices {
             let lbl = indices.count > 1 ? "\(setLabel(record, i)) Duration" : "Duration"
-            if let secs = record.setElapsedSeconds[i] {
-                rows.append(LabeledValue(label: lbl, value: "\(Int(secs) / 60) min"))
-            } else {
-                let timestamps = record.stats.filter { $0.setIndex == i }.map(\.timestamp)
-                if let first = timestamps.min(), let last = timestamps.max() {
-                    rows.append(LabeledValue(label: lbl, value: "\(Int(last.timeIntervalSince(first)) / 60) min"))
-                }
+            if let secs = MatchDurations.setElapsedSeconds(record, setIndex: i) {
+                rows.append(LabeledValue(label: lbl, value: MatchDurations.minutesString(secs)))
             }
         }
         let split = SetActivitySplit(setCount: record.setScores.count, stats: record.stats,
@@ -197,15 +192,15 @@ extension MatchWebViewModel {
     /// count ("12/15") centred inside the bar; the side value shows the percent.
     private static func percent(_ label: String, subtitle: String? = nil,
                                 meNum: Int, meDen: Int, oppNum: Int, oppDen: Int) -> CmpRow {
-        let meFrac  = meDen  > 0 ? Double(meNum)  / Double(meDen)  : 0
-        let oppFrac = oppDen > 0 ? Double(oppNum) / Double(oppDen) : 0
+        let me  = RatioDisplay(numerator: meNum,  denominator: meDen)
+        let opp = RatioDisplay(numerator: oppNum, denominator: oppDen)
         return CmpRow(
             label: label, subtitle: subtitle, kind: .percent,
-            meValue:  meDen  > 0 ? "\(Int((meFrac  * 100).rounded()))%" : "—",
-            oppValue: oppDen > 0 ? "\(Int((oppFrac * 100).rounded()))%" : "—",
-            meFraction: meFrac, oppFraction: oppFrac,
-            meBarLabel:  meDen  > 0 ? "\(meNum)/\(meDen)"   : nil,
-            oppBarLabel: oppDen > 0 ? "\(oppNum)/\(oppDen)" : nil
+            meValue:  me.percentText,
+            oppValue: opp.percentText,
+            meFraction: me.fraction, oppFraction: opp.fraction,
+            meBarLabel:  me.countText,
+            oppBarLabel: opp.countText
         )
     }
 
