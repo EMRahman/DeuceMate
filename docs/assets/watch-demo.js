@@ -1070,6 +1070,11 @@
   }
   function closeStats() {
     statsOpen = false;
+    // "View stats" (§E) hides the completion banner to open the overlay --
+    // restore it on close so the match-complete panel (and its Play again
+    // button) isn't gone for good; a mid-match close has nothing to restore
+    // (the banner was never shown), so this only fires post-match.
+    if (state && isMatchComplete(state) && el.banner) el.banner.hidden = false;
     render();
   }
   function toggleStatsButton() {
