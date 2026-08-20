@@ -297,6 +297,66 @@ struct PhoneStatsStoreTests {
         #expect(store.loadHistory() == [replacement])
     }
 
+    // MARK: - Published archive health
+
+    /// Health is published on the main queue; this hop lets those updates land.
+    private func drainMainQueue() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
+    @Test func healthyArchiveRaisesNoWarning() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let store = fixture.makeStore()
+
+        store.appendMatch(record())
+        await drainMainQueue()
+
+        #expect(store.persistenceHealth.warning == nil)
+    }
+
+    @Test func unreadableArchiveSurfacesSuspendedWrites() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(at: fixture.historyURL, withIntermediateDirectories: true)
+
+        let store = fixture.makeStore()
+        store.appendMatch(record())
+        await drainMainQueue()
+
+        // Nothing this launch records will be persisted, so the user must be
+        // told rather than the condition living only in the unified log.
+        #expect(store.persistenceHealth.failure?.operation == .archiveWritesSuspended)
+        #expect(store.persistenceHealth.warning?.severity == .critical)
+    }
+
+    @Test func corruptArchiveSurfacesQuarantineWarning() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try Data("not json {{{".utf8).write(to: fixture.historyURL)
+
+        let store = fixture.makeStore()
+        await drainMainQueue()
+
+        #expect(store.persistenceHealth.failure?.operation == .archiveQuarantined)
+        #expect(store.persistenceHealth.warning?.severity == .warning)
+    }
+
+    @Test func acknowledgementClearsTheWarning() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try Data("not json {{{".utf8).write(to: fixture.historyURL)
+        let store = fixture.makeStore()
+        await drainMainQueue()
+        #expect(store.persistenceHealth.warning != nil)
+
+        await MainActor.run { store.acknowledgePersistenceWarning() }
+
+        #expect(store.persistenceHealth.warning == nil)
+    }
+
     @Test func unreadableTombstoneFileSuspendsWrites() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

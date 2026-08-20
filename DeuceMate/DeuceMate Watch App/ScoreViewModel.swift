@@ -4,7 +4,10 @@ import SwiftUI
 import Combine
 import HealthKit
 import CoreLocation
+import os
 import DeuceMateCore
+
+private let scoreStateLogger = Logger(subsystem: "com.deucemate.persistence", category: "WatchAppState")
 
 struct ChangeoverInfo: Identifiable {
     let id = UUID()
@@ -14,6 +17,13 @@ struct ChangeoverInfo: Identifiable {
 
 class ScoreViewModel: ObservableObject {
     private static let userDefaultsQueue = DispatchQueue(label: "com.deucemate.userdefaults", qos: .utility)
+
+    /// Persistence failures worth telling the user about — a failed live-match
+    /// save, an unreadable restore, or a history write the store rejected.
+    /// Written on the main queue only (`saveState`/`loadState` run there, and
+    /// `StatsStore` reports its outcomes back on main). Rendered by
+    /// `PersistenceWarningBanner` on the start screen.
+    @Published private(set) var persistenceHealth = PersistenceHealth()
 
     @Published var currentServer: Player? = nil
     @Published var gameCount: Int = 0
@@ -616,9 +626,18 @@ class ScoreViewModel: ObservableObject {
             do {
                 try BackupExcludedFileWriter.excludeFromBackup(at: self.stateFileURL)
             } catch {
-                #if DEBUG
-                print("Critical: Failed to exclude existing app state from backup")
-                #endif
+                // Not surfaced in-app: the match data is intact, only its
+                // backup exclusion is. `saveState` reapplies the flag on every
+                // write, so this resolves itself on the next point.
+                scoreStateLogger.error("Failed to exclude existing app state from backup: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+
+        // A store-level read/write failure means lost match data just as much as
+        // a failed live-state save, so fold both into the same published health.
+        if let reportingStore = statsStore as? PersistenceOutcomeReporting {
+            reportingStore.onPersistenceOutcome = { [weak self] outcome in
+                self?.applyPersistenceOutcome(outcome)
             }
         }
         UserDefaults.standard.register(defaults: [
@@ -1662,10 +1681,15 @@ class ScoreViewModel: ObservableObject {
             // when the watch is locked/off-wrist during a match. The transient
             // Health-bearing state is excluded from device backup after every save.
             try BackupExcludedFileWriter.write(state, to: stateFileURL)
+            applyPersistenceOutcome(.succeeded(.saveLiveMatch))
         } catch {
-            #if DEBUG
-            print("Critical: Failed to save state")
-            #endif
+            // A dropped save is lost match data, so this reaches the log *and*
+            // the start screen — a `#if DEBUG print` was invisible in release.
+            scoreStateLogger.error("Failed to save live match state: \(error.localizedDescription, privacy: .public)")
+            applyPersistenceOutcome(.failed(PersistenceFailure(
+                operation: .saveLiveMatch,
+                detail: error.localizedDescription
+            )))
         }
 
         // Push in-progress checkpoint to the phone via WatchConnectivity so
@@ -1706,7 +1730,28 @@ class ScoreViewModel: ObservableObject {
         }
     }
 
+    /// Fold a persistence outcome into `persistenceHealth`, publishing only
+    /// when the displayed warning actually changes (saves run on every point).
+    private func applyPersistenceOutcome(_ outcome: PersistenceOutcome) {
+        var updated = persistenceHealth
+        guard updated.apply(outcome) else { return }
+        persistenceHealth = updated
+    }
+
+    /// Dismiss the persistence warning banner. The next failure re-raises it.
+    func acknowledgePersistenceWarning() {
+        guard persistenceHealth.failure != nil else { return }
+        var updated = persistenceHealth
+        updated.acknowledge()
+        persistenceHealth = updated
+    }
+
     func loadState() {
+        // A missing file is a normal cold start; a file that exists but can't be
+        // read is a real failure, and one whose consequence (scoring starts from
+        // scratch) the user has to be told about — the catch path below resets
+        // in-memory state, and the next save then overwrites the unreadable file.
+        let hadSavedState = FileManager.default.fileExists(atPath: stateFileURL.path)
         do {
             let data = try Data(contentsOf: stateFileURL)
             let state = try JSONDecoder().decode(AppState.self, from: data)
@@ -1751,10 +1796,15 @@ class ScoreViewModel: ObservableObject {
                     currentSetSessionStart = Date()
                 }
             }
+            applyPersistenceOutcome(.succeeded(.restoreLiveMatch))
         } catch {
-            #if DEBUG
-            print("Warning: Failed to load previous state")
-            #endif
+            if hadSavedState {
+                scoreStateLogger.error("Failed to load previous live match state: \(error.localizedDescription, privacy: .public)")
+                applyPersistenceOutcome(.failed(PersistenceFailure(
+                    operation: .restoreLiveMatch,
+                    detail: error.localizedDescription
+                )))
+            }
             sets = [SetScore()]
             currentPointsMe = 0
             currentPointsOpponent = 0

@@ -74,7 +74,15 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
         // would prune its watch mirror and mis-badge storage locations. Bail
         // instead — `loadHistoryOrNil() == nil` means unreadable, not empty.
         guard let ids = StatsStore.shared.loadHistoryOrNil()?.map(\.id) else { return }
-        guard let payload = try? MatchSyncPayloadBuilder.watchManifest(ids) else { return }
+        let payload: [String: Any]
+        do {
+            payload = try MatchSyncPayloadBuilder.watchManifest(ids)
+        } catch {
+            // The phone keeps its previous manifest, so badges go stale rather
+            // than wrong; still worth a log, since nothing else reports it.
+            logger.error("Failed to build watch manifest payload: \(error.localizedDescription, privacy: .public)")
+            return
+        }
         transport.sendControl(payload, queueOnFailure: true)
     }
 

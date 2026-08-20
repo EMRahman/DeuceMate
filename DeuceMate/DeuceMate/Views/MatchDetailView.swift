@@ -2,7 +2,10 @@
 // Shows Me vs Opponent stats side-by-side with split bars; no Me/Opp toggle needed.
 import SwiftUI
 import UIKit
+import os
 import DeuceMateCore
+
+private let exportLogger = Logger(subsystem: "com.deucemate.export", category: "MatchDetailView")
 
 struct MatchDetailView: View {
     let record: MatchRecord
@@ -642,8 +645,16 @@ struct MatchDetailView: View {
                     : MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .opponent, playerNTRP: ntrp)
                 let h = MatchHTMLExporter.html(for: record, maxHR: maxHR, aiPromptMe: aiMe, aiPromptOpponent: aiOpp)
                 let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-                do { try Data(h.utf8).write(to: url, options: .atomic); return url }
-                catch { return nil }
+                do {
+                    try Data(h.utf8).write(to: url, options: .atomic)
+                    return url
+                } catch {
+                    // The interactive-page share option is dropped when this
+                    // fails (text exports still work), so log why rather than
+                    // letting the option quietly disappear.
+                    exportLogger.error("Failed to write interactive match export: \(error.localizedDescription, privacy: .public)")
+                    return nil
+                }
             }.value
             let (s, f, so, fo, url) = await (summary, full, summaryOpp, fullOpp, htmlURL)
             exportSummary = s; exportFull = f; exportSummaryOpp = so; exportFullOpp = fo

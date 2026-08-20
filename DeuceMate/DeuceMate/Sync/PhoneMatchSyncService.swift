@@ -565,24 +565,37 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         label: "com.deucemate.phone.watchmirror", qos: .utility
     )
 
+    private static let mirrorLogger = Logger(subsystem: "com.deucemate.sync", category: "WatchMirror")
+
+    /// The mirror is a disposable cache of the watch's state, so a failure here
+    /// is never surfaced in-app (the next watch sync refills it) — but it is
+    /// logged, because an empty mirror otherwise looks like "nothing on watch".
     private static func loadCachedMirror() -> [MatchRecord] {
-        guard let data = try? Data(contentsOf: mirrorFileURL),
-              let records = try? JSONDecoder().decode([MatchRecord].self, from: data)
-        else { return [] }
-        return records
+        guard FileManager.default.fileExists(atPath: mirrorFileURL.path) else { return [] }
+        do {
+            let data = try Data(contentsOf: mirrorFileURL)
+            return try JSONDecoder().decode([MatchRecord].self, from: data)
+        } catch {
+            mirrorLogger.error("Failed to read cached watch mirror: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
     }
 
     private static func cacheMirror(_ records: [MatchRecord]) {
         mirrorIOQueue.async {
-            guard let data = try? JSONEncoder().encode(records) else { return }
-            // The mirror is refreshed from background WatchConnectivity callbacks,
-            // which can fire while the device is locked — `.completeFileProtection`
-            // would make the write fail then. `UntilFirstUserAuthentication` keeps
-            // it writable after the first post-boot unlock.
-            try? data.write(
-                to: mirrorFileURL,
-                options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
-            )
+            do {
+                let data = try JSONEncoder().encode(records)
+                // The mirror is refreshed from background WatchConnectivity callbacks,
+                // which can fire while the device is locked — `.completeFileProtection`
+                // would make the write fail then. `UntilFirstUserAuthentication` keeps
+                // it writable after the first post-boot unlock.
+                try data.write(
+                    to: mirrorFileURL,
+                    options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+                )
+            } catch {
+                mirrorLogger.error("Failed to cache watch mirror: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 

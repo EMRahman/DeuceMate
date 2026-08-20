@@ -243,6 +243,58 @@ struct PastMatchesView: View {
             .onChange(of: store.pendingRestorePreview) { _, preview in
                 if preview != nil { showRestorePrompt = true }
             }
+            // Archive write failures are otherwise only in the unified log, so
+            // they get a dismissible banner pinned above the list — the archive
+            // is exactly what this screen claims to show.
+            .safeAreaInset(edge: .top) {
+                if let warning = store.persistenceHealth.warning {
+                    ArchiveHealthBanner(warning: warning) {
+                        store.acknowledgePersistenceWarning()
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Archive health
+
+    /// Dismissible banner for a failed/suspended archive write. Tapping the
+    /// close button hides it; a later failure raises it again.
+    private struct ArchiveHealthBanner: View {
+        let warning: PersistenceWarning
+        let onDismiss: () -> Void
+
+        private var tint: Color {
+            warning.severity == .critical ? .red : .orange
+        }
+
+        var body: some View {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: warning.systemImage)
+                    .foregroundStyle(tint)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(warning.title)
+                        .font(.subheadline.weight(.semibold))
+                    Text(warning.message)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss warning")
+            }
+            .padding(12)
+            .background(.bar)
+            .overlay(alignment: .bottom) {
+                Divider()
+            }
+            .accessibilityElement(children: .combine)
         }
     }
 

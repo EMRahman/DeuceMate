@@ -53,6 +53,10 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// `false` = pushed to the local replica, daemon upload in progress;
     /// `true` = both files confirmed uploaded.
     @Published private(set) var isBackupUploaded: Bool? = nil
+    /// Archive failures the user needs to know about: a canonical write that did
+    /// not reach disk, writes suspended after an unreadable archive, or a
+    /// corrupt file moved aside. Rendered by `ArchiveHealthBanner`.
+    @Published private(set) var persistenceHealth = PersistenceHealth()
     /// Whether the user's iCloud account/container is currently usable. When
     /// false the archive still works in full (it is device-local); backup
     /// pushes and initial restore pause until iCloud returns.
@@ -299,6 +303,16 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         tombstones = newTombstones
         let didWrite = writeCanonicalOnQueue()
         publishOnQueue()
+        if !didWrite && !canonicalWritesSuspended {
+            // Suspended writes are reported once at load with their own,
+            // higher-severity operation; don't downgrade that here.
+            reportPersistence(.failed(PersistenceFailure(
+                operation: .saveMatchHistory,
+                detail: "Canonical archive write failed"
+            )))
+        } else if didWrite {
+            reportPersistence(.succeeded(.saveMatchHistory))
+        }
         guard didWrite else {
             // During the initial restore phase the pending item is a restore
             // retry (reading from iCloud, not pushing to it) — leave it running.
@@ -313,6 +327,24 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         if storageConfiguration.startsICloudSync {
             scheduleICloudBackupSyncOnQueue(after: Self.backupPushDebounce, retriesRemaining: Self.backupRetryDelays.count)
         }
+    }
+
+    /// Fold a persistence outcome into the published health on main. Called from
+    /// the store queue; publishing only happens when the warning changes.
+    private func reportPersistence(_ outcome: PersistenceOutcome) {
+        DispatchQueue.main.async {
+            var updated = self.persistenceHealth
+            guard updated.apply(outcome) else { return }
+            self.persistenceHealth = updated
+        }
+    }
+
+    /// Dismiss the archive warning banner. A later failure raises it again.
+    func acknowledgePersistenceWarning() {
+        guard persistenceHealth.failure != nil else { return }
+        var updated = persistenceHealth
+        updated.acknowledge()
+        persistenceHealth = updated
     }
 
     private func publishOnQueue() {
@@ -359,11 +391,14 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     }
 
     private func loadCanonicalOnQueue() {
+        var didQuarantine = false
         switch Self.readCanonicalFile([UUID].self, at: canonicalTombstoneURL) {
         case .loaded(let ids):
             tombstones = Set(ids)
-        case .missing, .corrupt:
-            break // corrupt file was moved aside; initial restore may refill what it can
+        case .missing:
+            break
+        case .corrupt:
+            didQuarantine = true // moved aside; initial restore may refill what it can
         case .unreadable:
             canonicalWritesSuspended = true
         }
@@ -371,8 +406,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         switch Self.readCanonicalFile([MatchRecord].self, at: canonicalHistoryURL) {
         case .loaded(let loaded):
             loadedRecords = loaded
-        case .missing, .corrupt:
-            loadedRecords = [] // corrupt file was moved aside; initial restore may refill what it can
+        case .missing:
+            loadedRecords = []
+        case .corrupt:
+            didQuarantine = true // moved aside; initial restore may refill what it can
+            loadedRecords = []
         case .unreadable:
             canonicalWritesSuspended = true
             loadedRecords = []
@@ -410,6 +448,17 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         }
         if canonicalWritesSuspended {
             phoneStoreLogger.error("Canonical archive unreadable; running in-memory with writes suspended")
+            // The archive on disk is intact but nothing recorded from now on
+            // will be saved, so this cannot stay a log-only condition.
+            reportPersistence(.failed(PersistenceFailure(
+                operation: .archiveWritesSuspended,
+                detail: "Canonical archive unreadable; writes suspended for this launch"
+            )))
+        } else if didQuarantine {
+            reportPersistence(.failed(PersistenceFailure(
+                operation: .archiveQuarantined,
+                detail: "A corrupt archive file was moved aside"
+            )))
         }
     }
 
@@ -443,8 +492,17 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         } catch {
             phoneStoreLogger.error("Failed to decode \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
             let aside = url.appendingPathExtension("corrupt")
-            try? FileManager.default.removeItem(at: aside)
-            try? FileManager.default.moveItem(at: url, to: aside)
+            // Quarantine is best effort — the caller starts clean either way —
+            // but a failure here means the undecodable file is still in place
+            // and will be overwritten by the next write, so it gets logged.
+            do {
+                if FileManager.default.fileExists(atPath: aside.path) {
+                    try FileManager.default.removeItem(at: aside)
+                }
+                try FileManager.default.moveItem(at: url, to: aside)
+            } catch {
+                phoneStoreLogger.error("Failed to quarantine corrupt \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
             return .corrupt
         }
     }
