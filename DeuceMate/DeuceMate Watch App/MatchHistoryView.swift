@@ -153,14 +153,16 @@ struct MatchHistoryView: View {
     private func resultLabel(for record: MatchRecord) -> String {
         if record.isInProgress { return inProgressScoreLabel(for: record) }
         if record.matchFormat == .perpetualPoints, let tb = record.setScores.first {
-            return "Final \(tb.tieBreakPointsMe)-\(tb.tieBreakPointsOpponent)"
+            return "Final \(CompactScoreLine.setScore(tb, setIndex: 0, matchFormat: record.matchFormat))"
         }
         if record.matchFormat == .superTiebreak, let tb = record.setScores.first {
             let result = record.iWon == true ? "Won" : "Lost"
-            return "\(result) \(tb.tieBreakPointsMe)-\(tb.tieBreakPointsOpponent)"
+            return "\(result) \(CompactScoreLine.setScore(tb, setIndex: 0, matchFormat: record.matchFormat))"
         }
         if record.matchFormat == .perpetualSuperTiebreak {
-            let scores = record.setScores.map { "\($0.tieBreakPointsMe)-\($0.tieBreakPointsOpponent)" }
+            let scores = record.setScores.enumerated().map {
+                CompactScoreLine.setScore($1, setIndex: $0, matchFormat: record.matchFormat)
+            }
             let scoreStr = scores.count > 4
                 ? scores.prefix(3).joined(separator: ", ") + ", … (\(scores.count))"
                 : scores.joined(separator: ", ")
@@ -169,44 +171,16 @@ struct MatchHistoryView: View {
             return "\(result) \(scoreStr)"
         }
         let result = record.iWon == true ? "Won" : "Lost"
-        let cfg = record.matchFormat.config
-        let parts = record.setScores.enumerated().map { index, set -> String in
-            if cfg.isDecidingSuperTiebreak(setIndex: index) && set.isTieBreak {
-                return "\(set.tieBreakPointsMe)-\(set.tieBreakPointsOpponent)"
-            }
-            if set.isTieBreak && set.gamesMe + set.gamesOpponent > 0 {
-                return "\(set.gamesMe)-\(set.gamesOpponent)(\(set.tieBreakPointsMe)-\(set.tieBreakPointsOpponent))"
-            } else if set.isTieBreak {
-                return "\(set.tieBreakPointsMe)-\(set.tieBreakPointsOpponent)"
-            }
-            return "\(set.gamesMe)-\(set.gamesOpponent)"
-        }
-        return "\(result) \(parts.joined(separator: ", "))"
+        let scores = CompactScoreLine.completed(
+            setScores: record.setScores,
+            matchFormat: record.matchFormat,
+            separator: ", "
+        )
+        return "\(result) \(scores)"
     }
 
     private func inProgressScoreLabel(for record: MatchRecord) -> String {
-        guard !record.setScores.isEmpty else { return "In Progress" }
-        var parts: [String] = []
-        for set in record.setScores.dropLast() {
-            if set.isTieBreak && set.gamesMe + set.gamesOpponent > 0 {
-                parts.append("\(set.gamesMe)-\(set.gamesOpponent)(\(set.tieBreakPointsMe)-\(set.tieBreakPointsOpponent))")
-            } else if set.isTieBreak {
-                parts.append("\(set.tieBreakPointsMe)-\(set.tieBreakPointsOpponent)")
-            } else {
-                parts.append("\(set.gamesMe)-\(set.gamesOpponent)")
-            }
-        }
-        if let current = record.setScores.last {
-            if current.isTieBreak {
-                parts.append("TB \(current.tieBreakPointsMe)-\(current.tieBreakPointsOpponent)")
-            } else {
-                parts.append("\(current.gamesMe)-\(current.gamesOpponent)")
-                if let gs = MatchRecord.gameScoreString(mePoints: record.currentPointsMe, oppPoints: record.currentPointsOpponent) {
-                    parts.append("(\(gs))")
-                }
-            }
-        }
-        return parts.isEmpty ? "In Progress" : parts.joined(separator: "  ")
+        CompactScoreLine.inProgress(record) ?? "In Progress"
     }
 
 

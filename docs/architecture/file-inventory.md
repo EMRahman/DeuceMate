@@ -64,7 +64,7 @@ matches; it does not score them (except by sending validated commands to the wat
 | `DeuceMateApp.swift` | 50 | The iPhone app's entry point: wires up the archive store, sync service and announcer; resumes initial restore or backup push whenever the app returns to the foreground. | App plumbing |
 | `ContentView.swift` | 15 | The navigation root — essentially just opens the archive list. | App plumbing |
 
-## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (38 files)
+## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (42 files)
 
 The rulebook both apps use. No screens; pure logic — which makes it the cheapest
 place to test and the safest place to change.
@@ -80,6 +80,10 @@ place to test and the safest place to change.
 | `Stats/SetActivitySplit.swift` | 115 | Per-set breakdowns (duration, points, games) used by the set filters in stats views. | Stats |
 | `Stats/PointGamesScore.swift` | 115 | Internal building block for `PointMatchScore`: derives the running Me–Opponent games score within one set from `PointStat.gameScoreAtStart` resets, including safe reconciliation of a game won by the final tracked point. Reconciliation proves that point actually completed a regular game/tiebreak before crediting it, and suppresses suffix-only histories rather than mislabelling them. | Stats, Web export |
 | `Stats/SetScoreLabel.swift` | 75 | Canonical recorder/opponent-oriented formatter for regular sets, in-set tiebreaks, and tiebreak-only sets; also owns the shared server-relative-snapshot → recorder-oriented `GameScoreLabel` used by iOS and web point displays. | Stats, archive, exports |
+| `Stats/SetFilter.swift` | 50 | The "All / per-set" scope both stats screens and the web export slice a match by, including the label rule (a deciding super-tiebreak reads "TB") in long (`Set 2`) and watch-width short (`S2`) forms. | Stats, Web export |
+| `Stats/MatchDurations.swift` | 55 | Canonical set/match duration resolution — the recorded value first, then the span between the set's first and last tracked point — plus the minute and live minute-second strings every surface renders. | Stats, exports |
+| `Stats/StatFormatting.swift` | 60 | The count/ratio/percent strings the stats screens and both exports print (`76 (54%)`, `3/8 (38%)`), keeping the deliberate truncate-in-exports vs. round-in-headers distinction in one place; `RatioDisplay` resolves one comparison-row side into bar fraction, percent text and count label. | Stats, exports |
+| `Stats/CompactScoreLine.swift` | 60 | The narrow hyphen-separated score line the watch renders where `SetScoreLabel`'s en-dashed form will not fit: completed sets, tiebreak parentheticals and the in-progress line with the live game score. | Stats (watch) |
 | `Stats/PointMatchScore.swift` | 114 | Derives a typed full match-score snapshot immediately before every tracked point: authoritative prior sets plus the live games/tiebreak-points segment, with graceful omission for legacy or suffix-only histories. Shared by the iOS Points tab, graph selection summary, and HTML Points tab. | Stats, graphs, Web export |
 | `Stats/HRZone.swift` | ~95 | Heart-rate zone maths: zones 1–5 from a max heart rate (age-derived or manually overridden). `isUsableBirthYear` exposes the same acceptance test `resolveMaxHR` uses internally, so the tracking-status UI can tell "calibrated" from "running on the 190 bpm default" without comparing against 190 (also a legitimate age-derived result, age 30). | Pulse Coach, health, tracking status |
 | `Models/ScoreTypes.swift` | 185 | The shared vocabulary: players, singles/doubles, the six match formats and their rules (data-driven), set scores, doubles serve order. | Live scoring, match setup |
@@ -125,13 +129,13 @@ iOS/watchOS app targets). See `docs/screenshots/README.md` for usage.
 | `DeuceMateArchiveTool/main.swift` | ~120 | CLI over `ManualMatchArchiveBackup`/`MatchHTMLExporter`: `list` inspects an archive JSON file (index, UUID, date, format, duration, set scores, stat count), `webexport` renders one match's interactive HTML export to disk, `seed` writes a decoded archive into a simulator app container's canonical `MatchArchive/` files (via `HealthSidecarPolicy`) for visual QA of the import feature without driving the file-picker UI. | Manual archive backup, Web export, tooling |
 | `DeuceMateWebSnapshot/main.swift` | ~150 | macOS-only headless renderer: loads a local HTML file (or wraps a plain `.txt` file in a simple styled dark page) into an off-screen `WKWebView`, runs a sequence of steps — click a button by label (e.g. the web export's Stats/Points tab toggle) or `scroll:<0-100>` to a percentage of the page height — capturing a PNG via `WKWebView.takeSnapshot` after each step. No macOS Screen Recording permission needed since it's an in-process view snapshot, not a display capture. Generic; not DeuceMate-specific. | Web export, AI-coach prompt, tooling |
 
-## 4. Tests (46 files)
+## 4. Tests (50 files)
 
 Tests are the correctness record. The interesting ones all live against the shared
 package (no simulator needed). Red flags in any PR: tests deleted, skipped, or
 expected values rewritten to make a failure pass — that requires explicit approval.
 
-**Package tests — `DeuceMate/Packages/DeuceMateCore/Tests/DeuceMateCoreTests/` (32 files):**
+**Package tests — `DeuceMate/Packages/DeuceMateCore/Tests/DeuceMateCoreTests/` (36 files):**
 
 | File | Covers |
 |---|---|
@@ -152,6 +156,8 @@ expected values rewritten to make a failure pass — that requires explicit appr
 | `HRZoneTests.swift` / `SetActivitySplitTests.swift` | HR zone boundaries; per-set splits. |
 | `PointGamesScoreTests.swift` | The in-set games derivation: game boundaries, realistic completed 6–4 and 7–6 sets, final-point reconciliation, suffix suppression (including the mid-game one-game-offset guard), no-games formats, and legacy snapshots. |
 | `SetScoreLabelTests.swift` | Canonical regular/tiebreak-only set labels across all six formats and both perspectives, plus recorder-oriented game scores (serve orientation, deuce, advantage, and tiebreak points). |
+| `SetFilterTests.swift` / `MatchDurationsTests.swift` | The shared set-scope labels/indices, and duration resolution: recorded value wins, per-set point-span fallback, whole-match `matchElapsedSeconds` → start/end span, and the minute strings. |
+| `StatFormattingTests.swift` / `CompactScoreLineTests.swift` | The shared percent/ratio strings (truncated for exports, rounded for headers, `—` with no denominator) and the watch's compact score line across regular sets, tiebreaks, tiebreak-only formats and in-progress matches. |
 | `PointMatchScoreTests.swift` | Full pre-point match-score composition across all formats: prior sets, live games, regular-set breakers, deciding super-tiebreaks, suffix-only history, and legacy data. |
 | `SettingsCopyTests.swift` / `ICloudBackupCopyTests.swift` | Settings blurbs and the iCloud status rule. |
 | `MatchTrackingStatusTests.swift` | The pre-match tracking indicators: each facet's on/degraded/off resolution, format-suppressed point tracking (Perpetual Points → `—` regardless of the toggle), Health `notDetermined` vs. denied vs. unavailable, Pulse Coach calibration (including age 30 resolving to 190 without being mistaken for the default, and the retroactive-recompute copy), `collapsingPulseWhenHealthOff` keeping/dropping Pulse correctly, and chip copy/width invariants. |
