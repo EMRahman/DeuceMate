@@ -13,7 +13,7 @@ item parked on a product decision) is kept in full at the bottom under
 [Archive](#archive--completed-and-parked-items); it is history worth reading
 before re-opening the same ground, not a queue.
 
-**Item numbers are permanent.** `CLAUDE.md`, `SUBMISSION_REVIEW.md`,
+**Item numbers are permanent.** `CLAUDE.md`, `docs/release/SUBMISSION_REVIEW.md`,
 `KNOWN_LIMITATIONS.md` and several feature plans cite items by number
 ("TECHNICAL_DEBT #18"). Numbers are never renumbered or reused when the
 ordering changes, and a completed item keeps its number in the archive.
@@ -798,7 +798,7 @@ shorter first-launch authorization prompt, and date of birth out of the
 `NSHealthShareUsageDescription`, privacy policy, and App Review notes. (2) Removes
 the only genuinely HealthKit-derived value that lived in `UserDefaults` (the
 birth-year provenance flag), which mattered ahead of the device-backup exclusion
-work — see `SUBMISSION_REVIEW.md` Blockers 3 & 4. A user-entered birth year is not
+work — see `docs/release/SUBMISSION_REVIEW.md` Blockers 3 & 4. A user-entered birth year is not
 HealthKit data, so it can remain in `UserDefaults`. (3) The computed-percentile
 branch was dead (`maxHRComputed` was never written), so `resolveMaxHR` carried a
 permanently-nil parameter and a misleading doc comment. Zone math is otherwise
@@ -821,7 +821,8 @@ derivation entirely with Apple's own zones.
 values this cleanup prepared for now live in the phone's backup-excluded Health
 sidecar rather than its normally backed-up canonical history. The watch history
 and live-state files are also marked backup-excluded after every save. See
-`HealthSidecarPolicy`, `PhoneStatsStore`, and `SUBMISSION_REVIEW.md` Blocker 4.
+`HealthSidecarPolicy`, `PhoneStatsStore`, and `docs/release/SUBMISSION_REVIEW.md`
+Blocker 4.
 
 ---
 

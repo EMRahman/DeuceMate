@@ -821,7 +821,7 @@ Non-blocking Release build warnings to clean up:
 ### Required formats
 
 - [x] Prepare an upload-ready screenshot package under
-  [`docs/app-store-screenshots/`](docs/app-store-screenshots/README.md): five
+  [`docs/app-store-screenshots/`](../app-store-screenshots/README.md): five
   iPhone 6.9-inch PNGs at 1320 x 2868 and four physical Apple Watch Series 7
   (45 mm) PNGs at 396 x 484. Dimensions and absence of alpha were verified on
   6 August 2026.

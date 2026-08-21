@@ -793,7 +793,8 @@ struct SettingsView: View {
     }
 
     // The same public pages the App Store listing points at — keep in lockstep
-    // with APP_STORE_METADATA.md (Apple requires both URLs to resolve publicly).
+    // with docs/release/APP_STORE_METADATA.md (Apple requires both URLs to
+    // resolve publicly).
     private static let privacyPolicyURL = URL(string: "https://emrahman.github.io/DeuceMate/privacy.html")
     private static let supportSiteURL = URL(string: "https://emrahman.github.io/DeuceMate/support.html")
 

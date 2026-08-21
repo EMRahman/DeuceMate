@@ -2,7 +2,7 @@
 
 ## Context
 
-`SUBMISSION_REVIEW.md` Blocker 4 has two halves. The **backup** half is done:
+`docs/release/SUBMISSION_REVIEW.md` Blocker 4 has two halves. The **backup** half is done:
 the automatic iCloud archive is HealthKit-stripped (`ArchiveBackupPolicy`), the
 local Health sidecar is backup-excluded (`HealthSidecarPolicy`), and the watch's
 Health-bearing files are backup-excluded. The **export/sharing** half is open:
@@ -204,8 +204,9 @@ opponent export names only the fields it really carries.
   The alert stays always-shown (unlike the per-match skip) because it doubles as
   the bulk-export confirmation.
 - **PR 5 — `docs:`** Update `PRIVACY_POLICY.md`, `docs/privacy.html`,
-  `APP_STORE_METADATA.md`, and App Review notes to describe the per-export
-  disclosure; flip the Blocker 4 export items in `SUBMISSION_REVIEW.md` and
+  `docs/release/APP_STORE_METADATA.md`, and App Review notes to describe the
+  per-export disclosure; flip the Blocker 4 export items in
+  `docs/release/SUBMISSION_REVIEW.md` and
   re-audit the App Privacy answer (Item 5). (Doc touches may instead ride along
   with each PR — decide at review.)
 

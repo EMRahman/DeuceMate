@@ -94,5 +94,6 @@ values were generated or invented for the screenshots.
 
 These folders contain the screenshots uploaded to App Store Connect on 6 August
 2026. The separate hardware demo/review video described in
-`SUBMISSION_REVIEW.md` still needs to be recorded on the physical iPhone and
+`docs/release/SUBMISSION_REVIEW.md` still needs to be recorded on the physical
+iPhone and
 Apple Watch and attached in App Store Connect.
