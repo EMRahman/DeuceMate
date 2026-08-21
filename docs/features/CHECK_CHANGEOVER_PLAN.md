@@ -21,7 +21,7 @@ A new opt-in **Check changeover** setting adds:
 | `DeuceMate/DeuceMate Watch App/HomeView.swift` | Add settings toggle, confirmation step, confirm-button readiness gating, resume monitoring |
 | `DeuceMate/DeuceMate Watch App/ContentView.swift` | Compute expected bearing; pass heading data; render compass indicator |
 | `PRIVACY_POLICY.md` | Document heading/location permission use |
-| `APP_STORE_METADATA.md` | Align user-facing disclosure wording with plist permission purpose |
+| `docs/release/APP_STORE_METADATA.md` | Align user-facing disclosure wording with plist permission purpose |
 
 ---
 
@@ -413,7 +413,7 @@ Add a short section clarifying:
 - No background route tracking implied by this feature
 - Feature is optional and user-controlled via settings
 
-### `APP_STORE_METADATA.md`
+### `docs/release/APP_STORE_METADATA.md`
 Add/update matching disclosure language for review notes and listing text so it aligns with the plist permission message.
 
 ---

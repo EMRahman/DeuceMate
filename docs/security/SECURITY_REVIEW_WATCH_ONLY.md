@@ -1,7 +1,7 @@
 # Security Review — DeuceMate (Apple Watch)
 
 > Superseded for whole-app scope by
-> [`docs/security/SECURITY_REVIEW_2026-06.md`](docs/security/SECURITY_REVIEW_2026-06.md),
+> [`docs/security/SECURITY_REVIEW_2026-06.md`](SECURITY_REVIEW_2026-06.md),
 > which also covers the iPhone companion, the Core package, and the HTML export.
 > This document is kept as the original watch-only review.
 

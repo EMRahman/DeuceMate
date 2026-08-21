@@ -8,9 +8,18 @@
 #   screenshots/ -> marketing screenshots shown on the landing page
 #
 # The internal feature-planning docs under docs/features/ are NOT part of the
-# public site and are excluded from the published build. So is the App Store
-# advertisement-frame build under app-store-screenshots/marketing/ — that HTML
-# is a render source for PNGs, not a page anyone should be able to browse to.
+# public site and are excluded from the published build. Neither are the App
+# Store working documents under docs/release/ — the submission review carries
+# in-flight App Review state (rejection reasons, Resolution Center replies,
+# TestFlight build numbers) and the metadata file is the working copy behind
+# app-store-description.txt, which is the part meant to be public. So is the
+# App Store advertisement-frame build under app-store-screenshots/marketing/ —
+# that HTML is a render source for PNGs, not a page anyone should be able to
+# browse to.
+#
+# Note for future edits: files here have no YAML front matter, so Jekyll copies
+# them verbatim and serves them as raw Markdown. Anything added under docs/ is
+# publicly fetchable unless it is listed below.
 title: DeuceMate
 description: >-
   A reliable, privacy-focused tennis scoring app for Apple Watch with an iPhone
@@ -18,5 +27,7 @@ description: >-
 exclude:
   - features/
   - features/**
+  - release/
+  - release/**
   - app-store-screenshots/marketing/
   - app-store-screenshots/marketing/**

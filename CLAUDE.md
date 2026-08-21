@@ -173,6 +173,18 @@ from here (#3, #9, #13, #18), so they are never renumbered. Check it before
 starting a refactor so you don't re-discover, or contradict, a documented
 decision — including one already closed in the archive.
 
+App Store working docs live in `docs/release/` — `APP_STORE_METADATA.md` (store
+copy, App Review notes) and `SUBMISSION_REVIEW.md` (pre-flight review, blockers,
+device evidence). Security reviews live in `docs/security/`.
+
+⚠️ **`docs/` is the published GitHub Pages site** (source: `main` branch, `/docs`
+path — it serves the App Store Marketing, Support, and Privacy URLs). Files there
+have no YAML front matter, so Jekyll copies them verbatim and serves them as raw
+Markdown: **anything you add under `docs/` is publicly fetchable unless it is
+listed in `docs/_config.yml`'s `exclude:`**. `features/` and `release/` are
+excluded; `architecture/`, `audits/`, `security/` and `USER_GUIDE.md` are live on
+the site. Consider which side a new doc belongs on before adding it.
+
 ---
 
 ## 3. Build & test (run locally on macOS)

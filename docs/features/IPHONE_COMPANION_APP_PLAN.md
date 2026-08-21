@@ -303,7 +303,7 @@ parity — the iPhone gets:
 | `DeuceMate Watch App/ScoreViewModel.swift` | Hook a new `WatchMatchSyncService.send(record:)` call into the existing match-completion and `saveState` paths |
 | `DeuceMate.xcodeproj/project.pbxproj` | Add iOS app target, add Swift Package, add `WCSession` capability, embed watch app inside iOS app |
 | `PRIVACY_POLICY.md` | Add: "Match data may be transmitted between your iPhone and Apple Watch via Apple's WatchConnectivity framework. No data leaves your devices or is sent to any server." |
-| `APP_STORE_METADATA.md` | Update product description: "Now with iPhone companion to keep your match history forever." |
+| `docs/release/APP_STORE_METADATA.md` | Update product description: "Now with iPhone companion to keep your match history forever." |
 | `README.md` | Update platform badge + features section |
 
 ---
