@@ -1,0 +1,60 @@
+# Publishes the DeuceMate marketing site to GitHub Pages.
+#
+# The publishing boundary is the `path:` below and nothing else. Everything in
+# docs/website/ is uploaded; everything else in the repository — including the
+# rest of docs/ (architecture, audits, features, release, security, the
+# screenshot capture guide) — is not, and cannot be reached by URL.
+#
+# This replaces the legacy branch build, which served the whole of /docs and
+# relied on an exclude list in the now-deleted docs/_config.yml to keep internal
+# documents off the site. That list was a denylist: a new folder was public
+# until someone remembered to add it. The artifact path is an allowlist instead.
+#
+# The site is plain static HTML — no front matter, no Liquid — so nothing is
+# built here. upload-pages-artifact tars docs/website/ as-is and deploy-pages
+# serves that tarball at the site root, which is why the public URLs are
+# unchanged: docs/website/privacy.html stays
+# https://emrahman.github.io/DeuceMate/privacy.html. Apple has those URLs on
+# file for the App Store listing, so they must not move.
+#
+# Runs on ubuntu-latest, which is free for public repositories. It deploys; it
+# does not build or test the apps — per CLAUDE.md §0 the Swift toolchain is
+# never run in CI.
+name: Deploy site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/website/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it midway, so the live
+# site is never left half-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/website
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -13,22 +13,22 @@ DeuceMate is a lightweight, native Apple Watch app for scoring tennis matches in
 
 ## Screenshots
 
-| <img src="docs/screenshots/04-watch-scoreboard.png" width="260" alt="Apple Watch live scoreboard"> | <img src="docs/screenshots/01-hero-watch-iphone.png" width="380" alt="iPhone companion showing the live score"> |
+| <img src="docs/website/screenshots/04-watch-scoreboard.png" width="260" alt="Apple Watch live scoreboard"> | <img src="docs/website/screenshots/01-hero-watch-iphone.png" width="380" alt="iPhone companion showing the live score"> |
 |:--:|:--:|
 | **Gesture-first scoring, right on your wrist.** | **Watch it live on your phone — same score, real time.** |
-| <img src="docs/screenshots/15-watch-start-tracking.png" width="260" alt="Apple Watch start screen showing the remembered Singles / Best of 3 setup and the Points, Health and Pulse tracking chips"> | <img src="docs/screenshots/18-watch-changeover-sticky.png" width="260" alt="Apple Watch scoreboard with a sticky Players change ends reminder above the score"> |
+| <img src="docs/website/screenshots/15-watch-start-tracking.png" width="260" alt="Apple Watch start screen showing the remembered Singles / Best of 3 setup and the Points, Health and Pulse tracking chips"> | <img src="docs/website/screenshots/18-watch-changeover-sticky.png" width="260" alt="Apple Watch scoreboard with a sticky Players change ends reminder above the score"> |
 | **Start in three taps — and see what the match will record.** | **The changeover reminder that stays put.** |
-| <img src="docs/screenshots/02-points-momentum-graph.png" width="380" alt="Points momentum graph with heart rate and steps"> | <img src="docs/screenshots/03-match-stats.png" width="380" alt="Side-by-side match statistics"> |
+| <img src="docs/website/screenshots/02-points-momentum-graph.png" width="380" alt="Points momentum graph with heart rate and steps"> | <img src="docs/website/screenshots/03-match-stats.png" width="380" alt="Side-by-side match statistics"> |
 | **See your momentum — overlaid with heart rate and movement.** | **Pro-level analytics — 20+ stats, side by side.** |
-| <img src="docs/screenshots/07-points-outcomes-won.png" width="380" alt="Points graph filtered to points won"> | <img src="docs/screenshots/08-points-outcomes-lost.png" width="380" alt="Points graph filtered to points lost"> |
+| <img src="docs/website/screenshots/07-points-outcomes-won.png" width="380" alt="Points graph filtered to points won"> | <img src="docs/website/screenshots/08-points-outcomes-lost.png" width="380" alt="Points graph filtered to points lost"> |
 | **Filter to your winning points — see exactly where you took control.** | **Filter to lost points — pinpoint where the match slipped away.** |
-| <img src="docs/screenshots/05-pulse-coach-hr-zones.png" width="380" alt="Pulse Coach heart-rate zone win rates"> | <img src="docs/screenshots/06-themes.png" width="380" alt="Five court-inspired themes"> |
+| <img src="docs/website/screenshots/05-pulse-coach-hr-zones.png" width="380" alt="Pulse Coach heart-rate zone win rates"> | <img src="docs/website/screenshots/06-themes.png" width="380" alt="Five court-inspired themes"> |
 | **Discover the heart-rate zone you win in.** | **Five court-inspired themes.** |
-| <img src="docs/screenshots/09-ai-coach-launcher.png" width="380" alt="AI Coach — send your match to ChatGPT, Claude or Gemini"> | <img src="docs/screenshots/10-ai-coach-prompt.png" width="380" alt="Generated coaching prompt ready to paste into any AI"> |
+| <img src="docs/website/screenshots/09-ai-coach-launcher.png" width="380" alt="AI Coach — send your match to ChatGPT, Claude or Gemini"> | <img src="docs/website/screenshots/10-ai-coach-prompt.png" width="380" alt="Generated coaching prompt ready to paste into any AI"> |
 | **One tap to send your match data to an AI coach.** | **A structured prompt — with full context — ready for any AI.** |
-| <img src="docs/screenshots/11-ai-coach-stats.png" width="380" alt="Match stats included in the AI export"> | <img src="docs/screenshots/12-ai-coach-raw-data.png" width="380" alt="Full point-by-point data table in the AI export"> |
+| <img src="docs/website/screenshots/11-ai-coach-stats.png" width="380" alt="Match stats included in the AI export"> | <img src="docs/website/screenshots/12-ai-coach-raw-data.png" width="380" alt="Full point-by-point data table in the AI export"> |
 | **Complete stats analysis included automatically.** | **Every point, in order — so the AI spots patterns you missed.** |
-| <img src="docs/screenshots/13-web-export-points.png" width="380" alt="Interactive HTML web export — points momentum chart and point-by-point list"> | <img src="docs/screenshots/14-web-export-stats.png" width="380" alt="Interactive HTML web export — Me-vs-Opponent match statistics"> |
+| <img src="docs/website/screenshots/13-web-export-points.png" width="380" alt="Interactive HTML web export — points momentum chart and point-by-point list"> | <img src="docs/website/screenshots/14-web-export-stats.png" width="380" alt="Interactive HTML web export — Me-vs-Opponent match statistics"> |
 | **Share a match as one self-contained web page — no app required.** | **The full stats breakdown, filterable by set, right in the browser.** |
 
 ## Why DeuceMate Exists

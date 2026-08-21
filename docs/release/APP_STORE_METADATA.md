@@ -282,8 +282,8 @@ Suggested Apple Watch screenshot content (in order):
 **Privacy Policy URL (REQUIRED):** `https://emrahman.github.io/DeuceMate/privacy.html`
 
 **Note:** These point at the public GitHub Pages site served from the `/docs`
-folder (`docs/index.html` = marketing landing page, `docs/support.html` =
-support/help, `docs/privacy.html` = privacy policy).
+folder (`docs/website/index.html` = marketing landing page, `docs/website/support.html` =
+support/help, `docs/website/privacy.html` = privacy policy).
 **Pages must be enabled before submission:** repo **Settings → Pages → Build
 and deployment → Deploy from a branch → `main` / `/docs`**. GitHub Pages on a
 private repo requires GitHub Pro or higher; on the free plan the repository must

@@ -14,9 +14,12 @@ frameworks only — this is a hard rule, do not add packages).
 
 ## 0. Operational reality in this environment (READ FIRST)
 
-- **Do not run or trigger GitHub Actions for verification.** The workflow was
-  removed to eliminate macOS runner costs. Do not rely on GitHub CI as a
-  feedback loop or safety net.
+- **Do not run or trigger GitHub Actions for verification.** The macOS test
+  workflow was removed to eliminate runner costs, and nothing replaced it. Do
+  not rely on GitHub CI as a feedback loop or safety net. Two ubuntu workflows
+  do exist and neither builds or tests anything: `ci.yml` (a placeholder that
+  echoes OK on every PR) and `pages.yml` (deploys the marketing site — see §2).
+  Never add a Swift build or test step to either.
 - **Local tests are welcome when the active environment is a Mac with the
   Swift/Xcode toolchain available.** Before building or testing, check for
   `xcodebuild` / `swift` (for example with `xcodebuild -version`). If they are
@@ -177,19 +180,32 @@ App Store working docs live in `docs/release/` — `APP_STORE_METADATA.md` (stor
 copy, App Review notes) and `SUBMISSION_REVIEW.md` (pre-flight review, blockers,
 device evidence). Security reviews live in `docs/security/`.
 
-⚠️ **`docs/` is the published GitHub Pages site** (source: `main` branch, `/docs`
-path — it serves the App Store Marketing, Support, and Privacy URLs). Files there
-have no YAML front matter, so Jekyll copies them verbatim and serves them as raw
-Markdown: **anything you add under `docs/` is publicly fetchable unless it is
-listed in `docs/_config.yml`'s `exclude:`**. `features/` and `release/` are
-excluded; `architecture/`, `audits/`, `security/` and `USER_GUIDE.md` are live on
-the site. Consider which side a new doc belongs on before adding it.
+⚠️ **`docs/website/` — and only `docs/website/` — is the published GitHub Pages
+site.** It serves the App Store Marketing, Support, and Privacy URLs, so those
+URLs must not move. `.github/workflows/pages.yml` uploads that one folder as the
+Pages artifact; its `path:` **is** the publishing boundary. Everything else under
+`docs/` (architecture, audits, features, release, security, USER_GUIDE, the
+screenshot capture guide, app-store-screenshots) is unreachable by URL, with no
+exclude list to maintain.
+
+Practical consequences:
+- A new internal doc anywhere under `docs/` is private by default. Put it in the
+  subfolder that fits; nothing else is needed.
+- A file added to `docs/website/` **is** published the moment it merges. That
+  folder is the site, not a docs folder — keep guides, notes, and READMEs out.
+- The site is plain static HTML: no front matter, no Liquid, no Jekyll. There is
+  no `_config.yml` any more (the legacy `/docs` build and its exclude denylist
+  were replaced by the artifact allowlist).
+- The marketing screenshots live in `docs/website/screenshots/` because the site
+  shows them; the capture guide that documents them stays at
+  `docs/screenshots/README.md`, outside the published folder.
 
 ---
 
 ## 3. Build & test (run locally on macOS)
 
-There is no GitHub Actions CI. Run tests locally from Xcode or from a Mac CLI
+No CI builds or tests this project (the only workflows are a PR placeholder and
+the Pages deploy — §0). Run tests locally from Xcode or from a Mac CLI
 when `xcodebuild` is available. `swift test` also works for the Core package.
 If the active environment lacks the Swift/Xcode toolchain, skip command
 execution and verify statically instead (§0).
@@ -223,8 +239,8 @@ to run and is pure logic. Mirror the existing one-file-per-subject naming
 `MatchSyncRoundTripTests.swift`, `MatchStorageLocationTests.swift`,
 `SettingsCopyTests.swift`, …).
 
-**Tests exist for Xcode, not GitHub.** There is no CI — but the test suite is
-still the correctness record for the owner running Xcode locally. Keep it strong.
+**Tests exist for Xcode, not GitHub.** Nothing runs them on push — but the test
+suite is still the correctness record for the owner running Xcode locally. Keep it strong.
 - ✅ **Add** tests / **strengthen** assertions — encouraged (and required for
   logic changes, above).
 - ✅ **Update** a test for behaviour you changed *on purpose* — fine; say so in

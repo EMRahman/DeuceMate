@@ -16,8 +16,8 @@ the symbol if a reference has drifted.
 
 ## Why
 
-The "Interactive demo" on the product site (`docs/try.html` +
-`docs/assets/watch-demo.js`/`.css`) is the site's main conversion tool — it is
+The "Interactive demo" on the product site (`docs/website/try.html` +
+`docs/website/assets/watch-demo.js`/`.css`) is the site's main conversion tool — it is
 what a visitor plays with before deciding to install. Today it faithfully ports
 the **scoring engine** (all six formats, tiebreaks, server rotation, undo) but
 none of the app's headline differentiator: **post-point outcome tracking** and
@@ -83,7 +83,7 @@ The implementer should treat these files as the specification of record. Do
    functions over plain objects, exposed on a `window.DeuceMateTracking` global
    (mirroring the existing `window.DeuceMateScoring`) so the owner can verify
    from the console.
-2. **New pure logic goes in a new file, `docs/assets/watch-demo-tracking.js`**,
+2. **New pure logic goes in a new file, `docs/website/assets/watch-demo-tracking.js`**,
    loaded in `try.html` *before* `watch-demo.js`. The existing engine block in
    `watch-demo.js` is stable and tested-by-use — do not refactor it. UI changes
    go in `watch-demo.js`'s controller section and `watch-demo.css`.
@@ -380,7 +380,7 @@ demo-only aid the watch doesn't have; keeping them is fine.
 ## Phases (one PR each, independently shippable)
 
 ### Phase 1 — Tracking foundation + second-serve context
-Create `docs/assets/watch-demo-tracking.js` (pure: pending-point builder,
+Create `docs/website/assets/watch-demo-tracking.js` (pure: pending-point builder,
 outcome availability, pill routing, stat-record constructors; export as
 `window.DeuceMateTracking`). Wire the second-serve flag (§A), the `.w-card`
 click-scope change, extended undo entries (§Undo model), and silent

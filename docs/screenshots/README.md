@@ -1,6 +1,10 @@
 # Screenshots — capture guide
 
-This folder holds the marketing screenshots shown in the [root README](../../README.md).
+How to capture the marketing screenshots shown in the [root README](../../README.md)
+and on the product site. The PNGs themselves live in
+[`docs/website/screenshots/`](../website/screenshots/) because they are published
+with the site; this guide stays here, outside the published folder.
+
 Most of them (02, 03, 05, 07, 08, 10, 11, 12, 13, 14) are now captured by
 reusable automation instead of by hand — see "How to capture" below. The rest
 (01, 04, 06) still need a person driving a simulator.
@@ -74,8 +78,8 @@ xcodebuild test -project DeuceMate.xcodeproj -scheme "DeuceMate" \
   -only-testing:DeuceMateUITests/ScreenshotTests
 ```
 Screenshots land in `DEUCEMATE_SCREENSHOT_OUTPUT_DIR` (defaults to a temp
-folder if unset) — copy the ones you want into this folder under the names in
-the table above.
+folder if unset) — copy the ones you want into `docs/website/screenshots/` under
+the names in the table above.
 
 ### AI-coach prompt shots (10, 11, 12)
 
@@ -180,7 +184,8 @@ rather than force a broken composite.
 3. For a true side-by-side hero composite, frame both captures with official
    **Apple device frames** (Apple Design Resources) and place them side by
    side in an image editor — unframed screenshots look unfinished.
-4. Save the file here under the exact name in the table above (PNG).
+4. Save the file in `docs/website/screenshots/` under the exact name in the
+   table above (PNG).
 
 For the Watch feature shots (15–18), the states are reached in this order from
 one sitting, which is also the order they tell the story in:

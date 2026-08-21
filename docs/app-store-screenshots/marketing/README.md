@@ -1,8 +1,8 @@
 # App Store advertisement frames — build source
 
 The three art-directed frames that lead the iPhone gallery. Everything here is a
-**render source**, not a published page: `docs/_config.yml` excludes this folder
-from GitHub Pages.
+**render source**, not a published page: it sits outside `docs/website/`, the only
+folder the Pages workflow uploads, so it is never served from GitHub Pages.
 
 ```bash
 ./build.sh

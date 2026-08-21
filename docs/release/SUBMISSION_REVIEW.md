@@ -272,7 +272,7 @@ metadata/docs, including every change merged after 16 July — PRs #68–#70) fo
 - [x] Added the iPhone-side HealthKit prompt to the Blocker 3 device matrix and
   the final smoke test — the previous matrix was Watch-only.
 - [x] Reconciled the remaining "iCloud backup" wording in `SUPPORT_PAGE.md`,
-  `docs/support.html`, and the `docs/index.html` badge to the iCloud Drive
+  `docs/website/support.html`, and the `docs/website/index.html` badge to the iCloud Drive
   archive terminology agreed in Item 5.
 
 ---
@@ -471,7 +471,7 @@ Required work:
   workout behavior; no separate in-app toggle is required by the chosen design.
 - [x] Expand the Watch read-purpose string to accurately mention steps and
   walking/running distance.
-- [x] Update `PRIVACY_POLICY.md`, `docs/privacy.html`, `APP_STORE_METADATA.md`,
+- [x] Update `PRIVACY_POLICY.md`, `docs/website/privacy.html`, `APP_STORE_METADATA.md`,
   and App Review notes to describe the implemented behavior.
 - [x] Test the manually reproducible fresh-install grant, denial, partial
   authorization, and revocation states. (The date-of-birth authorization case was
@@ -625,10 +625,10 @@ Required work:
   Completed across store metadata, privacy, README, marketing, support, user
   guide, App Review notes, and current iPhone/Watch copy.
 - [x] Reconcile `APP_STORE_METADATA.md`, `PRIVACY_POLICY.md`,
-  `docs/privacy.html`, `docs/support.html`, README, App Review notes, and in-app
+  `docs/website/privacy.html`, `docs/website/support.html`, README, App Review notes, and in-app
   copy from one agreed description of the implemented behavior.
 - [x] Update the policy's storage locations, file-protection class, and date.
-- [x] Point Settings -> Support & FAQ directly to `docs/support.html` rather
+- [x] Point Settings -> Support & FAQ directly to `docs/website/support.html` rather
   than the marketing root.
 - [x] **Data Not Collected** is the recommended App Privacy answer under
   [Apple's current definition](https://developer.apple.com/app-store/app-privacy-details/).
