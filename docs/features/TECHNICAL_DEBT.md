@@ -40,6 +40,7 @@ accurate docs, navigable files, and text-level checks are its substitutes.
 | 16 | Health/Privacy | Drop HealthKit date-of-birth read; user-entered birth year; remove dead computed max-HR path | High | **Done** |
 | 17 | Duplication | De-duplicate set filters, durations, percent strings and the compact score line into Core | Medium | **Done** |
 | 18 | Persistence | Persisted enums are additive-only; archives decode atomically | Medium | Rule documented; guards backlog |
+| 19 | Persistence | Version the persisted JSON formats (forward compatibility) | Medium | Backlog |
 
 ---
 
@@ -174,6 +175,28 @@ indicator on the history or settings screen is enough.
 
 **Why low:** Saves rarely fail in practice. This is a hardening measure rather
 than a fix for an active bug.
+
+**Scope correction (August 2026).** That "Low / not an active bug" rating is
+sound for what this item describes, but the item only ever described the *save*
+side. The **read** side was never written down: `loadState()` throwing on a file
+that exists resets ~20 fields, and `saveState()` — which runs on the very next
+point — then writes over the file it just failed to read. A merely unreadable
+checkpoint therefore became permanently gone, within one point, silently. The
+same principle was already understood and applied to the watch *archive* (see
+#4b's read-failure guard); the live-state file simply never got it, and nothing
+recorded the asymmetry.
+
+**Attempted and closed: PR #108.** It reported failures through a shared
+`PersistenceHealth` model in Core, moved the unreadable file aside before the
+reset, promoted a failed restore to `.critical`, and added a scoreboard chip so
+a mid-match failure is visible where it happens. Verified green locally (Core,
+watch and iOS suites). Closed unmerged pending a wider look at persistence
+recovery rather than because the work was wrong — the surrounding questions
+(#18's atomic decode and backup floor, #19's versioning) shape what the right
+shape of a fix is, and were still open. Worth reading before re-attempting;
+findings raised against it were stale inventory counts, user-facing copy
+promising a recovery path that does not exist, no cleanup of the quarantined
+file, and `persistenceHealth` not clearing on `resetMatch()`.
 
 ---
 
@@ -633,6 +656,12 @@ whole archive. The cascade, worst first:
 4. **Live match reset.** `loadState()`'s catch resets in-memory state and the
    next `saveState()` overwrites `appState.json`.
 
+**The same break runs in both directions.** *Adding* a case is safe for a new app
+reading old data, but an **old** app reading data a newer one wrote hits the
+identical `DecodingError` — `init(rawValue:)` returns `nil` for a case it does
+not have. So "additive-only" protects new-reads-old; nothing here protects
+old-reads-new. See #19.
+
 **Rule (documented):** `CLAUDE.md` §4 now carries a "Retire a case in a persisted
 enum" recipe — keep the case decodable forever, hide it from the user-facing list
 (`PointOutcome.userSelectable` is the existing pattern), and never fall back to a
@@ -679,3 +708,117 @@ Release.
 **Key files:** `ScoreTypes.swift`, `PointStat.swift`, `StatsStore.swift`,
 `PhoneStatsStore.swift` (`readCanonicalFile`, `pushBackupOnQueue`),
 `ScoreViewModel.swift` (`AppState`, `loadState`).
+
+---
+
+### 19 — Version the persisted JSON formats (forward compatibility)
+
+**What:** Backward compatibility — a *new* app reading *old* data — is well
+covered: the §4 `decodeIfPresent` recipe, enforced in review and pinned by
+`MatchRecordCodingTests`. The opposite direction has no defence and, more
+importantly, **no way to detect that it is happening**.
+
+Current state of the four persisted formats:
+
+| Format | Version field | Behaviour on data from a newer app |
+|---|---|---|
+| `appState.json` (watch live state) | `version: Int` — **present, required, and never read** (decoded at `ScoreViewModel.swift:528`, branched on nowhere) | none |
+| `matchHistory.json` (watch + phone canonical archive) | none — a bare `[MatchRecord]` array | none |
+| WatchConnectivity wire format | none | none |
+| Manual archive export/import | `schemaVersion`, rejected via `ArchiveError.unsupportedSchemaVersion` | detected and refused legibly — but see the equality-gate caveat below |
+
+**Why this repo is exposed, specifically.** The generic version of this risk is
+about staggered updates across devices. Here the real path is closer to home:
+the **watch app and the iPhone app are separate installs that can sit on
+different versions**, and they exchange `MatchRecord` JSON continuously. An App
+Store downgrade never happens; a mixed-version pair happens routinely.
+
+What that looks like today, if a newer watch sends a case an older phone lacks:
+
+- **Live payloads degrade correctly.** `SyncIncomingPayload.decode` wraps each
+  key in its own `do`/`catch` and emits `.decodeError(key:error:)`; the phone
+  logs it and drops that one event, keeping the rest.
+- **History pushes fail wholesale.** `MatchSyncMessage.decodeArray` decodes
+  `[MatchRecord]` in a single call, so one unknown value kills the entire
+  transfer. Nothing crashes and nothing is reported — the sync simply
+  accomplishes nothing until both sides update. Same atomic-array amplifier as
+  #18.
+
+**Proposed fix**, cheapest first:
+
+1. **Read the version that already exists.** `AppState.version` is stored and
+   required but inert. A `guard` against a version higher than the build
+   understands costs almost nothing and is already wired through the codec.
+2. **Give the archive and the wire format a top-level version.** Copy
+   `ManualMatchArchiveBackup`'s *envelope and its user-facing error* — it is the
+   one format that fails legibly rather than mysteriously — but **not** its
+   comparison. `validate` gates on `schemaVersion == supportedSchemaVersion`
+   (strict equality), which is indistinguishable from `<=` only because 1 is the
+   only version that has ever existed. A persistent store needs three branches,
+   not one:
+   - `version > supported` → refuse to read **and** refuse to write over it
+   - `version < supported` → migrate, or decode via the older shape
+   - `version == supported` → normal path
+3. **Make the gate a refusal to _write_, not just to read.** This is the half
+   that actually prevents data loss: an old client that encounters a newer
+   version must leave the file alone rather than resetting and saving over it.
+   A read-only refusal still loses the data on the next save.
+
+Two caveats on (2). First, a version gate only fires if someone remembers to
+bump the number: adding an enum case does not bump `supportedSchemaVersion`
+automatically, so an export from a newer app would still claim version 1, sail
+past the check, and throw a raw `DecodingError` instead of the clean message.
+Worth a comment next to that constant.
+
+Second — and this is a latent bug in `ManualMatchArchiveBackup` itself, not just
+a bad pattern to copy — **the first bump breaks every existing export.** The
+moment `supportedSchemaVersion` becomes 2, the equality check rejects every
+version-1 archive a user has already saved, with "this archive was created by a
+different version of DeuceMate". Their own backup file becomes unimportable by
+the newer app, which is the opposite of what a backup format is for. Relaxing
+the check to `<=` plus per-version decoding should happen *before* the first
+bump, not as part of it.
+
+**External guidance reviewed, and what applies here.** This is a recognised
+class of bug (decode failure → treat as empty → write the empty state back →
+the empty file becomes the truth). Assessed against this codebase:
+
+*Applies:*
+
+- Decode-failure-then-write-empty is the phone's exact path today
+  (`readCanonicalFile` → `.corrupt` → `loadedRecords = []` →
+  `pushBackupOnQueue` with no floor). Tracked in #18.
+- "Never silently replace on failure; move the original aside." Partially done:
+  the watch `StatsStore` read guard (#4b) and the phone's `.corrupt` quarantine
+  both do it; `appState.json` does not.
+- Version plus refuse-to-overwrite-newer. Missing everywhere. The manual archive
+  has the version and detects a mismatch, but refuses symmetrically rather than
+  only refusing *newer*, and it never writes back over the imported file, so it
+  does not demonstrate the overwrite half either.
+
+*Does not apply — recorded so it is not re-litigated:*
+
+- **`Codable` blobs in `UserDefaults`/`@AppStorage`.** DeuceMate stores only
+  scalars there (`Bool`, `Int`, `String`, `Double`), so the "decode fails →
+  default returned → default saved over the data" variant has no foothold.
+- **`NSUbiquitousKeyValueStore` overwrite limits.** Not used.
+- **Multi-device last-writer-wins propagation.** The iCloud copy is a one-way
+  backup: it is read only during initial local archive setup, gated by
+  `archiveInitialized.json`. The exposure is "an empty local archive overwrites
+  the backup", not "device A wipes device B".
+- **Core Data / SwiftData + CloudKit.** Genuinely more robust for schema
+  evolution, and the reason CloudKit locks production schemas to additive
+  changes — but adopting it is a re-architecture of the whole persistence layer.
+  Noted for completeness, not proposed.
+
+*One correction to the general advice:* the usual compatibility table says
+"field removed → usually fine". That holds for **fields** — `JSONDecoder`
+ignores unknown keys, pinned by `MatchRecordCodingTests`. It does **not** hold
+for **enum cases**, where both adding and removing break the reader. That is
+this repo's actual exposure, and it is why #18 exists as a separate item.
+
+**Key files:** `ScoreViewModel.swift` (`AppState.version`),
+`Persistence/StatsStoring.swift` (the unversioned archive codec),
+`Sync/MatchSyncMessage.swift` (`decodeArray`), `Sync/SyncIncomingPayload.swift`,
+`Persistence/ManualMatchArchiveBackup.swift` (envelope and error copy worth
+reusing; its equality gate is not).
