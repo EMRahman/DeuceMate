@@ -83,14 +83,15 @@ the compiler does not connect: a `MatchSyncKey` constant, a `UserDefaults`
 call in `ScoreViewModel`, and a matching call in `WatchMatchSyncService` /
 `PhoneMatchSyncService` (plus `@AppStorage` literals in the iPhone
 `SettingsView`). Changing one and missing another produces a silent
-settings-sync bug. `ScoreViewModel` has 29 `UserDefaults.standard` call sites;
+settings-sync bug. `ScoreViewModel` has 23 executable `UserDefaults.standard`
+call sites (re-counted 21 August 2026; a 24th grep match is a doc comment);
 only 7 use `MatchSyncKey` directly.
 
 **It is worse than simple duplication — one setting already uses three
 different strings.** The announcements toggle is persisted on the watch as
-`"phoneAnnouncementsEnabled"` (`ScoreViewModel.swift:87`), travels the wire as
+`"phoneAnnouncementsEnabled"` (`ScoreViewModel.swift:89`), travels the wire as
 `MatchSyncKey.announcementsEnabled` = `"announcementsEnabled"`
-(`MatchSyncMessage.swift:55`), and is persisted on the phone as
+(`MatchSyncMessage.swift:49`), and is persisted on the phone as
 `"liveAnnouncementsEnabled"` (`LiveAnnouncementService.swift:19`). So the §4
 recipe's "local key == wire key" rule already has a legacy exception, and an
 agent grepping only the wire key will miss both local stores. Do **not**
@@ -352,10 +353,11 @@ reusing; its equality gate is not).
 ### 4a — Silent save-failure handling and the unreadable-live-state path
 
 **What:** The watch's live-state save failure path is a `print` inside
-`#if DEBUG` (`ScoreViewModel.swift:1625`) — completely invisible in a release
-build. The two history stores do log failures through `os.Logger`
-(`StatsStore.swift:74–76` on the watch, `PhoneStatsStore.swift:293` on the
-phone), which reaches the unified log but is never surfaced in-app. For a
+`#if DEBUG` (`ScoreViewModel.swift:1666`, in `saveState()`) — completely
+invisible in a release build. The two history stores do log failures through
+`os.Logger` (`StatsStore.swift:110` read / `:124` write on the watch,
+`PhoneStatsStore.swift:356` on the phone), which reaches the unified log but
+is never surfaced in-app. For a
 scoring app where a failed save means lost match data, failures should be
 visible to the user (at minimum a brief in-app banner on the next active
 interaction).
@@ -530,7 +532,8 @@ resolution — was removed by the canonical/backup rewrite: mutations
 now touch only local files; `url(forUbiquityContainerIdentifier:)` runs solely
 inside async backup passes on the store's queue.)
 
-The watch's `StatsStore` (78 lines) uses the same queue-confined pattern. If
+The watch's `StatsStore` (127 lines — grown by the #4b read-failure guard)
+uses the same queue-confined pattern. If
 the migration happens, do both stores together so the two sides keep
 symmetrical concurrency semantics.
 
@@ -583,7 +586,7 @@ watchOS.
 static reducer — `pointWon(by:in:) -> ScoringResult`. State is a value type
 (`ScoringState`), side-effects are typed `ScoringEvent`s returned in the
 result. `ScoreViewModel` now delegates to the engine
-(`ScoreViewModel.swift:1010`) and reacts to events.
+(`ScoreViewModel.swift:1024`) and reacts to events.
 
 **Tests added:** 17 tests in `ScoringEngineTests` covering deuce
 cycling, server rotation, break-point detection, snapshot correctness,
@@ -592,8 +595,8 @@ all four non-standard formats, and endless formats. Core package test count when
 this landed: 378 across 29 test files (41 test files as of 21 August 2026).
 
 **Remaining gap:** The `handleSideChangesAfterTiebreakSetEnd` 4-case switch
-(players change × ball-holder changes; `ScoringEngine.swift:531–565`, called
-from the set-completion path at `:317`) has no dedicated test. Low risk given
+(players change × ball-holder changes; `ScoringEngine.swift:551–585`, called
+from the set-completion path at `:337`) has no dedicated test. Low risk given
 the logic is simple, but worth adding if the area is touched.
 
 ---
