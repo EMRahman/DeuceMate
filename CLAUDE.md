@@ -137,36 +137,41 @@ anything portable; no `.pbxproj` change needed — the package globs its sources
 
 | File | Lines | What |
 |------|------:|------|
-| `ScoreViewModel.swift` | ~1947 | Live match state + synced settings; delegates scoring rules to Core's `ScoringEngine` (see §1); seeds/persists the remembered match setup (`applyRememberedSetupIfIdle()`/`persistMatchSetupDefaults()`, called from `loadState()`/`resetMatch()` tails and `HomeView`'s `commitServerSelection()` — never from `init`, which runs before either restore path); `trackingStatuses` resolves Core's `MatchTrackingStatus.all(...)` and forwards `WorkoutManager.$healthAccess` (not its whole `objectWillChange` — that would also fire on every live-match HR/calorie tick) into its own `objectWillChange` in `init`, so views watching only the view model still redraw on Health-access changes without extra redraws during play. ⚠️ Almost no `MARK:` anchors yet — `Grep` for the symbol and read a bounded range. |
+| `ScoreViewModel.swift` | ~1974 | Live match state + synced settings; delegates scoring rules to Core's `ScoringEngine` (see §1); seeds/persists the remembered match setup (`applyRememberedSetupIfIdle()`/`persistMatchSetupDefaults()`, called from `loadState()`/`resetMatch()` tails and `HomeView`'s `commitServerSelection()` — never from `init`, which runs before either restore path); `trackingStatuses` resolves Core's `MatchTrackingStatus.all(...)` and forwards `WorkoutManager.$healthAccess` (not its whole `objectWillChange` — that would also fire on every live-match HR/calorie tick) into its own `objectWillChange` in `init`, so views watching only the view model still redraw on Health-access changes without extra redraws during play. ⚠️ Almost no `MARK:` anchors yet — `Grep` for the symbol and read a bounded range. |
 | `HomeView.swift` | ~959 | Match setup / start screen: a pre-match card states the remembered Singles/Doubles + format setup (hidden mid-match) and taps through to a combined Match Setup sheet, so Start Match skips straight to who-serves-first; the same card carries the Points/Health/Pulse tracking strip, and the Settings sheet opens with the always-three row form. ⚠️ No `MARK:` anchors yet. |
 | `TrackingStatusStrip.swift` | ~140 | Paints Core's `MatchTrackingStatus`: the pre-match strip (single-line icon+state chips, tap to Settings, Pulse collapsed out when Health is off) and the full-width Settings rows (always all three). |
-| `ContentView.swift` | ~941 | Live scoreboard + gesture handling. |
-| `MatchStatsView.swift` | ~630 | On-watch live stats. |
-| `Sync/WatchMatchSyncService.swift` | ~289 | Watch side of `WatchConnectivity`. |
+| `ContentView.swift` | ~989 | Live scoreboard + gesture handling. |
+| `MatchStatsView.swift` | ~595 | On-watch live stats. |
+| `Sync/WatchMatchSyncService.swift` | ~284 | Watch side of `WatchConnectivity`. |
 | `PointCategorySheet.swift`, `WorkoutManager.swift`, `MatchHistoryView.swift`, `StatsStore.swift`, `BackupExcludedFileWriter.swift`, `AppTheme.swift` | | Categorisation UI, HealthKit workout (`WorkoutManager` also publishes `healthAccess`, refreshed on foreground and in `HomeView.onAppear`), backup-excluded history/live-state persistence, theming. |
 
-Watch tests: `DeuceMate Watch AppTests/DeuceMate_Watch_AppTests.swift` (~1.1k
-lines, 36 Swift Testing `@Test` functions — high-level `ScoreViewModel`
-scenarios; needs `import DeuceMateCore`, see §0).
+Watch tests: `DeuceMate Watch AppTests/` — four files, 59 Swift Testing `@Test`
+functions. `DeuceMate_Watch_AppTests.swift` (~1.2k lines, 40 tests) holds the
+high-level `ScoreViewModel` scenarios; `StatsStoreTests`,
+`MatchSetupDefaultsWatchTests` and `TrackingStatusWatchTests` cover the rest.
+All need `import DeuceMateCore` (see §0).
 
 **iPhone app — `DeuceMate/`:**
 
 | File | Lines | What |
 |------|------:|------|
 | `Views/PointsGraphView.swift` | ~1.9k | Charts (points momentum + outcome/serving/ending-shot filters + HR/steps overlays), including set-relative point selection with the full pre-point score and serving side. Heavily `MARK:`-sectioned. |
-| `Views/MatchDetailView.swift` | ~1100 | Per-match detail, stats tabs, full-score/server point rows, share/export. |
-| `Export/MatchExporter.swift` | ~640 | Plain-text + AI-prompt export. `nonisolated static` builders by section. |
-| `Views/PastMatchesView.swift` | ~705 | iPhone archive list (phone-side analogue of the watch `MatchHistoryView`); shows storage-location + iCloud indicators. Growing fast — see TECHNICAL_DEBT #13. |
-| `Views/SettingsView.swift` (~820), `ManualMatchEntryView.swift` (~442), `LiveScoreboardView.swift` (~490), `LivePointCategoryPanel.swift` (~222) | | Settings including Watch sync counts/fresh-Watch restore guidance and Backup & Transfer archive export/import, manual entry, live spectator, phone-side point categorisation (mirrors the watch sheet when iPhone Input is on). |
+| `Views/MatchDetailView.swift` | ~1260 | Per-match detail, stats tabs, full-score/server point rows, share/export. |
+| `Export/MatchExporter.swift` | ~630 | Plain-text + AI-prompt export. `nonisolated static` builders by section. |
+| `Views/PastMatchesView.swift` | ~745 | iPhone archive list (phone-side analogue of the watch `MatchHistoryView`); shows storage-location + iCloud indicators. Growing fast — see TECHNICAL_DEBT #13. |
+| `Views/SettingsView.swift` (~819), `ManualMatchEntryView.swift` (~449), `LiveScoreboardView.swift` (~506), `LivePointCategoryPanel.swift` (~222) | | Settings including Watch sync counts/fresh-Watch restore guidance and Backup & Transfer archive export/import, manual entry, live spectator, phone-side point categorisation (mirrors the watch sheet when iPhone Input is on). |
 | `Views/PulseCoach/PulseCoachSection.swift`, `Views/Coaching/RecCoachSection.swift`, `AICoachLauncher.swift`, `AICoachSheet.swift` | | HR coaching panel, recreational coaching insights, and routing a generated coaching prompt to third-party AI apps. |
-| `Sync/PhoneMatchSyncService.swift` | ~600 | Phone side of `WatchConnectivity`; a Watch manifest (including empty) acknowledges Sync Now, and live install state refreshes through `sessionWatchStateDidChange`. |
+| `Sync/PhoneMatchSyncService.swift` | ~626 | Phone side of `WatchConnectivity`; a Watch manifest (including empty) acknowledges Sync Now, and live install state refreshes through `sessionWatchStateDidChange`. |
 | `Persistence/PhoneStatsStore.swift`, `Audio/LiveAnnouncementService.swift`, `HealthKitHRFetcher.swift` | | Health-stripped archive plus backup-excluded sidecar, manual export/import, TTS announcements, HR backfill. |
 
 Feature design docs live in `docs/features/*.md` — read the relevant plan before
 extending sync, changeover, or the companion app. The prioritised improvement
-backlog is `docs/features/TECHNICAL_DEBT.md` (statuses verified against the
-code at the most recent audit) — check it before starting a refactor so you don't
-re-discover, or contradict, a documented decision.
+backlog is `docs/features/TECHNICAL_DEBT.md` — **open items and their detail
+come first, ranked; completed and parked work is archived at the bottom of that
+file** with its original write-up intact. Item numbers are permanent and cited
+from here (#3, #9, #13, #18), so they are never renumbered. Check it before
+starting a refactor so you don't re-discover, or contradict, a documented
+decision — including one already closed in the archive.
 
 ---
 
@@ -336,9 +341,9 @@ compiler does not connect** (see §5). To add one, keep them consistent:
   **additive-only** — retire a case by hiding it from the UI, never by removing
   it. See §4 "Retire a case in a persisted enum" and
   `docs/features/TECHNICAL_DEBT.md` #18.
-- **Very large files** (`ScoreViewModel` ~1.9k, `PointsGraphView` ~1.9k,
-  `MatchDetailView` ~1.1k, `ContentView`/`HomeView`/`PastMatchesView`
-  ~0.7–0.9k). Don't load them whole. `PointsGraphView` and `MatchDetailView`
+- **Very large files** (`ScoreViewModel` ~2.0k, `PointsGraphView` ~1.9k,
+  `MatchDetailView` ~1.3k, `ContentView`/`HomeView`/`PastMatchesView`
+  ~0.7–1.0k). Don't load them whole. `PointsGraphView` and `MatchDetailView`
   are `MARK:`-sectioned; `ScoreViewModel` and `HomeView` currently have almost
   no anchors (adding them is TECHNICAL_DEBT #9) — for those, `Grep` for the
   symbol you need and read a bounded range around it. Splitting along `MARK:`
