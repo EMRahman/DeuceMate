@@ -85,6 +85,11 @@ Open a GitHub issue with:
 
 For security issues, email mail@ehsanrahman.com directly rather than opening a public issue.
 
+## Code of Conduct
+
+Participation is covered by the [Code of Conduct](CODE_OF_CONDUCT.md) — the short
+version is: critique code and ideas, not people.
+
 ## License
 
 By submitting a pull request, you agree that your contribution will be licensed under the [MIT License](LICENSE).
