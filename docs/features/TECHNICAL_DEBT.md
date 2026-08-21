@@ -7,9 +7,9 @@ reviewed, contextualised against the actual runtime behaviour, and
 prioritised.
 
 **How this file is organised.** Everything still needing attention is at the
-top — the [open items](#open-items) table, ranked highest-priority first, then
-their detail sections in the same order. Work that has landed (and the one
-item parked on a product decision) is kept in full at the bottom under
+top — the [open items](#open-items) table, ranked highest work-priority first,
+then detail sections grouped by subject. Work that has landed (and the one item
+parked on a product decision) is kept in full at the bottom under
 [Archive](#archive--completed-and-parked-items); it is history worth reading
 before re-opening the same ground, not a queue.
 
@@ -18,40 +18,62 @@ before re-opening the same ground, not a queue.
 ("TECHNICAL_DEBT #18"). Numbers are never renumbered or reused when the
 ordering changes, and a completed item keeps its number in the archive.
 
-**How priorities are weighted.** DeuceMate is developed primarily by AI coding
-agents working in cloud environments *without a Swift toolchain* (the owner
-runs Xcode locally). Debt that degrades agent effectiveness — an inaccurate
-claim in `CLAUDE.md`, a ~2k-line file with no `MARK:` anchors, an invariant
-nothing can check without a compiler — therefore ranks above conventional
-refactors of working code. An agent cannot compile its way back to safety;
-accurate docs, navigable files, and text-level checks are its substitutes.
+**How priorities are weighted.** The table deliberately separates two things
+that the earlier version of this document conflated:
+
+- **Application risk** is the severity and likelihood of harm to a user or
+  their data. `Critical impact / low–medium likelihood` is different from a
+  routine maintainability problem even when both deserve work.
+- **Work priority** also accounts for exposure, prerequisites, effort, and
+  engineering leverage. A comment-only navigation improvement can be a very
+  good quick win without being a high application risk; a currently safe sync
+  design can carry a mandatory trigger before its transport strategy changes.
+
+DeuceMate is developed primarily by AI coding agents working in cloud
+environments *without a Swift toolchain* (the owner runs Xcode locally). Agent
+effectiveness therefore remains a real input: accurate docs, navigable files,
+text-level checks, and recorded local verification substitute for a compiler in
+many sessions. They no longer masquerade as runtime severity, however.
 
 ---
 
 ## Open items
 
-Ranked. Priority is the recorded severity; effort is the size of the change.
+Ranked. Application risk describes the app as it exists; the work band says
+when the item should constrain future changes.
 
-| # | Area | Item | Priority | Effort |
-|---|------|------|----------|--------|
-| [3](#3--replace-stringly-typed-settings-keys-with-typed-keys) | Settings | Replace stringly-typed settings keys with typed keys | **High — next up** | Large, splittable per setting category |
-| [9](#9--mark-anchors-for-scoreviewmodel-homeview-contentview) | Navigability | `MARK:` anchors for `ScoreViewModel` / `HomeView` / `ContentView` | **High** | Small — comment-only, zero behaviour risk |
-| [18](#18--persisted-enums-are-additive-only-archives-decode-atomically) | Persistence | Persisted-enum guards (rule documented; guards missing) | Medium | Small first step (pin raw values), then staged |
-| [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version the persisted JSON formats (forward compatibility) | Medium | Medium |
-| [4a](#4a--silent-save-failure-handling-and-the-unreadable-live-state-path) | Persistence | Save-failure reporting **and** the unreadable-live-state path | Low as originally scoped; **read side is the real one** | Medium — PR #108 exists to re-read |
-| [2](#2--add-lastmodified-to-matchrecord-for-merge-policy) | Sync | Add `lastModified` to `MatchRecord` for merge policy | Medium | Small |
-| [7](#7--convert-formatted-string-stats-to-typed-values-in-matchstatssummary) | Stats | Convert formatted string stats to typed `RatioStat` | Medium | Small, mechanical, Core-only |
-| [11](#11--de-duplicate-appthemeswift-into-core) | Duplication | De-duplicate `AppTheme.swift` (still byte-identical) into Core | Medium | Small |
-| [12](#12--extract-the-point-categorisation-flow-state-machine-into-core) | Duplication | Extract point-categorisation flow state machine into Core | Medium | Medium |
-| [6](#6--phonestatsstore-concurrency-model) | Concurrency | `PhoneStatsStore` actor / `@MainActor` migration | Low | Medium |
-| [13](#13--split-pastmatchesview) | Architecture | Split `PastMatchesView` (745 lines, still the fastest-growing file) | Low | Small, do it opportunistically |
+| # | Area | Item | Application risk | Work band / trigger | Effort |
+|---|------|------|------------------|---------------------|--------|
+| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact; low–medium likelihood** | **Now** | Medium, staged |
+| [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | **High** | **Now**, in the persistence-safety programme | Medium — PR #108 exists to re-read |
+| [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | **High when schemas diverge** | **Before any persisted-model, enum, or wire-shape change** | Medium |
+| [3](#3--replace-stringly-typed-settings-keys-with-typed-keys) | Settings | Replace stringly-typed settings keys with typed keys | Medium today; **high change risk** | Next engineering-risk cleanup after persistence containment | Large, splittable per setting category |
+| [20](#20--make-health-derived-field-classification-mechanically-exhaustive) | Health/Privacy | Make Health-derived field classification mechanically exhaustive | No current bug; **high privacy risk on expansion** | Before adding any Health-derived field or export surface | Medium design; small first guards |
+| [4a-write](#4a-write--surface-save-failures) | Persistence | Surface live-state and archive save failures | Medium impact; low likelihood | After, or alongside, read containment | Small–medium |
+| [11](#11--de-duplicate-appthemeswift-into-core) | Duplication | De-duplicate `AppTheme.swift` (still byte-identical) | Medium change risk | Before the next theme edit | Small |
+| [12](#12--extract-the-point-categorisation-flow-state-machine-into-core) | Duplication | Extract point-categorisation flow state machine into Core | Medium change risk | Before the next outcome / ending-shot change | Medium |
+| [21](#21--record-an-executable-local-verification-gate) | Verification | Record an executable local verification gate | Medium regression/process risk | Establish now; require for scoring, persistence, and sync PRs | Small |
+| [9](#9--mark-anchors-for-scoreviewmodel-homeview-contentview) | Navigability | `MARK:` anchors for `ScoreViewModel` / `HomeView` / `ContentView` | **None at runtime** | Independent quick win | Small — comment-only |
+| [2](#2--add-a-monotonic-record-revision-before-queued-checkpoints) | Sync | Add a monotonic record revision for merge policy | Low today | **Mandatory before queueing live checkpoints** | Small |
+| [6](#6--phonestatsstore-concurrency-model) | Concurrency | `PhoneStatsStore` actor / `@MainActor` migration | Low today | Before Swift 6 strict concurrency or new background mutation paths | Medium |
+| [7](#7--convert-formatted-string-stats-to-typed-values-in-matchstatssummary) | Stats | Convert formatted string stats to typed `RatioStat` | Low | Before localization, structured stats export, or graphing | Small, mechanical, Core-only |
+| [13](#13--split-pastmatchesview) | Architecture | Split `PastMatchesView` (745 lines, still the fastest-growing file) | None today | Opportunistically on the next substantial edit | Small |
 
-**Read 18, 19 and 4a together.** They are one subject — what happens when a
-persisted file cannot be decoded — and each one's fix constrains the others'.
-#4a's PR was closed unmerged for exactly this reason. Sequencing them: pin the
-enum raw values (#18, cheapest and the real guard), floor the backup push
-(#18), then decide the version/refuse-to-write shape (#19) before re-doing the
-failure reporting and quarantine (#4a).
+**Read 18, 19 and 4a together.** They are one persistence-safety programme —
+what happens when a persisted file cannot be decoded — and each fix constrains
+the others'. #4a's PR was closed unmerged for exactly this reason. Sequence the
+programme by safety rather than by cheapest patch:
+
+1. **Fail closed at the origin.** A readable-but-undecodable canonical history
+   or tombstone file must suspend canonical writes and iCloud pushes; an
+   unreadable/undecodable live state must not be overwritten by the next point.
+2. **Land the cheap guards immediately, without calling the programme done.**
+   Pin all persisted-enum raw values and add the missing corrupt-main-file tests.
+3. **Add version envelopes and refuse-to-overwrite-newer semantics** (#19),
+   including an older-version policy for manual exports.
+4. **Add the tombstone-qualified backup floor** (#18) as defence in depth.
+5. **Offer explicit recovery.** Preserve the original bytes and make any lossy,
+   element-wise salvage a reported recovery operation, never the default read.
 
 ---
 
@@ -106,10 +128,13 @@ The design must model the announcements aliasing explicitly (either migrate
 the stored keys once, or give the enum a `localStorageKey` override) rather
 than assuming raw value == storage key everywhere.
 
-**Why high:** The trap is live today. CLAUDE.md §5 flags it explicitly as an
-AI trap. The fix is mechanical but large — touches both apps and every synced
-setting. Scope one setting category at a time to keep PRs reviewable. Until
-this lands, item 10's checker script is the only mechanical guard.
+**Risk and work priority:** The current keys were re-checked and are consistent,
+so this is not a known runtime bug. It is a **medium application risk today but
+a high change risk**: the next setting edit can create a silent sync/reset bug
+with no compiler signal. CLAUDE.md §5 flags it explicitly as an AI trap. Do it
+after the persistence containment work, scoped one setting category at a time
+to keep the large mechanical change reviewable. Until it lands, item 10's grep
+is the only guard.
 
 **Dead key to remove:** `MatchSyncKey.workoutSessionEnabled` and its decoded
 event remain from an abandoned in-app workout toggle. No sender emits the key,
@@ -145,14 +170,16 @@ side pickers / settings toggles / history & navigation. `ContentView`:
 scoreboard layout / gesture handling / overlays & badges. Update the
 `CLAUDE.md` file-map descriptions afterwards. Zero behaviour risk.
 
-**Why high:** The cheapest change in this document with a compounding payoff
-for every future agent session in the three most-touched watch files.
+**Risk and work priority:** **No runtime risk.** This remains the cheapest
+independent change in the document with a compounding payoff for every future
+agent session in the three most-touched watch files. Treat it as a quick win,
+not as evidence that it outranks user-data containment.
 
 **Key files:** `ScoreViewModel.swift`, `HomeView.swift`, `ContentView.swift`.
 
 ---
 
-### 18 — Persisted enums are additive-only; archives decode atomically
+### 18 — Fail closed on undecodable archives; persisted enums are additive-only
 
 **What:** Six enums reach persisted JSON — `MatchFormat`, `MatchType`, `Player`,
 `DoublesServer`, `PointOutcome`, `EndingShot` — and none has an unknown-value
@@ -193,12 +220,30 @@ enum" recipe — keep the case decodable forever, hide it from the user-facing l
 wrong value such as `.standard`, which would re-render an old match's score in
 the wrong shape.
 
-**Guards still backlog, cheapest first:**
+**Application risk: critical impact, low–medium likelihood.** Corruption and
+schema divergence are uncommon, but the failure amplifier spans the whole
+archive and the iCloud overwrite is irreversible. This is the first runtime
+risk to contain.
 
-- **Pin the raw values in tests.** `ScoreTypesTests.test_doublesServer_rawValuesArePersistedIdentifiers`
-  (added in #104) already does this for `DoublesServer` — extend the pattern to
-  the other five. Deterministic, zero runtime cost, fails in Xcode before the
-  code reaches a device. This is the real fix; the rest is defence in depth.
+**Safest implementation sequence:**
+
+- **Fail closed on score-bearing canonical data first.** A readable file that
+  cannot be decoded is not an empty archive. A decode failure in either the
+  canonical match history or its tombstones must preserve/quarantine the bytes,
+  suspend canonical writes, and suppress iCloud pushes for the process — the
+  same hard stop `.unreadable` already provides. The Health sidecar is different:
+  it is a reconstructable projection and may continue to degrade independently
+  without blocking score persistence.
+- **Pin the raw values in tests immediately, but state the limit accurately.**
+  `ScoreTypesTests.test_doublesServer_rawValuesArePersistedIdentifiers` (added
+  in #104) already does this for `DoublesServer`; extend the pattern to the other
+  five. This cheaply catches deletion, renaming, and raw-value drift. It does
+  **not** protect an old client from a newly added case, arbitrary corrupt JSON,
+  a missing required field, or an unbumped schema version, so it is a guard —
+  not the complete fix.
+- **Add the version/refuse-to-overwrite shape in #19.** Decode failure and
+  unsupported-newer-format are different diagnoses even though both must block
+  automatic writes.
 - **Floor the backup push — but qualify the floor by tombstones.**
   `pushBackupOnQueue` builds its snapshot straight from `records` with no floor,
   so a corrupt-load `[]` can overwrite a good backup. A naive "never push an
@@ -215,14 +260,17 @@ the wrong shape.
   additive and should always be written, even when the record write is withheld.
   (`lastPushedSnapshot` is per-process, so a first push after launch has no
   in-memory baseline to diff against and must read the remote or skip the check.)
-- **Decode the archive element-wise.** A `Lossy<T>` wrapper
-  (`init(from:) { value = try? T(from: decoder) }`) over `[MatchRecord]` removes
-  the amplifier — 24 of 25 matches survive instead of none. Count the drops and
-  surface them rather than compacting silently.
-- **Reconsider `.corrupt` vs `.unreadable` on the phone.** `CanonicalRead`
-  already has a non-destructive hard stop (`.unreadable` suspends writes and
-  leaves the file untouched). A well-formed file the app merely cannot map is
-  arguably that case, not a quarantine.
+- **Make element-wise decode an explicit recovery tool, not the normal read.**
+  A `Lossy<T>` wrapper can recover 24 of 25 records, but if the app then saves
+  that partial result it silently makes the rejected record's loss permanent.
+  Keep the original file, report the number and ids of dropped records where
+  possible, require a deliberate recovery action, and do not resume automatic
+  backup until the recovered state is accepted.
+
+**Tests required by the first containment PR:** a readable-but-undecodable main
+history suspends writes; a corrupt tombstone file does the same; neither state
+pushes an empty backup; and a legitimate tombstoned deletion — including
+deleting the only match — can still push a smaller or empty archive.
 
 **Not the answer:** a `fatalError` in the catch. `loadState()` runs on every
 launch, so the bad value on disk produces a crash loop whose only user-side
@@ -269,7 +317,12 @@ What that looks like today, if a newer watch sends a case an older phone lacks:
   accomplishes nothing until both sides update. Same atomic-array amplifier as
   #18.
 
-**Proposed fix**, cheapest first:
+**Application risk: high when schemas diverge.** There is no known version-2
+payload today, but the watch and phone routinely run different app versions.
+This item is therefore a hard prerequisite for any persisted enum/model or
+wire-shape change, not general cleanup to schedule afterwards.
+
+**Proposed compatibility rollout:**
 
 1. **Read the version that already exists.** `AppState.version` is stored and
    required but inert. A `guard` against a version higher than the build
@@ -288,6 +341,12 @@ What that looks like today, if a newer watch sends a case an older phone lacks:
    that actually prevents data loss: an old client that encounters a newer
    version must leave the file alone rather than resetting and saving over it.
    A read-only refusal still loses the data on the next save.
+4. **Ship the version-1 envelope and gate before using version 2.** Forward
+   refusal only protects clients that already know how to inspect the version.
+   First release readers that accept the legacy bare array and the version-1
+   envelope; only a later release should emit a genuinely incompatible shape.
+   Old clients predating the gate will still drop an unfamiliar sync payload,
+   but the new envelope must never make them overwrite local storage.
 
 Two caveats on (2). First, a version gate only fires if someone remembers to
 bump the number: adding an enum case does not bump `supportedSchemaVersion`
@@ -300,9 +359,12 @@ a bad pattern to copy — **the first bump breaks every existing export.** The
 moment `supportedSchemaVersion` becomes 2, the equality check rejects every
 version-1 archive a user has already saved, with "this archive was created by a
 different version of DeuceMate". Their own backup file becomes unimportable by
-the newer app, which is the opposite of what a backup format is for. Relaxing
-the check to `<=` plus per-version decoding should happen *before* the first
-bump, not as part of it.
+the newer app, which is the opposite of what a backup format is for. Replace
+the equality gate with an explicit set/range of versions for which a decoder or
+migration actually exists. Do not blindly accept every `<=` value — version 0
+or an otherwise unknown old shape is not safe merely because its number is
+smaller. Establish the version-1 branch *before* the first bump, not as part of
+it.
 
 **External guidance reviewed, and what applies here.** This is a recognised
 class of bug (decode failure → treat as empty → write the empty state back →
@@ -350,51 +412,63 @@ reusing; its equality gate is not).
 
 ---
 
-### 4a — Silent save-failure handling and the unreadable-live-state path
+### 4a — Persistence health: unreadable live state and save failures
 
-**What:** The watch's live-state save failure path is a `print` inside
-`#if DEBUG` (`ScoreViewModel.swift:1666`, in `saveState()`) — completely
-invisible in a release build. The two history stores do log failures through
-`os.Logger` (`StatsStore.swift:110` read / `:124` write on the watch,
-`PhoneStatsStore.swift:356` on the phone), which reaches the unified log but
-is never surfaced in-app. For a
-scoring app where a failed save means lost match data, failures should be
-visible to the user (at minimum a brief in-app banner on the next active
-interaction).
+The old item combined a high-impact read path with a low-likelihood save path
+and then gave the pair one ambiguous priority. Keep the permanent #4a reference,
+but treat its two deliverables separately.
 
-**Proposed fix:** Expose a `@Published var lastSaveError: Error?` (or similar)
-on the view model; show a non-blocking warning in the UI if a save has failed
-since the last successful one. Does not need to be intrusive — a small
-indicator on the history or settings screen is enough.
+#### 4a-read — Fail closed on an unreadable live state
 
-**Why low:** Saves rarely fail in practice. This is a hardening measure rather
-than a fix for an active bug.
+**What:** `loadState()` catches a missing file, an I/O failure, corrupt JSON,
+and a future-schema decode failure identically. It resets roughly 20 fields to
+a fresh match. `saveState()` runs on the next point and can then overwrite the
+checkpoint it merely failed to read. A transient protection/I/O problem or one
+unknown persisted enum can therefore erase the live match within one point.
 
-**Scope correction (August 2026).** That "Low / not an active bug" rating is
-sound for what this item describes, but the item only ever described the *save*
-side. The **read** side was never written down: `loadState()` throwing on a file
-that exists resets ~20 fields, and `saveState()` — which runs on the very next
-point — then writes over the file it just failed to read. A merely unreadable
-checkpoint therefore became permanently gone, within one point, silently. The
-same principle was already understood and applied to the watch *archive* (see
-#4b's read-failure guard); the live-state file simply never got it, and nothing
-recorded the asymmetry.
+**Application risk: high.** The probability is low, but a live tennis score is
+time-sensitive and often cannot be reconstructed after play continues. The
+watch archive already understands “read failure ≠ empty”; live state does not.
+
+**Proposed fix:** Distinguish “file genuinely absent” (normal first launch) from
+“file exists but could not be read/decoded”. Preserve or quarantine the latter,
+publish a critical persistence state, and block automatic state overwrite until
+the user explicitly abandons/resets or a recovery succeeds. Pair it with #19's
+`version > supported` diagnosis so “newer format” is reported accurately rather
+than called corruption. User-facing copy must say only what the app can really
+do; retaining bytes is not the same as offering a recovery path.
 
 **Attempted and closed: PR #108.** It reported failures through a shared
 `PersistenceHealth` model in Core, moved the unreadable file aside before the
 reset, promoted a failed restore to `.critical`, and added a scoreboard chip so
 a mid-match failure is visible where it happens. Verified green locally (Core,
-watch and iOS suites). Closed unmerged pending a wider look at persistence
-recovery rather than because the work was wrong — the surrounding questions
-(#18's atomic decode and backup floor, #19's versioning) shape what the right
-shape of a fix is, and were still open. Worth reading before re-attempting;
-findings raised against it were stale inventory counts, user-facing copy
-promising a recovery path that does not exist, no cleanup of the quarantined
-file, and `persistenceHealth` not clearing on `resetMatch()`.
+watch and iOS suites). Closed unmerged pending the wider persistence programme,
+not because the work was wrong. Re-read it before re-attempting. Findings to
+resolve: stale inventory counts, copy promising unavailable recovery, no cleanup
+policy for quarantined files, and `persistenceHealth` not clearing on an
+intentional `resetMatch()`.
+
+#### 4a-write — Surface save failures
+
+**What:** The watch live-state writer reports failure only through a `print`
+inside `#if DEBUG`; release builds emit nothing. The two history stores use
+`os.Logger`, which reaches the unified log but not the person continuing to
+score. Failed phone canonical writes also publish the new in-memory archive even
+though it may disappear on process termination.
+
+**Application risk: medium impact, low likelihood.** Class-B protection and
+atomic writes make failure uncommon, but storage/I/O failures still mean the
+latest score or archive mutation is not durable.
+
+**Proposed fix:** Reuse the persistence-health model established by 4a-read.
+Show a small but visible warning on the live scoreboard for live-state failure,
+and on history/settings for archive failure. Clear it only after a successful
+write or a deliberate reset that the model defines as resolving the condition;
+do not clear it merely because the view disappeared.
 
 ---
 
-### 2 — Add `lastModified` to `MatchRecord` for merge policy
+### 2 — Add a monotonic record revision before queued checkpoints
 
 **What:** `MatchMergePolicy` Case 5 (both in-progress) currently does
 "always accept incoming." This is safe for live `sendMessage` delivery
@@ -410,21 +484,28 @@ A previous attempt to use `stats.count` as a "newer" proxy broke undos
 (an undo checkpoint has fewer stats, so the phone wrongly discarded it). The
 comment in `MatchMergePolicy.swift` records this history.
 
-**Proposed fix:** Add `lastModified: Date` to `MatchRecord`, set to `Date()`
-on every watch-side state mutation. Update Case 5 to accept incoming only if
-`incoming.lastModified >= existing.lastModified`. Undo checkpoints are written
-*after* the undone state so their timestamp is always newer — the proxy is
-correct. Decode with `decodeIfPresent` defaulting to `startTime` (§4
-backward-compat recipe).
+**Proposed fix:** Add a monotonic `revision: UInt64` to `MatchRecord`, incremented
+by the source watch on every state mutation, including undo. Update Case 5 to
+accept an incoming in-progress record only when its revision is greater than or
+equal to the existing revision. Decode old records with
+`decodeIfPresent(UInt64.self, forKey: .revision) ?? 0` under the §4
+compatibility recipe: two legacy revision-0 checkpoints retain today's “latest
+arrival wins” behaviour, while a legacy checkpoint cannot roll back an already
+revisioned one.
 
-Secondary benefit: once `lastModified` exists the transport can safely queue
-a bounded "latest live checkpoint" when unreachable, improving phone archive
-freshness during BLE gaps. Currently the phone can lag the entire duration of
-a gap.
+Use the revision — not a wall-clock `lastModified` date — as the ordering
+primitive. Device time can move backwards and two rapid mutations need not have
+distinct timestamps. A `lastModified` date may still be useful for display or
+diagnostics, but it should not decide which queued checkpoint wins.
 
-**Why medium, not high:** The transport's intentional drop policy means there
-is no live repro path today. The fix becomes important if the transport
-strategy is ever changed.
+Once revision ordering exists, the transport can safely queue a bounded
+“latest live checkpoint” when unreachable, improving phone archive freshness
+during BLE gaps. Currently the phone can lag for the whole gap.
+
+**Risk and trigger:** **Low today.** The transport intentionally drops
+unreachable in-progress checkpoints, so the stale queued-arrival path does not
+exist. Make this a mandatory prerequisite — in the same PR or an immediately
+preceding one — before any transport change starts queueing them.
 
 **Key files:** `MatchRecord.swift`, `MatchMergePolicy.swift`,
 `MatchSyncTransport.swift`, `MatchRecordCodingTests.swift`,
@@ -464,9 +545,11 @@ This is a Core-only change — no `project.pbxproj` edit needed. Both apps
 consume `MatchStatsSummary` but read-only, so updating call sites to use
 `.wueRatio.formatted` instead of `.wueRatio` is a mechanical find-and-replace.
 
-**Why medium:** Clean, bounded change with clear benefits. No behaviour change
-— only the type changes. The `pct(num:den:)` helper in `MatchStatsSummary` can
-be retained as the formatting implementation.
+**Risk and trigger:** **Low today.** This is a clean, bounded change with useful
+future benefits but no current correctness failure. Do it before localization,
+structured stats export, or graphing needs the discarded values (or elevate it
+sooner if the current VoiceOver rendering becomes a release requirement). The
+`pct(num:den:)` helper in `MatchStatsSummary` can remain the formatter.
 
 **Key files:** `MatchStatsSummary.swift`, both apps' stats/export views,
 `MatchStatsSummaryTests.swift`.
@@ -488,9 +571,10 @@ framework, and the package platforms (iOS 16 / watchOS 9 / macOS 13) all have
 the APIs used. No `project.pbxproj` edit is needed for either the addition or
 the deletions (package globs; app targets are file-system-synchronized).
 
-**Why medium:** Low effort, removes 220 duplicated lines and a live drift
-trap. Until it lands, item 10's checker can cheaply assert the copies remain
-identical.
+**Risk and trigger:** **Medium change risk, no known drift today.** Low effort
+removes 220 duplicated lines and a silent cross-platform drift trap. Land it
+before the next theme edit. Until then, a direct `cmp`/`diff` of the two files —
+not item 10's settings-key grep — is the appropriate pre-push guard.
 
 **Key files:** both `AppTheme.swift` copies → new Core file.
 
@@ -513,11 +597,89 @@ ending-shot step applies for a given outcome + settings, and
 `advance`/`reset` transitions. Both views render from it; the logic gets Core
 tests. Adding an outcome then needs one logic change plus per-app cosmetics.
 
-**Why medium:** Real logic duplication (not just similar UI), directly reduces
-a documented multi-site recipe, and is testable in the cheap target.
+**Risk and trigger:** **Medium change risk.** This is real logic duplication,
+not just similar UI, but both copies agree today. Make it a prerequisite for
+the next `PointOutcome` / `EndingShot` or categorisation-flow change; it need not
+displace persistence containment before then.
 
 **Key files:** `PointCategorySheet.swift`, `LivePointCategoryPanel.swift`,
 new Core file + tests.
+
+---
+
+### 20 — Make Health-derived field classification mechanically exhaustive
+
+**What:** Five HealthKit-derived values currently travel as ordinary
+`MatchRecord` / `PointStat` properties, while three separate policies must agree
+that they are Health data:
+
+1. `MatchRecord.strippingHealthData()` removes them from the phone canonical
+   archive and iCloud snapshot.
+2. `HealthSidecarPolicy` projects and reconstructs them in the backup-excluded
+   local sidecar.
+3. `HealthExportConsent` identifies them before a user export or AI hand-off.
+
+`docs/architecture/health-data-flow.md` documents the manual recipe, but the
+compiler does not connect these lists. A sixth field added to the model but
+missed by the stripper can enter iCloud in violation of the app's privacy
+posture; one missed by consent can be shared without the promised disclosure.
+The existing JSON key-absence tests protect the five names they know, not a new
+field nobody added to the fixture or denylist.
+
+**Application risk:** No current leak was found and the five existing fields
+are covered. The risk becomes **high immediately when Health-derived storage or
+an export surface expands**, so this is a trigger item rather than a reason to
+rewrite stable code today.
+
+**Proposed fix:** Make one Core-owned projection/classification the source for
+stripping, sidecar split/merge, and consent-field enumeration. Preserve the
+existing flat persisted keys through compatible custom coding if the internal
+shape changes; do not trade the privacy fix for a schema break. Until that
+design lands, strengthen the contract tests around one full-fidelity sentinel
+record and keep the architecture checklist mandatory.
+
+**Cheap first guard:** add the missing dedicated assertion that the watch
+`appState.json` file is backup-excluded. It does not solve field exhaustiveness,
+but closes the explicit test gap recorded in `health-data-flow.md`.
+
+**Key files:** `MatchRecord.swift`, `PointStat.swift`,
+`HealthSidecarPolicy.swift`, `ArchiveBackupPolicy.swift`,
+`HealthExportConsent.swift`, and their policy/export tests.
+
+---
+
+### 21 — Record an executable local verification gate
+
+**What:** No GitHub workflow compiles or tests the app. `ci.yml` is a deliberate
+Ubuntu placeholder that only echoes `OK`, and many coding-agent environments
+have no Swift toolchain. `CLAUDE.md` §3 documents the individual local commands,
+but there is no executable all-relevant-suites entry point or required PR
+evidence field. The test suites are strong; a green pull-request check is still
+not evidence that a Swift change compiled or that any test ran.
+
+**Application risk:** **Medium regression/process risk.** This is not a runtime
+bug by itself, but it increases the chance that scoring, persistence, or sync
+regressions reach a build precisely where static review is weakest.
+
+**Proposed fix:** Keep the no-paid-macOS-CI decision in `CLAUDE.md`; do not add
+Swift work to the Ubuntu placeholder. Instead:
+
+- turn the existing commands into one repository-local verification entry point,
+  or explicitly designate the documented sequence as the gate and keep its
+  destinations current;
+- require PRs touching scoring, persistence, or sync to record the exact local
+  command, destination/toolchain, and result supplied by the owner;
+- make release-candidate evidence distinguish “statically reviewed” from
+  “compiled and tested”; and
+- rename or describe the placeholder check clearly enough that nobody reads
+  its `OK` as build verification.
+
+This is an evidence gate, not a demand that toolchain-less agents pretend they
+ran Xcode. When verification cannot run, the PR should remain explicit about
+that gap until the owner supplies it.
+
+**Key files:** `CLAUDE.md`, `CONTRIBUTING.md`, `.github/workflows/ci.yml`, and
+the chosen local verification script/documentation.
 
 ---
 
@@ -541,9 +703,11 @@ symmetrical concurrency semantics.
 backed by an `async` storage helper). Callers `await` mutations; the actor
 serialises access without blocking threads.
 
-**Why low:** The current code works and the deadlock path requires a specific
-calling pattern that doesn't exist today. The fix is worthwhile as a
-maintenance improvement, especially before adding any new background sync paths.
+**Risk and trigger:** **Low today.** The app targets still compile in Swift 5
+language mode, the current queue confinement works, and the former iCloud
+deadlock path is gone. Promote this to a prerequisite before enabling Swift 6
+strict concurrency or adding a new background mutation path; either change
+invalidates the assumptions behind the low rating.
 
 **Key files:** `PhoneStatsStore.swift`, `StatsStore.swift`.
 
@@ -563,8 +727,8 @@ edit — the historical reason for avoiding app-target splits is gone. The file
 has picked up 6 `MARK:` anchors since the original audit, so it is navigable —
 this is now purely about size.
 
-**Why low:** No correctness risk today. Do it opportunistically the next time
-the file is touched, before it crosses ~1k lines.
+**Risk and trigger:** **No correctness risk today.** Do it opportunistically on
+the next substantial edit, before the file crosses ~1k lines.
 
 **Key files:** `PastMatchesView.swift`.
 
