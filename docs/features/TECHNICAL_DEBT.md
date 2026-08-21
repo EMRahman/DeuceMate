@@ -725,7 +725,7 @@ Current state of the four persisted formats:
 | `appState.json` (watch live state) | `version: Int` — **present, required, and never read** (decoded at `ScoreViewModel.swift:528`, branched on nowhere) | none |
 | `matchHistory.json` (watch + phone canonical archive) | none — a bare `[MatchRecord]` array | none |
 | WatchConnectivity wire format | none | none |
-| Manual archive export/import | `schemaVersion`, rejected via `ArchiveError.unsupportedSchemaVersion` | correct, with user-facing copy |
+| Manual archive export/import | `schemaVersion`, rejected via `ArchiveError.unsupportedSchemaVersion` | detected and refused legibly — but see the equality-gate caveat below |
 
 **Why this repo is exposed, specifically.** The generic version of this risk is
 about staggered updates across devices. Here the real path is closer to home:
@@ -749,19 +749,35 @@ What that looks like today, if a newer watch sends a case an older phone lacks:
 1. **Read the version that already exists.** `AppState.version` is stored and
    required but inert. A `guard` against a version higher than the build
    understands costs almost nothing and is already wired through the codec.
-2. **Give the archive and the wire format a top-level version**, the way
-   `ManualMatchArchiveBackup` already does. The manual archive is the model to
-   copy — it is the one format that fails legibly rather than mysteriously.
+2. **Give the archive and the wire format a top-level version.** Copy
+   `ManualMatchArchiveBackup`'s *envelope and its user-facing error* — it is the
+   one format that fails legibly rather than mysteriously — but **not** its
+   comparison. `validate` gates on `schemaVersion == supportedSchemaVersion`
+   (strict equality), which is indistinguishable from `<=` only because 1 is the
+   only version that has ever existed. A persistent store needs three branches,
+   not one:
+   - `version > supported` → refuse to read **and** refuse to write over it
+   - `version < supported` → migrate, or decode via the older shape
+   - `version == supported` → normal path
 3. **Make the gate a refusal to _write_, not just to read.** This is the half
    that actually prevents data loss: an old client that encounters a newer
    version must leave the file alone rather than resetting and saving over it.
    A read-only refusal still loses the data on the next save.
 
-Caveat on (2): a version gate only fires if someone remembers to bump the
-number. Adding an enum case does not bump `supportedSchemaVersion`
+Two caveats on (2). First, a version gate only fires if someone remembers to
+bump the number: adding an enum case does not bump `supportedSchemaVersion`
 automatically, so an export from a newer app would still claim version 1, sail
 past the check, and throw a raw `DecodingError` instead of the clean message.
 Worth a comment next to that constant.
+
+Second — and this is a latent bug in `ManualMatchArchiveBackup` itself, not just
+a bad pattern to copy — **the first bump breaks every existing export.** The
+moment `supportedSchemaVersion` becomes 2, the equality check rejects every
+version-1 archive a user has already saved, with "this archive was created by a
+different version of DeuceMate". Their own backup file becomes unimportable by
+the newer app, which is the opposite of what a backup format is for. Relaxing
+the check to `<=` plus per-version decoding should happen *before* the first
+bump, not as part of it.
 
 **External guidance reviewed, and what applies here.** This is a recognised
 class of bug (decode failure → treat as empty → write the empty state back →
@@ -775,8 +791,10 @@ the empty file becomes the truth). Assessed against this codebase:
 - "Never silently replace on failure; move the original aside." Partially done:
   the watch `StatsStore` read guard (#4b) and the phone's `.corrupt` quarantine
   both do it; `appState.json` does not.
-- Version plus refuse-to-overwrite-newer. Missing everywhere except the manual
-  archive.
+- Version plus refuse-to-overwrite-newer. Missing everywhere. The manual archive
+  has the version and detects a mismatch, but refuses symmetrically rather than
+  only refusing *newer*, and it never writes back over the imported file, so it
+  does not demonstrate the overwrite half either.
 
 *Does not apply — recorded so it is not re-litigated:*
 
@@ -802,4 +820,5 @@ this repo's actual exposure, and it is why #18 exists as a separate item.
 **Key files:** `ScoreViewModel.swift` (`AppState.version`),
 `Persistence/StatsStoring.swift` (the unversioned archive codec),
 `Sync/MatchSyncMessage.swift` (`decodeArray`), `Sync/SyncIncomingPayload.swift`,
-`Persistence/ManualMatchArchiveBackup.swift` (the model to copy).
+`Persistence/ManualMatchArchiveBackup.swift` (envelope and error copy worth
+reusing; its equality gate is not).
