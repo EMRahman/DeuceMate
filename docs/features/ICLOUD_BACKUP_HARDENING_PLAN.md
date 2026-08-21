@@ -90,7 +90,7 @@ imported full-fidelity records.
 | `Packages/…/Models/MatchRecord.swift` (or a small extension file) | Promote the manual archive’s `private mergeMissingHealthData` into a shared pure helper, e.g. `fillingMissingHealthData(from:)` on `MatchRecord` + the `PointStat` twin, and add the inverse `strippingHealthData()` nil-ing the five fields. |
 | `Packages/…/Persistence/ManualMatchArchiveBackup.swift` | Replace its private helpers with calls to the shared ones. **No change to `encode`** — manual exports stay full-fidelity by design (`includesHealthData: true`). |
 | `Packages/…/Sync/ArchiveBackupPolicy.swift` | `backupSnapshot` maps records through `strippingHealthData()`. In `resolveBackup`, when a (now health-less) completed backup body replaces a local in-progress checkpoint, backfill the loser’s health fields into the winner via the shared helper instead of discarding them. |
-| `PRIVACY_POLICY.md`, `docs/privacy.html` | State that the iCloud copy excludes health measurements; manual exports include them. (Also fold in the PR C corrections for these files if convenient — see below.) |
+| `PRIVACY_POLICY.md`, `docs/website/privacy.html` | State that the iCloud copy excludes health measurements; manual exports include them. (Also fold in the PR C corrections for these files if convenient — see below.) |
 | `CLAUDE.md`, `docs/architecture/file-inventory.md` | Refresh the `ArchiveBackupPolicy` blurbs to mention stripping. |
 
 Tests (`DeuceMateCoreTests`, all pure):
@@ -167,8 +167,8 @@ real backup with only the watch’s matches. Never run them before PR B ships:
 Carried over from the review; independent of A/B except where A already
 touches the privacy texts:
 
-- `docs/index.html` FAQ: “Is my match data synced to the cloud? **No** … no
-  iCloud” contradicts the app (and `docs/privacy.html` on the same site).
+- `docs/website/index.html` FAQ: “Is my match data synced to the cloud? **No** … no
+  iCloud” contradicts the app (and `docs/website/privacy.html` on the same site).
 - `PRIVACY_POLICY.md`: “**Is never transmitted off your devices by the App**”
   contradicts its own iCloud Sync section; “stored in your personal iCloud
   Drive container **rather than** the device’s local Documents folder”

@@ -50,7 +50,8 @@ statistics, `44ACB61B-BBF0-444C-86BC-2A0125E0DF6D` (5 August 2026, 3-6 1-6,
 5. `05-match-archive.png` - match history and statistics availability
 
 This one 6.9-inch set satisfies the iPhone screenshot-size requirement; do not
-mix in the older 6.3/6.5-inch files from `docs/screenshots/` for this slot.
+mix in the older 6.3/6.5-inch files from `docs/website/screenshots/` for this
+slot.
 
 ## Apple Watch
 

@@ -203,7 +203,7 @@ opponent export names only the fields it really carries.
   `> 0` gating, which would under-disclose a `0` that still ships in the JSON.
   The alert stays always-shown (unlike the per-match skip) because it doubles as
   the bulk-export confirmation.
-- **PR 5 — `docs:`** Update `PRIVACY_POLICY.md`, `docs/privacy.html`,
+- **PR 5 — `docs:`** Update `PRIVACY_POLICY.md`, `docs/website/privacy.html`,
   `docs/release/APP_STORE_METADATA.md`, and App Review notes to describe the
   per-export disclosure; flip the Blocker 4 export items in
   `docs/release/SUBMISSION_REVIEW.md` and

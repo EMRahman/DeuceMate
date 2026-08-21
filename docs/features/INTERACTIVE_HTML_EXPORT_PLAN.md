@@ -29,7 +29,7 @@ Chosen over a hosted "share a link" approach because it needs **no server, no
 hosting, no database, no link expiry**, and adds **no networking** to an app that
 has none. It fits two existing constraints perfectly: `MatchRecord` is already
 `Codable` (one match → self-contained JSON), and the repo already hand-rolls
-dependency-free browser JS (`docs/assets/watch-demo.js`), so an embedded
+dependency-free browser JS (`docs/website/assets/watch-demo.js`), so an embedded
 zero-library chart renderer honours the hard "Apple frameworks only / zero
 third-party dependencies" rule.
 
@@ -153,7 +153,7 @@ MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
 
 ## Future ideas (not built)
 
-- A hosted "share a link" variant (viewer on the existing GitHub Pages `docs/`
-  site, match data in the URL fragment) if a tappable link is later preferred
+- A hosted "share a link" variant (viewer on the existing GitHub Pages site in
+  `docs/website/`, match data in the URL fragment) if a tappable link is later preferred
   over a file attachment.
 - Reusing `MatchWebTemplate`'s renderer on the marketing site demo.
