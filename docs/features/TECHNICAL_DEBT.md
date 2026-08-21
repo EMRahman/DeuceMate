@@ -83,8 +83,9 @@ the compiler does not connect: a `MatchSyncKey` constant, a `UserDefaults`
 call in `ScoreViewModel`, and a matching call in `WatchMatchSyncService` /
 `PhoneMatchSyncService` (plus `@AppStorage` literals in the iPhone
 `SettingsView`). Changing one and missing another produces a silent
-settings-sync bug. `ScoreViewModel` has 24 `UserDefaults.standard` call sites
-(re-counted 21 August 2026); only 7 use `MatchSyncKey` directly.
+settings-sync bug. `ScoreViewModel` has 23 executable `UserDefaults.standard`
+call sites (re-counted 21 August 2026; a 24th grep match is a doc comment);
+only 7 use `MatchSyncKey` directly.
 
 **It is worse than simple duplication — one setting already uses three
 different strings.** The announcements toggle is persisted on the watch as
