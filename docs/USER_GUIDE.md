@@ -418,4 +418,4 @@ Keep in mind that some of the rules tips and prompts are tennis-specific (for ex
 - watchOS 9.0 or later
 - iOS 17.0 or later (iPhone companion)
 
-DeuceMate will be available for download on the App Store (submission in progress).
+DeuceMate is [on the App Store](https://apps.apple.com/app/id6757105622).

@@ -271,9 +271,10 @@ metadata/docs, including every change merged after 16 July — PRs #68–#70) fo
   `AICoachLauncher` match, and the WatchConnectivity transit shape).
 - [x] Added the iPhone-side HealthKit prompt to the Blocker 3 device matrix and
   the final smoke test — the previous matrix was Watch-only.
-- [x] Reconciled the remaining "iCloud backup" wording in `SUPPORT_PAGE.md`,
-  `docs/website/support.html`, and the `docs/website/index.html` badge to the iCloud Drive
-  archive terminology agreed in Item 5.
+- [x] Reconciled the remaining "iCloud backup" wording in `SUPPORT_PAGE.md`
+  (since retired — it duplicated the support page), `docs/website/support.html`,
+  and the `docs/website/index.html` badge to the iCloud Drive archive
+  terminology agreed in Item 5.
 
 ---
 

@@ -82,7 +82,6 @@ The developer does not collect or receive data from DeuceMate and operates no ba
 - 🌐 Support site: [emrahman.github.io/DeuceMate/support.html](https://emrahman.github.io/DeuceMate/support.html)
 - 📧 Email: [mail@ehsanrahman.com](mailto:mail@ehsanrahman.com?subject=DeuceMate%20Feedback)
 - 🐛 Report issues: [GitHub Issues](https://github.com/EMRahman/DeuceMate/issues)
-- 📖 Help & FAQs: [SUPPORT_PAGE.md](SUPPORT_PAGE.md)
 
 ## Development
 
