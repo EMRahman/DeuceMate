@@ -281,15 +281,21 @@ Suggested Apple Watch screenshot content (in order):
 **Marketing URL (optional):** `https://emrahman.github.io/DeuceMate/`
 **Privacy Policy URL (REQUIRED):** `https://emrahman.github.io/DeuceMate/privacy.html`
 
-**Note:** These point at the public GitHub Pages site served from the `/docs`
-folder (`docs/website/index.html` = marketing landing page, `docs/website/support.html` =
-support/help, `docs/website/privacy.html` = privacy policy).
-**Pages must be enabled before submission:** repo **Settings → Pages → Build
-and deployment → Deploy from a branch → `main` / `/docs`**. GitHub Pages on a
-private repo requires GitHub Pro or higher; on the free plan the repository must
-be public for Pages to publish. If you'd rather host on your own domain, drop
-the same two files on `ehsanrahman.com` and use those URLs instead — Apple only
-needs the Privacy Policy and Support URLs to resolve publicly.
+**Note:** These point at the public GitHub Pages site, which is built from
+`docs/website/` (`index.html` = marketing landing page, `support.html` =
+support/help, `privacy.html` = privacy policy — the folder is the site root, so
+each file's URL is its name).
+**Pages must be enabled before submission:** repo **Settings → Pages → Build and
+deployment → Source → GitHub Actions**. ⚠️ Do **not** pick "Deploy from a
+branch": the site is published by `.github/workflows/pages.yml`, which uploads
+`docs/website/` as the Pages artifact. A branch source pointed at `main` / `/docs`
+would serve the repository's documentation folder, which has no `index.html` at
+its root — the Marketing, Support and Privacy URLs registered with Apple would
+all 404. GitHub Pages on a private repo requires GitHub Pro or higher; on the
+free plan the repository must be public for Pages to publish. If you'd rather
+host on your own domain, drop the same two files on `ehsanrahman.com` and use
+those URLs instead — Apple only needs the Privacy Policy and Support URLs to
+resolve publicly.
 
 ---
 

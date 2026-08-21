@@ -153,7 +153,7 @@ MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
 
 ## Future ideas (not built)
 
-- A hosted "share a link" variant (viewer on the existing GitHub Pages `docs/`
-  site, match data in the URL fragment) if a tappable link is later preferred
+- A hosted "share a link" variant (viewer on the existing GitHub Pages site in
+  `docs/website/`, match data in the URL fragment) if a tappable link is later preferred
   over a file attachment.
 - Reusing `MatchWebTemplate`'s renderer on the marketing site demo.
