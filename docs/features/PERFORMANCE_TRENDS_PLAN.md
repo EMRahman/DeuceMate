@@ -40,6 +40,8 @@ key_data_model_facts:
   - "wueRatio / aggressionIndex / ownErrorsPct are pre-formatted Strings and their numerators are discarded (MatchStatsSummary.swift:57-62). A W:UE trend line cannot be drawn from a String. This is TECHNICAL_DEBT #7."
   - "PhoneStatsStore.history is @Published private(set) [MatchRecord], already newest-first (PhoneStatsStore.swift:37). Trend series are oldest-first, so the derivation reverses it exactly once, in Core."
   - "PastMatchesView's `pastRecords` (PastMatchesView.swift:93-97) UNIONS store.history with syncService.watchMirror rows. Mirror rows are summaries and may carry no stats. Trends must read store.history alone."
+  - "Outcome tracking is toggleable MID-MATCH, and when off the watch still records the point as .uncategorized (ScoreViewModel.swift:938, 'Stats off: silently record an uncategorized point for history/analytics'). MatchStatsSummary counts outcome numerators over the categorized subset (:143,176-182) but wonPoints/lostPoints/firstServeTotal over ALL points (:147-148,155). Pairing them depresses every outcome rate on a partially tracked match — so outcome-mix metrics use categorized-only denominators. See §3.6."
+  - "Pooling must sum raw numerator/denominator pairs across every match in a block, not average the plotted dots. wueRatio is nil at zero unforced errors — nil meaning 'no errors', not 'no data' — so a 10W/0UE match has no dot but its 10 winners still belong in the pooled numerator. See §3.3 and §4.2."
   - "MatchStatsSummary.init is eager: ~30 filter passes plus PulseCoachInsights, StepsCoachInsights and RecCoachInsights (MatchStatsSummary.swift:325-349). Cheap for one match, wasteful across an archive — hence the id-keyed cache in §6.6, not new API (§8.1)."
 decisions:
   normalization: "natural-rate-per-metric plus a Rate/Count toggle"
@@ -61,6 +63,9 @@ open_questions:
   - id: OQ-3
     question: "Should the inline section hide entirely below the minimum match count, per the house 'empty array = hide the section' idiom (RecCoachInsights.swift:30-32)?"
     recommendation: "No. Render the section with a one-line 'Needs 3 tracked matches — you have 2' explainer. The house idiom exists so a per-match panel does not show noise on thin data; here, hiding means a new user never learns the feature exists. This is a deliberate, stated departure."
+  - id: OQ-5
+    question: "Should a window whose trackingCoverage is low be labelled, or excluded outright?"
+    recommendation: "Labelled, not excluded. §3.6's categorized denominators already make the rate honest for the tracked subset; excluding would throw away a real signal because part of a match went untracked. Surface trackingCoverage on the screen and let the player judge."
   - id: OQ-4
     question: "Aces over time — worth a metric?"
     recommendation: "Not in this feature. ServingPointCategory.ace requires endingShot == .serve (PointStat.swift:226-228), so ace counts are silently zero for every match archived without ending-shot data, which reads as 'you stopped hitting aces'. Revisit once ending-shot coverage is near-universal in a real archive."
@@ -205,6 +210,19 @@ what survives. Tested explicitly (`PerformanceTrendsTests`).
 | Chart / sparkline dot | that match's own rate | each match is one observation; that is what "per match" means to a player |
 | Headline figure and delta | pooled: Σnumerators / Σdenominators over the block | a 24-point thrashing must not swing the average as hard as a three-setter |
 
+**Pooling sums every match in the block, including matches whose own dot is absent.** A
+match with 10 winners and 0 unforced errors has no plottable W:UE dot (§4.2), but its 10
+winners still belong in the pooled numerator: pooling `10W/0UE` with `1W/1UE` is
+**11 : 1**, not `1 : 1`. Dropping the un-plottable match would discard real data and report
+the player's cleanest match as their worst. Pooled is therefore Σnumerator / Σdenominator
+over **all** matches in the block, `nil` only when Σdenominator is 0 — never a mean of the
+plotted dots.
+
+For percentage metrics the two formulations agree: a match with an empty denominator
+contributes `0/0`, a no-op. They diverge only for `wueRatio`, where `nil` means "zero
+unforced errors", not "no data". That narrowness is exactly what makes it easy to get
+wrong, so §5.2 gives pooling its own accessor rather than reusing the plotting one.
+
 Both are correct for their job, and they will not agree. The screen labels the pooled
 figure with its window ("4.2% · last 10") so the two are never mistaken for each other.
 This is OQ-1.
@@ -215,7 +233,9 @@ Every metric returns `Double?`. It is `nil` — never `0` — when the denominat
 the match lacks the coverage the metric needs (no `endingShot` data for rally depth, no
 `isBreakPoint`/`gameScoreAtStart` for pressure, zero unforced errors for a W:UE ratio).
 
-Charts skip `nil` dots; pooled blocks pool only non-`nil` matches. Collapsing these to `0`
+Charts skip `nil` dots. **Pooled blocks do not skip them** — they sum raw numerators and
+denominators across every match and go `nil` only when the aggregate denominator is 0
+(§3.3). Collapsing a `nil` to `0`
 would draw a player a graph of their equipment history and label it their game. This is the
 one rule most likely to be quietly violated during implementation, so it is asserted per
 metric in `TrendMetricTests`.
@@ -233,7 +253,35 @@ A match contributes only if **all** hold:
 
 Ineligible matches are absent from the series entirely, not plotted as gaps.
 
-### 3.6 Naming
+### 3.6 Partially tracked matches: categorized denominators
+
+Outcome tracking is a setting the player can toggle **mid-match**. When it is off the watch
+still records the point, with `outcome: .uncategorized` — `ScoreViewModel.swift:938` is
+explicit: *"Stats off: silently record an uncategorized point for history/analytics."*
+
+So a match can hold 30 categorized points and 90 uncategorized ones and still clear §3.5's
+threshold. That matters, because `MatchStatsSummary` counts outcome numerators over the
+**categorized** subset (`MatchStatsSummary.swift:143,176-182`) while `wonPoints`,
+`lostPoints` and `firstServeTotal` count **every** point
+(`MatchStatsSummary.swift:147-148,155`). Pairing the two treats every untracked point as
+"not an error and not a winner" and silently depresses the rate — a player who turned
+tracking off for a bad patch would see their error rate *improve*.
+
+**Outcome-mix metrics therefore divide by categorized-only denominators.** The rate then
+reads honestly: "of the points I lost *that were tracked*, this share were unforced errors".
+
+The flaw is confined to metrics whose numerator filters on `outcome` — double faults,
+unforced errors, forced errors, winners, W:UE, aggression index, own-error share. Serve,
+return, break-point, big-point and points-won metrics key off `winner`, `server`,
+`isSecondServe` and `isBreakPoint`, every one of which is recorded for uncategorized points
+too, so those are correct against all-points denominators. Rally depth is already safe by
+construction: `endingShot` is `nil` on an uncategorized point, so `pointsWithEndingShot`
+excludes it.
+
+`MatchTrendSample` also carries `trackingCoverage` (categorized ÷ total) so the screen can
+mark a thinly-tracked window rather than quietly averaging it in.
+
+### 3.7 Naming
 
 **"Trends"**, for the section header, the nav title and the doc. It fits an inset-grouped
 header and a `.inline` nav title; "Trending" carries a social-media ranking connotation the
@@ -253,30 +301,38 @@ Below, all field names are `MatchStatsSummary` fields evaluated with **`focal: .
 
 | Metric | Numerator / denominator | Better |
 |---|---|---|
-| Double Faults | `doubleFaults` / `firstServeTotal` (= all service points) | lower |
-| Double Faults conceded | `opponentDoubleFaults` / (`returnOppsOnFirst` + `returnOppsOnSecond`) | higher |
-| Unforced Errors | `myUnforcedErrors` / `lostPoints` | lower |
-| Unforced Errors drawn | `opponentUnforcedErrors` / `wonPoints` | higher |
-| Forced Errors conceded | `myForcedErrors` / `lostPoints` | lower |
-| **Forced Errors caused** | `opponentForcedErrors` / `wonPoints` | higher |
+| Double Faults | `doubleFaults` / `categorizedServicePoints` | lower |
+| Double Faults conceded | `opponentDoubleFaults` / `categorizedOpponentServicePoints` | higher |
+| Unforced Errors | `unforcedErrorsHit` / `categorizedPointsLost` | lower |
+| Unforced Errors drawn | `unforcedErrorsDrawn` / `categorizedPointsWon` | higher |
+| Forced Errors conceded | `forcedErrorsConceded` / `categorizedPointsLost` | lower |
+| **Forced Errors caused** | `forcedErrorsCaused` / `categorizedPointsWon` | higher |
 
-Note `firstServeTotal` is **every** service point, not "first serves that landed" — the
-naming is counter-intuitive and documented at `MatchStatsSummary.swift:151-154`.
+Every denominator here is **categorized-only**, per §3.6. Pairing a categorized numerator
+with an all-points denominator under-reports each rate on a partially tracked match.
+
+Note also that `MatchStatsSummary.firstServeTotal`, which `servicePoints` mirrors, is
+**every** service point, not "first serves that landed" — counter-intuitive, and documented
+at `MatchStatsSummary.swift:151-154`.
 
 ### 4.2 Attack
 
 | Metric | Numerator / denominator | Better |
 |---|---|---|
-| Winners | `myWinners` / `wonPoints` | higher |
-| Winners conceded | `opponentWinners` / `lostPoints` | lower |
-| W:UE ratio | `myWinners` / `myUnforcedErrors` — **ratio unit, no count mode** | higher |
-| Aggression index | `myWinners` / (`myWinners` + `myUnforcedErrors`) | higher |
-| Own-error share | (`doubleFaults` + `myUnforcedErrors`) / `lostPoints` | lower |
+| Winners | `winnersHit` / `categorizedPointsWon` | higher |
+| Winners conceded | `winnersConceded` / `categorizedPointsLost` | lower |
+| W:UE ratio | `winnersHit` / `unforcedErrorsHit` — **ratio unit, no count mode** | higher |
+| Aggression index | `winnersHit` / (`winnersHit` + `unforcedErrorsHit`) | higher |
+| Own-error share | (`doubleFaults` + `unforcedErrorsHit`) / `categorizedPointsLost` | lower |
 
-W:UE is `nil` when `myUnforcedErrors == 0`. The per-match display renders that as `∞ : 1`
+W:UE is `nil` when `unforcedErrorsHit == 0`. The per-match display renders that as `∞ : 1`
 (matching `MatchStatsSummary.swift:187`); the **chart cannot plot it**, and feeding
 `Double.infinity` to Swift Charts destroys the Y domain for the whole series. `nil` and a
 skipped dot is the only safe answer.
+
+⚠️ **`nil` here means "zero unforced errors", not "no data".** That match's winners must
+still enter the pooled numerator (§3.3). Pooling only the plottable matches would report a
+flawless match as a mediocre one — `10W/0UE` then `1W/1UE` is **11 : 1**, not `1 : 1`.
 
 ### 4.3 Rally depth — four phases, not a length
 
@@ -341,14 +397,25 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     public let matchFormat: MatchFormat
     public let recorderWon: Bool?           // nil == draw (never in-progress; see init)
 
-    // Volume
+    // Volume. The categorized* denominators are what outcome-mix metrics divide by
+    // (§3.6); the all-points ones serve the serve/return/pressure metrics, which are
+    // valid on uncategorized points too.
     public let totalPoints: Int
     public let categorizedPoints: Int
     public let pointsWon: Int
     public let pointsLost: Int
+    public let categorizedPointsWon: Int
+    public let categorizedPointsLost: Int
+    /// categorizedPoints / totalPoints. 1.0 when tracking stayed on all match; lower
+    /// when the player toggled it off mid-match (§3.6). Surfaced, not silently averaged.
+    public var trackingCoverage: Double {
+        totalPoints > 0 ? Double(categorizedPoints) / Double(totalPoints) : 0
+    }
 
     // Serve and return
     public let servicePoints: Int           // summary.firstServeTotal — ALL service points
+    public let categorizedServicePoints: Int
+    public let categorizedOpponentServicePoints: Int
     public let firstServesIn: Int
     public let firstServeWins: Int
     public let secondServePoints: Int
@@ -436,8 +503,18 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
     public var unit: Unit
     public var supportsCountMode: Bool       // false for wueRatio, aggressionIndex, shares
 
-    /// `nil` when the denominator is empty or the sample lacks coverage (§3.4).
-    public func ratio(in sample: MatchTrendSample) -> Ratio?
+    /// The raw pair for this metric on one match, WITHOUT the empty-denominator guard.
+    /// `nil` only when the sample lacks the coverage the metric needs at all (e.g. no
+    /// ending-shot data). Pooling sums these across a block (§3.3).
+    public func rawPair(in sample: MatchTrendSample) -> (numerator: Int, denominator: Int)?
+
+    /// One match's plottable value: `rawPair` plus the empty-denominator guard, so a
+    /// 0-denominator match yields no dot (§3.4). Never use this for pooling — it would
+    /// discard the numerator of a zero-denominator match (§4.2).
+    public func ratio(in sample: MatchTrendSample) -> Ratio? {
+        guard let p = rawPair(in: sample), p.denominator > 0 else { return nil }
+        return Ratio(numerator: p.numerator, denominator: p.denominator)
+    }
 
     public static func metrics(in group: TrendMetricGroup) -> [TrendMetric]
     /// The four rows on the archive screen.
@@ -483,7 +560,10 @@ public struct TrendSeries: Equatable, Sendable, Identifiable {
     public var id: TrendMetric { metric }
     public let metric: TrendMetric
     public let points: [TrendPoint]         // oldest-first, nil-valued matches omitted
-    public let pooled: TrendMetric.Ratio    // Σnum / Σden over the window (§3.3)
+    /// Σnumerator / Σdenominator over EVERY match in the window — including matches whose
+    /// own dot is absent (§3.3). Built from `rawPair`, never from `points`. `nil` only
+    /// when the aggregate denominator is 0. **This is not a mean of `points`.**
+    public let pooled: TrendMetric.Ratio?
     public let delta: TrendDelta?           // nil when either block is too thin
 }
 
@@ -630,12 +710,18 @@ Closes `TECHNICAL_DEBT.md` #7.
 1. `Stats/MatchStatsSummary.swift` — add `RatioStat { numerator, denominator, formatted }`
    as #7 specifies; change `wueRatio`, `aggressionIndex`, `ownErrorsPct` from `String` to
    it. Keep `pct(num:den:)` as the formatter so no output string changes.
-2. Update call sites to `.formatted`: `MatchDetailView.swift`, `MatchExporter.swift`,
+2. `Stats/MatchStatsSummary.swift` — additively expose `categorizedPointsWon`,
+   `categorizedPointsLost`, `categorizedServicePoints`, `categorizedOpponentServicePoints`,
+   derived from the `categorized` subset it already builds
+   (`MatchStatsSummary.swift:143`). §3.6's denominators then live in one place instead of
+   being recomputed in `MatchTrendSample`. No existing field changes.
+3. Update call sites to `.formatted`: `MatchDetailView.swift`, `MatchExporter.swift`,
    `MatchStatsView.swift` (watch), `WebExport/MatchWebViewModel+Comparison.swift`.
    Mechanical — #7 records it as such.
-3. `MatchStatsSummaryTests.swift` — assert the typed numerator/denominator, and that
-   `.formatted` is byte-identical to today's strings for the ∞, `—` and normal cases.
-4. `docs/features/TECHNICAL_DEBT.md` — move #7 to the archive as **(Done)**, keeping its
+4. `MatchStatsSummaryTests.swift` — assert the typed numerator/denominator; that
+   `.formatted` is byte-identical to today's strings for the ∞, `—` and normal cases; and
+   that the categorized denominators exclude `.uncategorized` points.
+5. `docs/features/TECHNICAL_DEBT.md` — move #7 to the archive as **(Done)**, keeping its
    write-up intact per that file's contract.
 
 *Separable:* `MatchTrendSample` could compute W:UE from the public `Int` fields and skip
@@ -737,8 +823,8 @@ cd DeuceMate/Packages/DeuceMateCore && \
 | Test file | Must cover |
 |---|---|
 | `MatchTrendSampleTests` | eligibility rejects in-progress, `.perpetualPoints`, and <20 categorized points; counters equal a hand-built match; `rallyDepth` keyed correctly when buckets are missing; recorder-framed names map to the right `MatchStatsSummary` fields — **especially `forcedErrorsCaused` == `opponentForcedErrors`** |
-| `TrendMetricTests` | every metric returns `nil` (not `0`) on an empty denominator; `wueRatio` is `nil` at zero UEs; every case has a group, label, denominator label and direction; rally-depth shares are `.neutral`; `supportsCountMode` is false exactly for ratio/share metrics |
-| `PerformanceTrendsTests` | **filter-before-window ordering**; pooled ≠ mean-of-rates on deliberately uneven matches; delta sign and percentage-point units; `.flat` below `minimumBlockMatches` and below `minimumChange`; `.improving` for a *falling* double-fault rate; window larger than history; single-match and empty history; newest-first input yields oldest-first output |
+| `TrendMetricTests` | `ratio(in:)` returns `nil` (not `0`) on an empty denominator; `wueRatio` is `nil` at zero UEs but `rawPair` still reports its winners; outcome-mix metrics divide by the **categorized** denominators, so a match that is half-untracked reports the same rate as a fully-tracked one with the same tracked points; every case has a group, label, denominator label and direction; rally-depth shares are `.neutral`; `supportsCountMode` is false exactly for ratio/share metrics |
+| `PerformanceTrendsTests` | **filter-before-window ordering**; **pooled W:UE over `10W/0UE` + `1W/1UE` is 11:1, not 1:1** — the zero-UE match's winners must survive pooling even though it has no dot; pooled is `nil` only when Σdenominator is 0; pooled ≠ mean-of-rates on deliberately uneven matches; delta sign and percentage-point units; `.flat` below `minimumBlockMatches` and below `minimumChange`; `.improving` for a *falling* double-fault rate; window larger than history; single-match and empty history; newest-first input yields oldest-first output |
 
 Add a mirror-image consistency test in the style of `SimulatedGameStatsTests.swift:184-185`:
 build a synthetic match and assert the recorder-side and opponent-side metrics are proper
@@ -757,6 +843,8 @@ xcodebuild test -project DeuceMate/DeuceMate.xcodeproj \
   read as a collapse. This is the one check that proves §3.1 works; if it fails, the
   feature is actively misleading and should not ship.
 - A match with no `endingShot` data leaves a **gap** in the Rally Depth chart, not a zero.
+- A match played with outcome tracking toggled off partway does **not** show an improved
+  error rate (§3.6). This is the failure mode the categorized denominators exist to stop.
 - Falling double faults show a **green** ↓, not a red one (§5.3 orientation).
 - Switching Singles → Doubles with few doubles matches shows the thin-data line, not an
   empty chart or a crash.
@@ -778,6 +866,12 @@ xcodebuild test -project DeuceMate/DeuceMate.xcodeproj \
   `MatchStatsSummary.swift:176-182` before touching §4.1.
 - The second-highest risk is `nil` quietly becoming `0` (§3.4) somewhere between Core and a
   `LineMark`. `Chart` will happily plot a zero.
+- The third is pooling from `points` instead of from `rawPair` (§3.3). It looks like a
+  harmless simplification, agrees with the correct answer for every percentage metric, and
+  is wrong only for `wueRatio` — where it reports a player's cleanest match as their worst.
+  That is why `pooled` is documented as "not a mean of `points`" at its declaration.
+- Outcome-mix denominators are **categorized-only** (§3.6) and the rest are not. That
+  asymmetry is deliberate and load-bearing; do not "tidy" it into one denominator.
 - Do not "simplify" §3.3 by making the headline figure the mean of the chart dots. They are
   different numbers on purpose, and the reasoning is OQ-1.
 - Flag anything in `open_questions` you would resolve differently, especially OQ-3 — it is a
