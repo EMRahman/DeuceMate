@@ -460,7 +460,7 @@ struct MatchStatsView: View {
             if hasAnyOutcomeData {
                 comparisonSectionHeader("Outcome Breakdown")
                 HStack(spacing: 2) {
-                    Text(me.wueRatio)
+                    Text(me.wueRatio.formatted)
                         .font(.system(size: 10, weight: .semibold).monospacedDigit())
                         .foregroundStyle(meColor)
                         .frame(minWidth: 26, alignment: .trailing)
@@ -474,7 +474,7 @@ struct MatchStatsView: View {
                             .foregroundStyle(.tertiary)
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
-                    Text(opp.wueRatio)
+                    Text(opp.wueRatio.formatted)
                         .font(.system(size: 10, weight: .semibold).monospacedDigit())
                         .foregroundStyle(oppColor)
                         .frame(minWidth: 26, alignment: .leading)

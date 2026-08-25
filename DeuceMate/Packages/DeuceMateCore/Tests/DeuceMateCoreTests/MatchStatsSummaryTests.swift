@@ -87,7 +87,9 @@ final class MatchStatsSummaryTests: XCTestCase {
         // myWinners = pts 0,3,5,7,8 (outcome=winner AND winner==me)
         // myUE = pts where winner=opp, outcome=UE → pt 2 (1)
         // wue = 5/1 = 5.0 : 1
-        XCTAssertEqual(s.wueRatio, "5.0 : 1")
+        XCTAssertEqual(s.wueRatio.formatted, "5.0 : 1")
+        XCTAssertEqual(s.wueRatio.numerator, 5)
+        XCTAssertEqual(s.wueRatio.denominator, 1)
     }
 
     func test_rallyDepth_populated() {
@@ -114,9 +116,23 @@ final class MatchStatsSummaryTests: XCTestCase {
     func test_emptyStats_noGarbage() {
         let s = MatchStatsSummary(stats: [], focal: .me)
         XCTAssertEqual(s.totalPoints, 0)
-        XCTAssertEqual(s.wueRatio, "—")
-        XCTAssertEqual(s.aggressionIndex, "—")
-        XCTAssertEqual(s.ownErrorsPct, "—")
+        XCTAssertEqual(s.wueRatio.formatted, "—")
+        XCTAssertEqual(s.aggressionIndex.formatted, "—")
+        XCTAssertEqual(s.ownErrorsPct.formatted, "—")
+    }
+
+    /// wueRatio is "∞ : 1", never "—", when there are winners but zero
+    /// unforced errors — a RatioStat consumer must not treat that nil-free
+    /// case as "no data" (PERFORMANCE_TRENDS_PLAN.md §4.2).
+    func test_wueRatio_infinityWhenNoUnforcedErrors() {
+        let stats = [
+            PointStat(setIndex: 0, server: .me, winner: .me, outcome: .winner, endingShot: .serve),
+            PointStat(setIndex: 0, server: .me, winner: .me, outcome: .winner, endingShot: .serve)
+        ]
+        let s = MatchStatsSummary(stats: stats, focal: .me)
+        XCTAssertEqual(s.wueRatio.formatted, "∞ : 1")
+        XCTAssertEqual(s.wueRatio.numerator, 2)
+        XCTAssertEqual(s.wueRatio.denominator, 0)
     }
 
     func test_pct_formatting() {
@@ -190,9 +206,60 @@ final class MatchStatsSummaryTests: XCTestCase {
     func test_coachingMetrics_correct() {
         let s = MatchStatsSummary(stats: makeStats(), focal: .me)
         // aggressionIndex: myW=5, myW+myUE=6 → 83% (5/6)
-        XCTAssertEqual(s.aggressionIndex, "83% (5/6)")
+        XCTAssertEqual(s.aggressionIndex.formatted, "83% (5/6)")
+        XCTAssertEqual(s.aggressionIndex.numerator, 5)
+        XCTAssertEqual(s.aggressionIndex.denominator, 6)
         // ownErrorsPct: df+myUE=2, lostPoints=3 → Int(66.6…) = 66% (2/3)
-        XCTAssertEqual(s.ownErrorsPct, "66% (2/3)")
+        XCTAssertEqual(s.ownErrorsPct.formatted, "66% (2/3)")
+        XCTAssertEqual(s.ownErrorsPct.numerator, 2)
+        XCTAssertEqual(s.ownErrorsPct.denominator, 3)
+    }
+
+    // MARK: - Categorized-only denominators (§3.6)
+
+    /// makeStats() is fully categorized (no .uncategorized points), so the
+    /// categorized-only totals must equal their all-points counterparts.
+    func test_categorizedDenominators_matchAllPointsWhenFullyTracked() {
+        let s = MatchStatsSummary(stats: makeStats(), focal: .me)
+        XCTAssertEqual(s.categorizedPointsWon, s.pointsWon)
+        XCTAssertEqual(s.categorizedPointsLost, s.lostPoints)
+        XCTAssertEqual(s.categorizedServicePoints, s.firstServeTotal)
+        XCTAssertEqual(s.categorizedOpponentServicePoints,
+                       s.returnOppsOnFirst + s.returnOppsOnSecond)
+    }
+
+    /// Regression for the Codex-caught spec bug in PERFORMANCE_TRENDS_PLAN.md
+    /// §3.6: a match with tracking toggled off mid-match still records the
+    /// untracked points (outcome: .uncategorized), so an outcome-mix rate
+    /// paired with an ALL-points denominator would be silently depressed.
+    /// categorizedPointsWon/Lost must exclude the untracked points entirely,
+    /// not merely undercount their numerator.
+    func test_categorizedDenominators_excludeUncategorizedPoints() {
+        let tracked: [PointStat] = [
+            PointStat(setIndex: 0, server: .me, winner: .me, outcome: .winner, endingShot: .serve),
+            PointStat(setIndex: 0, server: .me, winner: .opponent, outcome: .unforcedError, endingShot: .rally)
+        ]
+        // Tracking toggled off: these mirror ScoreViewModel.autoRecordPointStat,
+        // which stamps outcome: .uncategorized for points recorded while stats
+        // tracking is disabled (ScoreViewModel.swift:938).
+        let untracked: [PointStat] = (0..<10).map { i in
+            PointStat(setIndex: 0, server: i % 2 == 0 ? .me : .opponent,
+                      winner: i % 2 == 0 ? .opponent : .me, outcome: .uncategorized)
+        }
+        let s = MatchStatsSummary(stats: tracked + untracked, focal: .me)
+        // All-points totals are diluted by the 10 untracked points.
+        XCTAssertEqual(s.totalPoints, 12)
+        XCTAssertEqual(s.pointsWon, 6)     // 1 tracked win + 5 untracked wins
+        XCTAssertEqual(s.lostPoints, 6)    // 1 tracked loss + 5 untracked losses
+        // Categorized-only totals see just the 2 tracked points.
+        XCTAssertEqual(s.categorizedPointsWon, 1)
+        XCTAssertEqual(s.categorizedPointsLost, 1)
+        // The bug this regresses: pairing myWinners (numerator over the
+        // categorized subset) with the ALL-points pointsWon (6) would read
+        // 1/6 = 16%. Paired with the categorized denominator it correctly
+        // reads 1/1 = 100% of this player's TRACKED wins were winners.
+        XCTAssertEqual(s.myWinners, 1)
+        XCTAssertEqual(Double(s.myWinners) / Double(s.categorizedPointsWon), 1.0)
     }
 
     // MARK: - Deuce/Ad score state

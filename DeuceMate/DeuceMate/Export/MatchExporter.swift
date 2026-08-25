@@ -248,9 +248,9 @@ nonisolated struct MatchExporter {
         lines.append(row("Unforced Errors:", "\(summary.myUnforcedErrors)"))
         lines.append(row("Forced Errors:", "\(summary.myForcedErrors)"))
         lines.append(row("Double Faults:", "\(summary.myDoubleFaults)"))
-        lines.append(row("Self-Inflicted Losses:", summary.ownErrorsPct + "  (own errors / points lost)"))
-        lines.append(row("W:UE Ratio:", summary.wueRatio + "  ← aim for >1.0"))
-        lines.append(row("Aggression Index:", summary.aggressionIndex + "  (winners / winners+UE)"))
+        lines.append(row("Self-Inflicted Losses:", summary.ownErrorsPct.formatted + "  (own errors / points lost)"))
+        lines.append(row("W:UE Ratio:", summary.wueRatio.formatted + "  ← aim for >1.0"))
+        lines.append(row("Aggression Index:", summary.aggressionIndex.formatted + "  (winners / winners+UE)"))
         return lines.joined(separator: "\n")
     }
 
