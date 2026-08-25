@@ -96,6 +96,11 @@ struct PastMatchesView: View {
                                 .filter { $0.id != activeID }
                                 .sorted { $0.startTime > $1.startTime }
 
+                        // Trends — reads store.history directly, not pastRecords,
+                        // since watch-mirror rows may carry no stats (§6.1 of
+                        // docs/features/PERFORMANCE_TRENDS_PLAN.md).
+                        TrendsSection(records: store.history, activeMatchID: activeID)
+
                         // Live Match section
                         if let liveRecord = store.history.first(where: { $0.id == activeID }) {
                             Section {

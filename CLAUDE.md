@@ -51,7 +51,11 @@ frameworks only — this is a hard rule, do not add packages).
   (phone) — the documented announcements aliases (TECHNICAL_DEBT #3); and
   `defaultMatchFormat` / `defaultMatchType` (watch-local, `MatchSetupDefaults` —
   the remembered match setup never syncs to the phone, see
-  `docs/features/MATCH_START_UX_PLAN.md` §5.6).
+  `docs/features/MATCH_START_UX_PLAN.md` §5.6); and `trendsWindow` /
+  `trendsMatchType` / `trendsMatchFormat` (phone-local, `TrendsView` — the
+  archive screen's Trends filters are UI state, not a match setting, so they
+  never sync to the watch either, see
+  `docs/features/PERFORMANCE_TRENDS_PLAN.md` §6.4).
   See `docs/features/TECHNICAL_DEBT.md` #10.
 - **When you genuinely cannot verify**, say so clearly in the PR description
   rather than pushing speculatively.
@@ -162,7 +166,8 @@ All need `import DeuceMateCore` (see §0).
 | `Views/PointsGraphView.swift` | ~1.9k | Charts (points momentum + outcome/serving/ending-shot filters + HR/steps overlays), including set-relative point selection with the full pre-point score and serving side. Heavily `MARK:`-sectioned. |
 | `Views/MatchDetailView.swift` | ~1260 | Per-match detail, stats tabs, full-score/server point rows, share/export. |
 | `Export/MatchExporter.swift` | ~630 | Plain-text + AI-prompt export. `nonisolated static` builders by section. |
-| `Views/PastMatchesView.swift` | ~745 | iPhone archive list (phone-side analogue of the watch `MatchHistoryView`); shows storage-location + iCloud indicators. Growing fast — see TECHNICAL_DEBT #13. |
+| `Views/PastMatchesView.swift` | ~751 | iPhone archive list (phone-side analogue of the watch `MatchHistoryView`); shows storage-location + iCloud indicators; hosts the Trends section (below). TECHNICAL_DEBT #13's "next substantial edit" landed as ~6 lines here — new content went to `Views/Trends/` instead of growing this file. |
+| `Views/Trends/TrendsSection.swift`, `TrendsSamples.swift`, `TrendsView.swift`, `TrendChart.swift`, `TrendSparkline.swift` | | Cross-match performance trends UI: `TrendsSection` is the archive-screen headline (4 sparklines + link, or a "needs N more" line — deliberately not hidden below the minimum-matches threshold); `TrendsView` is the full pushed screen (window/type/format filters, Rate/Count toggle, one `TrendChart` per group); `TrendChart` draws the grouped multi-line charts (`foregroundStyle(by:)` + `chartForegroundStyleScale(domain:range:)` — NOT a literal per-mark colour, which merges every metric into one connected line) and the Rally Depth Mix/Win-Rate toggle; `TrendSparkline` is the shared compact chart+delta-chip. See `docs/features/PERFORMANCE_TRENDS_PLAN.md`. |
 | `Views/SettingsView.swift` (~819), `ManualMatchEntryView.swift` (~449), `LiveScoreboardView.swift` (~506), `LivePointCategoryPanel.swift` (~222) | | Settings including Watch sync counts/fresh-Watch restore guidance and Backup & Transfer archive export/import, manual entry, live spectator, phone-side point categorisation (mirrors the watch sheet when iPhone Input is on). |
 | `Views/PulseCoach/PulseCoachSection.swift`, `Views/Coaching/RecCoachSection.swift`, `AICoachLauncher.swift`, `AICoachSheet.swift` | | HR coaching panel, recreational coaching insights, and routing a generated coaching prompt to third-party AI apps. |
 | `Sync/PhoneMatchSyncService.swift` | ~626 | Phone side of `WatchConnectivity`; a Watch manifest (including empty) acknowledges Sync Now, and live install state refreshes through `sessionWatchStateDidChange`. |
