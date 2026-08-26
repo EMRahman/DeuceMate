@@ -12,9 +12,10 @@ import DeuceMateCore
 struct TrendsSection: View {
     /// The full phone archive (store.history) — NOT PastMatchesView's
     /// `pastRecords`, which unions in watch-mirror summaries that may carry
-    /// no `stats` at all (§6.1).
+    /// no `stats` at all (§6.1). Includes the live match, if any — it now
+    /// contributes to trends once it clears the categorized-points
+    /// threshold (owner request), not just completed matches.
     let records: [MatchRecord]
-    let activeMatchID: UUID?
 
     @Environment(\.appTheme) private var theme
     @StateObject private var samplesCache = TrendsSamples()
@@ -27,6 +28,19 @@ struct TrendsSection: View {
         let have = samplesCache.samples.count
         guard have < PerformanceTrends.minimumMatches else { return nil }
         return PerformanceTrends.minimumMatches - have
+    }
+
+    /// A cheap per-render signature covering everything TrendsSamples'
+    /// cache cares about (id, endTime, iWon, stats.count) — used only to
+    /// decide whether to CALL refresh at all; TrendsSamples' own internal
+    /// fingerprint is the precise check. Needed because a live match's
+    /// stats grow one point at a time without its id ever changing, so
+    /// watching `records.map(\.id)` alone would never re-trigger while a
+    /// match is still being scored.
+    private var recordsSignature: String {
+        records.map {
+            "\($0.id.uuidString)|\($0.stats.count)|\($0.endTime?.timeIntervalSince1970 ?? -1)|\($0.iWon.map(String.init) ?? "?")"
+        }.joined(separator: ";")
     }
 
     var body: some View {
@@ -58,10 +72,10 @@ struct TrendsSection: View {
             Text("Trends")
         }
         .onAppear {
-            samplesCache.refresh(records: records, excludingActiveMatchID: activeMatchID)
+            samplesCache.refresh(records: records)
         }
-        .onChange(of: records.map(\.id)) { _, _ in
-            samplesCache.refresh(records: records, excludingActiveMatchID: activeMatchID)
+        .onChange(of: recordsSignature) { _, _ in
+            samplesCache.refresh(records: records)
         }
     }
 }

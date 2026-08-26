@@ -1,8 +1,5 @@
 // TrendsSamplesTests.swift — cache invalidation for the Trends screen's
-// id-keyed MatchTrendSample derivation. Regression coverage for a bug
-// caught in PR #120 review: an id-only cache signature doesn't change when
-// a match transitions from in-progress to completed (same id, new
-// endTime/iWon), so the newly-eligible match silently never appears.
+// id-keyed MatchTrendSample derivation.
 import Foundation
 import DeuceMateCore
 import Testing
@@ -18,9 +15,9 @@ struct TrendsSamplesTests {
         }
     }
 
-    private func makeInProgress(id: UUID) -> MatchRecord {
+    private func makeInProgress(id: UUID, pointCount: Int = 25) -> MatchRecord {
         MatchRecord(id: id, startTime: Date(), endTime: nil,
-                    setScores: [SetScore()], stats: makePoints(count: 25), iWon: nil)
+                    setScores: [SetScore()], stats: makePoints(count: pointCount), iWon: nil)
     }
 
     private func makeCompleted(id: UUID, startTime: Date) -> MatchRecord {
@@ -29,73 +26,72 @@ struct TrendsSamplesTests {
                     stats: makePoints(count: 25), iWon: true)
     }
 
-    /// The bug: refresh(records:) is called once while a match is
-    /// in-progress (excluded from samples, correctly), then again after the
-    /// SAME match completes (same id, only endTime/iWon changed). An
-    /// id-only cache signature sees no change in the id array and skips
-    /// recomputation, leaving the newly-eligible match permanently absent
-    /// from samples until an unrelated match changes the id set.
+    /// Regression for a bug caught in PR #120 review: an id-only cache
+    /// signature doesn't change when a match transitions from in-progress
+    /// to completed (same id, new endTime/iWon), so the sample's content
+    /// stayed frozen at its in-progress shape. Now that in-progress matches
+    /// are themselves eligible (owner request), the assertion is about the
+    /// sample's CONTENT updating on completion, not about appearing for the
+    /// first time.
     @Test func refresh_picksUpMatchCompletingWithSameID() {
         let id = UUID()
         let cache = TrendsSamples()
 
-        // excludingActiveMatchID held constant (nil) across both calls, so
-        // the ONLY thing that changes between them is the record's own
-        // endTime/iWon — isolating exactly the transition the bug missed.
-        cache.refresh(records: [makeInProgress(id: id)], excludingActiveMatchID: nil)
-        #expect(cache.samples.isEmpty)
+        cache.refresh(records: [makeInProgress(id: id)])
+        #expect(cache.samples.map(\.matchID) == [id])
+        #expect(cache.samples.first?.isInProgress == true)
+        #expect(cache.samples.first?.recorderWon == nil)
 
         let completed = makeCompleted(id: id, startTime: Date().addingTimeInterval(-3600))
-        cache.refresh(records: [completed], excludingActiveMatchID: nil)
+        cache.refresh(records: [completed])
         #expect(cache.samples.map(\.matchID) == [id])
+        #expect(cache.samples.first?.isInProgress == false)
+        #expect(cache.samples.first?.recorderWon == true)
     }
 
-    /// A no-op refresh (identical records, identical activeMatchID) must not
-    /// recompute — this is the whole point of the cache. Verified indirectly:
-    /// samples stays stable in both identity and content across a redundant call.
+    /// A live match's stats grow one point at a time while endTime/iWon stay
+    /// nil the whole time — a fingerprint on id/endTime/iWon alone can't see
+    /// that. The cache must pick up the newly-scored points on the next
+    /// refresh, not freeze at whatever the match looked like on first load.
+    @Test func refresh_picksUpNewPointsOnStillInProgressMatch() {
+        let id = UUID()
+        let cache = TrendsSamples()
+
+        cache.refresh(records: [makeInProgress(id: id, pointCount: 25)])
+        #expect(cache.samples.first?.totalPoints == 25)
+
+        cache.refresh(records: [makeInProgress(id: id, pointCount: 30)])
+        #expect(cache.samples.first?.totalPoints == 30)
+    }
+
+    /// A no-op refresh (identical records) must not recompute — this is the
+    /// whole point of the cache. Verified indirectly: samples stays stable
+    /// in both identity and content across a redundant call.
     @Test func refresh_isNoOpWhenNothingChanged() {
         let id = UUID()
         let record = makeCompleted(id: id, startTime: Date().addingTimeInterval(-3600))
         let cache = TrendsSamples()
 
-        cache.refresh(records: [record], excludingActiveMatchID: nil)
+        cache.refresh(records: [record])
         let first = cache.samples
-        cache.refresh(records: [record], excludingActiveMatchID: nil)
+        cache.refresh(records: [record])
         #expect(cache.samples.map(\.matchID) == first.map(\.matchID))
         #expect(cache.samples.count == 1)
     }
 
-    /// Adding a second match (id set changes) is picked up — the pre-existing
-    /// id-based half of the signature still works.
+    /// Adding a second match (id set changes) is picked up.
     @Test func refresh_picksUpNewlyAddedMatch() {
         let idA = UUID()
         let idB = UUID()
         let cache = TrendsSamples()
 
-        cache.refresh(records: [makeCompleted(id: idA, startTime: Date().addingTimeInterval(-7200))], excludingActiveMatchID: nil)
+        cache.refresh(records: [makeCompleted(id: idA, startTime: Date().addingTimeInterval(-7200))])
         #expect(cache.samples.count == 1)
 
         cache.refresh(records: [
             makeCompleted(id: idA, startTime: Date().addingTimeInterval(-7200)),
             makeCompleted(id: idB, startTime: Date().addingTimeInterval(-3600))
-        ], excludingActiveMatchID: nil)
-        #expect(Set(cache.samples.map(\.matchID)) == Set([idA, idB]))
-    }
-
-    /// A change to `excludingActiveMatchID` alone (no record content change)
-    /// must also trigger recomputation, since it affects which record the
-    /// derivation excludes.
-    @Test func refresh_picksUpActiveMatchIDChange() {
-        let idA = UUID()
-        let idB = UUID()
-        let recordA = makeCompleted(id: idA, startTime: Date().addingTimeInterval(-7200))
-        let recordB = makeCompleted(id: idB, startTime: Date().addingTimeInterval(-3600))
-        let cache = TrendsSamples()
-
-        cache.refresh(records: [recordA, recordB], excludingActiveMatchID: idA)
-        #expect(cache.samples.map(\.matchID) == [idB])
-
-        cache.refresh(records: [recordA, recordB], excludingActiveMatchID: nil)
+        ])
         #expect(Set(cache.samples.map(\.matchID)) == Set([idA, idB]))
     }
 }
