@@ -52,16 +52,42 @@ struct TrendsSection: View {
         return PerformanceTrends.minimumMatches - have
     }
 
+    /// Whether opening the full Trends screen and switching on "Include
+    /// In-Progress Matches" would itself clear `minimumMatches`, even
+    /// though the completed-only count (`matchesNeeded`) doesn't. That
+    /// toggle lives ONLY inside `TrendsView`, so without this the thin-data
+    /// state was a dead end: too few completed matches to unlock the
+    /// NavigationLink, with no way to reach the one control that could fix
+    /// that (Codex review, PR #121).
+    private var reachableViaInProgress: Bool {
+        matchesNeeded != nil && samplesCache.samples.count >= PerformanceTrends.minimumMatches
+    }
+
+    private func thinDataLabel(needed: Int) -> some View {
+        Label(
+            reachableViaInProgress
+                ? "Track \(needed) more completed match\(needed == 1 ? "" : "es") — or open Trends and include your in-progress match."
+                : "Track \(needed) more tracked match\(needed == 1 ? "" : "es") to see performance trends.",
+            systemImage: "lock"
+        )
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .padding(.vertical, 2)
+    }
+
     var body: some View {
         Section {
             if let needed = matchesNeeded {
-                Label(
-                    "Track \(needed) more tracked match\(needed == 1 ? "" : "es") to see performance trends.",
-                    systemImage: "lock"
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 2)
+                if reachableViaInProgress {
+                    NavigationLink {
+                        TrendsView(samples: samplesCache.samples)
+                    } label: {
+                        thinDataLabel(needed: needed)
+                    }
+                    .accessibilityHint(Text("Opens Trends"))
+                } else {
+                    thinDataLabel(needed: needed)
+                }
             } else {
                 // The whole card is the navigation target — not just a
                 // separate "See all trends" row — so any tap on a sparkline

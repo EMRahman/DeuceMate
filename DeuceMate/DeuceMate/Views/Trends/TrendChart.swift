@@ -148,8 +148,9 @@ struct TrendChart: View {
             emptyState
         } else {
             if !percentSeries.isEmpty {
-                lineChart(for: percentSeries)
-                legend(for: percentSeries)
+                let shown = plottable(percentSeries)
+                lineChart(for: shown)
+                legend(for: shown)
             }
             ForEach(ratioSeries) { s in
                 TrendSparkline(series: s, displayMode: displayMode, color: s.metric.chartColor)
@@ -167,17 +168,26 @@ struct TrendChart: View {
         displayMode == .count ? Double(point.ratio.numerator) : point.value
     }
 
-    /// Draws `series` as a multi-line chart, filtering out — in Count mode
-    /// only — any metric with `supportsCountMode == false` (aggressionIndex,
-    /// ownErrorShare): its 0...1 fraction plotted against a raw-count axis
-    /// would read as pinned near zero, so it drops out of Count mode rather
-    /// than misrepresenting it. Every metric is plottable in Rate mode.
-    /// Takes an explicit list (not just `self.series`) so callers can narrow
-    /// to a subset — e.g. Serve & Return's filter picks 2 of its 6 metrics.
+    /// `series`, filtering out — in Count mode only — any metric with
+    /// `supportsCountMode == false` (aggressionIndex, ownErrorShare): its
+    /// 0...1 fraction plotted against a raw-count axis would read as
+    /// pinned near zero, so it drops out of Count mode rather than
+    /// misrepresenting it. Every metric is plottable in Rate mode. Callers
+    /// must route BOTH `lineChart(for:)` and `legend(for:)` through this
+    /// same filtered list — passing the chart a filtered list and the
+    /// legend the unfiltered one left a legend chip toggleable with no
+    /// corresponding line to toggle (Codex review, PR #121).
+    private func plottable(_ series: [TrendSeries]) -> [TrendSeries] {
+        displayMode == .count ? series.filter { $0.metric.supportsCountMode } : series
+    }
+
+    /// Draws `series` as a multi-line chart. Takes an explicit list (not
+    /// just `self.series`) so callers can narrow to a subset — e.g. Serve &
+    /// Return's filter picks 2 of its 6 metrics — and must already be
+    /// display-mode-filtered via `plottable(_:)` before calling.
     private func lineChart(for series: [TrendSeries]) -> some View {
-        let plottable = displayMode == .count ? series.filter { $0.metric.supportsCountMode } : series
-        return Chart {
-            ForEach(plottable) { s in
+        Chart {
+            ForEach(series) { s in
                 if !hiddenMetrics.contains(s.metric) {
                     ForEach(s.points) { point in
                         LineMark(
@@ -195,7 +205,7 @@ struct TrendChart: View {
                 }
             }
         }
-        .chartForegroundStyleScale(domain: colorScale(for: plottable).domain, range: colorScale(for: plottable).range)
+        .chartForegroundStyleScale(domain: colorScale(for: series).domain, range: colorScale(for: series).range)
         .chartYAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine()
@@ -245,8 +255,13 @@ struct TrendChart: View {
         if selected.isEmpty || selected.allSatisfy({ $0.points.isEmpty }) {
             emptyState
         } else {
-            lineChart(for: selected)
-            legend(for: selected)
+            // All 6 Serve & Return metrics support Count mode today, so this
+            // is a no-op filter in practice — routed through the same
+            // helper as standardBody for a single source of truth, not two
+            // copies of the same predicate to keep in sync.
+            let shown = plottable(selected)
+            lineChart(for: shown)
+            legend(for: shown)
         }
     }
 
