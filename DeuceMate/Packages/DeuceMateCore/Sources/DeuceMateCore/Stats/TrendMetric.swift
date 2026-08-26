@@ -38,7 +38,7 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
     case winners, winnersConceded, wueRatio, aggressionIndex, ownErrorShare
     case depthShareServe, depthShareReturn, depthShareServePlusOne, depthShareRally
     case depthWinServe, depthWinReturn, depthWinServePlusOne, depthWinRally
-    case firstServeIn, firstServeWin, secondServeWin, returnWinFirst, returnWinSecond
+    case firstServeIn, secondServeIn, firstServeWin, secondServeWin, returnWinFirst, returnWinSecond
     case breakPointsConverted, breakPointsSaved, bigPointWin, pointsWon
 
     public var id: String { rawValue }
@@ -72,7 +72,7 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         case .depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally,
              .depthWinServe, .depthWinReturn, .depthWinServePlusOne, .depthWinRally:
             return .rallyDepth
-        case .firstServeIn, .firstServeWin, .secondServeWin, .returnWinFirst, .returnWinSecond:
+        case .firstServeIn, .secondServeIn, .firstServeWin, .secondServeWin, .returnWinFirst, .returnWinSecond:
             return .serveReturn
         case .breakPointsConverted, .breakPointsSaved, .bigPointWin, .pointsWon:
             return .pressure
@@ -101,6 +101,7 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         case .depthWinServePlusOne:    return "Win Rate — S+1"
         case .depthWinRally:           return "Win Rate — Rally"
         case .firstServeIn:            return "1st Serve In"
+        case .secondServeIn:           return "2nd Serve In"
         case .firstServeWin:           return "1st Serve Win"
         case .secondServeWin:          return "2nd Serve Win"
         case .returnWinFirst:          return "Return Win (1st)"
@@ -116,6 +117,8 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .doubleFaults, .firstServeIn, .firstServeWin:
             return "of service points"
+        case .secondServeIn:
+            return "of 2nd-serve points"
         case .doubleFaultsConceded, .returnWinFirst:
             return "of return points"
         case .unforcedErrors, .forcedErrorsConceded, .ownErrorShare:
@@ -150,7 +153,7 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         case .doubleFaults, .unforcedErrors, .forcedErrorsConceded, .ownErrorShare, .winnersConceded:
             return .lower
         case .doubleFaultsConceded, .unforcedErrorsDrawn, .forcedErrorsCaused, .winners,
-             .wueRatio, .aggressionIndex, .firstServeIn, .firstServeWin, .secondServeWin,
+             .wueRatio, .aggressionIndex, .firstServeIn, .secondServeIn, .firstServeWin, .secondServeWin,
              .returnWinFirst, .returnWinSecond, .depthWinServe, .depthWinReturn,
              .depthWinServePlusOne, .depthWinRally, .breakPointsConverted, .breakPointsSaved,
              .bigPointWin, .pointsWon:
@@ -224,6 +227,8 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
             return depthWinPair(.rally, in: sample)
         case .firstServeIn:
             return (sample.firstServesIn, sample.servicePoints)
+        case .secondServeIn:
+            return (sample.secondServesIn, sample.secondServePoints)
         case .firstServeWin:
             return (sample.firstServeWins, sample.firstServesIn)
         case .secondServeWin:

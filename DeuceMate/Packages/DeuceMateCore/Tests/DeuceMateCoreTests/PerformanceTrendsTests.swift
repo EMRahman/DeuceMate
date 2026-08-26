@@ -20,7 +20,7 @@ final class PerformanceTrendsTests: XCTestCase {
             categorizedPointsWon: 12, categorizedPointsLost: 8,
             servicePoints: 10, categorizedServicePoints: categorizedServicePoints,
             categorizedOpponentServicePoints: 10,
-            firstServesIn: 7, firstServeWins: 5, secondServePoints: 3, secondServeWins: 1,
+            firstServesIn: 7, firstServeWins: 5, secondServePoints: 3, secondServesIn: 2, secondServeWins: 1,
             doubleFaults: doubleFaults, returnPointsOnFirst: 6, returnWinsOnFirst: 3,
             returnPointsOnSecond: 4, returnWinsOnSecond: 2, opponentDoubleFaults: 1,
             winnersHit: winnersHit, winnersConceded: 4, unforcedErrorsHit: unforcedErrorsHit, unforcedErrorsDrawn: 3,
