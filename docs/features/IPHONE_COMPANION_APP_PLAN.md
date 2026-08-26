@@ -392,10 +392,15 @@ production.
 
 These are *not* in v1 but the architecture above leaves room for them:
 
-- **Phone-only stats** — career-level rollups across matches: serve % over
+- ~~**Phone-only stats** — career-level rollups across matches: serve % over
   time, W:UE trend lines, opponent-specific records. Add fields to
   `MatchStatsSummary` or a new `CareerStatsSummary` and surface a third
-  screen on iOS.
+  screen on iOS.~~ **Delivered** by `docs/features/PERFORMANCE_TRENDS_PLAN.md`
+  — a "Trends" section on the existing archive screen (not a third screen),
+  covering serve %, W:UE, and every other per-match stat over time.
+  **Opponent-specific records were NOT delivered and are not derivable**:
+  `MatchRecord` has no opponent name or identity field of any kind. That part
+  of this bullet should have read "aspirational" rather than "deferred."
 - **CSV / share-sheet export** of a single match or full history.
 - **iCloud backup** so users can restore on a new phone without replaying
   the watch sync. Optional; off by default to preserve the privacy posture.

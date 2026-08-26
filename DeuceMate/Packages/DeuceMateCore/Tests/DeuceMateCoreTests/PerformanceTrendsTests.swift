@@ -235,6 +235,17 @@ final class PerformanceTrendsTests: XCTestCase {
         XCTAssertLessThan(series?.delta?.change ?? 1, 0)  // rate fell
     }
 
+    /// Same shape as the double-fault case above, for Unforced Errors —
+    /// the metric the owner specifically called out (falling + green must
+    /// mean `change < 0`, which is what points TrendSparkline's arrow down).
+    func test_delta_fallingUnforcedErrorRate_isImproving() {
+        let prior = [makeSample(daysAgo: 3, unforcedErrorsHit: 6), makeSample(daysAgo: 2, unforcedErrorsHit: 6)]
+        let recent = [makeSample(daysAgo: 1, unforcedErrorsHit: 1), makeSample(daysAgo: 0, unforcedErrorsHit: 1)]
+        let series = PerformanceTrends.series(for: .unforcedErrors, in: prior + recent)
+        XCTAssertEqual(series?.delta?.direction, .improving)
+        XCTAssertLessThan(series?.delta?.change ?? 1, 0)  // rate fell
+    }
+
     func test_delta_risingWinnerRate_isImproving() {
         let prior = [makeSample(daysAgo: 3, winnersHit: 2), makeSample(daysAgo: 2, winnersHit: 2)]
         let recent = [makeSample(daysAgo: 1, winnersHit: 10), makeSample(daysAgo: 0, winnersHit: 10)]
