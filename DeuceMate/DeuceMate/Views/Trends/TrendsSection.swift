@@ -20,12 +20,24 @@ struct TrendsSection: View {
     @Environment(\.appTheme) private var theme
     @StateObject private var samplesCache = TrendsSamples()
 
+    /// Completed matches only — the archive-screen headline has no room for
+    /// its own filter controls, so it silently takes the feature's default
+    /// (TrendFilter()'s includeInProgress: false), matching the full Trends
+    /// screen's own default. The in-progress match can still be seen by
+    /// opening the full screen and switching "Include In-Progress Matches" on.
+    private var completedOnly: [MatchTrendSample] {
+        PerformanceTrends.scoped(samplesCache.samples, filter: TrendFilter(), window: .all)
+    }
+
     private var headline: [TrendSeries] {
-        PerformanceTrends.headline(in: samplesCache.samples)
+        PerformanceTrends.headline(in: completedOnly)
     }
 
     private var matchesNeeded: Int? {
-        let have = samplesCache.samples.count
+        // Counts completedOnly, not samplesCache.samples — otherwise this
+        // gate could pass on total match count while the headline it gates
+        // (computed from the completed-only subset) still has too few.
+        let have = completedOnly.count
         guard have < PerformanceTrends.minimumMatches else { return nil }
         return PerformanceTrends.minimumMatches - have
     }

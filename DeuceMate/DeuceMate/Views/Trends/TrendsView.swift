@@ -13,11 +13,15 @@ struct TrendsView: View {
     let samples: [MatchTrendSample]
 
     // Phone-local UI state, not synced (no MatchSyncKey, no wire key — see
-    // CLAUDE.md §0's settings-key exception list, which these three keys
+    // CLAUDE.md §0's settings-key exception list, which these four keys
     // are added to in the same PR as this file).
     @AppStorage("trendsWindow") private var windowRaw: String = "last10"
     @AppStorage("trendsMatchType") private var matchTypeRaw: String = "all"
     @AppStorage("trendsMatchFormat") private var matchFormatRaw: String = "all"
+    /// Off by default — completed matches only. On blends the in-progress
+    /// match's data into every chart alongside completed ones (an
+    /// inclusion switch, not a dataset swap — see TrendFilter.includeInProgress).
+    @AppStorage("trendsIncludeInProgress") private var includeInProgress: Bool = false
 
     @State private var displayMode: TrendDisplayMode = .rate
 
@@ -50,7 +54,11 @@ struct TrendsView: View {
     ]
 
     private var scopedSamples: [MatchTrendSample] {
-        PerformanceTrends.scoped(samples, filter: TrendFilter(matchType: matchType, matchFormat: matchFormat), window: window)
+        PerformanceTrends.scoped(
+            samples,
+            filter: TrendFilter(matchType: matchType, matchFormat: matchFormat, includeInProgress: includeInProgress),
+            window: window
+        )
     }
 
     var body: some View {
@@ -62,6 +70,7 @@ struct TrendsView: View {
                     Spacer()
                     formatMenu
                 }
+                Toggle("Include In-Progress Matches", isOn: $includeInProgress)
                 Picker("Display", selection: $displayMode) {
                     ForEach(TrendDisplayMode.allCases) { mode in
                         Text(mode.label).tag(mode)

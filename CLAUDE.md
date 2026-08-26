@@ -52,9 +52,9 @@ frameworks only — this is a hard rule, do not add packages).
   `defaultMatchFormat` / `defaultMatchType` (watch-local, `MatchSetupDefaults` —
   the remembered match setup never syncs to the phone, see
   `docs/features/MATCH_START_UX_PLAN.md` §5.6); and `trendsWindow` /
-  `trendsMatchType` / `trendsMatchFormat` (phone-local, `TrendsView` — the
-  archive screen's Trends filters are UI state, not a match setting, so they
-  never sync to the watch either, see
+  `trendsMatchType` / `trendsMatchFormat` / `trendsIncludeInProgress`
+  (phone-local, `TrendsView` — the archive screen's Trends filters are UI
+  state, not a match setting, so they never sync to the watch either, see
   `docs/features/PERFORMANCE_TRENDS_PLAN.md` §6.4).
   See `docs/features/TECHNICAL_DEBT.md` #10.
 - **When you genuinely cannot verify**, say so clearly in the PR description
