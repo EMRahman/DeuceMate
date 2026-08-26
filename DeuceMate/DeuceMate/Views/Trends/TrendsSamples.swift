@@ -13,31 +13,28 @@ final class TrendsSamples: ObservableObject {
     /// match, once it clears the categorized-points threshold.
     @Published private(set) var samples: [MatchTrendSample] = []
 
-    /// The subset of each record's fields that changes eligibility or
-    /// derivation: `id` for add/remove, `endTime`/`iWon` for the
-    /// in-progress -> completed transition, and `statsCount` for a still-
-    /// live match's points arriving one by one — its `endTime`/`iWon` never
-    /// change while in progress, so without a stats-shaped signal a live
-    /// match's trend line would freeze at whatever it looked like on the
-    /// first refresh and never pick up a newly-scored point. The phone
-    /// archive is otherwise read-only once a match completes (CLAUDE.md's
-    /// "phone never authors results" invariant), so a full `stats` value
-    /// comparison isn't needed for completed matches — just the count.
-    private struct Fingerprint: Equatable {
-        let id: UUID
-        let endTime: Date?
-        let iWon: Bool?
-        let statsCount: Int
-    }
-
-    private var cachedFingerprints: [Fingerprint] = []
+    /// Full record equality, not a hand-picked field subset. An earlier
+    /// (id, endTime, iWon, statsCount) fingerprint missed a real case: a
+    /// Settings > Backup & Transfer import can replace a record's content —
+    /// re-categorized points, corrected server data, edited start
+    /// time/type/format — while its id, endTime, iWon, and point count all
+    /// stay identical (`ManualMatchArchiveBackup`'s replace/merge modes
+    /// both preserve the incoming record's `id`, so this isn't
+    /// hypothetical). That left the Trends screen showing stale derived
+    /// data until something else happened to change the signature, since
+    /// dismissing the Settings sheet doesn't recreate this `@StateObject`
+    /// (Codex review, PR #121). `MatchRecord`'s synthesized `==` compares
+    /// every stored field, including `stats`, so nothing that could change
+    /// a derived `MatchTrendSample` can silently miss invalidating the
+    /// cache — and it stays correct automatically if a future field is
+    /// added, with no field list to keep in sync.
+    private var cachedRecords: [MatchRecord] = []
 
     /// Recomputes `samples` from `records` only if something that could
     /// change the result has actually changed since the last call.
     func refresh(records: [MatchRecord]) {
-        let fingerprints = records.map { Fingerprint(id: $0.id, endTime: $0.endTime, iWon: $0.iWon, statsCount: $0.stats.count) }
-        guard fingerprints != cachedFingerprints else { return }
-        cachedFingerprints = fingerprints
+        guard records != cachedRecords else { return }
+        cachedRecords = records
         samples = PerformanceTrends.samples(from: records)
     }
 }

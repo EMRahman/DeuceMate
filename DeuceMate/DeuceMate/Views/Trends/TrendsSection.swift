@@ -52,19 +52,6 @@ struct TrendsSection: View {
         return PerformanceTrends.minimumMatches - have
     }
 
-    /// A cheap per-render signature covering everything TrendsSamples'
-    /// cache cares about (id, endTime, iWon, stats.count) — used only to
-    /// decide whether to CALL refresh at all; TrendsSamples' own internal
-    /// fingerprint is the precise check. Needed because a live match's
-    /// stats grow one point at a time without its id ever changing, so
-    /// watching `records.map(\.id)` alone would never re-trigger while a
-    /// match is still being scored.
-    private var recordsSignature: String {
-        records.map {
-            "\($0.id.uuidString)|\($0.stats.count)|\($0.endTime?.timeIntervalSince1970 ?? -1)|\($0.iWon.map(String.init) ?? "?")"
-        }.joined(separator: ";")
-    }
-
     var body: some View {
         Section {
             if let needed = matchesNeeded {
@@ -107,7 +94,15 @@ struct TrendsSection: View {
         .onAppear {
             samplesCache.refresh(records: records)
         }
-        .onChange(of: recordsSignature) { _, _ in
+        // `records` (a `[MatchRecord]`) is directly Equatable — comparing
+        // it here, rather than a hand-picked field subset, is what makes
+        // TrendsSamples.refresh's own full-record equality check (see that
+        // file) actually get invoked whenever anything relevant changes,
+        // including a live match's stats growing point-by-point (endTime/
+        // iWon never change while in progress, so watching only those
+        // wouldn't retrigger) or a Backup & Transfer import replacing a
+        // record's content in place (Codex review, PR #121).
+        .onChange(of: records) { _, _ in
             samplesCache.refresh(records: records)
         }
     }

@@ -64,6 +64,37 @@ struct TrendsSamplesTests {
         #expect(cache.samples.first?.totalPoints == 30)
     }
 
+    /// Regression for a Codex-caught bug in PR #121 review: an (id,
+    /// endTime, iWon, statsCount) fingerprint doesn't change when a record's
+    /// point-level content is replaced in place — e.g. a Settings > Backup
+    /// & Transfer import re-categorizing points — while id, endTime, iWon,
+    /// and point count all stay identical. Not hypothetical:
+    /// `ManualMatchArchiveBackup`'s replace/merge import modes both
+    /// preserve the incoming record's id. The cache must pick up the new
+    /// content, not freeze on the old.
+    @Test func refresh_picksUpChangedContentWithSameIdentityAndCount() {
+        let id = UUID()
+        let cache = TrendsSamples()
+
+        let original = makeCompleted(id: id, startTime: Date().addingTimeInterval(-3600))
+        cache.refresh(records: [original])
+        let originalUnforcedErrors = cache.samples.first?.unforcedErrorsHit
+        #expect(originalUnforcedErrors == 12)  // makePoints alternates winner/unforcedError over 25 points
+
+        // Same id/startTime/endTime/setScores/iWon/point-count as `original`
+        // — only the point-level content differs (every point now a winner).
+        let recategorized = MatchRecord(
+            id: id, startTime: original.startTime, endTime: original.endTime,
+            setScores: original.setScores,
+            stats: (0..<25).map { _ in PointStat(setIndex: 0, server: .me, winner: .me, outcome: .winner) },
+            iWon: original.iWon
+        )
+        #expect(recategorized.stats.count == original.stats.count)
+
+        cache.refresh(records: [recategorized])
+        #expect(cache.samples.first?.unforcedErrorsHit == 0)
+    }
+
     /// A no-op refresh (identical records) must not recompute — this is the
     /// whole point of the cache. Verified indirectly: samples stays stable
     /// in both identity and content across a redundant call.
