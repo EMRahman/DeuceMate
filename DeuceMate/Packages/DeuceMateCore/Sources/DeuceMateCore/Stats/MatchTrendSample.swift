@@ -202,7 +202,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
 
     /// Fewest points a set must contain to take part in the fatigue
     /// comparison. Same number `RecCoachInsights`' set-duration decline rule
-    /// already requires of both sets (RecCoachInsights.swift:276) — one
+    /// already requires of both sets (RecCoachInsights.swift:277) — one
     /// threshold, cited rather than re-invented. It also keeps a full set from
     /// being compared against a ~15-point super-tiebreak decider, which is a
     /// "set" by index but not by workload.
