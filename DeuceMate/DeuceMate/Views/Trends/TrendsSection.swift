@@ -33,6 +33,16 @@ struct TrendsSection: View {
         PerformanceTrends.headline(in: completedOnly)
     }
 
+    /// "Double Faults 7%, Unforced Errors 24%, ..." — one VoiceOver
+    /// announcement standing in for the four TrendSparkline rows once
+    /// they're combined into a single accessibility element (see body).
+    private var headlineAccessibilitySummary: String {
+        let parts = headline.map { series in
+            "\(series.metric.displayLabel) \(series.metric.format(series.pooled))"
+        }
+        return (["Trends"] + parts).joined(separator: ", ")
+    }
+
     private var matchesNeeded: Int? {
         // Counts completedOnly, not samplesCache.samples — otherwise this
         // gate could pass on total match count while the headline it gates
@@ -66,19 +76,30 @@ struct TrendsSection: View {
                 .foregroundStyle(.secondary)
                 .padding(.vertical, 2)
             } else {
-                VStack(spacing: 6) {
-                    ForEach(headline) { series in
-                        TrendSparkline(series: series, displayMode: .rate, color: theme.colors.me)
-                    }
-                }
-                .padding(.vertical, 2)
+                // The whole card is the navigation target — not just a
+                // separate "See all trends" row — so any tap on a sparkline
+                // opens the full screen. The system supplies the chevron
+                // disclosure hint automatically for a NavigationLink row in
+                // a List, the same one the old text-only row already had.
                 NavigationLink {
                     TrendsView(samples: samplesCache.samples)
                 } label: {
-                    Text("See all trends")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(theme.colors.me)
+                    VStack(spacing: 6) {
+                        ForEach(headline) { series in
+                            TrendSparkline(series: series, displayMode: .rate, color: theme.colors.me)
+                        }
+                    }
+                    .padding(.vertical, 2)
                 }
+                // Each TrendSparkline already ignores its own children for
+                // accessibility and states its own label; wrapping four of
+                // them in one NavigationLink would otherwise concatenate
+                // all four into one run-on VoiceOver announcement. Replace
+                // it with one concise summary plus an explicit hint that
+                // this opens something.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(headlineAccessibilitySummary))
+                .accessibilityHint(Text("Opens Trends"))
             }
         } header: {
             Text("Trends")

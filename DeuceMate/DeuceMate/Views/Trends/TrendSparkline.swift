@@ -84,7 +84,7 @@ struct TrendSparkline: View {
     private var deltaChip: some View {
         if let delta = series.delta {
             HStack(spacing: 2) {
-                Image(systemName: deltaIcon(delta.direction))
+                Image(systemName: deltaIcon(delta))
                     .font(.caption2.weight(.semibold))
             }
             .foregroundStyle(deltaColor(delta.direction))
@@ -94,14 +94,27 @@ struct TrendSparkline: View {
         }
     }
 
-    private func deltaIcon(_ direction: TrendDelta.Direction) -> String {
-        switch direction {
-        case .improving: return "arrow.up.right"
-        case .declining: return "arrow.down.right"
-        case .flat:       return "minus"
+    /// Points the way the number actually moved — down when the rate fell,
+    /// up when it rose — independent of whether that movement is good or
+    /// bad for this metric. `deltaColor` carries the good/bad judgement
+    /// separately, so a falling Unforced Errors rate reads as a down arrow
+    /// in green, not an "up and to the right" arrow that contradicts the
+    /// number it sits next to. `.flat` always shows a plain dash regardless
+    /// of `change`'s sign — a below-threshold wobble isn't a real trend in
+    /// either direction.
+    private func deltaIcon(_ delta: TrendDelta) -> String {
+        switch delta.direction {
+        case .flat: return "minus"
+        case .improving, .declining:
+            return delta.change >= 0 ? "arrow.up.right" : "arrow.down.right"
         }
     }
 
+    /// Whether the movement `deltaIcon` points to is good news for THIS
+    /// metric — oriented by `TrendDelta.direction`, already metric-aware
+    /// (e.g. a falling Unforced Errors rate is `.improving`; a falling
+    /// Winners rate would be `.declining`). Deliberately independent of the
+    /// icon's raw up/down.
     private func deltaColor(_ direction: TrendDelta.Direction) -> Color {
         switch direction {
         case .improving: return .green
@@ -113,13 +126,29 @@ struct TrendSparkline: View {
     private var accessibilityLabel: String {
         var parts = ["\(series.metric.displayLabel): \(valueText) \(series.metric.denominatorLabel)"]
         if let delta = series.delta {
+            let magnitude = deltaMagnitudeText(delta)
             switch delta.direction {
-            case .improving: parts.append("improving")
-            case .declining: parts.append("declining")
+            case .improving: parts.append("improving\(magnitude)")
+            case .declining: parts.append("declining\(magnitude)")
             case .flat:       parts.append("little change")
             }
         }
         return parts.joined(separator: ", ")
+    }
+
+    /// " down 4 percentage points" / " up 0.3" — the same movement the
+    /// arrow icon shows, spelled out for VoiceOver, which can't see the
+    /// arrow's direction. Empty string for `.flat`, where there's no
+    /// meaningful movement to report.
+    private func deltaMagnitudeText(_ delta: TrendDelta) -> String {
+        let verb = delta.change >= 0 ? "up" : "down"
+        let magnitude = abs(delta.change)
+        switch series.metric.unit {
+        case .percent:
+            return " \(verb) \(Int(magnitude.rounded())) percentage points"
+        case .ratio:
+            return " \(verb) \(String(format: "%.1f", magnitude))"
+        }
     }
 }
 
