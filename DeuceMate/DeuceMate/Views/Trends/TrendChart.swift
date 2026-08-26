@@ -181,6 +181,78 @@ struct TrendChart: View {
         displayMode == .count ? series.filter { $0.metric.supportsCountMode } : series
     }
 
+    /// `points` split into runs of consecutive `TrendPoint.index` values —
+    /// the unit Swift Charts actually connects into one line. Charts groups
+    /// `LineMark`s into a path by their `foregroundStyle(by:)` discriminator
+    /// value alone, connecting every mark sharing that value in x-order
+    /// regardless of any gap between them; simply omitting a missing index
+    /// (as this used to do) does NOT produce a visual break (Codex review,
+    /// PR #121) — a zero-UE match's `wueRatio` or a legacy match's
+    /// rally-depth data with no ending-shot record would read as
+    /// interpolated instead of genuinely missing. `lineMarks(for:)` gives
+    /// each run its own discriminator value to force the break; the value
+    /// itself is never shown to the user, since the legend is custom-built
+    /// from `series` directly (`legend(for:)`/`staticLegend(for:)`), not
+    /// from Chart's own style domain, which stays hidden via
+    /// `.chartLegend(.hidden)`.
+    private func runs(of points: [TrendPoint]) -> [[TrendPoint]] {
+        var result: [[TrendPoint]] = []
+        for point in points {
+            if let lastIndex = result.last?.last?.index, point.index == lastIndex + 1 {
+                result[result.count - 1].append(point)
+            } else {
+                result.append([point])
+            }
+        }
+        return result
+    }
+
+    /// The internal, never-displayed discriminator `lineMarks(for:)` tags
+    /// one run's marks with — must match `runColorScale(for:)`'s domain
+    /// exactly, since that's what maps each run back to its metric's colour.
+    private func runKey(_ metric: TrendMetric, _ runIndex: Int) -> String {
+        "\(metric.rawValue)#\(runIndex)"
+    }
+
+    /// One discriminator-domain entry per RUN (not per metric, unlike
+    /// `colorScale(for:)`), each mapped to its metric's single colour —
+    /// what `lineChart(for:)`/`rallyDepthWinRateChart` need since
+    /// `runKey(_:_:)` fragments one metric into several Chart-visible
+    /// "series". `max(_, 1)` covers a metric with zero points: it still
+    /// needs one domain entry so `.chartForegroundStyleScale` never sees an
+    /// empty domain for a metric present in `series`.
+    private func runColorScale(for series: [TrendSeries]) -> (domain: [String], range: [Color]) {
+        var domain: [String] = []
+        var range: [Color] = []
+        for s in series {
+            let runCount = max(runs(of: s.points).count, 1)
+            for runIndex in 0..<runCount {
+                domain.append(runKey(s.metric, runIndex))
+                range.append(s.metric.chartColor)
+            }
+        }
+        return (domain, range)
+    }
+
+    @ChartContentBuilder
+    private func lineMarks(for s: TrendSeries) -> some ChartContent {
+        ForEach(Array(runs(of: s.points).enumerated()), id: \.offset) { runIndex, run in
+            ForEach(run) { point in
+                LineMark(
+                    x: .value("Match", point.index),
+                    y: .value("Value", plottedValue(point))
+                )
+                .foregroundStyle(by: .value("Series", runKey(s.metric, runIndex)))
+                .lineStyle(s.metric.isOpponentFramed
+                    ? StrokeStyle(lineWidth: 2, dash: [4, 3])
+                    : StrokeStyle(lineWidth: 2))
+                .interpolationMethod(.monotone)
+                .symbol(Circle())
+                .symbolSize(18)
+            }
+        }
+    }
+
     /// Draws `series` as a multi-line chart. Takes an explicit list (not
     /// just `self.series`) so callers can narrow to a subset — e.g. Serve &
     /// Return's filter picks 2 of its 6 metrics — and must already be
@@ -189,23 +261,11 @@ struct TrendChart: View {
         Chart {
             ForEach(series) { s in
                 if !hiddenMetrics.contains(s.metric) {
-                    ForEach(s.points) { point in
-                        LineMark(
-                            x: .value("Match", point.index),
-                            y: .value("Value", plottedValue(point))
-                        )
-                        .foregroundStyle(by: .value("Metric", s.metric.displayLabel))
-                        .lineStyle(s.metric.isOpponentFramed
-                            ? StrokeStyle(lineWidth: 2, dash: [4, 3])
-                            : StrokeStyle(lineWidth: 2))
-                        .interpolationMethod(.monotone)
-                        .symbol(Circle())
-                        .symbolSize(18)
-                    }
+                    lineMarks(for: s)
                 }
             }
         }
-        .chartForegroundStyleScale(domain: colorScale(for: series).domain, range: colorScale(for: series).range)
+        .chartForegroundStyleScale(domain: runColorScale(for: series).domain, range: runColorScale(for: series).range)
         .chartYAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine()
@@ -342,19 +402,10 @@ struct TrendChart: View {
     private var rallyDepthWinRateChart: some View {
         Chart {
             ForEach(depthWinSeries) { s in
-                ForEach(s.points) { point in
-                    LineMark(
-                        x: .value("Match", point.index),
-                        y: .value("Value", plottedValue(point))
-                    )
-                    .foregroundStyle(by: .value("Metric", s.metric.displayLabel))
-                    .interpolationMethod(.monotone)
-                    .symbol(Circle())
-                    .symbolSize(18)
-                }
+                lineMarks(for: s)
             }
         }
-        .chartForegroundStyleScale(domain: colorScale(for: depthWinSeries).domain, range: colorScale(for: depthWinSeries).range)
+        .chartForegroundStyleScale(domain: runColorScale(for: depthWinSeries).domain, range: runColorScale(for: depthWinSeries).range)
         .chartYAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine()
