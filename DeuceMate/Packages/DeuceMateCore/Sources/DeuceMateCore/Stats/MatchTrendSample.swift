@@ -22,9 +22,18 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     public let startTime: Date
     public let matchType: MatchType
     public let matchFormat: MatchFormat
-    /// `nil` means a draw. A sample is never built for an in-progress match —
-    /// eligibility excludes it — so `nil` cannot mean "unknown" here.
+    /// `nil` means a draw OR a still-in-progress match — check `isInProgress`
+    /// to tell them apart. In-progress matches are eligible (as of the
+    /// owner's request to include them) as long as they clear the
+    /// categorized-points threshold; their stats simply reflect the match
+    /// so far and grow as it continues.
     public let recorderWon: Bool?
+    /// Mirrors `MatchRecord.isInProgress` at the moment this sample was
+    /// built. A live match's stats grow point-by-point without `endTime`/
+    /// `iWon` ever changing, so callers that need to know whether a value
+    /// might still change should check this rather than inferring it from
+    /// `recorderWon == nil` (which a completed draw also produces).
+    public let isInProgress: Bool
 
     // MARK: - Volume
 
@@ -111,7 +120,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
 
     public init(
         matchID: UUID, startTime: Date, matchType: MatchType, matchFormat: MatchFormat,
-        recorderWon: Bool?, totalPoints: Int, categorizedPoints: Int, pointsWon: Int,
+        recorderWon: Bool?, isInProgress: Bool, totalPoints: Int, categorizedPoints: Int, pointsWon: Int,
         pointsLost: Int, categorizedPointsWon: Int, categorizedPointsLost: Int,
         servicePoints: Int, categorizedServicePoints: Int, categorizedOpponentServicePoints: Int,
         firstServesIn: Int, firstServeWins: Int, secondServePoints: Int, secondServesIn: Int, secondServeWins: Int,
@@ -127,6 +136,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         self.matchType = matchType
         self.matchFormat = matchFormat
         self.recorderWon = recorderWon
+        self.isInProgress = isInProgress
         self.totalPoints = totalPoints
         self.categorizedPoints = categorizedPoints
         self.pointsWon = pointsWon
@@ -163,10 +173,11 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         self.pointsWithEndingShot = pointsWithEndingShot
     }
 
-    /// `nil` when the match is ineligible (§3.5): still in progress, a format
-    /// that disables point tracking, or too few categorized points.
+    /// `nil` when the match is ineligible (§3.5): a format that disables
+    /// point tracking, or too few categorized points so far. In-progress
+    /// matches ARE eligible once they clear the categorized-points
+    /// threshold — their stats simply reflect the match as scored so far.
     public init?(record: MatchRecord) {
-        guard !record.isInProgress else { return nil }
         guard !record.matchFormat.config.disablesPointTracking else { return nil }
 
         let summary = MatchStatsSummary(stats: record.stats, focal: .me,
@@ -185,6 +196,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         self.init(
             matchID: record.id, startTime: record.startTime, matchType: record.matchType,
             matchFormat: record.matchFormat, recorderWon: record.iWon,
+            isInProgress: record.isInProgress,
             totalPoints: summary.totalPoints, categorizedPoints: categorizedTotal,
             pointsWon: summary.pointsWon, pointsLost: summary.lostPoints,
             categorizedPointsWon: summary.categorizedPointsWon,

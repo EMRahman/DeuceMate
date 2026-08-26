@@ -15,7 +15,7 @@ final class TrendMetricTests: XCTestCase {
     private func makeSample(
         matchID: UUID = UUID(), startTime: Date = Date(),
         matchType: MatchType = .singles, matchFormat: MatchFormat = .standard,
-        recorderWon: Bool? = true,
+        recorderWon: Bool? = true, isInProgress: Bool = false,
         totalPoints: Int = 40, categorizedPoints: Int = 40, pointsWon: Int = 22, pointsLost: Int = 18,
         categorizedPointsWon: Int = 22, categorizedPointsLost: Int = 18,
         servicePoints: Int = 20, categorizedServicePoints: Int = 20, categorizedOpponentServicePoints: Int = 20,
@@ -34,7 +34,7 @@ final class TrendMetricTests: XCTestCase {
     ) -> MatchTrendSample {
         MatchTrendSample(
             matchID: matchID, startTime: startTime, matchType: matchType, matchFormat: matchFormat,
-            recorderWon: recorderWon, totalPoints: totalPoints, categorizedPoints: categorizedPoints,
+            recorderWon: recorderWon, isInProgress: isInProgress, totalPoints: totalPoints, categorizedPoints: categorizedPoints,
             pointsWon: pointsWon, pointsLost: pointsLost,
             categorizedPointsWon: categorizedPointsWon, categorizedPointsLost: categorizedPointsLost,
             servicePoints: servicePoints, categorizedServicePoints: categorizedServicePoints,
