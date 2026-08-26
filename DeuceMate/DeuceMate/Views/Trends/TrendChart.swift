@@ -1,5 +1,8 @@
 // TrendChart.swift — one TrendMetricGroup's chart on the Trends screen.
-// Errors/Attack/Serve & Return/Pressure share one multi-line chart shape;
+// Errors/Attack/Pressure share one multi-line chart shape plotting every
+// metric in the group at once. Serve & Return uses the same chart shape but
+// narrowed by a persisted Serves In/Serves Win/Returns Win filter to 2 of
+// its 6 metrics at a time (owner request — 6 lines at once was cluttered).
 // Rally Depth gets a distinct normalized-stack-vs-win-rate toggle since its
 // axis is fundamentally different (phase share, not an error rate).
 // See docs/features/PERFORMANCE_TRENDS_PLAN.md §6.3.
@@ -74,6 +77,10 @@ struct TrendChart: View {
 
     @State private var hiddenMetrics: Set<TrendMetric>
     @State private var rallyDepthMode: RallyDepthMode = .mix
+    /// Persisted (unlike `rallyDepthMode`, which resets each time the
+    /// screen opens) — the owner asked this filter to remember the last
+    /// choice across launches. Phone-local, no wire key — see CLAUDE.md §0.
+    @AppStorage("trendsServeReturnFilter") private var serveReturnFilterRaw: String = ServeReturnFilter.servesIn.rawValue
 
     init(group: TrendMetricGroup, series: [TrendSeries], displayMode: TrendDisplayMode) {
         self.group = group
@@ -89,17 +96,45 @@ struct TrendChart: View {
         var label: String { self == .mix ? "Mix" : "Win Rate" }
     }
 
+    /// Narrows the Serve & Return group's six metrics to one question at a
+    /// time — no "All 6" option (confirmed with the owner). Defaults to
+    /// `.servesIn`, the archive's most basic serve stat.
+    private enum ServeReturnFilter: String, CaseIterable, Identifiable {
+        case servesIn, servesWin, returnsWin
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .servesIn:   return "Serves In"
+            case .servesWin:  return "Serves Win"
+            case .returnsWin: return "Returns Win"
+            }
+        }
+        var metrics: [TrendMetric] {
+            switch self {
+            case .servesIn:   return [.firstServeIn, .secondServeIn]
+            case .servesWin:  return [.firstServeWin, .secondServeWin]
+            case .returnsWin: return [.returnWinFirst, .returnWinSecond]
+            }
+        }
+    }
+
+    private var serveReturnFilter: ServeReturnFilter {
+        ServeReturnFilter(rawValue: serveReturnFilterRaw) ?? .servesIn
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if group == .rallyDepth {
                 rallyDepthBody
+            } else if group == .serveReturn {
+                serveReturnBody
             } else {
                 standardBody
             }
         }
     }
 
-    // MARK: - Standard groups (Errors, Attack, Serve & Return, Pressure)
+    // MARK: - Standard groups (Errors, Attack, Pressure)
 
     /// Ratio-unit metrics (currently only W:UE) can't share a 0–1 percent
     /// axis with everything else in Attack, so they render as their own
@@ -113,23 +148,13 @@ struct TrendChart: View {
             emptyState
         } else {
             if !percentSeries.isEmpty {
-                lineChart
+                lineChart(for: percentSeries)
                 legend(for: percentSeries)
             }
             ForEach(ratioSeries) { s in
                 TrendSparkline(series: s, displayMode: displayMode, color: s.metric.chartColor)
             }
         }
-    }
-
-    /// The percentSeries metrics actually plottable at the current display
-    /// mode: in Count mode, a metric with `supportsCountMode == false`
-    /// (aggressionIndex, ownErrorShare) has no count form, and its 0...1
-    /// fraction plotted against a raw-count axis would read as pinned near
-    /// zero — so it drops out of Count mode rather than misrepresenting it.
-    /// Every metric is plottable in Rate mode.
-    private var plottablePercentSeries: [TrendSeries] {
-        displayMode == .count ? percentSeries.filter { $0.metric.supportsCountMode } : percentSeries
     }
 
     /// A point's Y value at the current display mode: the 0...1 rate, or —
@@ -142,9 +167,17 @@ struct TrendChart: View {
         displayMode == .count ? Double(point.ratio.numerator) : point.value
     }
 
-    private var lineChart: some View {
-        Chart {
-            ForEach(plottablePercentSeries) { s in
+    /// Draws `series` as a multi-line chart, filtering out — in Count mode
+    /// only — any metric with `supportsCountMode == false` (aggressionIndex,
+    /// ownErrorShare): its 0...1 fraction plotted against a raw-count axis
+    /// would read as pinned near zero, so it drops out of Count mode rather
+    /// than misrepresenting it. Every metric is plottable in Rate mode.
+    /// Takes an explicit list (not just `self.series`) so callers can narrow
+    /// to a subset — e.g. Serve & Return's filter picks 2 of its 6 metrics.
+    private func lineChart(for series: [TrendSeries]) -> some View {
+        let plottable = displayMode == .count ? series.filter { $0.metric.supportsCountMode } : series
+        return Chart {
+            ForEach(plottable) { s in
                 if !hiddenMetrics.contains(s.metric) {
                     ForEach(s.points) { point in
                         LineMark(
@@ -162,7 +195,7 @@ struct TrendChart: View {
                 }
             }
         }
-        .chartForegroundStyleScale(domain: colorScale(for: plottablePercentSeries).domain, range: colorScale(for: plottablePercentSeries).range)
+        .chartForegroundStyleScale(domain: colorScale(for: plottable).domain, range: colorScale(for: plottable).range)
         .chartYAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine()
@@ -188,6 +221,33 @@ struct TrendChart: View {
     /// auto-assigned categorical one.
     private func colorScale(for series: [TrendSeries]) -> (domain: [String], range: [Color]) {
         (series.map { $0.metric.displayLabel }, series.map { $0.metric.chartColor })
+    }
+
+    // MARK: - Serve & Return
+
+    /// The two metrics `serveReturnFilter` currently selects, in their
+    /// declared order (1st before 2nd) — the group's `TrendMetric.allCases`
+    /// order, unaffected by which two are picked.
+    private var serveReturnSelectedSeries: [TrendSeries] {
+        series.filter { serveReturnFilter.metrics.contains($0.metric) }
+    }
+
+    @ViewBuilder
+    private var serveReturnBody: some View {
+        Picker("Serve & Return View", selection: $serveReturnFilterRaw) {
+            ForEach(ServeReturnFilter.allCases) { filter in
+                Text(filter.label).tag(filter.rawValue)
+            }
+        }
+        .pickerStyle(.segmented)
+
+        let selected = serveReturnSelectedSeries
+        if selected.isEmpty || selected.allSatisfy({ $0.points.isEmpty }) {
+            emptyState
+        } else {
+            lineChart(for: selected)
+            legend(for: selected)
+        }
     }
 
     // MARK: - Rally depth
