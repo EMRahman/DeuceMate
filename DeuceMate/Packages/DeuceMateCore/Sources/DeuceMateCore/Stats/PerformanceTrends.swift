@@ -125,12 +125,13 @@ public enum PerformanceTrends {
 
     /// Eligible samples, **oldest-first**. `records` may be newest-first
     /// (`PhoneStatsStore.history` is) — this is the one place the order
-    /// flips. Ineligibility (in-progress, tracking-disabled format, too few
-    /// categorized points) is `MatchTrendSample.init?`'s job; this function
-    /// additionally excludes `activeMatchID` as defense in depth.
-    public static func samples(from records: [MatchRecord], excluding activeMatchID: UUID? = nil) -> [MatchTrendSample] {
+    /// flips. Ineligibility (tracking-disabled format, too few categorized
+    /// points) is entirely `MatchTrendSample.init?`'s job — including an
+    /// in-progress match, which is eligible once it clears the categorized-
+    /// points threshold, its `isInProgress` flag telling callers apart from
+    /// a completed match.
+    public static func samples(from records: [MatchRecord]) -> [MatchTrendSample] {
         records
-            .filter { $0.id != activeMatchID }
             .compactMap { MatchTrendSample(record: $0) }
             .sorted { $0.startTime < $1.startTime }
     }

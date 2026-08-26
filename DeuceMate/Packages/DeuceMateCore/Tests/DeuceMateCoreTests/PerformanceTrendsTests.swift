@@ -15,7 +15,7 @@ final class PerformanceTrendsTests: XCTestCase {
     ) -> MatchTrendSample {
         MatchTrendSample(
             matchID: id, startTime: Date().addingTimeInterval(TimeInterval(-daysAgo * 86400)),
-            matchType: matchType, matchFormat: matchFormat, recorderWon: true,
+            matchType: matchType, matchFormat: matchFormat, recorderWon: true, isInProgress: false,
             totalPoints: 20, categorizedPoints: 20, pointsWon: 12, pointsLost: 8,
             categorizedPointsWon: 12, categorizedPointsLost: 8,
             servicePoints: 10, categorizedServicePoints: categorizedServicePoints,
@@ -31,18 +31,20 @@ final class PerformanceTrendsTests: XCTestCase {
         )
     }
 
-    private func makeRecord(id: UUID = UUID(), daysAgo: Int, matchType: MatchType = .singles, matchFormat: MatchFormat = .standard) -> MatchRecord {
+    private func makeRecord(id: UUID = UUID(), daysAgo: Int, matchType: MatchType = .singles,
+                            matchFormat: MatchFormat = .standard, inProgress: Bool = false) -> MatchRecord {
         let points = (0..<20).map { _ in
             PointStat(setIndex: 0, server: .me, winner: .me, outcome: .winner)
         }
         return MatchRecord(
             id: id, startTime: Date().addingTimeInterval(TimeInterval(-daysAgo * 86400)),
-            endTime: Date(), setScores: [SetScore()], stats: points, iWon: true,
+            endTime: inProgress ? nil : Date(), setScores: [SetScore()], stats: points,
+            iWon: inProgress ? nil : true,
             matchType: matchType, matchFormat: matchFormat
         )
     }
 
-    // MARK: - samples(from:excluding:)
+    // MARK: - samples(from:)
 
     func test_samples_reordersNewestFirstInputToOldestFirstOutput() {
         let a = makeRecord(daysAgo: 0)   // most recent
@@ -52,11 +54,20 @@ final class PerformanceTrendsTests: XCTestCase {
         XCTAssertEqual(samples.map(\.matchID), [c.id, b.id, a.id])  // oldest-first output
     }
 
-    func test_samples_excludesActiveMatchID() {
-        let active = makeRecord(daysAgo: 0)
-        let other = makeRecord(daysAgo: 1)
-        let samples = PerformanceTrends.samples(from: [active, other], excluding: active.id)
-        XCTAssertEqual(samples.map(\.matchID), [other.id])
+    /// Owner-requested: an in-progress match (enough categorized points, but
+    /// no endTime/iWon yet) is included, not excluded — its sample carries
+    /// isInProgress == true and recorderWon == nil so callers can tell it
+    /// apart from a completed draw.
+    func test_samples_includesInProgressMatchWithEnoughPoints() {
+        let live = makeRecord(daysAgo: 0, inProgress: true)
+        let completed = makeRecord(daysAgo: 1)
+        let samples = PerformanceTrends.samples(from: [live, completed])
+        XCTAssertEqual(Set(samples.map(\.matchID)), Set([live.id, completed.id]))
+        let liveSample = samples.first { $0.matchID == live.id }
+        XCTAssertEqual(liveSample?.isInProgress, true)
+        XCTAssertNil(liveSample?.recorderWon)
+        let completedSample = samples.first { $0.matchID == completed.id }
+        XCTAssertEqual(completedSample?.isInProgress, false)
     }
 
     func test_samples_emptyHistoryYieldsEmptyArray() {

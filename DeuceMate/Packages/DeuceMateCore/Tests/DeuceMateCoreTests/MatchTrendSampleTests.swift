@@ -65,8 +65,26 @@ final class MatchTrendSampleTests: XCTestCase {
 
     // MARK: - Eligibility
 
-    func test_eligibility_rejectsInProgressMatch() {
+    /// Owner-requested: an in-progress match with enough categorized points
+    /// is included, not excluded. Its `recorderWon` is nil (no result yet)
+    /// but `isInProgress` is true, distinguishing it from a completed draw
+    /// (which is also `recorderWon == nil` but `isInProgress == false`).
+    func test_eligibility_acceptsInProgressMatchWithEnoughPoints() {
         let record = makeRecord(points: makeEligiblePoints(), endTime: nil, iWon: nil)
+        let sample = MatchTrendSample(record: record)
+        XCTAssertNotNil(sample)
+        XCTAssertEqual(sample?.isInProgress, true)
+        XCTAssertNil(sample?.recorderWon)
+    }
+
+    /// The categorized-points threshold still applies while in progress —
+    /// a match 3 points into being scored shouldn't produce a sample any
+    /// more than a too-short completed one would.
+    func test_eligibility_rejectsInProgressMatchWithTooFewPoints() {
+        let points = (0..<10).map { _ in
+            PointStat(setIndex: 0, server: .me, winner: .me, outcome: .winner)
+        }
+        let record = makeRecord(points: points, endTime: nil, iWon: nil)
         XCTAssertNil(MatchTrendSample(record: record))
     }
 
@@ -115,10 +133,13 @@ final class MatchTrendSampleTests: XCTestCase {
     func test_eligibility_acceptsDraw() {
         // iWon == nil with a non-nil endTime is a completed draw, not
         // in-progress (MatchRecord.isInProgress, MatchRecord.swift:176).
+        // recorderWon is nil here for a DIFFERENT reason than the
+        // in-progress case above — isInProgress is what tells them apart.
         let record = makeRecord(points: makeEligiblePoints(), iWon: nil)
         let sample = MatchTrendSample(record: record)
         XCTAssertNotNil(sample)
         XCTAssertNil(sample?.recorderWon)
+        XCTAssertEqual(sample?.isInProgress, false)
     }
 
     // MARK: - Field mapping against a hand-built match
