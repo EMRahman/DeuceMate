@@ -51,6 +51,21 @@ extension TrendMetric {
         case .breakPointsSaved:                               return .cyan
         case .bigPointWin:                                    return .orange
         case .pointsWon:                                      return .green
+        case .avgHeartRate:                                   return .red
+        case .hardZoneShare:                                  return .orange
+        case .hardZoneWinRate:                                return .green
+        case .stepsPerPoint:                                  return .blue
+        case .stepsPerPointWon:                               return .teal
+        case .metresPerPoint:                                 return .indigo
+        case .minutesPerMatch:                                return .brown
+        // Fatigue pairs: first set vs final set, distinct enough to read
+        // apart at a glance since the gap between them IS the metric.
+        case .winRateFirstSet:                                return .green
+        case .winRateFinalSet:                                return .orange
+        case .avgHeartRateFirstSet:                           return .pink
+        case .avgHeartRateFinalSet:                           return .red
+        case .stepsPerPointFirstSet:                          return .cyan
+        case .stepsPerPointFinalSet:                          return .blue
         }
     }
 
@@ -159,10 +174,18 @@ struct TrendChart: View {
 
     // MARK: - Standard groups (Errors, Attack, Pressure)
 
-    /// Ratio-unit metrics (currently only W:UE) can't share a 0–1 percent
-    /// axis with everything else in Attack, so they render as their own
-    /// compact rows below the shared chart instead of distorting its scale.
-    private var percentSeries: [TrendSeries] { series.filter { $0.metric.unit == .percent } }
+    /// A metric's unit IS the axis it belongs on. Percentages, bpm, steps per
+    /// point, metres and minutes cannot share one Y scale — plotted together,
+    /// Swift Charts infers a single domain and the small-magnitude series
+    /// flatten against the bottom. So a group renders one chart per unit
+    /// present, in this order. Ratio-unit metrics (only W:UE today) stay the
+    /// exception they always were: a single unbounded value per match reads
+    /// better as a sparkline row than as a chart one match can blow out.
+    private static let unitOrder: [TrendMetric.Unit] = [.percent, .bpm, .steps, .metres, .minutes]
+
+    private func bucket(_ unit: TrendMetric.Unit) -> [TrendSeries] {
+        series.filter { $0.metric.unit == unit }
+    }
     private var ratioSeries: [TrendSeries] { series.filter { $0.metric.unit == .ratio } }
 
     @ViewBuilder
@@ -170,11 +193,22 @@ struct TrendChart: View {
         if series.isEmpty || series.allSatisfy({ $0.points.isEmpty }) {
             emptyState
         } else {
-            if !percentSeries.isEmpty {
-                let shown = plottable(percentSeries)
-                lineChart(for: shown)
-                selectionSummary(for: shown)
-                legend(for: shown)
+            ForEach(Self.unitOrder, id: \.self) { unit in
+                let shown = plottable(bucket(unit))
+                // A bucket can be empty for two different reasons — no metric
+                // of that unit in this group, or every one of them lacking
+                // coverage in this window (a Health-free archive's bpm bucket).
+                // Both mean "draw nothing here", not "draw an empty axis".
+                if !shown.isEmpty && !shown.allSatisfy({ $0.points.isEmpty }) {
+                    if let caption = unit.axisCaption {
+                        Text(caption)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    lineChart(for: shown, unit: unit)
+                    selectionSummary(for: shown)
+                    legend(for: shown)
+                }
             }
             ForEach(ratioSeries) { s in
                 TrendSparkline(series: s, displayMode: displayMode, color: s.metric.chartColor, sampleCount: sampleCount)
@@ -355,7 +389,7 @@ struct TrendChart: View {
     /// just `self.series`) so callers can narrow to a subset — e.g. Serve &
     /// Return's filter picks 2 of its 6 metrics — and must already be
     /// display-mode-filtered via `plottable(_:)` before calling.
-    private func lineChart(for series: [TrendSeries]) -> some View {
+    private func lineChart(for series: [TrendSeries], unit: TrendMetric.Unit = .percent) -> some View {
         Chart {
             ForEach(series) { s in
                 if !hiddenMetrics.contains(s.metric) {
@@ -375,7 +409,7 @@ struct TrendChart: View {
                 AxisGridLine()
                 AxisValueLabel {
                     if let v = value.as(Double.self) {
-                        Text(displayMode == .count ? "\(Int(v.rounded()))" : "\(Int((v * 100).rounded()))%")
+                        Text(displayMode == .count ? "\(Int(v.rounded()))" : unit.axisText(v))
                             .font(.caption2)
                     }
                 }

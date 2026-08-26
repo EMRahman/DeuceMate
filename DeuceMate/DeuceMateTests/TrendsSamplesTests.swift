@@ -37,13 +37,13 @@ struct TrendsSamplesTests {
         let id = UUID()
         let cache = TrendsSamples()
 
-        cache.refresh(records: [makeInProgress(id: id)])
+        cache.refresh(records: [makeInProgress(id: id)], maxHR: 190)
         #expect(cache.samples.map(\.matchID) == [id])
         #expect(cache.samples.first?.isInProgress == true)
         #expect(cache.samples.first?.recorderWon == nil)
 
         let completed = makeCompleted(id: id, startTime: Date().addingTimeInterval(-3600))
-        cache.refresh(records: [completed])
+        cache.refresh(records: [completed], maxHR: 190)
         #expect(cache.samples.map(\.matchID) == [id])
         #expect(cache.samples.first?.isInProgress == false)
         #expect(cache.samples.first?.recorderWon == true)
@@ -57,10 +57,10 @@ struct TrendsSamplesTests {
         let id = UUID()
         let cache = TrendsSamples()
 
-        cache.refresh(records: [makeInProgress(id: id, pointCount: 25)])
+        cache.refresh(records: [makeInProgress(id: id, pointCount: 25)], maxHR: 190)
         #expect(cache.samples.first?.totalPoints == 25)
 
-        cache.refresh(records: [makeInProgress(id: id, pointCount: 30)])
+        cache.refresh(records: [makeInProgress(id: id, pointCount: 30)], maxHR: 190)
         #expect(cache.samples.first?.totalPoints == 30)
     }
 
@@ -77,7 +77,7 @@ struct TrendsSamplesTests {
         let cache = TrendsSamples()
 
         let original = makeCompleted(id: id, startTime: Date().addingTimeInterval(-3600))
-        cache.refresh(records: [original])
+        cache.refresh(records: [original], maxHR: 190)
         let originalUnforcedErrors = cache.samples.first?.unforcedErrorsHit
         #expect(originalUnforcedErrors == 12)  // makePoints alternates winner/unforcedError over 25 points
 
@@ -91,7 +91,7 @@ struct TrendsSamplesTests {
         )
         #expect(recategorized.stats.count == original.stats.count)
 
-        cache.refresh(records: [recategorized])
+        cache.refresh(records: [recategorized], maxHR: 190)
         #expect(cache.samples.first?.unforcedErrorsHit == 0)
     }
 
@@ -103,9 +103,9 @@ struct TrendsSamplesTests {
         let record = makeCompleted(id: id, startTime: Date().addingTimeInterval(-3600))
         let cache = TrendsSamples()
 
-        cache.refresh(records: [record])
+        cache.refresh(records: [record], maxHR: 190)
         let first = cache.samples
-        cache.refresh(records: [record])
+        cache.refresh(records: [record], maxHR: 190)
         #expect(cache.samples.map(\.matchID) == first.map(\.matchID))
         #expect(cache.samples.count == 1)
     }
@@ -116,13 +116,39 @@ struct TrendsSamplesTests {
         let idB = UUID()
         let cache = TrendsSamples()
 
-        cache.refresh(records: [makeCompleted(id: idA, startTime: Date().addingTimeInterval(-7200))])
+        cache.refresh(records: [makeCompleted(id: idA, startTime: Date().addingTimeInterval(-7200))], maxHR: 190)
         #expect(cache.samples.count == 1)
 
         cache.refresh(records: [
             makeCompleted(id: idA, startTime: Date().addingTimeInterval(-7200)),
             makeCompleted(id: idB, startTime: Date().addingTimeInterval(-3600))
-        ])
+        ], maxHR: 190)
         #expect(Set(cache.samples.map(\.matchID)) == Set([idA, idB]))
+    }
+
+    /// The zone counters are measured against the player's CURRENT resolved max
+    /// HR, so editing a birth year in Settings changes every historical sample
+    /// without touching a single record. A records-only cache check can't see
+    /// that, and the Trends screen would keep showing zone figures derived from
+    /// the old yardstick until something else happened to change the archive.
+    @Test func refresh_recomputesWhenOnlyMaxHRChanges() {
+        let record = MatchRecord(
+            id: UUID(), startTime: Date().addingTimeInterval(-3600), endTime: Date(),
+            setScores: [SetScore(gamesMe: 6, gamesOpponent: 3)],
+            stats: (0..<30).map { i in
+                PointStat(setIndex: 0, server: .me, winner: i % 2 == 0 ? .me : .opponent,
+                          outcome: i % 2 == 0 ? .winner : .unforcedError,
+                          heartRateBPM: 150)
+            },
+            iWon: true)
+        let cache = TrendsSamples()
+
+        // 150/190 = 79% — Z3, below the hard zones.
+        cache.refresh(records: [record], maxHR: 190)
+        #expect(cache.samples.first?.hardZonePoints == 0)
+
+        // 150/175 = 86% — Z4. Same record, new yardstick.
+        cache.refresh(records: [record], maxHR: 175)
+        #expect(cache.samples.first?.hardZonePoints == 30)
     }
 }

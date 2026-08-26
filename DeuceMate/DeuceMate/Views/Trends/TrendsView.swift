@@ -25,6 +25,10 @@ struct TrendsView: View {
 
     @State private var displayMode: TrendDisplayMode = .rate
 
+    /// Read only for the Heart Rate group's calibration note — the samples
+    /// themselves were already derived with this value by `TrendsSection`.
+    var maxHRSetting = MaxHRSetting()
+
     private var window: TrendWindow {
         if windowRaw == "all" { return .all }
         if windowRaw.hasPrefix("last"), let n = Int(windowRaw.dropFirst(4)) { return .last(n) }
@@ -50,7 +54,8 @@ struct TrendsView: View {
     /// indifferent to). Errors first, then Serve & Return, Attack, Rally
     /// Depth, Pressure.
     private let groupDisplayOrder: [TrendMetricGroup] = [
-        .errors, .serveReturn, .attack, .rallyDepth, .pressure
+        .errors, .serveReturn, .attack, .rallyDepth, .pressure,
+        .heartRate, .movement, .fatigue
     ]
 
     private var scopedSamples: [MatchTrendSample] {
@@ -79,6 +84,47 @@ struct TrendsView: View {
     /// #121). `scopedSamples` is oldest-first, matching `TrendPoint.index`.
     private var dateByIndex: [Int: Date] {
         Dictionary(uniqueKeysWithValues: scopedSamples.enumerated().map { ($0.offset, $0.element.startTime) })
+    }
+
+    /// How many scoped matches actually carry what a health group needs, plus
+    /// — for Heart Rate — whether its zones are measured against the player's
+    /// own max HR or the 190 bpm fallback.
+    ///
+    /// Health data is device-local and does NOT survive an iCloud restore: the
+    /// canonical archive is health-stripped and the Health sidecar is excluded
+    /// from backup, so after a fresh-install restore the tennis metrics come
+    /// back and these do not. A partly-covered health chart is therefore a
+    /// normal state that has to be explained rather than left mysterious —
+    /// the same reasoning as the partial-tracking caption above.
+    private func coverageNote(for group: TrendMetricGroup) -> String? {
+        let total = scopedSamples.count
+        guard total > 0 else { return nil }
+
+        let covered: Int
+        let subject: String
+        switch group {
+        case .heartRate:
+            covered = scopedSamples.filter { $0.hrSampledPoints >= TrendMetric.minimumHRSamples }.count
+            subject = "heart-rate data"
+        case .movement:
+            covered = scopedSamples.filter {
+                $0.stepSampledPoints >= TrendMetric.minimumStepSamples || $0.distanceMetres != nil
+            }.count
+            subject = "movement data"
+        case .fatigue:
+            covered = scopedSamples.filter { $0.fatigue != nil }.count
+            subject = "two comparable sets"
+        case .errors, .attack, .rallyDepth, .serveReturn, .pressure:
+            return nil
+        }
+
+        var note = "\(covered) of \(total) match\(total == 1 ? "" : "es") in this window "
+            + "\(covered == 1 ? "has" : "have") \(subject)."
+        if group == .heartRate && !maxHRSetting.isCalibrated {
+            note += " Zones use an estimated max of \(maxHRSetting.resolved) bpm — "
+                + "set your birth year in Settings for accurate zones."
+        }
+        return note
     }
 
     var body: some View {
@@ -127,9 +173,21 @@ struct TrendsView: View {
                 }
                 ForEach(groupDisplayOrder) { group in
                     let groupSeries = PerformanceTrends.series(for: group, in: scopedSamples)
-                    if !groupSeries.isEmpty {
-                        Section(group.displayLabel) {
+                    // `!groupSeries.isEmpty` is not the right test: a group
+                    // whose metrics all exist but carry no plottable point —
+                    // every health group on an archive recorded without Health
+                    // access — still returns a full series array. Ask whether
+                    // any of them has a point before drawing a section of
+                    // empty charts.
+                    if groupSeries.contains(where: { !$0.points.isEmpty }) {
+                        Section {
                             TrendChart(group: group, series: groupSeries, displayMode: displayMode, sampleCount: scopedSamples.count, dateByIndex: dateByIndex)
+                        } header: {
+                            Text(group.displayLabel)
+                        } footer: {
+                            if let note = coverageNote(for: group) {
+                                Text(note)
+                            }
                         }
                     }
                 }

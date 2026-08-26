@@ -20,6 +20,11 @@ struct TrendsSection: View {
     @Environment(\.appTheme) private var theme
     @StateObject private var samplesCache = TrendsSamples()
 
+    /// The zone counters' yardstick. Held here rather than re-read inside
+    /// `TrendsSamples` so the cache stays a plain value-in/value-out object
+    /// with no settings dependency of its own.
+    var maxHRSetting = MaxHRSetting()
+
     /// Completed matches only — the archive-screen headline has no room for
     /// its own filter controls, so it silently takes the feature's default
     /// (TrendFilter()'s includeInProgress: false), matching the full Trends
@@ -118,7 +123,7 @@ struct TrendsSection: View {
             Text("Trends")
         }
         .onAppear {
-            samplesCache.refresh(records: records)
+            samplesCache.refresh(records: records, maxHR: maxHRSetting.resolved)
         }
         // `records` (a `[MatchRecord]`) is directly Equatable — comparing
         // it here, rather than a hand-picked field subset, is what makes
@@ -129,7 +134,13 @@ struct TrendsSection: View {
         // wouldn't retrigger) or a Backup & Transfer import replacing a
         // record's content in place (Codex review, PR #121).
         .onChange(of: records) { _, _ in
-            samplesCache.refresh(records: records)
+            samplesCache.refresh(records: records, maxHR: maxHRSetting.resolved)
+        }
+        // A birth-year or max-HR edit in Settings re-derives every hard-zone
+        // counter without changing a single record, so it needs its own
+        // trigger — `records` alone would leave the zone charts stale.
+        .onChange(of: maxHRSetting.resolved) { _, newValue in
+            samplesCache.refresh(records: records, maxHR: newValue)
         }
     }
 }
