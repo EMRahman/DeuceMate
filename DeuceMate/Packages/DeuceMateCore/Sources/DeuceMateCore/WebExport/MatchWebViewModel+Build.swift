@@ -194,10 +194,10 @@ extension MatchWebViewModel {
             StatRow(label: "Unforced Errors", value: "\(s.myUnforcedErrors)", hint: nil),
             StatRow(label: "Forced Errors", value: "\(s.myForcedErrors)", hint: nil),
             StatRow(label: "Double Faults", value: "\(s.myDoubleFaults)", hint: nil),
-            StatRow(label: "Self-Inflicted Losses", value: s.ownErrorsPct, hint: "own errors / points lost",
+            StatRow(label: "Self-Inflicted Losses", value: s.ownErrorsPct.formatted, hint: "own errors / points lost",
                     fraction: frac(s.myDoubleFaults + s.myUnforcedErrors, s.lostPoints)),
-            StatRow(label: "W:UE Ratio", value: s.wueRatio, hint: "aim for > 1.0"),
-            StatRow(label: "Aggression Index", value: s.aggressionIndex, hint: "winners / (winners + UE)",
+            StatRow(label: "W:UE Ratio", value: s.wueRatio.formatted, hint: "aim for > 1.0"),
+            StatRow(label: "Aggression Index", value: s.aggressionIndex.formatted, hint: "winners / (winners + UE)",
                     fraction: frac(s.myWinners, s.myWinners + s.myUnforcedErrors))
         ], note: nil, bullets: nil)
     }

@@ -127,11 +127,11 @@ final class SimulatedGameStatsTests: XCTestCase {
     func test_simulatedGame_coachingMetrics() {
         let me = MatchStatsSummary(stats: makeStats(), focal: .me)
         // myW=4 (pts 1, 5, 9, 11), myUE=3 → 4/3 = 1.3 : 1.
-        XCTAssertEqual(me.wueRatio, "1.3 : 1")
+        XCTAssertEqual(me.wueRatio.formatted, "1.3 : 1")
         // Aggression index = 4 / (4+3) = 4/7 = 57%.
-        XCTAssertEqual(me.aggressionIndex, "57% (4/7)")
+        XCTAssertEqual(me.aggressionIndex.formatted, "57% (4/7)")
         // Own errors % = (DF + UE) / lost = (1 + 3) / 6 = 66%.
-        XCTAssertEqual(me.ownErrorsPct, "66% (4/6)")
+        XCTAssertEqual(me.ownErrorsPct.formatted, "66% (4/6)")
     }
 
     // MARK: - Pressure / score states

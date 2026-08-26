@@ -2,6 +2,42 @@
 // match stats views. Platform-neutral: no SwiftUI, no UIKit, no WatchKit.
 import Foundation
 
+/// A ratio stored as its number pair rather than a pre-formatted string, so
+/// callers can graph it, pool it across matches, or read it for VoiceOver
+/// instead of only ever displaying the literal text. Replaces three `String`
+/// fields on `MatchStatsSummary` (TECHNICAL_DEBT.md #7).
+public struct RatioStat: Equatable, Sendable {
+    public enum Style: Sendable {
+        /// "57% (12/21)" — `MatchStatsSummary.pct(num:den:)`'s shape;
+        /// "—" when `denominator == 0`.
+        case percent
+        /// "2.3 : 1" — winners-to-errors shape; "∞ : 1" when `denominator == 0`
+        /// and `numerator > 0`; "—" when both are 0.
+        case ratio
+    }
+
+    public let numerator: Int
+    public let denominator: Int
+    public let style: Style
+
+    public init(numerator: Int, denominator: Int, style: Style) {
+        self.numerator = numerator
+        self.denominator = denominator
+        self.style = style
+    }
+
+    public var formatted: String {
+        switch style {
+        case .percent:
+            return MatchStatsSummary.pct(num: numerator, den: denominator)
+        case .ratio:
+            if numerator == 0 && denominator == 0 { return "—" }
+            guard denominator > 0 else { return "∞ : 1" }
+            return String(format: "%.1f : 1", Double(numerator) / Double(denominator))
+        }
+    }
+}
+
 /// All statistics derived from a collection of `PointStat`s for one focal
 /// player. Computed once and consumed by both the watchOS and iOS stats views,
 /// guaranteeing metric parity by construction.
@@ -52,14 +88,25 @@ public struct MatchStatsSummary: Sendable {
 
     public let uncategorizedCount: Int
 
+    /// Categorized-only won/lost point totals and service-point totals — the
+    /// denominators outcome-mix trend metrics divide by. An untracked point is
+    /// neither an error nor a winner, so pairing a categorized numerator with
+    /// an all-points denominator (wonPoints/lostPoints/firstServeTotal) would
+    /// silently depress every rate on a partially tracked match.
+    /// See PERFORMANCE_TRENDS_PLAN.md §3.6.
+    public let categorizedPointsWon: Int
+    public let categorizedPointsLost: Int
+    public let categorizedServicePoints: Int
+    public let categorizedOpponentServicePoints: Int
+
     // MARK: - Derived coaching metrics
 
-    /// Winners-to-unforced-errors ratio as a formatted string.
-    public let wueRatio: String
+    /// Winners-to-unforced-errors ratio; `.formatted` renders "2.3 : 1".
+    public let wueRatio: RatioStat
     /// Of all aggressive outcomes (W + UE), what fraction were winners.
-    public let aggressionIndex: String
+    public let aggressionIndex: RatioStat
     /// Fraction of lost points that were self-inflicted (DF + UE).
-    public let ownErrorsPct: String
+    public let ownErrorsPct: RatioStat
 
     // MARK: - Pressure / normal
 
@@ -181,14 +228,17 @@ public struct MatchStatsSummary: Sendable {
         let oppFE  = categorized.filter { $0.winner == focal && $0.outcome == .forcedError }.count
         let myW    = categorized.filter { $0.winner == focal && $0.outcome == .winner }.count
 
-        // Coaching metrics
-        let wueStr: String = {
-            if myW == 0 && myUE == 0 { return "—" }
-            guard myUE > 0 else { return "∞ : 1" }
-            return String(format: "%.1f : 1", Double(myW) / Double(myUE))
-        }()
-        let aggrStr = Self.pct(num: myW, den: myW + myUE)
-        let ownErrStr = Self.pct(num: df + myUE, den: pLost)
+        // Categorized-only denominators (§3.6)
+        let categorizedWon = categorized.filter { $0.winner == focal }.count
+        let categorizedLost = categorized.filter { $0.winner == other }.count
+        let categorizedServicePts = categorized.filter { $0.server == focal }.count
+        let categorizedOppServicePts = categorized.filter { $0.server == other }.count
+
+        // Coaching metrics — RatioStat carries the numerator/denominator so
+        // trend charts can graph what these used to discard as plain strings.
+        let wueRatioStat = RatioStat(numerator: myW, denominator: myUE, style: .ratio)
+        let aggrStat = RatioStat(numerator: myW, denominator: myW + myUE, style: .percent)
+        let ownErrStat = RatioStat(numerator: df + myUE, denominator: pLost, style: .percent)
 
         // Pressure
         let isBig: (PointStat) -> Bool = { pt in
@@ -276,9 +326,13 @@ public struct MatchStatsSummary: Sendable {
         opponentForcedErrors = oppFE
         myWinners = myW
         uncategorizedCount = uncatCount
-        wueRatio = wueStr
-        aggressionIndex = aggrStr
-        ownErrorsPct = ownErrStr
+        categorizedPointsWon = categorizedWon
+        categorizedPointsLost = categorizedLost
+        categorizedServicePoints = categorizedServicePts
+        categorizedOpponentServicePoints = categorizedOppServicePts
+        wueRatio = wueRatioStat
+        aggressionIndex = aggrStat
+        ownErrorsPct = ownErrStat
         bigPointTotal = bigPts.count
         bigPointWins = bigWins
         normalPointTotal = normalPts.count

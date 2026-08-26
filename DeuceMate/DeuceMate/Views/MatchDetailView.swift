@@ -1001,11 +1001,11 @@ struct MatchDetailView: View {
             }
             Spacer()
             HStack(spacing: 4) {
-                Text(meSummary.wueRatio)
+                Text(meSummary.wueRatio.formatted)
                     .foregroundStyle(meColor)
                 Text("/")
                     .foregroundStyle(.secondary)
-                Text(oppSummary.wueRatio)
+                Text(oppSummary.wueRatio.formatted)
                     .foregroundStyle(oppColor)
             }
             .font(.body.monospacedDigit())

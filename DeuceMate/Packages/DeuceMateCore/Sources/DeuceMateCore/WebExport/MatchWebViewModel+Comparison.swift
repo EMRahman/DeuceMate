@@ -88,7 +88,7 @@ extension MatchWebViewModel {
         if hasAny {
             sections.append(CmpSection(title: "Outcome Breakdown", rows: [
                 CmpRow(label: "Win : Unforced Err", subtitle: "aim for > 1.0", kind: .ratio,
-                       meValue: meFull.wueRatio, oppValue: oppFull.wueRatio,
+                       meValue: meFull.wueRatio.formatted, oppValue: oppFull.wueRatio.formatted,
                        meFraction: 0, oppFraction: 0, meBarLabel: nil, oppBarLabel: nil),
                 count("Winners",         meFull.myWinners,        oppFull.myWinners),
                 count("Unforced Errors", meFull.myUnforcedErrors, oppFull.myUnforcedErrors),

@@ -56,7 +56,6 @@ when the item should constrain future changes.
 | [9](#9--mark-anchors-for-scoreviewmodel-homeview-contentview) | Navigability | `MARK:` anchors for `ScoreViewModel` / `HomeView` / `ContentView` | **None at runtime** | Independent quick win | Small — comment-only |
 | [2](#2--add-a-monotonic-record-revision-before-queued-checkpoints) | Sync | Add a monotonic record revision for merge policy | Low today | **Mandatory before queueing live checkpoints** | Small |
 | [6](#6--phonestatsstore-concurrency-model) | Concurrency | `PhoneStatsStore` actor / `@MainActor` migration | Low today | Before Swift 6 strict concurrency or new background mutation paths | Medium |
-| [7](#7--convert-formatted-string-stats-to-typed-values-in-matchstatssummary) | Stats | Convert formatted string stats to typed `RatioStat` | Low | Before localization, structured stats export, or graphing | Small, mechanical, Core-only |
 | [13](#13--split-pastmatchesview) | Architecture | Split `PastMatchesView` (745 lines, still the fastest-growing file) | None today | Opportunistically on the next substantial edit | Small |
 
 **Read 18, 19 and 4a together.** They are one persistence-safety programme —
@@ -91,6 +90,7 @@ Completed, or parked with a recorded reason. Full write-ups are
 | [10](#10--settings-key-consistency-check-done) | Tooling | Settings-key consistency check | **Done** — grep in `CLAUDE.md` §0; #3 is the real fix |
 | [14](#14--hygiene-force-unwrap-placeholder-test-targets-done) | Hygiene | Force-unwrap; placeholder test targets | **Done** — force-unwrap removed; the phone test targets are real now |
 | [16](#16--drop-healthkit-date-of-birth-read-user-entered-birth-year-remove-dead-computed-max-hr-path-done-15-july-2026) | Health/Privacy | Drop HealthKit date-of-birth read; user-entered birth year | **Done** — 15 July 2026 |
+| [7](#7--convert-formatted-string-stats-to-typed-values-in-matchstatssummary-done) | Stats | Convert formatted string stats to typed `RatioStat` | **Done** — `PERFORMANCE_TRENDS_PLAN.md` PR 1 |
 | [17](#17--de-duplicate-stats-scaffolding-into-core-done) | Stats | De-duplicate set filters, durations, percent strings, compact score | **Done** — four new Core files |
 | [15](#15--localization-parked) | i18n | Localization (all UI copy is hardcoded English) | **Parked** — product decision, not code |
 
@@ -510,49 +510,6 @@ preceding one — before any transport change starts queueing them.
 **Key files:** `MatchRecord.swift`, `MatchMergePolicy.swift`,
 `MatchSyncTransport.swift`, `MatchRecordCodingTests.swift`,
 `MatchMergePolicyTests.swift`.
-
----
-
-### 7 — Convert formatted string stats to typed values in `MatchStatsSummary`
-
-**What:** Three fields in `MatchStatsSummary` store pre-formatted strings:
-
-```swift
-public let wueRatio: String        // e.g. "2.3 : 1" or "∞ : 1"
-public let aggressionIndex: String // e.g. "35% (7/20)"
-public let ownErrorsPct: String    // e.g. "60% (6/10)"
-```
-
-The underlying numerators and denominators are computed locally and then
-discarded. Storing only the formatted string makes graphing impossible,
-accessibility harder (VoiceOver reads the literal string), localization
-harder, and AI-export formatting inconsistent.
-
-**Proposed fix:** Replace with a small `RatioStat` struct in Core:
-
-```swift
-public struct RatioStat: Sendable {
-    public let numerator: Int
-    public let denominator: Int
-    public var formatted: String { ... } // same logic as current pct()
-}
-```
-
-Views and exporters call `.formatted` for display. The typed values are
-available for graphing, accessibility labels, and structured AI export.
-
-This is a Core-only change — no `project.pbxproj` edit needed. Both apps
-consume `MatchStatsSummary` but read-only, so updating call sites to use
-`.wueRatio.formatted` instead of `.wueRatio` is a mechanical find-and-replace.
-
-**Risk and trigger:** **Low today.** This is a clean, bounded change with useful
-future benefits but no current correctness failure. Do it before localization,
-structured stats export, or graphing needs the discarded values (or elevate it
-sooner if the current VoiceOver rendering becomes a release requirement). The
-`pct(num:den:)` helper in `MatchStatsSummary` can remain the formatter.
-
-**Key files:** `MatchStatsSummary.swift`, both apps' stats/export views,
-`MatchStatsSummaryTests.swift`.
 
 ---
 
@@ -990,6 +947,45 @@ sidecar rather than its normally backed-up canonical history. The watch history
 and live-state files are also marked backup-excluded after every save. See
 `HealthSidecarPolicy`, `PhoneStatsStore`, and `docs/release/SUBMISSION_REVIEW.md`
 Blocker 4.
+
+---
+
+### 7 — Convert formatted string stats to typed values in `MatchStatsSummary` (Done)
+
+**What:** Three fields stored pre-formatted strings — `wueRatio`,
+`aggressionIndex`, `ownErrorsPct` — with their numerators and denominators
+discarded. Storing only the formatted string made graphing impossible,
+VoiceOver read the literal text, and structured export was inconsistent.
+
+**Done:** Added `RatioStat` (`numerator`, `denominator`, `.formatted`) to
+`MatchStatsSummary.swift` and converted the three fields to it.
+`pct(num:den:)` remains the percent formatter; `RatioStat.formatted` also
+covers the winners-to-errors ratio shape (`"2.3 : 1"`, `"∞ : 1"`) the plain
+`pct()` helper never produced. All six call sites — `MatchDetailView.swift`,
+`MatchStatsView.swift` (watch), `MatchExporter.swift`, and the two web-export
+comparison/build files — now read `.formatted`; output strings are unchanged.
+
+Triggered by, and landed as PR 1 of,
+[`PERFORMANCE_TRENDS_PLAN.md`](PERFORMANCE_TRENDS_PLAN.md) — its W:UE
+sparkline is exactly the "graphing needs the discarded values" trigger this
+item was waiting on. The same PR additively exposed four new
+categorized-only counters (`categorizedPointsWon/Lost`,
+`categorizedServicePoints`, `categorizedOpponentServicePoints`) that the
+outcome-mix trend metrics divide by, so a match with tracking toggled off
+mid-match doesn't silently read a better error rate than it earned
+(`PERFORMANCE_TRENDS_PLAN.md` §3.6) — beyond this item's original scope, but
+the natural place to add them.
+
+**Tests added:** `MatchStatsSummaryTests` and `SimulatedGameStatsTests`
+updated to read `.formatted`; new cases assert the raw numerator/denominator,
+the `"∞ : 1"` case, and that the categorized counters equal their all-points
+counterparts on a fully-tracked match but diverge correctly when some points
+are `.uncategorized`.
+
+**Key files:** `MatchStatsSummary.swift`, `MatchStatsSummaryTests.swift`,
+`SimulatedGameStatsTests.swift`, `MatchDetailView.swift`,
+`MatchStatsView.swift`, `MatchExporter.swift`,
+`MatchWebViewModel+Comparison.swift`, `MatchWebViewModel+Build.swift`.
 
 ---
 
