@@ -69,6 +69,18 @@ struct TrendsView: View {
         scopedSamples.filter { $0.trackingCoverage < 1.0 }.count
     }
 
+    /// index -> match date for EVERY scoped sample, independent of whether
+    /// any metric in any group actually has a plottable value there.
+    /// `TrendChart` deriving dates only from its own (already-sparse)
+    /// `series` left an index with zero data for the whole group — every
+    /// Rally Depth metric gapped on a match with no ending-shot data, say —
+    /// invisible to both its axis label and its selection readout, even
+    /// though `chartXDomain` still spans that index (Codex review, PR
+    /// #121). `scopedSamples` is oldest-first, matching `TrendPoint.index`.
+    private var dateByIndex: [Int: Date] {
+        Dictionary(uniqueKeysWithValues: scopedSamples.enumerated().map { ($0.offset, $0.element.startTime) })
+    }
+
     var body: some View {
         List {
             Section {
@@ -117,7 +129,7 @@ struct TrendsView: View {
                     let groupSeries = PerformanceTrends.series(for: group, in: scopedSamples)
                     if !groupSeries.isEmpty {
                         Section(group.displayLabel) {
-                            TrendChart(group: group, series: groupSeries, displayMode: displayMode, sampleCount: scopedSamples.count)
+                            TrendChart(group: group, series: groupSeries, displayMode: displayMode, sampleCount: scopedSamples.count, dateByIndex: dateByIndex)
                         }
                     }
                 }

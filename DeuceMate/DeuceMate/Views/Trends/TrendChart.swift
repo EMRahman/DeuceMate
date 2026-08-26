@@ -80,6 +80,14 @@ struct TrendChart: View {
     /// indices this one metric happens to have values for (Codex review,
     /// PR #121).
     let sampleCount: Int
+    /// index -> match date for EVERY sample in the caller's scoped window,
+    /// not just indices this group happens to have plottable values for —
+    /// passed in from `TrendsView` rather than derived from `series` here,
+    /// since a group where every metric gaps the same match (all four
+    /// Rally Depth share metrics on a match with no ending-shot data, say)
+    /// would otherwise leave that index dateless even though `chartXDomain`
+    /// still spans it (Codex review, PR #121).
+    let dateByIndex: [Int: Date]
 
     @State private var hiddenMetrics: Set<TrendMetric>
     @State private var rallyDepthMode: RallyDepthMode = .mix
@@ -95,11 +103,12 @@ struct TrendChart: View {
     /// choice across launches. Phone-local, no wire key — see CLAUDE.md §0.
     @AppStorage("trendsServeReturnFilter") private var serveReturnFilterRaw: String = ServeReturnFilter.servesIn.rawValue
 
-    init(group: TrendMetricGroup, series: [TrendSeries], displayMode: TrendDisplayMode, sampleCount: Int) {
+    init(group: TrendMetricGroup, series: [TrendSeries], displayMode: TrendDisplayMode, sampleCount: Int, dateByIndex: [Int: Date]) {
         self.group = group
         self.series = series
         self.displayMode = displayMode
         self.sampleCount = sampleCount
+        self.dateByIndex = dateByIndex
         // Opponent-framed metrics start hidden; everything else starts shown.
         _hiddenMetrics = State(initialValue: Set(series.map(\.metric).filter(\.isOpponentFramed)))
     }
@@ -285,20 +294,27 @@ struct TrendChart: View {
         0...max(sampleCount - 1, 0)
     }
 
-    /// index -> match date, built from every point across every metric in
-    /// this GROUP (`self.series`, not whichever narrower subset a given
-    /// chart body currently shows) — maximizes which indices have a date
-    /// available, since Serve & Return's 2-of-6 filter or Rally Depth's
-    /// share/win-rate split would otherwise starve this of coverage for an
-    /// index only present in a metric that isn't currently displayed.
-    private var dateByIndex: [Int: Date] {
-        var result: [Int: Date] = [:]
-        for s in series {
-            for point in s.points {
-                result[point.index] = point.date
+    /// `chartXSelection`'s raw binding can publish an index outside
+    /// `chartXDomain` when a drag continues past either plot edge — Swift
+    /// Charts doesn't clamp this itself, which is exactly why
+    /// `PointsGraphView.applyXSelection` already wraps its own binding the
+    /// same way. Left unclamped, an out-of-range value fails both
+    /// `chartXDomain.contains` (the `RuleMark` disappears) and
+    /// `dateByIndex` (the readout disappears) while staying STORED, so the
+    /// selection reads as lost but silently blocks the next gesture from
+    /// registering as a change until it lands on a genuinely different
+    /// value (Codex review, PR #121).
+    private var clampedSelection: Binding<Int?> {
+        Binding(
+            get: { selectedIndex },
+            set: { newValue in
+                if let v = newValue {
+                    selectedIndex = min(max(v, chartXDomain.lowerBound), chartXDomain.upperBound)
+                } else {
+                    selectedIndex = nil
+                }
             }
-        }
-        return result
+        )
     }
 
     private static let axisDateFormat = Date.FormatStyle.dateTime.month(.abbreviated).day()
@@ -374,7 +390,7 @@ struct TrendChart: View {
             }
         }
         .chartLegend(.hidden)
-        .chartXSelection(value: $selectedIndex)
+        .chartXSelection(value: clampedSelection)
         .frame(height: 140)
     }
 
@@ -523,7 +539,7 @@ struct TrendChart: View {
             }
         }
         .chartLegend(.hidden)
-        .chartXSelection(value: $selectedIndex)
+        .chartXSelection(value: clampedSelection)
         .frame(height: 140)
     }
 
@@ -560,7 +576,7 @@ struct TrendChart: View {
             }
         }
         .chartLegend(.hidden)
-        .chartXSelection(value: $selectedIndex)
+        .chartXSelection(value: clampedSelection)
         .frame(height: 140)
     }
 
