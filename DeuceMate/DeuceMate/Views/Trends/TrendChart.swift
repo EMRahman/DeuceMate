@@ -121,14 +121,34 @@ struct TrendChart: View {
         }
     }
 
+    /// The percentSeries metrics actually plottable at the current display
+    /// mode: in Count mode, a metric with `supportsCountMode == false`
+    /// (aggressionIndex, ownErrorShare) has no count form, and its 0...1
+    /// fraction plotted against a raw-count axis would read as pinned near
+    /// zero — so it drops out of Count mode rather than misrepresenting it.
+    /// Every metric is plottable in Rate mode.
+    private var plottablePercentSeries: [TrendSeries] {
+        displayMode == .count ? percentSeries.filter { $0.metric.supportsCountMode } : percentSeries
+    }
+
+    /// A point's Y value at the current display mode: the 0...1 rate, or —
+    /// when Count mode is selected and the metric supports it — the raw
+    /// numerator. Counts across metrics with different denominators are
+    /// still meaningfully comparable as counts (e.g. "12 double faults" vs
+    /// "8 unforced errors" over the same window), unlike mixing a fraction
+    /// and a count on one axis.
+    private func plottedValue(_ point: TrendPoint) -> Double {
+        displayMode == .count ? Double(point.ratio.numerator) : point.value
+    }
+
     private var lineChart: some View {
         Chart {
-            ForEach(percentSeries) { s in
+            ForEach(plottablePercentSeries) { s in
                 if !hiddenMetrics.contains(s.metric) {
                     ForEach(s.points) { point in
                         LineMark(
                             x: .value("Match", point.index),
-                            y: .value("Value", point.value)
+                            y: .value("Value", plottedValue(point))
                         )
                         .foregroundStyle(by: .value("Metric", s.metric.displayLabel))
                         .lineStyle(s.metric.isOpponentFramed
@@ -139,13 +159,14 @@ struct TrendChart: View {
                 }
             }
         }
-        .chartForegroundStyleScale(domain: colorScale(for: percentSeries).domain, range: colorScale(for: percentSeries).range)
+        .chartForegroundStyleScale(domain: colorScale(for: plottablePercentSeries).domain, range: colorScale(for: plottablePercentSeries).range)
         .chartYAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine()
                 AxisValueLabel {
                     if let v = value.as(Double.self) {
-                        Text("\(Int((v * 100).rounded()))%").font(.caption2)
+                        Text(displayMode == .count ? "\(Int(v.rounded()))" : "\(Int((v * 100).rounded()))%")
+                            .font(.caption2)
                     }
                 }
             }
@@ -246,7 +267,7 @@ struct TrendChart: View {
                 ForEach(s.points) { point in
                     LineMark(
                         x: .value("Match", point.index),
-                        y: .value("Value", point.value)
+                        y: .value("Value", plottedValue(point))
                     )
                     .foregroundStyle(by: .value("Metric", s.metric.displayLabel))
                     .interpolationMethod(.monotone)
@@ -259,7 +280,8 @@ struct TrendChart: View {
                 AxisGridLine()
                 AxisValueLabel {
                     if let v = value.as(Double.self) {
-                        Text("\(Int((v * 100).rounded()))%").font(.caption2)
+                        Text(displayMode == .count ? "\(Int(v.rounded()))" : "\(Int((v * 100).rounded()))%")
+                            .font(.caption2)
                     }
                 }
             }

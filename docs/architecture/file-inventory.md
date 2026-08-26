@@ -137,7 +137,7 @@ iOS/watchOS app targets). See `docs/screenshots/README.md` for usage.
 | `DeuceMateArchiveTool/main.swift` | ~120 | CLI over `ManualMatchArchiveBackup`/`MatchHTMLExporter`: `list` inspects an archive JSON file (index, UUID, date, format, duration, set scores, stat count), `webexport` renders one match's interactive HTML export to disk, `seed` writes a decoded archive into a simulator app container's canonical `MatchArchive/` files (via `HealthSidecarPolicy`) for visual QA of the import feature without driving the file-picker UI. | Manual archive backup, Web export, tooling |
 | `DeuceMateWebSnapshot/main.swift` | ~150 | macOS-only headless renderer: loads a local HTML file (or wraps a plain `.txt` file in a simple styled dark page) into an off-screen `WKWebView`, runs a sequence of steps — click a button by label (e.g. the web export's Stats/Points tab toggle) or `scroll:<0-100>` to a percentage of the page height — capturing a PNG via `WKWebView.takeSnapshot` after each step. No macOS Screen Recording permission needed since it's an in-process view snapshot, not a display capture. Generic; not DeuceMate-specific. | Web export, AI-coach prompt, tooling |
 
-## 4. Tests (58 files)
+## 4. Tests (59 files)
 
 Tests are the correctness record. The interesting ones all live against the shared
 package (no simulator needed). Red flags in any PR: tests deleted, skipped, or
@@ -204,6 +204,12 @@ HR/steps only via the raw-point table, the opponent-prompt disclaimer, and agree
 between `HealthExportConsent.presentFields` and what each export string actually
 emits — the `MatchExporter` half of the disclosure↔export cross-check, which must
 live in the iOS target because Core cannot import app-side code),
+`DeuceMateTests/TrendsSamplesTests.swift` (the Trends screen's `@MainActor`
+sample cache: a match completing with the same id it had while in-progress —
+same array of ids, only `endTime`/`iWon` changing — is picked up rather than
+staying silently stale, alongside the no-op-when-unchanged, add-a-match, and
+`excludingActiveMatchID`-change cases; a regression test for a bug caught in
+PR #120 review that would have failed under the prior id-only cache signature),
 `DeuceMateUITests/DeuceMateUITests.swift`
 (Manual Entry -> history -> truthful detail empty states -> export, both the
 negative skip-when-empty and the seed-gated positive "Share health data?" consent
