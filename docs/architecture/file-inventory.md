@@ -64,7 +64,7 @@ matches; it does not score them (except by sending validated commands to the wat
 | `DeuceMateApp.swift` | 50 | The iPhone app's entry point: wires up the archive store, sync service and announcer; resumes initial restore or backup push whenever the app returns to the foreground. | App plumbing |
 | `ContentView.swift` | 15 | The navigation root — essentially just opens the archive list. | App plumbing |
 
-## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (44 files)
+## 3. Shared package — `DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/` (47 files)
 
 The rulebook both apps use. No screens; pure logic — which makes it the cheapest
 place to test and the safest place to change.
@@ -73,6 +73,9 @@ place to test and the safest place to change.
 |---|---:|---|---|
 | `Scoring/ScoringEngine.swift` | 567 | The tennis rules, as a pure function: given a state and "player X won the point", returns the new state plus events (game/set won, changeover due, announcement text). It also exposes the perspective-neutral regular-game completion predicate used by historical point-score reconciliation. No side effects — fully unit-testable. | Live scoring, stats |
 | `Stats/MatchStatsSummary.swift` | 455 | The statistics math: serve/return percentages, break points, error counts, winner-to-error ratio (typed `RatioStat`, TECHNICAL_DEBT #7), pressure-point performance, rally depth, HR-zone splits, per-point step deltas + movement timeline, and categorized-only won/lost/service-point totals for cross-match trend metrics. Both apps display numbers computed here, so they can never disagree. | Stats |
+| `Stats/MatchTrendSample.swift` | 205 | One eligible match reduced to the raw counters cross-match trends pool and window — a recorder-framed rename of a single `MatchStatsSummary(focal: .me)` (never a second, duplicated counting pass). A failable `init?(record:)` owns eligibility: excludes in-progress matches, formats with `disablesPointTracking` (Perpetual Points), and matches under 20 categorized points. | Trends |
+| `Stats/TrendMetric.swift` | 270 | The cross-match metric catalogue: double faults, unforced/forced errors (both directions), winners, W:UE ratio, rally-depth share/win-rate per `EndingShot`, serve/return percentages, and pressure conversions. `rawPair(in:)` (unguarded, for pooling) vs. `ratio(in:)` (denominator-guarded, for plotting a single dot) is the split that keeps a zero-UE match's winners from being discarded when pooled. | Trends |
+| `Stats/PerformanceTrends.swift` | 224 | Windows, filters (type/format, applied before the window), pools (Σnumerator/Σdenominator, not a mean of per-match rates), and diffs (`TrendDelta`, oriented by the metric's `betterDirection` so a falling double-fault rate is always `.improving`) a whole archive of `MatchTrendSample`s into per-metric `TrendSeries`. | Trends |
 | `Stats/RecCoachInsights.swift` | 310 | The Rec Coach rule set: eight coaching rules (e.g. self-inflicted losses, double-fault leakage, pressure-point drop-off) that fire from point stats and rank the top observations. | Rec Coach |
 | `Stats/PulseCoachInsights.swift` | 125 | The Pulse Coach rule set: three heart-rate rules (zone-vs-results delta, break-point HR spike, late-match decline). | Pulse Coach |
 | `Stats/StepsCoachInsights.swift` | 95 | The steps movement/fatigue rule set: two rules (accumulated-step late-match decline, high-movement-point win rate) over the `MatchStatsSummary.StepPoint` timeline. Recorder-only; surfaced in the AI/stats export's Movement & Fatigue section. | Stats, health |
@@ -129,18 +132,19 @@ iOS/watchOS app targets). See `docs/screenshots/README.md` for usage.
 | `DeuceMateArchiveTool/main.swift` | ~120 | CLI over `ManualMatchArchiveBackup`/`MatchHTMLExporter`: `list` inspects an archive JSON file (index, UUID, date, format, duration, set scores, stat count), `webexport` renders one match's interactive HTML export to disk, `seed` writes a decoded archive into a simulator app container's canonical `MatchArchive/` files (via `HealthSidecarPolicy`) for visual QA of the import feature without driving the file-picker UI. | Manual archive backup, Web export, tooling |
 | `DeuceMateWebSnapshot/main.swift` | ~150 | macOS-only headless renderer: loads a local HTML file (or wraps a plain `.txt` file in a simple styled dark page) into an off-screen `WKWebView`, runs a sequence of steps — click a button by label (e.g. the web export's Stats/Points tab toggle) or `scroll:<0-100>` to a percentage of the page height — capturing a PNG via `WKWebView.takeSnapshot` after each step. No macOS Screen Recording permission needed since it's an in-process view snapshot, not a display capture. Generic; not DeuceMate-specific. | Web export, AI-coach prompt, tooling |
 
-## 4. Tests (55 files)
+## 4. Tests (58 files)
 
 Tests are the correctness record. The interesting ones all live against the shared
 package (no simulator needed). Red flags in any PR: tests deleted, skipped, or
 expected values rewritten to make a failure pass — that requires explicit approval.
 
-**Package tests — `DeuceMate/Packages/DeuceMateCore/Tests/DeuceMateCoreTests/` (41 files):**
+**Package tests — `DeuceMate/Packages/DeuceMateCore/Tests/DeuceMateCoreTests/` (44 files):**
 
 | File | Covers |
 |---|---|
 | `ScoringEngineTests.swift` | The tennis rules: deuce cycles, serve rotation, tiebreaks, changeovers, all match formats, match completion, and the perspective-neutral regular-game completion predicate shared with historical reconciliation. |
 | `MatchStatsSummaryTests.swift` / `MatchStatsSummaryHRTests.swift` / `MatchStatsSummaryStepsTests.swift` | The statistics math, including heart-rate splits and per-point step deltas / timeline. |
+| `MatchTrendSampleTests.swift` / `TrendMetricTests.swift` / `PerformanceTrendsTests.swift` | Cross-match trends: eligibility (in-progress, tracking-disabled formats, thin categorized data), the recorder-framed field mapping against `MatchStatsSummary`, nil-not-zero on empty denominators, filter-before-window ordering, pooling (including the zero-denominator-match regression), and delta orientation/thresholds. |
 | `StepsSeriesTests.swift` | The shared steps overlay series: base-normalization, per-point deltas, sparse-sample indices, and the `totalSteps` linear-estimate fallback. |
 | `RecCoachInsightsTests.swift` / `PulseCoachInsightsTests.swift` / `StepsCoachInsightsTests.swift` | Every coaching rule firing (and not firing) on fixture matches. |
 | `MatchRecordCodingTests.swift` | Saved matches decode forever — round-trips plus old JSON without newer fields. |
@@ -232,6 +236,7 @@ touched. A PR for feature X that edits files far outside its row deserves a ques
 | **Live scoreboard & iPhone input** | `ScoreViewModel` (command validation) | `LiveScoreboardView`, `LivePointCategoryPanel`, `PhoneMatchSyncService` | `MatchSyncMessage` |
 | **Announcements (spoken score)** | `ScoreViewModel` (builds the text) | `Audio/LiveAnnouncementService` | `MatchSyncMessage` |
 | **Stats & graphs** | `MatchStatsView` | `MatchDetailView`, `PointsGraphView`, `HealthKitHRFetcher` | `MatchStatsSummary`, `SetActivitySplit`, `PointMatchScore`, `PointGamesScore`, `SetScoreLabel`, `PointStat` |
+| **Trends** | — | *(landing in a follow-up PR)* | `MatchTrendSample`, `TrendMetric`, `PerformanceTrends` |
 | **Rec Coach insights** | — | `Views/Coaching/RecCoachSection` | `RecCoachInsights` |
 | **Pulse Coach (heart-rate) insights** | `ScoreViewModel` (settings) | `Views/PulseCoach/PulseCoachSection` | `PulseCoachInsights`, `HRZone` |
 | **AI coaching export** | — | `Export/MatchExporter`, `AICoachSheet`, `AICoachLauncher` | `MatchStatsSummary` |
