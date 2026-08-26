@@ -11,11 +11,11 @@ final class PerformanceTrendsTests: XCTestCase {
     private func makeSample(
         id: UUID = UUID(), daysAgo: Int, matchType: MatchType = .singles, matchFormat: MatchFormat = .standard,
         winnersHit: Int = 5, unforcedErrorsHit: Int = 2,
-        doubleFaults: Int = 1, categorizedServicePoints: Int = 10
+        doubleFaults: Int = 1, categorizedServicePoints: Int = 10, isInProgress: Bool = false
     ) -> MatchTrendSample {
         MatchTrendSample(
             matchID: id, startTime: Date().addingTimeInterval(TimeInterval(-daysAgo * 86400)),
-            matchType: matchType, matchFormat: matchFormat, recorderWon: true, isInProgress: false,
+            matchType: matchType, matchFormat: matchFormat, recorderWon: isInProgress ? nil : true, isInProgress: isInProgress,
             totalPoints: 20, categorizedPoints: 20, pointsWon: 12, pointsLost: 8,
             categorizedPointsWon: 12, categorizedPointsLost: 8,
             servicePoints: 10, categorizedServicePoints: categorizedServicePoints,
@@ -138,6 +138,35 @@ final class PerformanceTrendsTests: XCTestCase {
         let samples = [makeSample(daysAgo: 1), makeSample(daysAgo: 0)]
         let scoped = PerformanceTrends.scoped(samples, filter: .all, window: .last(50))
         XCTAssertEqual(scoped.count, 2)
+    }
+
+    // MARK: - includeInProgress filtering
+
+    /// Default TrendFilter() excludes an in-progress sample — the feature's
+    /// default posture everywhere (owner request).
+    func test_scoped_defaultFilterExcludesInProgress() {
+        let samples = [makeSample(daysAgo: 1), makeSample(daysAgo: 0, isInProgress: true)]
+        let scoped = PerformanceTrends.scoped(samples, filter: TrendFilter(), window: .all)
+        XCTAssertEqual(scoped.count, 1)
+        XCTAssertFalse(scoped.contains { $0.isInProgress })
+    }
+
+    func test_scoped_includeInProgressTrue_includesIt() {
+        let samples = [makeSample(daysAgo: 1), makeSample(daysAgo: 0, isInProgress: true)]
+        let scoped = PerformanceTrends.scoped(samples, filter: TrendFilter(includeInProgress: true), window: .all)
+        XCTAssertEqual(scoped.count, 2)
+    }
+
+    /// includeInProgress combines with matchType/matchFormat via AND, same
+    /// as every other TrendFilter axis — an in-progress doubles match isn't
+    /// pulled in by a singles-only filter just because includeInProgress is
+    /// on. The completed singles match still passes through both axes.
+    func test_scoped_includeInProgress_combinesWithOtherAxes() {
+        let completedSingles = makeSample(daysAgo: 1, matchType: .singles)
+        let inProgressDoubles = makeSample(daysAgo: 0, matchType: .doubles, isInProgress: true)
+        let filter = TrendFilter(matchType: .singles, includeInProgress: true)
+        let scoped = PerformanceTrends.scoped([completedSingles, inProgressDoubles], filter: filter, window: .all)
+        XCTAssertEqual(scoped.map(\.matchID), [completedSingles.matchID])
     }
 
     // MARK: - Pooling (§3.3) — the Codex-caught bug

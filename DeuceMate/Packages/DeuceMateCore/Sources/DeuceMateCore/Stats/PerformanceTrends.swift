@@ -20,20 +20,31 @@ public enum TrendWindow: Hashable, Sendable {
     public static let presets: [TrendWindow] = [.last(5), .last(10), .last(20), .all]
 }
 
-/// Which matches are in scope, independent of the window. `nil` on either
-/// field means "all" for that axis.
+/// Which matches are in scope, independent of the window. `nil` on
+/// `matchType`/`matchFormat` means "all" for that axis.
 public struct TrendFilter: Hashable, Sendable {
     public var matchType: MatchType?
     public var matchFormat: MatchFormat?
+    /// Whether an in-progress match's sample is in scope. `false` by
+    /// default — completed matches only, the feature's default posture
+    /// everywhere (owner request). `MatchTrendSample.isInProgress` is the
+    /// field this checks.
+    public var includeInProgress: Bool
 
-    public init(matchType: MatchType? = nil, matchFormat: MatchFormat? = nil) {
+    public init(matchType: MatchType? = nil, matchFormat: MatchFormat? = nil,
+                includeInProgress: Bool = false) {
         self.matchType = matchType
         self.matchFormat = matchFormat
+        self.includeInProgress = includeInProgress
     }
 
+    /// Every match type and format, completed only — the default posture,
+    /// not an unconditional "everything." Pass `includeInProgress: true`
+    /// explicitly to also see in-progress matches.
     public static let all = TrendFilter()
 
     public func includes(_ sample: MatchTrendSample) -> Bool {
+        if !includeInProgress && sample.isInProgress { return false }
         if let matchType, sample.matchType != matchType { return false }
         if let matchFormat, sample.matchFormat != matchFormat { return false }
         return true
