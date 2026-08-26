@@ -61,6 +61,14 @@ struct TrendsView: View {
         )
     }
 
+    /// Matches in the current scoped window whose outcome tracking was off
+    /// for part of the match (`trackingCoverage < 1.0`) — surfaced so a
+    /// low-coverage window isn't silently averaged in as if every point had
+    /// been seen (OQ-5, docs/features/PERFORMANCE_TRENDS_PLAN.md §3.6).
+    private var partiallyTrackedCount: Int {
+        scopedSamples.filter { $0.trackingCoverage < 1.0 }.count
+    }
+
     var body: some View {
         List {
             Section {
@@ -79,15 +87,32 @@ struct TrendsView: View {
                 .pickerStyle(.segmented)
             }
 
-            if scopedSamples.isEmpty {
+            // Re-enforces PerformanceTrends.minimumMatches AFTER filtering —
+            // the archive screen's TrendsSection only gates on the unfiltered
+            // total, so a filter combination that leaves 1-2 matches must be
+            // caught here or a single match would render as a "trend"
+            // (Codex review, PR #121).
+            if scopedSamples.count < PerformanceTrends.minimumMatches {
                 Section {
                     ContentUnavailableView(
-                        "No Matches",
+                        "Not Enough Matches",
                         systemImage: "chart.line.uptrend.xyaxis",
-                        description: Text("No tracked matches match these filters.")
+                        description: Text(scopedSamples.isEmpty
+                            ? "No tracked matches match these filters."
+                            : "Only \(scopedSamples.count) tracked match\(scopedSamples.count == 1 ? "" : "es") found for these filters — Trends needs at least \(PerformanceTrends.minimumMatches).")
                     )
                 }
             } else {
+                if partiallyTrackedCount > 0 {
+                    Section {
+                        Label(
+                            "\(partiallyTrackedCount) match\(partiallyTrackedCount == 1 ? "" : "es") in this window had tracking off for part of the match — outcome rates below reflect only the tracked points.",
+                            systemImage: "exclamationmark.triangle"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
                 ForEach(groupDisplayOrder) { group in
                     let groupSeries = PerformanceTrends.series(for: group, in: scopedSamples)
                     if !groupSeries.isEmpty {
