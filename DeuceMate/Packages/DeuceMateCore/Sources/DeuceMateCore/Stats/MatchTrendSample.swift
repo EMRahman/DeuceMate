@@ -56,6 +56,9 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     public let firstServesIn: Int
     public let firstServeWins: Int
     public let secondServePoints: Int
+    /// Second-serve points that landed in (outcome != .doubleFault) — the
+    /// numerator for "2nd Serve In". `summary.secondServeIn`.
+    public let secondServesIn: Int
     public let secondServeWins: Int
     public let doubleFaults: Int
     public let returnPointsOnFirst: Int
@@ -111,7 +114,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         recorderWon: Bool?, totalPoints: Int, categorizedPoints: Int, pointsWon: Int,
         pointsLost: Int, categorizedPointsWon: Int, categorizedPointsLost: Int,
         servicePoints: Int, categorizedServicePoints: Int, categorizedOpponentServicePoints: Int,
-        firstServesIn: Int, firstServeWins: Int, secondServePoints: Int, secondServeWins: Int,
+        firstServesIn: Int, firstServeWins: Int, secondServePoints: Int, secondServesIn: Int, secondServeWins: Int,
         doubleFaults: Int, returnPointsOnFirst: Int, returnWinsOnFirst: Int,
         returnPointsOnSecond: Int, returnWinsOnSecond: Int, opponentDoubleFaults: Int,
         winnersHit: Int, winnersConceded: Int, unforcedErrorsHit: Int, unforcedErrorsDrawn: Int,
@@ -136,6 +139,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         self.firstServesIn = firstServesIn
         self.firstServeWins = firstServeWins
         self.secondServePoints = secondServePoints
+        self.secondServesIn = secondServesIn
         self.secondServeWins = secondServeWins
         self.doubleFaults = doubleFaults
         self.returnPointsOnFirst = returnPointsOnFirst
@@ -189,7 +193,8 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
             categorizedServicePoints: summary.categorizedServicePoints,
             categorizedOpponentServicePoints: summary.categorizedOpponentServicePoints,
             firstServesIn: summary.firstServeIn, firstServeWins: summary.firstServeWins,
-            secondServePoints: summary.secondServeTotal, secondServeWins: summary.secondServeWins,
+            secondServePoints: summary.secondServeTotal, secondServesIn: summary.secondServeIn,
+            secondServeWins: summary.secondServeWins,
             doubleFaults: summary.doubleFaults,
             returnPointsOnFirst: summary.returnOppsOnFirst, returnWinsOnFirst: summary.returnWinsOnFirst,
             returnPointsOnSecond: summary.returnOppsOnSecond, returnWinsOnSecond: summary.returnWinsOnSecond,
