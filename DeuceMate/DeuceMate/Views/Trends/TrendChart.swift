@@ -83,6 +83,13 @@ struct TrendChart: View {
 
     @State private var hiddenMetrics: Set<TrendMetric>
     @State private var rallyDepthMode: RallyDepthMode = .mix
+    /// Tap/drag-selected match index, shared across whichever chart shape
+    /// this group currently shows — `PERFORMANCE_TRENDS_PLAN.md` §6.3
+    /// specified "the date appears in the axis label and in the selection
+    /// readout" from the start, but neither was ever wired up; the axis was
+    /// unconditionally `.chartXAxis(.hidden)` with no selection at all
+    /// (Codex review, PR #121).
+    @State private var selectedIndex: Int?
     /// Persisted (unlike `rallyDepthMode`, which resets each time the
     /// screen opens) — the owner asked this filter to remember the last
     /// choice across launches. Phone-local, no wire key — see CLAUDE.md §0.
@@ -157,6 +164,7 @@ struct TrendChart: View {
             if !percentSeries.isEmpty {
                 let shown = plottable(percentSeries)
                 lineChart(for: shown)
+                selectionSummary(for: shown)
                 legend(for: shown)
             }
             ForEach(ratioSeries) { s in
@@ -277,6 +285,56 @@ struct TrendChart: View {
         0...max(sampleCount - 1, 0)
     }
 
+    /// index -> match date, built from every point across every metric in
+    /// this GROUP (`self.series`, not whichever narrower subset a given
+    /// chart body currently shows) — maximizes which indices have a date
+    /// available, since Serve & Return's 2-of-6 filter or Rally Depth's
+    /// share/win-rate split would otherwise starve this of coverage for an
+    /// index only present in a metric that isn't currently displayed.
+    private var dateByIndex: [Int: Date] {
+        var result: [Int: Date] = [:]
+        for s in series {
+            for point in s.points {
+                result[point.index] = point.date
+            }
+        }
+        return result
+    }
+
+    private static let axisDateFormat = Date.FormatStyle.dateTime.month(.abbreviated).day()
+
+    /// The tap/drag-selected point's date plus each currently-visible
+    /// metric's value at that match — the "selection readout" the plan
+    /// always specified. `series` is whatever the calling chart body is
+    /// showing (already display-mode- and hidden-metric-filtered where
+    /// relevant), so this reads the same set of values the chart itself
+    /// draws, never a wider or narrower one.
+    @ViewBuilder
+    private func selectionSummary(for series: [TrendSeries]) -> some View {
+        if let selectedIndex, let date = dateByIndex[selectedIndex] {
+            HStack(spacing: 10) {
+                Text(date, format: Self.axisDateFormat)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                ForEach(series) { s in
+                    if !hiddenMetrics.contains(s.metric),
+                       let point = s.points.first(where: { $0.index == selectedIndex }) {
+                        HStack(spacing: 3) {
+                            Circle().fill(s.metric.chartColor).frame(width: 6, height: 6)
+                            Text(displayMode == .count && s.metric.supportsCountMode
+                                ? s.metric.formatCount(point.ratio)
+                                : s.metric.format(point.ratio))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
     /// Draws `series` as a multi-line chart. Takes an explicit list (not
     /// just `self.series`) so callers can narrow to a subset — e.g. Serve &
     /// Return's filter picks 2 of its 6 metrics — and must already be
@@ -287,6 +345,11 @@ struct TrendChart: View {
                 if !hiddenMetrics.contains(s.metric) {
                     lineMarks(for: s)
                 }
+            }
+            if let selectedIndex, chartXDomain.contains(selectedIndex) {
+                RuleMark(x: .value("Selected", selectedIndex))
+                    .foregroundStyle(Color.secondary.opacity(0.55))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             }
         }
         .chartForegroundStyleScale(domain: runColorScale(for: series).domain, range: runColorScale(for: series).range)
@@ -302,8 +365,16 @@ struct TrendChart: View {
                 }
             }
         }
-        .chartXAxis(.hidden)
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 3)) { value in
+                if let idx = value.as(Int.self), let date = dateByIndex[idx] {
+                    AxisGridLine()
+                    AxisValueLabel { Text(date, format: Self.axisDateFormat).font(.caption2) }
+                }
+            }
+        }
         .chartLegend(.hidden)
+        .chartXSelection(value: $selectedIndex)
         .frame(height: 140)
     }
 
@@ -346,6 +417,7 @@ struct TrendChart: View {
             // copies of the same predicate to keep in sync.
             let shown = plottable(selected)
             lineChart(for: shown)
+            selectionSummary(for: shown)
             legend(for: shown)
         }
     }
@@ -374,9 +446,11 @@ struct TrendChart: View {
             switch rallyDepthMode {
             case .mix:
                 rallyDepthStackedChart
+                selectionSummary(for: depthShareSeries)
                 staticLegend(for: depthShareSeries)
             case .winRate:
                 rallyDepthWinRateChart
+                selectionSummary(for: depthWinSeries)
                 staticLegend(for: depthWinSeries)
             }
         }
@@ -416,6 +490,11 @@ struct TrendChart: View {
             ForEach(depthShareSeries) { s in
                 areaMarks(for: s)
             }
+            if let selectedIndex, chartXDomain.contains(selectedIndex) {
+                RuleMark(x: .value("Selected", selectedIndex))
+                    .foregroundStyle(Color.secondary.opacity(0.55))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+            }
         }
         .chartForegroundStyleScale(domain: runColorScale(for: depthShareSeries).domain, range: runColorScale(for: depthShareSeries).range)
         .chartXScale(domain: chartXDomain)
@@ -435,8 +514,16 @@ struct TrendChart: View {
                 }
             }
         }
-        .chartXAxis(.hidden)
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 3)) { value in
+                if let idx = value.as(Int.self), let date = dateByIndex[idx] {
+                    AxisGridLine()
+                    AxisValueLabel { Text(date, format: Self.axisDateFormat).font(.caption2) }
+                }
+            }
+        }
         .chartLegend(.hidden)
+        .chartXSelection(value: $selectedIndex)
         .frame(height: 140)
     }
 
@@ -444,6 +531,11 @@ struct TrendChart: View {
         Chart {
             ForEach(depthWinSeries) { s in
                 lineMarks(for: s)
+            }
+            if let selectedIndex, chartXDomain.contains(selectedIndex) {
+                RuleMark(x: .value("Selected", selectedIndex))
+                    .foregroundStyle(Color.secondary.opacity(0.55))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             }
         }
         .chartForegroundStyleScale(domain: runColorScale(for: depthWinSeries).domain, range: runColorScale(for: depthWinSeries).range)
@@ -459,8 +551,16 @@ struct TrendChart: View {
                 }
             }
         }
-        .chartXAxis(.hidden)
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 3)) { value in
+                if let idx = value.as(Int.self), let date = dateByIndex[idx] {
+                    AxisGridLine()
+                    AxisValueLabel { Text(date, format: Self.axisDateFormat).font(.caption2) }
+                }
+            }
+        }
         .chartLegend(.hidden)
+        .chartXSelection(value: $selectedIndex)
         .frame(height: 140)
     }
 
