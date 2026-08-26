@@ -364,20 +364,35 @@ struct TrendChart: View {
         Array(Set(depthShareSeries.flatMap { $0.points.map(\.index) })).sorted()
     }
 
+    /// Same run-splitting as `lineMarks(for:)` (see its doc comment),
+    /// applied to `AreaMark`: normalized stacking groups whatever marks
+    /// share an X value regardless of which run's discriminator they carry,
+    /// so a match present for the other three depth-share metrics still
+    /// stacks correctly — only a fully-absent index (a match with no
+    /// ending-shot data at all, so all four series omit it) is affected,
+    /// and that's exactly the case that must NOT be bridged over (Codex
+    /// review, PR #121).
+    @ChartContentBuilder
+    private func areaMarks(for s: TrendSeries) -> some ChartContent {
+        ForEach(Array(runs(of: s.points).enumerated()), id: \.offset) { runIndex, run in
+            ForEach(run) { point in
+                AreaMark(
+                    x: .value("Match", point.index),
+                    y: .value("Share", point.value),
+                    stacking: .normalized
+                )
+                .foregroundStyle(by: .value("Series", runKey(s.metric, runIndex)))
+            }
+        }
+    }
+
     private var rallyDepthStackedChart: some View {
         Chart {
             ForEach(depthShareSeries) { s in
-                ForEach(s.points) { point in
-                    AreaMark(
-                        x: .value("Match", point.index),
-                        y: .value("Share", point.value),
-                        stacking: .normalized
-                    )
-                    .foregroundStyle(by: .value("Metric", s.metric.displayLabel))
-                }
+                areaMarks(for: s)
             }
         }
-        .chartForegroundStyleScale(domain: colorScale(for: depthShareSeries).domain, range: colorScale(for: depthShareSeries).range)
+        .chartForegroundStyleScale(domain: runColorScale(for: depthShareSeries).domain, range: runColorScale(for: depthShareSeries).range)
         .chartYAxis {
             // .automatic, not an explicit [0.0, 0.5, 1.0]: normalized
             // AreaMark stacking reports its Y-axis values ALREADY in

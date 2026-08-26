@@ -73,7 +73,7 @@ struct TrendSparkline: View {
     @ViewBuilder
     private var chart: some View {
         if series.points.count >= 2 {
-            SparklineShape(values: series.points.map(\.value))
+            SparklineShape(points: series.points.map { (index: $0.index, value: $0.value) })
                 .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
         } else {
             Color.clear
@@ -157,26 +157,39 @@ struct TrendSparkline: View {
 /// precise readout (the pooled figure text carries that). Used only at
 /// sparkline size (~60×22).
 private struct SparklineShape: Shape {
-    let values: [Double]
+    /// (index, value) pairs, oldest-first — `index` is the point's true
+    /// position in the scoped series (`TrendPoint.index`), not just its
+    /// position in this array. A prior version took plain `[Double]`
+    /// values, so a metric missing an observation for one match (a zero-UE
+    /// match's W:UE) had its remaining points silently re-spaced evenly as
+    /// if that match had never existed, connecting straight through the
+    /// gap. Positioning by real index, and breaking the path (instead of
+    /// connecting) wherever two consecutive points aren't adjacent indices,
+    /// is what actually shows the gap (Codex review, PR #121).
+    let points: [(index: Int, value: Double)]
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        guard values.count >= 2 else { return path }
-        let minV = values.min() ?? 0
-        let maxV = values.max() ?? 1
+        guard points.count >= 2, let first = points.first, let last = points.last else { return path }
+        let minV = points.map(\.value).min() ?? 0
+        let maxV = points.map(\.value).max() ?? 1
         let span = max(maxV - minV, 0.0001)
-        let stepX = rect.width / CGFloat(values.count - 1)
+        let indexSpan = max(last.index - first.index, 1)
 
-        func point(_ index: Int) -> CGPoint {
-            let x = rect.minX + CGFloat(index) * stepX
-            let normalized = (values[index] - minV) / span
+        func location(_ p: (index: Int, value: Double)) -> CGPoint {
+            let x = rect.minX + CGFloat(p.index - first.index) / CGFloat(indexSpan) * rect.width
+            let normalized = (p.value - minV) / span
             let y = rect.maxY - CGFloat(normalized) * rect.height
             return CGPoint(x: x, y: y)
         }
 
-        path.move(to: point(0))
-        for i in 1..<values.count {
-            path.addLine(to: point(i))
+        path.move(to: location(points[0]))
+        for i in 1..<points.count {
+            if points[i].index == points[i - 1].index + 1 {
+                path.addLine(to: location(points[i]))
+            } else {
+                path.move(to: location(points[i]))
+            }
         }
         return path
     }
