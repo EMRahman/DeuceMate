@@ -144,20 +144,49 @@ final class TrendMetricTests: XCTestCase {
         }
     }
 
-    func test_supportsCountMode_falseExactlyForRatioAndShareMetrics() {
+    func test_supportsCountMode_falseExactlyForMetricsWithNoMeaningfulCount() {
         let expectedFalse: Set<TrendMetric> = [
             .wueRatio, .aggressionIndex, .ownErrorShare,
-            .depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally
+            .depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally,
+            // Health metrics whose numerator is not a quantity worth plotting:
+            // a summed bpm is meaningless, and stepsPerPointWon's numerator is
+            // the same match step load stepsPerPoint already draws.
+            .avgHeartRate, .avgHeartRateFirstSet, .avgHeartRateFinalSet,
+            .hardZoneShare, .stepsPerPointWon, .minutesPerMatch
         ]
         for metric in TrendMetric.allCases {
             XCTAssertEqual(metric.supportsCountMode, !expectedFalse.contains(metric), "\(metric)")
         }
     }
 
-    func test_wueRatio_isRatioUnit_everythingElseIsPercent() {
+    /// Pins every non-percent metric to its unit. `TrendChart` buckets its
+    /// series by `unit` and gives each bucket its own Y axis, so a metric
+    /// silently landing in the wrong bucket is a chart that plots bpm against a
+    /// percentage scale — visible only to someone who happens to look.
+    func test_everyMetric_hasItsExpectedUnit() {
+        let nonPercent: [TrendMetric: TrendMetric.Unit] = [
+            .wueRatio: .ratio,
+            .avgHeartRate: .bpm,
+            .avgHeartRateFirstSet: .bpm,
+            .avgHeartRateFinalSet: .bpm,
+            .stepsPerPoint: .steps,
+            .stepsPerPointWon: .steps,
+            .stepsPerPointFirstSet: .steps,
+            .stepsPerPointFinalSet: .steps,
+            .metresPerPoint: .metres,
+            .minutesPerMatch: .minutes
+        ]
         for metric in TrendMetric.allCases {
-            let expected: TrendMetric.Unit = metric == .wueRatio ? .ratio : .percent
-            XCTAssertEqual(metric.unit, expected, "\(metric)")
+            XCTAssertEqual(metric.unit, nonPercent[metric] ?? .percent, "\(metric)")
+        }
+    }
+
+    /// A `switch` exhaustiveness canary: adding a `Unit` case without giving it
+    /// a flat-change threshold would otherwise fail to compile here rather than
+    /// silently defaulting, but this also pins the values themselves.
+    func test_minimumChange_isDefinedForEveryUnit() {
+        for unit: TrendMetric.Unit in [.percent, .ratio, .bpm, .steps, .metres, .minutes] {
+            XCTAssertGreaterThan(PerformanceTrends.minimumChange(for: unit), 0, "\(unit)")
         }
     }
 
