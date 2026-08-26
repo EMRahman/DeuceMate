@@ -260,6 +260,23 @@ struct TrendChart: View {
         }
     }
 
+    /// The full scoped window's X domain — fixed to `0...sampleCount-1`
+    /// independent of which indices the marks a chart actually draws cover.
+    /// Swift Charts otherwise infers a `Chart`'s X-axis domain from the
+    /// marks it's given, so a match at either EDGE of the window with no
+    /// data for any currently-visible series (the newest match having only
+    /// return points while Serve & Return shows "Serves In," say, or
+    /// lacking ending-shot data entirely in Rally Depth) would silently
+    /// shrink the inferred domain and stretch the nearest real match out to
+    /// that edge — the same bug `TrendSparkline`'s `sampleCount` fixes for
+    /// sparklines, recurring here at the chart level because the run-
+    /// splitting fix (`lineMarks(for:)`/`areaMarks(for:)`) only stops
+    /// Charts from CONNECTING across a gap, it doesn't pin the axis itself
+    /// (Codex review, PR #121).
+    private var chartXDomain: ClosedRange<Int> {
+        0...max(sampleCount - 1, 0)
+    }
+
     /// Draws `series` as a multi-line chart. Takes an explicit list (not
     /// just `self.series`) so callers can narrow to a subset — e.g. Serve &
     /// Return's filter picks 2 of its 6 metrics — and must already be
@@ -273,6 +290,7 @@ struct TrendChart: View {
             }
         }
         .chartForegroundStyleScale(domain: runColorScale(for: series).domain, range: runColorScale(for: series).range)
+        .chartXScale(domain: chartXDomain)
         .chartYAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine()
@@ -400,6 +418,7 @@ struct TrendChart: View {
             }
         }
         .chartForegroundStyleScale(domain: runColorScale(for: depthShareSeries).domain, range: runColorScale(for: depthShareSeries).range)
+        .chartXScale(domain: chartXDomain)
         .chartYAxis {
             // .automatic, not an explicit [0.0, 0.5, 1.0]: normalized
             // AreaMark stacking reports its Y-axis values ALREADY in
@@ -428,6 +447,7 @@ struct TrendChart: View {
             }
         }
         .chartForegroundStyleScale(domain: runColorScale(for: depthWinSeries).domain, range: runColorScale(for: depthWinSeries).range)
+        .chartXScale(domain: chartXDomain)
         .chartYAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine()
