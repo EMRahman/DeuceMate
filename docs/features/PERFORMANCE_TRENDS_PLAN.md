@@ -1,10 +1,10 @@
 <!--
 machine-readable summary (parse this block first)
 
-status: proposed
+status: implemented
 author: Claude (Opus 5), design session with the owner
 date: 2026-08-25
-implemented_date: null
+implemented_date: 2026-08-26
 blocked_by: null
 delivers: "docs/features/IPHONE_COMPANION_APP_PLAN.md §'Future work (explicitly deferred)' → 'Phone-only stats — career-level rollups across matches: serve % over time, W:UE trend lines, opponent-specific records. Add fields to MatchStatsSummary or a new CareerStatsSummary and surface a third screen on iOS.' This plan delivers the first two; opponent-specific records are NOT deliverable — see key_data_model_facts."
 closes_backlog_item: "TECHNICAL_DEBT.md #7 — Convert formatted string stats to typed values in MatchStatsSummary. Its recorded trigger is 'Before localization, structured stats export, or graphing'. This feature graphs the W:UE ratio, so the trigger fires here. PR 1."
@@ -42,7 +42,7 @@ key_data_model_facts:
   - "PastMatchesView's `pastRecords` (PastMatchesView.swift:93-97) UNIONS store.history with syncService.watchMirror rows. Mirror rows are summaries and may carry no stats. Trends must read store.history alone."
   - "Outcome tracking is toggleable MID-MATCH, and when off the watch still records the point as .uncategorized (ScoreViewModel.swift:938, 'Stats off: silently record an uncategorized point for history/analytics'). MatchStatsSummary counts outcome numerators over the categorized subset (:143,176-182) but wonPoints/lostPoints/firstServeTotal over ALL points (:147-148,155). Pairing them depresses every outcome rate on a partially tracked match — so outcome-mix metrics use categorized-only denominators. See §3.6."
   - "Pooling must sum raw numerator/denominator pairs across every match in a block, not average the plotted dots. wueRatio is nil at zero unforced errors — nil meaning 'no errors', not 'no data' — so a 10W/0UE match has no dot but its 10 winners still belong in the pooled numerator. See §3.3 and §4.2."
-  - "MatchStatsSummary.init is eager: ~30 filter passes plus PulseCoachInsights, StepsCoachInsights and RecCoachInsights (MatchStatsSummary.swift:325-349). Cheap for one match, wasteful across an archive — hence the id-keyed cache in §6.6, not new API (§8.1)."
+  - "MatchStatsSummary.init is eager: ~30 filter passes plus PulseCoachInsights, StepsCoachInsights and RecCoachInsights (MatchStatsSummary.swift:325-349). Cheap for one match, wasteful across an archive — hence the equality-invalidated cache in §6.6, not new API (§8.1)."
 decisions:
   normalization: "natural-rate-per-metric plus a Rate/Count toggle"
   headline: "sparkline row per metric on the archive screen"
@@ -244,14 +244,22 @@ metric in `TrendMetricTests`.
 
 A match contributes only if **all** hold:
 
-1. `!record.isInProgress` (`MatchRecord.swift:176`) and its id is not the live match.
-2. `!record.matchFormat.config.disablesPointTracking` — excludes `.perpetualPoints`, which
+1. `!record.matchFormat.config.disablesPointTracking` — excludes `.perpetualPoints`, which
    never presents the categorisation sheet (`ScoreTypes.swift:135`) and so has no outcomes.
-3. At least **20 categorized points** — the same threshold `RecCoachInsights.generate`
+2. At least **20 categorized points** — the same threshold `RecCoachInsights.generate`
    already uses to refuse thin data (`RecCoachInsights.swift:78`). One number, one
    precedent, cited rather than re-invented.
 
 Ineligible matches are absent from the series entirely, not plotted as gaps.
+
+⚠️ **Revised after initial implementation** (owner request): an in-progress match is
+**eligible**, not excluded, once it clears rule 2 — its `isInProgress` flag (mirroring
+`MatchRecord.isInProgress`, `MatchRecord.swift:176`) tells callers apart from a completed
+draw (both have `recorderWon == nil`). Eligibility and *inclusion* are a deliberate split:
+`MatchTrendSample.init?` owns eligibility (can this match ever produce a sample); whether an
+eligible in-progress sample is actually shown is `TrendFilter.includeInProgress` (§6.4),
+off by default everywhere. The original single-condition design below is kept for context on
+why the split exists, not as the current rule.
 
 ### 3.6 Partially tracked matches: categorized denominators
 
@@ -395,7 +403,8 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     public let startTime: Date
     public let matchType: MatchType
     public let matchFormat: MatchFormat
-    public let recorderWon: Bool?           // nil == draw (never in-progress; see init)
+    public let recorderWon: Bool?           // nil == draw OR still in-progress — check isInProgress
+    public let isInProgress: Bool           // mirrors MatchRecord.isInProgress at build time
 
     // Volume. The categorized* denominators are what outcome-mix metrics divide by
     // (§3.6); the all-points ones serve the serve/return/pressure metrics, which are
@@ -419,6 +428,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     public let firstServesIn: Int
     public let firstServeWins: Int
     public let secondServePoints: Int
+    public let secondServesIn: Int          // added post-launch: "2nd Serve In" metric
     public let secondServeWins: Int
     public let doubleFaults: Int
     public let returnPointsOnFirst: Int
@@ -663,14 +673,21 @@ No `WebExportColors` coupling: trends are not exported, so the `CLAUDE.md` §2 "
 
 ### 6.4 Filter persistence
 
-Three **phone-local** `@AppStorage` keys: `trendsWindow`, `trendsMatchType`,
-`trendsMatchFormat`. Not synced — no `MatchSyncKey`, no wire key, no watch mirror,
-following the `MatchSetupDefaults` precedent for device-local UI state.
+Five **phone-local** `@AppStorage` keys, all following the `MatchSetupDefaults` precedent
+for device-local UI state — not synced, no `MatchSyncKey`, no wire key, no watch mirror:
+
+- `trendsWindow`, `trendsMatchType`, `trendsMatchFormat` (`TrendsView`) — the original three.
+- `trendsIncludeInProgress` (`TrendsView`) — owner-requested revision to §3.5's eligibility
+  split: off by default everywhere (the archive-screen headline inherits the default
+  silently, having no room for its own toggle).
+- `trendsServeReturnFilter` (`TrendChart`) — narrows the Serve & Return group's six metrics
+  to one pair (Serves In / Serves Win / Returns Win) at a time; persisted, unlike Rally
+  Depth's Mix/Win Rate toggle which is plain `@State` and resets each time the screen opens.
 
 ⚠️ `CLAUDE.md` §0 runs a settings-key consistency grep that expects every `@AppStorage`
-literal to match a `MatchSyncKey` raw value, with a documented exception list. **These three
-keys must be added to that list in the same PR**, or the next agent to run the check will
-report a drift bug that does not exist.
+literal to match a `MatchSyncKey` raw value, with a documented exception list. **Every key
+above must be in that list**, or the next agent to run the check will report a drift bug
+that does not exist.
 
 ### 6.5 Accessibility
 
@@ -687,15 +704,30 @@ string `"1.4 : 1"`. PR 1 fixes that for every surface, not just this one.
 
 `MatchStatsSummary.init` runs ~30 filter passes plus three insight engines
 (`MatchStatsSummary.swift:325-349`). Once per match is fine; once per match **per render**
-is not. `TrendsSamples` is an `ObservableObject` holding `[UUID: MatchTrendSample]`, keyed
-by match id and invalidated only when `store.history` changes identity. Filtering and
-windowing then operate on cached value types.
+is not. `TrendsSamples` is an `ObservableObject` holding an ordered `[MatchTrendSample]`,
+invalidated by comparing the full incoming `[MatchRecord]` array for equality against the
+last-seen array — not a hand-picked field subset. (An earlier `(id, endTime, iWon,
+statsCount)` fingerprint missed a real case, caught in Codex review: a Backup & Transfer
+import can replace a record's point-level content while those four fields stay identical.
+Full `MatchRecord` equality — its stored fields include `stats` — closes that gap and stays
+correct automatically if a future field is added.) Filtering and windowing then operate on
+cached value types.
 
-Below `PerformanceTrends.minimumMatches` (3) the section renders a single explanatory line —
-"Needs 3 tracked matches — you have 2" — rather than disappearing. This is a **deliberate
+Below `PerformanceTrends.minimumMatches` (3), `TrendsSection` renders a single explanatory
+line — "Track N more tracked matches..." — rather than disappearing. This is a **deliberate
 departure** from the house "empty ⇒ hide the section" idiom (`RecCoachInsights.swift:30-32`):
 that idiom stops a per-match panel showing noise, whereas hiding here means a new user never
 discovers the feature. Recorded as OQ-3.
+
+`TrendsSection`'s gate only checks the *unfiltered* total, though — the full `TrendsView`
+screen re-checks `scopedSamples.count < minimumMatches` **after** type/format/window/
+in-progress filtering, since a filter combination can legally leave 1-2 matches even when
+the archive as a whole clears the gate. Missing this second check (caught in Codex review)
+would let a single filtered match render as a multi-point "trend."
+
+`TrendsView` also surfaces §3.6's `trackingCoverage` per OQ-5's recommendation: a caption
+above the charts names how many matches in the current scoped window had tracking off for
+part of the match, so their outcome rates aren't mistaken for full-match numbers.
 
 ---
 
@@ -822,7 +854,7 @@ cd DeuceMate/Packages/DeuceMateCore && \
 
 | Test file | Must cover |
 |---|---|
-| `MatchTrendSampleTests` | eligibility rejects in-progress, `.perpetualPoints`, and <20 categorized points; counters equal a hand-built match; `rallyDepth` keyed correctly when buckets are missing; recorder-framed names map to the right `MatchStatsSummary` fields — **especially `forcedErrorsCaused` == `opponentForcedErrors`** |
+| `MatchTrendSampleTests` | eligibility accepts an in-progress match once it clears the categorized-points threshold (`isInProgress` distinguishes it from a completed draw) and rejects `.perpetualPoints` and <20 categorized points; counters equal a hand-built match; `rallyDepth` keyed correctly when buckets are missing; recorder-framed names map to the right `MatchStatsSummary` fields — **especially `forcedErrorsCaused` == `opponentForcedErrors`** |
 | `TrendMetricTests` | `ratio(in:)` returns `nil` (not `0`) on an empty denominator; `wueRatio` is `nil` at zero UEs but `rawPair` still reports its winners; outcome-mix metrics divide by the **categorized** denominators, so a match that is half-untracked reports the same rate as a fully-tracked one with the same tracked points; every case has a group, label, denominator label and direction; rally-depth shares are `.neutral`; `supportsCountMode` is false exactly for ratio/share metrics |
 | `PerformanceTrendsTests` | **filter-before-window ordering**; **pooled W:UE over `10W/0UE` + `1W/1UE` is 11:1, not 1:1** — the zero-UE match's winners must survive pooling even though it has no dot; pooled is `nil` only when Σdenominator is 0; pooled ≠ mean-of-rates on deliberately uneven matches; delta sign and percentage-point units; `.flat` below `minimumBlockMatches` and below `minimumChange`; `.improving` for a *falling* double-fault rate; window larger than history; single-match and empty history; newest-first input yields oldest-first output |
 

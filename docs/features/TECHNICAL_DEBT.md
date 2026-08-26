@@ -672,10 +672,11 @@ invalidates the assumptions behind the low rating.
 
 ### 13 — Split `PastMatchesView`
 
-**What:** 745 lines — up 59% from the ~468 recorded at the original audit, and
-still the fastest-growing file in the repo (storage-location indicators, iCloud status
-strip, filtering, deletion flows all accreted here). Not yet a problem, but it
-is on the `ScoreViewModel` trajectory.
+**What:** 745 lines (751 as of the Trends feature) — up 59% from the ~468
+recorded at the original audit, and still the fastest-growing file in the
+repo (storage-location indicators, iCloud status strip, filtering, deletion
+flows all accreted here). Not yet a problem, but it is on the
+`ScoreViewModel` trajectory.
 
 **Proposed fix:** Split along feature boundaries into extension files (row
 view, storage/iCloud badges, toolbars/filters). Since the app targets use
@@ -684,8 +685,18 @@ edit — the historical reason for avoiding app-target splits is gone. The file
 has picked up 6 `MARK:` anchors since the original audit, so it is navigable —
 this is now purely about size.
 
+**Note (Trends feature, `docs/features/PERFORMANCE_TRENDS_PLAN.md`):** the
+"next substantial edit" this item names arrived and did NOT grow the file
+the way earlier features did — the Trends section is one `TrendsSection(...)`
+call (~6 lines) with all its content in new files under `Views/Trends/`. This
+item is not closed; the existing 745/751 lines are still unsplit and the
+proposed fix below is unstarted, but it demonstrates the pattern going
+forward: new archive-screen features belong in their own files from the
+start, not appended here.
+
 **Risk and trigger:** **No correctness risk today.** Do it opportunistically on
-the next substantial edit, before the file crosses ~1k lines.
+the next substantial edit **to the existing content**, before the file crosses
+~1k lines.
 
 **Key files:** `PastMatchesView.swift`.
 
