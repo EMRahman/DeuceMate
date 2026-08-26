@@ -43,6 +43,16 @@ struct TrendSparkline: View {
     let series: TrendSeries
     let displayMode: TrendDisplayMode
     let color: Color
+    /// Total matches in the caller's scoped window — NOT derived from
+    /// `series.points.count`, which already omits any match this metric
+    /// has no value for. Fixes the shape's X-domain to `0..<sampleCount`
+    /// (`TrendPoint.index`'s own range) rather than to the min/max index
+    /// actually present, so a missing match at either EDGE of the window
+    /// (the newest match having zero UE, say) leaves visible empty space
+    /// there instead of the nearest real point being stretched to the
+    /// frame's edge as if it were the newest/oldest observation (Codex
+    /// review, PR #121 — a boundary case the mid-window gap fix missed).
+    let sampleCount: Int
 
     private var valueText: String {
         if displayMode == .count && series.metric.supportsCountMode {
@@ -73,8 +83,11 @@ struct TrendSparkline: View {
     @ViewBuilder
     private var chart: some View {
         if series.points.count >= 2 {
-            SparklineShape(points: series.points.map { (index: $0.index, value: $0.value) })
-                .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+            SparklineShape(
+                points: series.points.map { (index: $0.index, value: $0.value) },
+                indexRange: 0...max(sampleCount - 1, 1)
+            )
+            .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
         } else {
             Color.clear
         }
@@ -167,17 +180,25 @@ private struct SparklineShape: Shape {
     /// connecting) wherever two consecutive points aren't adjacent indices,
     /// is what actually shows the gap (Codex review, PR #121).
     let points: [(index: Int, value: Double)]
+    /// The FULL scoped window's index range (0...sampleCount-1), fixed
+    /// independent of which indices `points` actually has values for. A
+    /// version that derived its X-domain from `points.first`/`.last`
+    /// instead handled a gap in the MIDDLE of the window but not at either
+    /// EDGE: a missing newest/oldest match just meant the nearest real
+    /// point silently became the new edge, stretched to fill the frame as
+    /// if it were that boundary observation (Codex review, PR #121).
+    let indexRange: ClosedRange<Int>
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        guard points.count >= 2, let first = points.first, let last = points.last else { return path }
+        guard points.count >= 2 else { return path }
         let minV = points.map(\.value).min() ?? 0
         let maxV = points.map(\.value).max() ?? 1
         let span = max(maxV - minV, 0.0001)
-        let indexSpan = max(last.index - first.index, 1)
+        let indexSpan = max(indexRange.upperBound - indexRange.lowerBound, 1)
 
         func location(_ p: (index: Int, value: Double)) -> CGPoint {
-            let x = rect.minX + CGFloat(p.index - first.index) / CGFloat(indexSpan) * rect.width
+            let x = rect.minX + CGFloat(p.index - indexRange.lowerBound) / CGFloat(indexSpan) * rect.width
             let normalized = (p.value - minV) / span
             let y = rect.maxY - CGFloat(normalized) * rect.height
             return CGPoint(x: x, y: y)

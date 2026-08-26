@@ -117,7 +117,7 @@ struct TrendsView: View {
                     let groupSeries = PerformanceTrends.series(for: group, in: scopedSamples)
                     if !groupSeries.isEmpty {
                         Section(group.displayLabel) {
-                            TrendChart(group: group, series: groupSeries, displayMode: displayMode)
+                            TrendChart(group: group, series: groupSeries, displayMode: displayMode, sampleCount: scopedSamples.count)
                         }
                     }
                 }

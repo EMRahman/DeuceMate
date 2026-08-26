@@ -74,6 +74,12 @@ struct TrendChart: View {
     /// Pre-scoped to `group` by the caller (PerformanceTrends.series(for:in:)).
     let series: [TrendSeries]
     let displayMode: TrendDisplayMode
+    /// Total matches in the caller's scoped window — passed through to
+    /// `TrendSparkline` for `ratioSeries` rows (currently just W:UE) so its
+    /// sparkline's X-domain reflects the whole window, not just whichever
+    /// indices this one metric happens to have values for (Codex review,
+    /// PR #121).
+    let sampleCount: Int
 
     @State private var hiddenMetrics: Set<TrendMetric>
     @State private var rallyDepthMode: RallyDepthMode = .mix
@@ -82,10 +88,11 @@ struct TrendChart: View {
     /// choice across launches. Phone-local, no wire key — see CLAUDE.md §0.
     @AppStorage("trendsServeReturnFilter") private var serveReturnFilterRaw: String = ServeReturnFilter.servesIn.rawValue
 
-    init(group: TrendMetricGroup, series: [TrendSeries], displayMode: TrendDisplayMode) {
+    init(group: TrendMetricGroup, series: [TrendSeries], displayMode: TrendDisplayMode, sampleCount: Int) {
         self.group = group
         self.series = series
         self.displayMode = displayMode
+        self.sampleCount = sampleCount
         // Opponent-framed metrics start hidden; everything else starts shown.
         _hiddenMetrics = State(initialValue: Set(series.map(\.metric).filter(\.isOpponentFramed)))
     }
@@ -153,7 +160,7 @@ struct TrendChart: View {
                 legend(for: shown)
             }
             ForEach(ratioSeries) { s in
-                TrendSparkline(series: s, displayMode: displayMode, color: s.metric.chartColor)
+                TrendSparkline(series: s, displayMode: displayMode, color: s.metric.chartColor, sampleCount: sampleCount)
             }
         }
     }

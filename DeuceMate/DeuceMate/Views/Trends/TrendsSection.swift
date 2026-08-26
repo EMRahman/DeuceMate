@@ -99,7 +99,7 @@ struct TrendsSection: View {
                 } label: {
                     VStack(spacing: 6) {
                         ForEach(headline) { series in
-                            TrendSparkline(series: series, displayMode: .rate, color: theme.colors.me)
+                            TrendSparkline(series: series, displayMode: .rate, color: theme.colors.me, sampleCount: completedOnly.count)
                         }
                     }
                     .padding(.vertical, 2)
