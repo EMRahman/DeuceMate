@@ -39,6 +39,7 @@ extension TrendMetric {
         case .depthShareServePlusOne, .depthWinServePlusOne:  return .pink
         case .depthShareRally, .depthWinRally:                return .brown
         case .firstServeIn:                                   return .blue
+        case .secondServeIn:                                  return .cyan
         case .firstServeWin:                                  return .green
         case .secondServeWin:                                 return .orange
         case .returnWinFirst:                                 return .purple
@@ -155,6 +156,8 @@ struct TrendChart: View {
                             ? StrokeStyle(lineWidth: 2, dash: [4, 3])
                             : StrokeStyle(lineWidth: 2))
                         .interpolationMethod(.monotone)
+                        .symbol(Circle())
+                        .symbolSize(18)
                     }
                 }
             }
@@ -271,6 +274,8 @@ struct TrendChart: View {
                     )
                     .foregroundStyle(by: .value("Metric", s.metric.displayLabel))
                     .interpolationMethod(.monotone)
+                    .symbol(Circle())
+                    .symbolSize(18)
                 }
             }
         }

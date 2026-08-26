@@ -40,6 +40,15 @@ struct TrendsView: View {
         .standard, .bestOf3FullFinalSet, .superTiebreak, .perpetualSuperTiebreak, .quick4Games
     ]
 
+    /// Display order for the grouped sections — a presentation preference
+    /// distinct from `TrendMetricGroup`'s own declaration order (which
+    /// `TrendMetric.metrics(in:)` and every other Core consumer are
+    /// indifferent to). Errors first, then Serve & Return, Attack, Rally
+    /// Depth, Pressure.
+    private let groupDisplayOrder: [TrendMetricGroup] = [
+        .errors, .serveReturn, .attack, .rallyDepth, .pressure
+    ]
+
     private var scopedSamples: [MatchTrendSample] {
         PerformanceTrends.scoped(samples, filter: TrendFilter(matchType: matchType, matchFormat: matchFormat), window: window)
     }
@@ -70,7 +79,7 @@ struct TrendsView: View {
                     )
                 }
             } else {
-                ForEach(TrendMetricGroup.allCases) { group in
+                ForEach(groupDisplayOrder) { group in
                     let groupSeries = PerformanceTrends.series(for: group, in: scopedSamples)
                     if !groupSeries.isEmpty {
                         Section(group.displayLabel) {
