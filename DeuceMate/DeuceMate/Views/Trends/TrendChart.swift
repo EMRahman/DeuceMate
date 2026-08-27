@@ -270,9 +270,22 @@ struct TrendChart: View {
     /// corresponding line to toggle (Codex review, PR #121). The empty-series
     /// filter above is that same bug arriving by a different route.
     private func plottable(_ series: [TrendSeries]) -> [TrendSeries] {
-        series
-            .filter { !$0.points.isEmpty }
-            .filter { displayMode != .count || $0.metric.supportsCountMode }
+        withData(series).filter { displayMode != .count || $0.metric.supportsCountMode }
+    }
+
+    /// The no-data filter ALONE, for charts that plot rates whatever the
+    /// display mode says.
+    ///
+    /// The normalized stacks are exactly that: `areaMarks` plots
+    /// `point.value` directly and never consults `plottedValue`, so a share
+    /// renders identically in Rate and Count. Routing them through
+    /// `plottable` dropped every series in Count mode — the shares are
+    /// `supportsCountMode == false` precisely because a share has no count
+    /// form — which emptied Rally Depth — By Service and, because the Rally
+    /// Depth group gated on its share series, took its working Win Rate mode
+    /// down with it (Codex review, PR #122).
+    private func withData(_ series: [TrendSeries]) -> [TrendSeries] {
+        series.filter { !$0.points.isEmpty }
     }
 
     /// `points` split into runs of consecutive `TrendPoint.index` values —
@@ -519,7 +532,7 @@ struct TrendChart: View {
     // MARK: - Rally depth
 
     private var depthShareSeries: [TrendSeries] {
-        plottable(series.filter { [.depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally].contains($0.metric) })
+        withData(series.filter { [.depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally].contains($0.metric) })
     }
     private var depthWinSeries: [TrendSeries] {
         plottable(series.filter { [.depthWinServe, .depthWinReturn, .depthWinServePlusOne, .depthWinRally].contains($0.metric) })
@@ -531,7 +544,7 @@ struct TrendChart: View {
         let metrics: [TrendMetric] = side == .onServe
             ? [.servedShareServe, .servedShareReturn, .servedShareServePlusOne, .servedShareRally]
             : [.returnedShareServe, .returnedShareReturn, .returnedShareServePlusOne, .returnedShareRally]
-        return plottable(series.filter { metrics.contains($0.metric) })
+        return withData(series.filter { metrics.contains($0.metric) })
     }
 
     @ViewBuilder
@@ -562,15 +575,23 @@ struct TrendChart: View {
         }
         .pickerStyle(.segmented)
 
-        if depthShareSeries.isEmpty {
-            emptyState
-        } else {
-            switch rallyDepthMode {
-            case .mix:
+        // Gated per mode, on the series that mode actually draws. Gating both
+        // on the share series let a gap in one suppress the other — the exact
+        // coupling that turned the Count-mode filter bug into a Win Rate
+        // outage.
+        switch rallyDepthMode {
+        case .mix:
+            if depthShareSeries.isEmpty {
+                emptyState
+            } else {
                 rallyDepthStackedChart
                 selectionSummary(for: depthShareSeries)
                 staticLegend(for: depthShareSeries)
-            case .winRate:
+            }
+        case .winRate:
+            if depthWinSeries.isEmpty {
+                emptyState
+            } else {
                 rallyDepthWinRateChart
                 selectionSummary(for: depthWinSeries)
                 staticLegend(for: depthWinSeries)
