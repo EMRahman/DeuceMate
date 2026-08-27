@@ -333,8 +333,6 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     /// question. Two sets of identical movement read 3.87 vs 4.00 before this
     /// drop and equal after it.
     private static func setSlices(record: MatchRecord, summary: MatchStatsSummary) -> [SetSlice] {
-        guard !record.isInProgress else { return [] }
-
         var pointsBySet: [Int: (points: Int, won: Int)] = [:]
         for stat in record.stats {
             var entry = pointsBySet[stat.setIndex] ?? (points: 0, won: 0)
@@ -343,7 +341,13 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
             pointsBySet[stat.setIndex] = entry
         }
 
-        let playedSets = pointsBySet.keys.sorted()
+        // Only the set actually IN PLAY is a partial reading — a live match's
+        // earlier sets are finished and as good as any completed match's. The
+        // whole match used to be dropped, which made the screen's "Include
+        // In-Progress Matches" toggle a lie for this group alone: every other
+        // group honoured it while Fatigue silently plotted nothing.
+        let setInPlay = record.isInProgress ? pointsBySet.keys.max() : nil
+        let playedSets = pointsBySet.keys.sorted().filter { $0 != setInPlay }
         guard playedSets.count >= 2, let decidingIndex = playedSets.last else { return [] }
 
         // The decider is a super-tiebreak when the FORMAT says so — `.standard`,
@@ -365,6 +369,10 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         // Bucket the timeline once rather than re-filtering it per set.
         let stepsBySet = Dictionary(grouping: summary.stepsTimeline, by: \.setIndex)
 
+        // `decidingIndex` is the last set in scope, so for a live match it is
+        // the last FINISHED one — never the decider, which the match has not
+        // reached. The `decidingSetIndex` test below already enforces that; this
+        // is why it must stay rather than be simplified to "the last set".
         return playedSets.map { index in
             let counts = pointsBySet[index] ?? (points: 0, won: 0)
             // `stepsTimeline` is chronological, so `dropFirst` removes this

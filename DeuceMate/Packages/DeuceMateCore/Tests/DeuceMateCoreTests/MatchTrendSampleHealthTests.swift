@@ -234,18 +234,51 @@ final class MatchTrendSampleHealthTests: XCTestCase {
                        "one set has nothing to compare across")
     }
 
-    func test_fatigue_isNilForAnInProgressMatch_butTheOtherCountersSurvive() throws {
+    /// Only the set actually in play is a partial reading. A live match's
+    /// EARLIER sets are finished and are as good as any completed match's, so
+    /// dropping the whole match made the screen's "Include In-Progress Matches"
+    /// toggle a lie for this group alone — it plotted nothing at all.
+    func test_inProgressMatch_keepsCompletedSets_andDropsOnlyTheSetInPlay() throws {
         let record = makeRecord(sets: [
             SetSpec(index: 0, points: 30, wins: 18, stepDelta: 4),
-            SetSpec(index: 1, points: 24, wins: 10, stepDelta: 5)
+            SetSpec(index: 1, points: 28, wins: 12, stepDelta: 5),
+            SetSpec(index: 2, points: 9, wins: 5, stepDelta: 6)   // still being played
         ], inProgress: true)
         let sample = try XCTUnwrap(MatchTrendSample(record: record))
 
         XCTAssertTrue(sample.isInProgress)
-        XCTAssertEqual(sample.setSlices, [], "a set still being played is a partial reading")
+        XCTAssertEqual(sample.setSlices.map(\.setIndex), [0, 1])
+        XCTAssertEqual(TrendMetric.winRateSet1.rawPair(in: sample)?.numerator, 18)
+        XCTAssertEqual(TrendMetric.winRateSet2.rawPair(in: sample)?.numerator, 12)
+        XCTAssertNil(TrendMetric.winRateSet3.rawPair(in: sample),
+                     "the set in play would drift point by point")
         // The live match still contributes to every non-fatigue metric.
         XCTAssertNotNil(TrendMetric.pointsWon.rawPair(in: sample))
-        XCTAssertNil(TrendMetric.winRateSet1.rawPair(in: sample))
+    }
+
+    /// A live match still in its second set has exactly one finished set, which
+    /// is nothing to compare across — the same bar a completed one-set match
+    /// fails.
+    func test_inProgressMatch_inItsSecondSet_hasNothingToCompare() throws {
+        let record = makeRecord(sets: [
+            SetSpec(index: 0, points: 30, wins: 18),
+            SetSpec(index: 1, points: 12, wins: 7)               // still being played
+        ], inProgress: true)
+        XCTAssertEqual(MatchTrendSample(record: record)?.setSlices, [])
+    }
+
+    /// The decider only exists once the match reaches it, so a live match's
+    /// last FINISHED set is never classified as one.
+    func test_inProgressMatch_neverClassifiesAFinishedSetAsTheDecider() throws {
+        let record = makeRecord(sets: [
+            SetSpec(index: 0, points: 30, wins: 18),
+            SetSpec(index: 1, points: 28, wins: 12),
+            SetSpec(index: 2, points: 6, wins: 3)                // super-tiebreak in play
+        ], inProgress: true, matchFormat: .standard)
+        let sample = try XCTUnwrap(MatchTrendSample(record: record))
+
+        XCTAssertNil(sample.decidingTiebreakSlice)
+        XCTAssertNotNil(sample.fullSetSlice(1), "set 2 stays an ordinary set")
     }
 
     // MARK: - Trap 3: each family gates on its own denominator

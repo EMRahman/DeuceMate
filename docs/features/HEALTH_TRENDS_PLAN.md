@@ -142,9 +142,12 @@ about whether the match can support a per-set reading at all:
 
 - **At least two sets.** A single-set match has nothing to compare across, which also
   excludes the tiebreak-only formats and `.quick4Games`.
-- **Nothing from an in-progress match.** Its last set is still being played, so its rates
-  would drift point by point. Every other counter on the sample stays valid for a live
-  match.
+- **Nothing from the set in play.** An in-progress match's current set would drift point by
+  point, so it is dropped — but only it. Its earlier sets are finished and count normally,
+  which is what the screen's "Include In-Progress Matches" toggle promises. Dropping the
+  whole match (the first cut) made that toggle a lie for this group alone: every other group
+  honoured it while Fatigue silently plotted nothing, so a live three-setter showed no
+  fatigue at all despite having two completed sets.
 
 The step slices drop each set's first sample: a `stepsTimeline` entry's load is measured from the previous sample, so a set's
 opening entry is the match-wide baseline (load 0) in the opening set and spans the whole
