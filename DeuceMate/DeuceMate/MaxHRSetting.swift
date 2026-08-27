@@ -36,6 +36,9 @@ struct MaxHRSetting: DynamicProperty {
     /// (age 30) — the exact distinction that helper exists to make.
     var isCalibrated: Bool {
         if HRZone.isValidOverride(manualOverride) { return true }
-        return birthYear > 0 && HRZone.isUsableBirthYear(birthYear)
+        // No `birthYear > 0` guard: `isUsableBirthYear` already rejects
+        // anything at or below 1900, and restating part of its rule here would
+        // be exactly the re-derivation this type exists to avoid.
+        return HRZone.isUsableBirthYear(birthYear)
     }
 }

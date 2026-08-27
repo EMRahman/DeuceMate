@@ -200,7 +200,10 @@ struct TrendChart: View {
                 // coverage in this window (a Health-free archive's bpm bucket).
                 // Both mean "draw nothing here", not "draw an empty axis".
                 if !shown.isEmpty && !shown.allSatisfy({ $0.points.isEmpty }) {
-                    if let caption = unit.axisCaption {
+                    // Count mode plots raw numerators (whole-match step or
+                    // metre totals), not the per-point rate the caption names,
+                    // so the caption is suppressed rather than left lying.
+                    if displayMode != .count, let caption = unit.axisCaption {
                         Text(caption)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
@@ -389,8 +392,12 @@ struct TrendChart: View {
     /// just `self.series`) so callers can narrow to a subset — e.g. Serve &
     /// Return's filter picks 2 of its 6 metrics — and must already be
     /// display-mode-filtered via `plottable(_:)` before calling.
-    private func lineChart(for series: [TrendSeries], unit: TrendMetric.Unit = .percent) -> some View {
-        Chart {
+    private func lineChart(for series: [TrendSeries], unit: TrendMetric.Unit) -> some View {
+        // Bound once: `runColorScale` walks every series' runs, and reading it
+        // twice in the modifier below doubled that on every body pass — now
+        // multiplied by however many unit buckets a group renders.
+        let scale = runColorScale(for: series)
+        return Chart {
             ForEach(series) { s in
                 if !hiddenMetrics.contains(s.metric) {
                     lineMarks(for: s)
@@ -402,7 +409,7 @@ struct TrendChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             }
         }
-        .chartForegroundStyleScale(domain: runColorScale(for: series).domain, range: runColorScale(for: series).range)
+        .chartForegroundStyleScale(domain: scale.domain, range: scale.range)
         .chartXScale(domain: chartXDomain)
         .chartYAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
@@ -466,7 +473,11 @@ struct TrendChart: View {
             // helper as standardBody for a single source of truth, not two
             // copies of the same predicate to keep in sync.
             let shown = plottable(selected)
-            lineChart(for: shown)
+            // All six Serve & Return metrics are percentages; `unit` is passed
+            // explicitly (rather than defaulted) so adding a bpm- or steps-unit
+            // metric to this group fails to compile instead of quietly
+            // rendering against a percentage axis.
+            lineChart(for: shown, unit: .percent)
             selectionSummary(for: shown)
             legend(for: shown)
         }
@@ -536,7 +547,8 @@ struct TrendChart: View {
     }
 
     private var rallyDepthStackedChart: some View {
-        Chart {
+        let scale = runColorScale(for: depthShareSeries)
+        return Chart {
             ForEach(depthShareSeries) { s in
                 areaMarks(for: s)
             }
@@ -546,7 +558,7 @@ struct TrendChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             }
         }
-        .chartForegroundStyleScale(domain: runColorScale(for: depthShareSeries).domain, range: runColorScale(for: depthShareSeries).range)
+        .chartForegroundStyleScale(domain: scale.domain, range: scale.range)
         .chartXScale(domain: chartXDomain)
         .chartYAxis {
             // .automatic, not an explicit [0.0, 0.5, 1.0]: normalized
@@ -578,7 +590,8 @@ struct TrendChart: View {
     }
 
     private var rallyDepthWinRateChart: some View {
-        Chart {
+        let scale = runColorScale(for: depthWinSeries)
+        return Chart {
             ForEach(depthWinSeries) { s in
                 lineMarks(for: s)
             }
@@ -588,14 +601,16 @@ struct TrendChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             }
         }
-        .chartForegroundStyleScale(domain: runColorScale(for: depthWinSeries).domain, range: runColorScale(for: depthWinSeries).range)
+        .chartForegroundStyleScale(domain: scale.domain, range: scale.range)
         .chartXScale(domain: chartXDomain)
         .chartYAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine()
                 AxisValueLabel {
                     if let v = value.as(Double.self) {
-                        Text(displayMode == .count ? "\(Int(v.rounded()))" : "\(Int((v * 100).rounded()))%")
+                        Text(displayMode == .count
+                             ? "\(Int(v.rounded()))"
+                             : TrendMetric.Unit.percent.axisText(v))
                             .font(.caption2)
                     }
                 }

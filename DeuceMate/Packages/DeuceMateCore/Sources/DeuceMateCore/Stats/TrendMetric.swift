@@ -342,14 +342,25 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
             guard sample.hrSampledPoints >= Self.minimumHRSamples else { return nil }
             return (sample.hardZonePoints, sample.hrSampledPoints)
         case .hardZoneWinRate:
-            guard sample.hardZonePoints >= Self.minimumHardZonePoints else { return nil }
+            // BOTH gates: without the sample-count one, a match with 6 HR
+            // readings that all happen to be Z5 plots a win rate while its two
+            // sibling metrics correctly refuse — and the section footer, which
+            // counts `minimumHRSamples` coverage, says the window has no
+            // heart-rate data at all.
+            guard sample.hrSampledPoints >= Self.minimumHRSamples,
+                  sample.hardZonePoints >= Self.minimumHardZonePoints else { return nil }
             return (sample.hardZoneWins, sample.hardZonePoints)
         case .stepsPerPoint:
             guard sample.stepSampledPoints >= Self.minimumStepSamples else { return nil }
             return (sample.stepSumLoad, sample.stepSampledPoints)
         case .stepsPerPointWon:
-            guard sample.stepSampledPoints >= Self.minimumStepSamples, sample.pointsWon > 0 else { return nil }
-            return (sample.stepSumLoad, sample.pointsWon)
+            // `stepSampledPointsWon`, NOT `pointsWon`: the numerator covers only
+            // the sampled window, so a full-match denominator would make the
+            // rate fall as step coverage falls — and this metric is oriented
+            // `.lower`, so that reads as a fitness gain.
+            guard sample.stepSampledPoints >= Self.minimumStepSamples,
+                  sample.stepSampledPointsWon > 0 else { return nil }
+            return (sample.stepSumLoad, sample.stepSampledPointsWon)
         case .metresPerPoint:
             guard let metres = sample.distanceMetres, sample.totalPoints > 0 else { return nil }
             return (metres, sample.totalPoints)

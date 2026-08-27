@@ -129,6 +129,12 @@ public enum PerformanceTrends {
     /// set at roughly "smaller than this is measurement noise, not a trend":
     /// a percentage point, a tenth of a ratio, two bpm, half a step, half a
     /// metre, two minutes.
+    ///
+    /// `delta(for:in:)` returns `.flat` for a `.neutral` metric before it gets
+    /// here, so today only `.percent`, `.ratio` and `.steps` are ever consulted
+    /// — every `.bpm`/`.metres`/`.minutes` metric is currently neutral. The
+    /// other three are kept, and correct, for the moment one of those units
+    /// gains an orientation.
     public static func minimumChange(for unit: TrendMetric.Unit) -> Double {
         switch unit {
         case .percent: return 1.0

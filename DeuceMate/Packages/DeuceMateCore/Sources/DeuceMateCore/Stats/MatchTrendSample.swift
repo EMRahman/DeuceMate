@@ -135,6 +135,14 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     /// across points (StepsSeries.swift:66-79), under which "steps per point"
     /// is `totalSteps / n` by construction — a constant, not a measurement.
     public let stepSampledPoints: Int
+    /// Points **among the step-sampled ones** that the recorder won. The
+    /// all-match `pointsWon` is the wrong denominator for a steps-per-point-won
+    /// rate: `stepSumLoad` only covers the sampled window, so pairing the two
+    /// divides a partial numerator by a full denominator and the rate falls as
+    /// step coverage falls — reported as an improvement, since this is the one
+    /// health metric with an orientation. `StepPoint.wonByFocal` makes the
+    /// matching count free.
+    public let stepSampledPointsWon: Int
     /// Σ `perPointSteps` over the timeline, including its baseline first entry
     /// (which carries a load of 0). Pairing it with `stepSampledPoints`
     /// reproduces `MatchStatsSummary.averageSteps` exactly, so the trend and
@@ -226,7 +234,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         // recorded without Health access produces.
         hrSampledPoints: Int = 0, hrSumBPM: Int = 0,
         hardZonePoints: Int = 0, hardZoneWins: Int = 0,
-        stepSampledPoints: Int = 0, stepSumLoad: Int = 0,
+        stepSampledPoints: Int = 0, stepSumLoad: Int = 0, stepSampledPointsWon: Int = 0,
         distanceMetres: Int? = nil, elapsedMinutes: Int? = nil,
         fatigue: FatigueSplit? = nil
     ) {
@@ -276,6 +284,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         self.hardZoneWins = hardZoneWins
         self.stepSampledPoints = stepSampledPoints
         self.stepSumLoad = stepSumLoad
+        self.stepSampledPointsWon = stepSampledPointsWon
         self.distanceMetres = distanceMetres
         self.elapsedMinutes = elapsedMinutes
         self.fatigue = fatigue
@@ -349,9 +358,9 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
             hardZoneWins: hardZoneStats.reduce(0) { $0 + $1.wins },
             stepSampledPoints: stepPoints.count,
             stepSumLoad: stepPoints.reduce(0) { $0 + $1.perPointSteps },
+            stepSampledPointsWon: stepPoints.filter(\.wonByFocal).count,
             distanceMetres: record.totalDistanceMeters.flatMap { $0 > 0 ? Int($0.rounded()) : nil },
-            elapsedMinutes: MatchDurations.matchElapsedSeconds(record)
-                .flatMap { $0 > 0 ? Int($0) / 60 : nil },
+            elapsedMinutes: Self.elapsedMinutes(record),
             fatigue: Self.fatigueSplit(record: record, summary: summary)
         )
     }
@@ -377,6 +386,15 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     ///
     /// `record.stats` needs no sorting here — every figure is a per-set count,
     /// so point order within a set is irrelevant.
+    ///
+    /// The two step slices deliberately **drop each set's first sample**. A
+    /// `stepsTimeline` entry's load is measured from the previous sample, so a
+    /// set's first entry is not comparable to the rest: in the first set it is
+    /// the match-wide baseline (load 0 by definition), and in the final set it
+    /// spans the whole inter-set changeover. Both distortions push the same way
+    /// — "you moved more when tired" — in the one metric that exists to answer
+    /// that question. Two sets of identical movement read 3.87 vs 4.00 before
+    /// this drop and equal after it.
     private static func fatigueSplit(record: MatchRecord, summary: MatchStatsSummary) -> FatigueSplit? {
         guard !record.isInProgress else { return nil }
 
@@ -397,9 +415,15 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
               firstCounts.points >= minimumFatigueSetPoints,
               finalCounts.points >= minimumFatigueSetPoints else { return nil }
 
+        // Bucket both timelines once rather than re-filtering them per slice.
+        let hrBySet = Dictionary(grouping: summary.hrTimeline, by: \.setIndex)
+        let stepsBySet = Dictionary(grouping: summary.stepsTimeline, by: \.setIndex)
+
         func slice(_ index: Int, _ counts: (points: Int, won: Int)) -> SetSlice {
-            let hr = summary.hrTimeline.filter { $0.setIndex == index }
-            let steps = summary.stepsTimeline.filter { $0.setIndex == index }
+            let hr = hrBySet[index] ?? []
+            // `stepsTimeline` is chronological, so `dropFirst` removes this
+            // set's non-comparable opening delta (see the note above).
+            let steps = (stepsBySet[index] ?? []).dropFirst()
             return SetSlice(
                 setIndex: index,
                 points: counts.points,
@@ -413,5 +437,23 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
 
         return FatigueSplit(firstSet: slice(firstIndex, firstCounts),
                             finalSet: slice(finalIndex, finalCounts))
+    }
+
+    /// Whole minutes of play, or `nil` when there is no finished duration to
+    /// report. Two guards, for two different reasons:
+    ///
+    /// - **In progress**: `minutesPerMatch` is the one metric whose numerator
+    ///   is a whole-match absolute rather than a rate, so a live match would
+    ///   plot its elapsed-so-far beside finished matches and drag the window's
+    ///   pooled mean down — the same partial-reading problem that excludes an
+    ///   in-progress match from `fatigueSplit`.
+    /// - **Zero**: the seconds are truncated to minutes, so a sub-minute
+    ///   duration yields 0, and a 0-minute dot would break this type's own
+    ///   nil-never-zero rule.
+    private static func elapsedMinutes(_ record: MatchRecord) -> Int? {
+        guard !record.isInProgress,
+              let seconds = MatchDurations.matchElapsedSeconds(record) else { return nil }
+        let minutes = Int(seconds) / 60
+        return minutes > 0 ? minutes : nil
     }
 }

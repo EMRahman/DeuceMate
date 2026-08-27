@@ -52,7 +52,7 @@ struct TrendsView: View {
     /// distinct from `TrendMetricGroup`'s own declaration order (which
     /// `TrendMetric.metrics(in:)` and every other Core consumer are
     /// indifferent to). Errors first, then Serve & Return, Attack, Rally
-    /// Depth, Pressure.
+    /// Depth, Pressure — then the three health groups.
     private let groupDisplayOrder: [TrendMetricGroup] = [
         .errors, .serveReturn, .attack, .rallyDepth, .pressure,
         .heartRate, .movement, .fatigue
@@ -107,10 +107,14 @@ struct TrendsView: View {
             covered = scopedSamples.filter { $0.hrSampledPoints >= TrendMetric.minimumHRSamples }.count
             subject = "heart-rate data"
         case .movement:
+            // Deliberately NOT "movement data": `minutesPerMatch` is health-free
+            // and keeps this group rendering on an archive with no step or
+            // distance data at all, so a broader subject would have the footer
+            // flatly contradict the chart above it.
             covered = scopedSamples.filter {
                 $0.stepSampledPoints >= TrendMetric.minimumStepSamples || $0.distanceMetres != nil
             }.count
-            subject = "movement data"
+            subject = "step or distance data"
         case .fatigue:
             covered = scopedSamples.filter { $0.fatigue != nil }.count
             subject = "two comparable sets"

@@ -19,15 +19,18 @@ final class MatchTrendSampleHealthTests: XCTestCase {
         var bpmOnFirst: Int?
         /// Steps accumulated per point, or nil for no step sampling.
         var stepDelta: Int?
+        /// How many of the set's points carry a step sample. nil == all.
+        var stepsOnFirst: Int?
 
         init(index: Int, points: Int, wins: Int, bpm: Int? = nil,
-             bpmOnFirst: Int? = nil, stepDelta: Int? = nil) {
+             bpmOnFirst: Int? = nil, stepDelta: Int? = nil, stepsOnFirst: Int? = nil) {
             self.index = index
             self.points = points
             self.wins = wins
             self.bpm = bpm
             self.bpmOnFirst = bpmOnFirst
             self.stepDelta = stepDelta
+            self.stepsOnFirst = stepsOnFirst
         }
     }
 
@@ -48,17 +51,24 @@ final class MatchTrendSampleHealthTests: XCTestCase {
         var offset: TimeInterval = 0
         for spec in sets {
             for i in 0..<spec.points {
-                if let delta = spec.stepDelta { cumulative += delta }
+                let carriesSteps = spec.stepDelta != nil && i < (spec.stepsOnFirst ?? spec.points)
+                if let delta = spec.stepDelta, carriesSteps { cumulative += delta }
                 let carriesBPM = spec.bpm != nil && i < (spec.bpmOnFirst ?? spec.points)
                 stats.append(PointStat(
                     timestamp: Date(timeIntervalSince1970: offset),
                     setIndex: spec.index,
                     server: i.isMultiple(of: 2) ? .me : .opponent,
-                    winner: i < spec.wins ? .me : .opponent,
+                    // Wins are spread evenly across the set rather than
+                    // clustered at the front, so a partially sampled window has
+                    // the same win rate as the whole set. Clustering them made
+                    // a coverage-sensitivity test measure the fixture instead
+                    // of the metric. The per-set totals are unchanged.
+                    winner: ((i + 1) * spec.wins) / spec.points > (i * spec.wins) / spec.points
+                        ? .me : .opponent,
                     outcome: .winner,
                     endingShot: .rally,
                     heartRateBPM: carriesBPM ? spec.bpm : nil,
-                    stepsCumulative: spec.stepDelta == nil ? nil : cumulative
+                    stepsCumulative: carriesSteps ? cumulative : nil
                 ))
                 offset += 30
             }
@@ -285,5 +295,98 @@ final class MatchTrendSampleHealthTests: XCTestCase {
         XCTAssertLessThan(delta.change, 0, "steps per point won fell")
         XCTAssertEqual(delta.direction, .improving,
                        "running less for the same points is an improvement, not a decline")
+    }
+
+    // MARK: - Regressions: numerator and denominator must cover the same window
+
+    /// `stepsPerPointWon` paired a sampled-window numerator with an all-match
+    /// denominator, so the rate fell purely as step coverage fell — and it is
+    /// the one health metric with an orientation, so that read as `.improving`.
+    func test_stepsPerPointWon_isUnaffectedByStepCoverage() throws {
+        // Same movement and the same 50% win rate throughout; the only
+        // difference is how much of the match the watch sampled.
+        let fullyCovered = makeRecord(sets: [
+            SetSpec(index: 0, points: 60, wins: 30, stepDelta: 10)
+        ])
+        let halfCovered = makeRecord(sets: [
+            SetSpec(index: 0, points: 60, wins: 30, stepDelta: 10, stepsOnFirst: 20)
+        ])
+
+        let full = try XCTUnwrap(MatchTrendSample(record: fullyCovered))
+        let half = try XCTUnwrap(MatchTrendSample(record: halfCovered))
+
+        let fullPair = try XCTUnwrap(TrendMetric.stepsPerPointWon.rawPair(in: full))
+        let halfPair = try XCTUnwrap(TrendMetric.stepsPerPointWon.rawPair(in: half))
+
+        // Denominators are wins WITHIN the sampled window, so both read the
+        // same true cost per point won even though the windows differ in size.
+        // Both land near the true 20 steps per point won (10 steps/point at a
+        // 50% win rate), approaching it from below because the timeline's
+        // baseline entry contributes a zero. Before the fix the half-covered
+        // match read 6.3 against the full match's 19.7 — a third of the cost,
+        // reported as an improvement.
+        XCTAssertEqual(Double(fullPair.numerator) / Double(fullPair.denominator),
+                       Double(halfPair.numerator) / Double(halfPair.denominator),
+                       accuracy: 1.0,
+                       "a shorter sampling window must not look like a fitness gain")
+        XCTAssertEqual(halfPair.denominator, half.stepSampledPointsWon)
+        XCTAssertNotEqual(halfPair.denominator, half.pointsWon,
+                          "the all-match win count is the wrong denominator here")
+    }
+
+    /// The fatigue steps pair compared a first set carrying the match-wide
+    /// baseline (load 0) against a final set whose opening delta spans the
+    /// changeover, so identical movement read as a rise in effort.
+    func test_fatigueSteps_readEqualWhenMovementIsIdentical() throws {
+        let record = makeRecord(sets: [
+            SetSpec(index: 0, points: 30, wins: 18, stepDelta: 4),
+            SetSpec(index: 1, points: 30, wins: 12, stepDelta: 4)
+        ])
+        let split = try XCTUnwrap(MatchTrendSample(record: record)?.fatigue)
+
+        let first = Double(split.firstSet.stepSumLoad) / Double(split.firstSet.stepSampledPoints)
+        let final = Double(split.finalSet.stepSumLoad) / Double(split.finalSet.stepSampledPoints)
+        XCTAssertEqual(first, 4.0, accuracy: 0.001)
+        XCTAssertEqual(final, 4.0, accuracy: 0.001,
+                       "the final set's opening delta spans the changeover and must be dropped")
+        XCTAssertEqual(first, final, accuracy: 0.001,
+                       "identical movement must not plot as a fatigue signal")
+    }
+
+    /// `hardZoneWinRate` gated only on hard-zone points, so it drew a dot from
+    /// a sample its two sibling metrics — and the screen's coverage footer —
+    /// both considered too thin to exist.
+    func test_hardZoneWinRate_requiresTheSameHRCoverageAsItsSiblings() throws {
+        // 6 readings at 180 bpm: Z5 at maxHR 190, but below minimumHRSamples.
+        let record = makeRecord(sets: [SetSpec(index: 0, points: 40, wins: 20, bpm: 180, bpmOnFirst: 6)])
+        let sample = try XCTUnwrap(MatchTrendSample(record: record, maxHR: 190))
+
+        XCTAssertEqual(sample.hardZonePoints, 6, "the readings are in Z5")
+        XCTAssertNil(TrendMetric.avgHeartRate.rawPair(in: sample))
+        XCTAssertNil(TrendMetric.hardZoneShare.rawPair(in: sample))
+        XCTAssertNil(TrendMetric.hardZoneWinRate.rawPair(in: sample),
+                     "must not plot under a footer that says there is no HR data")
+    }
+
+    /// `minutesPerMatch` is the only metric whose numerator is a whole-match
+    /// absolute, so a still-growing duration can't be plotted beside finished
+    /// matches — and a sub-minute duration must be absent, not zero.
+    func test_minutesPerMatch_isNilForInProgressAndSubMinuteMatches() throws {
+        let live = makeRecord(sets: [SetSpec(index: 0, points: 30, wins: 18)],
+                              inProgress: true, matchElapsedSeconds: 480)
+        let liveSample = try XCTUnwrap(MatchTrendSample(record: live))
+        XCTAssertNil(liveSample.elapsedMinutes)
+        XCTAssertNil(TrendMetric.minutesPerMatch.rawPair(in: liveSample),
+                     "8 minutes so far is not a match length")
+
+        let brief = makeRecord(sets: [SetSpec(index: 0, points: 30, wins: 18)],
+                               matchElapsedSeconds: 45)
+        let briefSample = try XCTUnwrap(MatchTrendSample(record: brief))
+        XCTAssertNil(briefSample.elapsedMinutes, "truncating 45s to 0 minutes must yield nil, not 0")
+        XCTAssertNil(TrendMetric.minutesPerMatch.rawPair(in: briefSample))
+
+        let normal = makeRecord(sets: [SetSpec(index: 0, points: 30, wins: 18)],
+                                matchElapsedSeconds: 3600)
+        XCTAssertEqual(try XCTUnwrap(MatchTrendSample(record: normal)).elapsedMinutes, 60)
     }
 }

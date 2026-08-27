@@ -99,20 +99,28 @@ because they were better" is unknowable — every efficiency metric carries that
 |---|---|---|---|---|
 | `avgHeartRate` | Σ bpm / HR-sampled points | `.bpm` | neutral | ≥ 10 HR points |
 | `hardZoneShare` | Z4+Z5 points / HR-sampled points | `.percent` | neutral | ≥ 10 HR points |
-| `hardZoneWinRate` | wins in Z4+Z5 / Z4+Z5 points | `.percent` | higher | ≥ 5 Z4+Z5 points |
+| `hardZoneWinRate` | wins in Z4+Z5 / Z4+Z5 points | `.percent` | higher | ≥ 10 HR points **and** ≥ 5 Z4+Z5 points |
 
 ### Movement
 | Metric | numerator / denominator | unit | better | gate |
 |---|---|---|---|---|
 | `stepsPerPoint` | Σ per-point steps / step-sampled points | `.steps` | neutral | ≥ 10 step samples |
-| `stepsPerPointWon` | Σ per-point steps / points won | `.steps` | **lower** | ≥ 10 step samples |
+| `stepsPerPointWon` | Σ per-point steps / points won **among step-sampled points** | `.steps` | **lower** | ≥ 10 step samples |
 | `metresPerPoint` | distance / total points | `.metres` | neutral | distance > 0 |
-| `minutesPerMatch` | elapsed minutes / 1 | `.minutes` | neutral | duration resolvable |
+| `minutesPerMatch` | elapsed minutes / 1 | `.minutes` | neutral | completed, duration ≥ 1 min |
 
 `stepsPerPointWon` is the energy-efficiency metric: **how much running one won point costs
-you.** Falling means winning more cheaply. `minutesPerMatch` is health-free by design — the
+you.** Falling means winning more cheaply. Its denominator counts wins **within the
+step-sampled window**, not the whole match: `stepSumLoad` only covers sampled points, and
+pairing a partial numerator with a full denominator made the rate fall as coverage fell —
+which, in the one health metric with an orientation, reported a dropout as a fitness gain. `minutesPerMatch` is health-free by design — the
 one series here that survives an iCloud restore and exists without Health access, so the
-group is never wholly empty.
+group is never wholly empty. It is also the only metric whose numerator is a whole-match
+absolute rather than a rate, so it is `nil` for an in-progress match (whose duration is
+still growing) and for a sub-minute one (which truncates to a 0 that would break the
+nil-never-zero rule). Because it keeps the group rendering with no step or distance data
+at all, the group's coverage footer names "step or distance data" specifically rather than
+claiming the whole group is empty.
 
 ### Fatigue — first played set vs last played set
 | Metric pair | numerator / denominator | unit | better |
@@ -132,6 +140,15 @@ played) while still contributing to every other metric.
 Each pair checks **both** slices before returning either, so a set that lacks coverage can
 never leave its partner drawn alone — one line of a two-line comparison reads as a complete
 answer.
+
+The two **step** slices drop each set's first sample. A `stepsTimeline` entry's load is
+measured from the previous sample, so a set's opening entry is not comparable to the rest:
+in the first set it is the match-wide baseline (load 0 by definition), and in the final set
+it spans the whole inter-set changeover. Both distortions push the same way — "you moved
+more when tired" — in the metric that exists to answer exactly that. Two sets of identical
+movement read 3.87 vs 4.00 before the drop and equal after it. The whole-match
+`stepsPerPoint` deliberately keeps its baseline entry, so that figure still reproduces
+`MatchStatsSummary.averageSteps` and agrees with the text export.
 
 Thresholds are cited, not invented: 20 points per set from `RecCoachInsights`' set-duration
 rule; 10 HR/step samples from `PulseCoachInsights.generate` and `StepsCoachInsights`.
