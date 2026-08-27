@@ -25,9 +25,6 @@ struct TrendsView: View {
 
     @State private var displayMode: TrendDisplayMode = .rate
 
-    /// Read only for the Heart Rate group's calibration note — the samples
-    /// themselves were already derived with this value by `TrendsSection`.
-    var maxHRSetting = MaxHRSetting()
 
     private var window: TrendWindow {
         if windowRaw == "all" { return .all }
@@ -55,7 +52,7 @@ struct TrendsView: View {
     /// Depth, Pressure — then the three health groups.
     private let groupDisplayOrder: [TrendMetricGroup] = [
         .errors, .serveReturn, .attack, .rallyDepth, .pressure,
-        .heartRate, .movement, .fatigue
+        .effort, .fatigue
     ]
 
     private var scopedSamples: [MatchTrendSample] {
@@ -86,9 +83,8 @@ struct TrendsView: View {
         Dictionary(uniqueKeysWithValues: scopedSamples.enumerated().map { ($0.offset, $0.element.startTime) })
     }
 
-    /// How many scoped matches actually carry what a health group needs, plus
-    /// — for Heart Rate — whether its zones are measured against the player's
-    /// own max HR or the 190 bpm fallback.
+    /// How many scoped matches actually carry what a movement-derived group
+    /// needs.
     ///
     /// Health data is device-local and does NOT survive an iCloud restore: the
     /// canonical archive is health-stripped and the Health sidecar is excluded
@@ -103,18 +99,9 @@ struct TrendsView: View {
         let covered: Int
         let subject: String
         switch group {
-        case .heartRate:
-            covered = scopedSamples.filter { $0.hrSampledPoints >= TrendMetric.minimumHRSamples }.count
-            subject = "heart-rate data"
-        case .movement:
-            // Deliberately NOT "movement data": `minutesPerMatch` is health-free
-            // and keeps this group rendering on an archive with no step or
-            // distance data at all, so a broader subject would have the footer
-            // flatly contradict the chart above it.
-            covered = scopedSamples.filter {
-                $0.stepSampledPoints >= TrendMetric.minimumStepSamples || $0.distanceMetres != nil
-            }.count
-            subject = "step or distance data"
+        case .effort:
+            covered = scopedSamples.filter { $0.stepSampledPoints >= TrendMetric.minimumStepSamples }.count
+            subject = "step data"
         case .fatigue:
             covered = scopedSamples.filter { $0.fatigue != nil }.count
             subject = "two comparable sets"
@@ -122,13 +109,8 @@ struct TrendsView: View {
             return nil
         }
 
-        var note = "\(covered) of \(total) match\(total == 1 ? "" : "es") in this window "
+        return "\(covered) of \(total) match\(total == 1 ? "" : "es") in this window "
             + "\(covered == 1 ? "has" : "have") \(subject)."
-        if group == .heartRate && !maxHRSetting.isCalibrated {
-            note += " Zones use an estimated max of \(maxHRSetting.resolved) bpm — "
-                + "set your birth year in Settings for accurate zones."
-        }
-        return note
     }
 
     var body: some View {

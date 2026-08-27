@@ -148,11 +148,8 @@ final class TrendMetricTests: XCTestCase {
         let expectedFalse: Set<TrendMetric> = [
             .wueRatio, .aggressionIndex, .ownErrorShare,
             .depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally,
-            // Health metrics whose numerator is not a quantity worth plotting:
-            // a summed bpm is meaningless, and stepsPerPointWon's numerator is
-            // the same match step load stepsPerPoint already draws.
-            .avgHeartRate, .avgHeartRateFirstSet, .avgHeartRateFinalSet,
-            .hardZoneShare, .stepsPerPointWon, .minutesPerMatch
+            // A rally SHARE is a style, not a count anyone wants plotted raw.
+            .rallyShareOnServe, .rallyShareOnReturn
         ]
         for metric in TrendMetric.allCases {
             XCTAssertEqual(metric.supportsCountMode, !expectedFalse.contains(metric), "\(metric)")
@@ -166,15 +163,9 @@ final class TrendMetricTests: XCTestCase {
     func test_everyMetric_hasItsExpectedUnit() {
         let nonPercent: [TrendMetric: TrendMetric.Unit] = [
             .wueRatio: .ratio,
-            .avgHeartRate: .bpm,
-            .avgHeartRateFirstSet: .bpm,
-            .avgHeartRateFinalSet: .bpm,
-            .stepsPerPoint: .steps,
             .stepsPerPointWon: .steps,
             .stepsPerPointFirstSet: .steps,
-            .stepsPerPointFinalSet: .steps,
-            .metresPerPoint: .metres,
-            .minutesPerMatch: .minutes
+            .stepsPerPointFinalSet: .steps
         ]
         for metric in TrendMetric.allCases {
             XCTAssertEqual(metric.unit, nonPercent[metric] ?? .percent, "\(metric)")
@@ -185,7 +176,7 @@ final class TrendMetricTests: XCTestCase {
     /// a flat-change threshold would otherwise fail to compile here rather than
     /// silently defaulting, but this also pins the values themselves.
     func test_minimumChange_isDefinedForEveryUnit() {
-        for unit: TrendMetric.Unit in [.percent, .ratio, .bpm, .steps, .metres, .minutes] {
+        for unit: TrendMetric.Unit in [.percent, .ratio, .steps] {
             XCTAssertGreaterThan(PerformanceTrends.minimumChange(for: unit), 0, "\(unit)")
         }
     }

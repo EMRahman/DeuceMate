@@ -6,12 +6,14 @@ author: Claude (Opus 5), design session with the owner
 date: 2026-08-26
 implemented_date: 2026-08-26
 blocked_by: null
-delivers: "The heart-rate and movement half of docs/features/PERFORMANCE_TRENDS_PLAN.md. That plan's catalogue was entirely tennis-derived and read none of the HealthKit data the watch already records; this adds three groups — Heart Rate, Movement, Fatigue — under coverage rules stricter than the tennis metrics need."
+delivers: "The movement half of docs/features/PERFORMANCE_TRENDS_PLAN.md, plus rally length split by serving side. Shipped first as three groups and 13 metrics; reduced in the same branch to two groups and 5 metrics after review — see section 3's 'What was cut, and why', which is the part to read before proposing a new metric here."
+metric_count: "5 movement/fatigue metrics in 2 groups (3 charts), plus 4 rally-by-server metrics inside the existing Rally Depth group (0 new charts)."
 scope:
   in_scope:
     - "Packages/DeuceMateCore/Sources/DeuceMateCore/Stats/MatchTrendSample.swift (health counters, a maxHR parameter, the fatigue set-pair rule)"
-    - "Packages/DeuceMateCore/Sources/DeuceMateCore/Stats/TrendMetric.swift (4 new Unit cases, 3 new groups, 13 new metrics, the coverage gates)"
-    - "Packages/DeuceMateCore/Sources/DeuceMateCore/Stats/PerformanceTrends.swift (minimumChange per unit, samples(from:maxHR:))"
+    - "Packages/DeuceMateCore/Sources/DeuceMateCore/Stats/TrendMetric.swift (one new Unit case (.steps), 2 new groups, 9 metrics, startsHidden, the coverage gates)"
+    - "Packages/DeuceMateCore/Sources/DeuceMateCore/Stats/MatchStatsSummary.swift (rallyDepthOnServe / rallyDepthOnReturn)"
+    - "Packages/DeuceMateCore/Sources/DeuceMateCore/Stats/PerformanceTrends.swift (minimumChange per unit)"
     - "Packages/DeuceMateCore/Tests/DeuceMateCoreTests/MatchTrendSampleHealthTests.swift (new), TrendMetricTests.swift"
     - "DeuceMate/DeuceMate/MaxHRSetting.swift (new — the phone's shared reader for the two stored max-HR settings)"
     - "DeuceMate/DeuceMate/Views/Trends/{TrendChart,TrendSparkline,TrendsSamples,TrendsSection,TrendsView}.swift"
@@ -20,6 +22,7 @@ scope:
     - "DeuceMate/DeuceMateTests/TrendsSamplesTests.swift"
   out_of_scope:
     - "Any schema change. No MatchRecord/PointStat field, so no CLAUDE.md §4 backward-compat recipe, no MatchSyncKey, no new UserDefaults key, no watch change."
+    - "Heart rate in any form, zones included. Shipped, then cut — the reasoning is in section 3 and is the thing to read before re-adding it."
     - "Calorie-derived metrics. MatchRecord.totalCaloriesKcal is active + basal (WorkoutManager.swift:136); basal accrues with the clock, so 'calories per point' is substantially a duration measurement. Excluded, not deferred."
     - "Cardiac efficiency as one number (movement produced per heartbeat) — a quotient of two rates, and TrendMetric.Ratio is Int/Int. The two rates ship as separate series instead."
     - "Recovery between points. HR is one spot reading per point with no rest-interval samples; it is not in the data."
@@ -30,13 +33,14 @@ key_data_model_facts:
   - "StepsSeries.make falls back to spreading MatchRecord.totalSteps evenly across points when fewer than two real samples exist (StepsSeries.swift:66-79). Under that fallback steps-per-point is totalSteps/n BY CONSTRUCTION — a constant, not a measurement. Health metrics read stepsTimeline only."
   - "stepsTimeline's first entry is the BASELINE and carries a load of 0 (MatchStatsSummary.sampledStepLoads). stepSumLoad/stepSampledPoints therefore reproduces MatchStatsSummary.averageSteps exactly, which is what keeps the trend and the text export's 'Avg Steps / Point' in agreement."
   - "Health data is device-local and does NOT survive an iCloud restore: the canonical archive is health-stripped, the Health sidecar is backup-excluded, and ArchiveBackupPolicy.backupSnapshot strips the five HealthKit fields for Guideline 5.1.3(ii). After a fresh-install restore the tennis metrics come back and these do not."
-  - "HRZone.resolveMaxHR is a CURRENT setting applied retroactively to archived matches, and 220−age drifts a bpm a year. Zone counters therefore depend on a value that can change without any record changing — hence MatchTrendSample.init?(record:maxHR:) and the composite TrendsSamples cache key."
-  - "HRZone.resolveMaxHR falls back to 190 when uncalibrated. HRZone.isUsableBirthYear is the way to tell that apart from a legitimate age-30 result — it must never be inferred by comparing the resolved value against 190."
+  - "EndingShot records the PHASE a point ended in, never who served: a point ending on the return shot is still a point the recorder served. Rally-by-server therefore splits on PointStat.server, and the two axes must not be confused."
+  - "MatchStatsSummary.rallyDepthOnServe + rallyDepthOnReturn sum back to rallyDepth, which is the cheapest assertion available that the partition is right."
   - "A private STORED property makes a SwiftUI View's synthesized memberwise init private too (unlike a private property-wrapped one), so views holding a MaxHRSetting declare it internal."
 decisions:
   fatigue_basis: "set-based — first played set vs last played set, both needing 20 points (owner decision over chronological halves)"
-  zones: "in v1 (owner decision), with calibration captioned rather than gated"
-  group_count: "three — Heart Rate, Movement, Fatigue. One 'Effort' group would have carried five units and therefore five charts"
+  zones: "cut. Shipped in the first pass at the owner's request, then removed with the rest of heart rate — a metric that needs a yardstick the user can change is not worth a chart"
+  group_count: "two — Fatigue and Effort — plus a third mode on the existing Rally Depth picker. The screen budget is the binding constraint, not the metric count"
+  keeping_a_chart: "a chart earns its place only if the number moving tells the player to do something differently. Load and duration are context, not instruction"
   pairs_not_deltas: "fatigue ships as first-set/final-set metric PAIRS on one chart; the gap between the lines is the fatigue. TrendMetric.Ratio is Int/Int and cannot carry a signed difference"
   empty_denominator: "nil, never zero — inherited from PERFORMANCE_TRENDS_PLAN.md §3.4"
 implementation_notes:
@@ -92,66 +96,94 @@ because they were better" is unknowable — every efficiency metric carries that
 5. **Zones are a moving yardstick** — handled by the composite cache key and a calibration
    caption, never by silently re-deriving behind the user's back.
 
-## 3. The catalogue — 13 metrics, 3 groups
+## 3. The catalogue — 5 metrics, 3 charts, 2 groups
 
-### Heart Rate
-| Metric | numerator / denominator | unit | better | gate |
-|---|---|---|---|---|
-| `avgHeartRate` | Σ bpm / HR-sampled points | `.bpm` | neutral | ≥ 10 HR points |
-| `hardZoneShare` | Z4+Z5 points / HR-sampled points | `.percent` | neutral | ≥ 10 HR points |
-| `hardZoneWinRate` | wins in Z4+Z5 / Z4+Z5 points | `.percent` | higher | ≥ 10 HR points **and** ≥ 5 Z4+Z5 points |
+The first cut of this feature shipped 13 metrics across three groups and **8 charts**, on a
+screen that already had five groups. Most of them reported *load* rather than anything a
+player can act on, so the catalogue was reduced to the ones that pass a single test: does
+this number, moving, tell you to do something differently?
 
-### Movement
-| Metric | numerator / denominator | unit | better | gate |
-|---|---|---|---|---|
-| `stepsPerPoint` | Σ per-point steps / step-sampled points | `.steps` | neutral | ≥ 10 step samples |
-| `stepsPerPointWon` | Σ per-point steps / points won **among step-sampled points** | `.steps` | **lower** | ≥ 10 step samples |
-| `metresPerPoint` | distance / total points | `.metres` | neutral | distance > 0 |
-| `minutesPerMatch` | elapsed minutes / 1 | `.minutes` | neutral | completed, duration ≥ 1 min |
-
-`stepsPerPointWon` is the energy-efficiency metric: **how much running one won point costs
-you.** Falling means winning more cheaply. Its denominator counts wins **within the
-step-sampled window**, not the whole match: `stepSumLoad` only covers sampled points, and
-pairing a partial numerator with a full denominator made the rate fall as coverage fell —
-which, in the one health metric with an orientation, reported a dropout as a fitness gain. `minutesPerMatch` is health-free by design — the
-one series here that survives an iCloud restore and exists without Health access, so the
-group is never wholly empty. It is also the only metric whose numerator is a whole-match
-absolute rather than a rate, so it is `nil` for an in-progress match (whose duration is
-still growing) and for a sub-minute one (which truncates to a 0 that would break the
-nil-never-zero rule). Because it keeps the group rendering with no step or distance data
-at all, the group's coverage footer names "step or distance data" specifically rather than
-claiming the whole group is empty.
-
-### Fatigue — first played set vs last played set
+### Fatigue
 | Metric pair | numerator / denominator | unit | better |
 |---|---|---|---|
 | `winRateFirstSet` / `winRateFinalSet` | points won in set / points in set | `.percent` | higher |
-| `avgHeartRateFirstSet` / `avgHeartRateFinalSet` | Σ bpm in set / HR points in set | `.bpm` | neutral |
 | `stepsPerPointFirstSet` / `stepsPerPointFinalSet` | Σ steps in set / step samples in set | `.steps` | neutral |
 
-The set pair is **a rule, not a search**: the first played set and the last played set, both
-needing 20 points. Hunting for "the first two sets that qualify" would let the metric mean
-set 1 vs set 3 on one match and set 2 vs set 3 on the next. Consequences, all deliberate:
-single-set formats produce no fatigue dots; a ~15-point super-tiebreak decider is excluded
-by the 20-point gate, so a full set is never compared against a 10-point tiebreak; and
-**in-progress matches produce no fatigue dots at all** (their final set is still being
-played) while still contributing to every other metric.
+Two charts, and together they separate *do I fade* from *why*: a win rate that drops while
+step load holds is a decision or technique problem; both dropping together is conditioning.
+The win-rate pair needs **no HealthKit data at all**, so it is the one thing here that
+still works for a player who never granted Health access and for an archive restored from
+iCloud, where health data is permanently gone.
+
+### Effort
+| Metric | numerator / denominator | unit | better |
+|---|---|---|---|
+| `stepsPerPointWon` | Σ per-point steps / points won **among step-sampled points** | `.steps` | **lower** |
+
+How much running one won point costs you; falling means winning more cheaply. Its
+denominator counts wins within the step-sampled window, not the whole match — pairing a
+partial numerator with a full denominator made the rate fall as coverage fell, which in the
+one metric with an orientation reported a dropped stream as a fitness gain.
+
+### The set-pair rule (used by both Fatigue pairs)
+
+Resolved once per match: the **first played set** and the **last played set**, both needing
+20 points. It is a rule, not a search — hunting for "the first two sets that qualify" would
+let the metric mean set 1 vs 3 on one match and set 2 vs 3 on the next. Single-set formats
+therefore produce no fatigue dots; a ~15-point super-tiebreak decider is excluded by the
+20-point gate, so a full set is never compared against a 10-point tiebreak; and in-progress
+matches produce none at all, since their final set is still being played.
 
 Each pair checks **both** slices before returning either, so a set that lacks coverage can
-never leave its partner drawn alone — one line of a two-line comparison reads as a complete
-answer.
+never leave its partner drawn alone. The two step slices additionally drop each set's first
+sample: a `stepsTimeline` entry's load is measured from the previous sample, so a set's
+opening entry is the match-wide baseline (load 0) in the first set and spans the whole
+inter-set changeover in the final one. Both distortions push the same way — "you moved more
+when tired" — in the metric that exists to answer exactly that. Two sets of identical
+movement read 3.87 vs 4.00 before the drop and equal after it. The whole-match figure would
+keep its baseline entry to stay equal to `MatchStatsSummary.averageSteps`, which is why the
+per-set and whole-match conventions deliberately differ.
 
-The two **step** slices drop each set's first sample. A `stepsTimeline` entry's load is
-measured from the previous sample, so a set's opening entry is not comparable to the rest:
-in the first set it is the match-wide baseline (load 0 by definition), and in the final set
-it spans the whole inter-set changeover. Both distortions push the same way — "you moved
-more when tired" — in the metric that exists to answer exactly that. Two sets of identical
-movement read 3.87 vs 4.00 before the drop and equal after it. The whole-match
-`stepsPerPoint` deliberately keeps its baseline entry, so that figure still reproduces
-`MatchStatsSummary.averageSteps` and agrees with the text export.
+### What was cut, and why
 
-Thresholds are cited, not invented: 20 points per set from `RecCoachInsights`' set-duration
-rule; 10 HR/step samples from `PulseCoachInsights.generate` and `StepsCoachInsights`.
+| Removed | Why |
+|---|---|
+| `avgHeartRate`, `hardZoneShare`, `hardZoneWinRate`, `avgHeartRateFirstSet`, `avgHeartRateFinalSet` | **Heart rate dropped entirely.** Zones depend on a max-HR yardstick that shifts under the user (see the retired trap 5 below), "win rate in Z4–Z5" largely restates the fade signal, and step sampling survives in cases where the HR stream doesn't. Dropping them removed the `maxHR` parameter, the `TrendsSamples` composite cache key and the calibration caption with them. |
+| `metresPerPoint` | Collinear with steps per point — two charts saying the same thing. |
+| `minutesPerMatch` | Match length is context, not performance, and every archive row already shows it. |
+| `stepsPerPoint` (whole-match) | Running more is neither good nor bad on its own. Its counters stay: `stepsPerPointWon` needs them for its numerator and its gate. |
+
+Do not re-propose these without a reason that survives the test above. The `.bpm`, `.metres`
+and `.minutes` `Unit` cases went with them, leaving `.steps` as the only unit this feature
+added — the unit bucketing itself stays, because Fatigue holds a percent chart and a steps
+chart.
+
+## 3a. Rally length by serving side
+
+Four metrics answering a question the tennis catalogue could not: **do my service points go
+long, and does that cost me?** They live in the existing `.rallyDepth` group behind a third
+mode on its segmented picker, so they add **no chart at all**.
+
+| Metric | numerator / denominator | better |
+|---|---|---|
+| `rallyWinOnServe` | rally points won on my serve / rally points on my serve | higher |
+| `rallyWinOnReturn` | rally points won on return / rally points on return | higher |
+| `rallyShareOnServe` | rally points on my serve / my service points with an ending shot | neutral |
+| `rallyShareOnReturn` | rally points on return / return points with an ending shot | neutral |
+
+The split axis is **`PointStat.server`, not `EndingShot.serve`**. `EndingShot` records the
+*phase* a point ended in, so a point ending on the return shot is still a point I served;
+reading the side off the phase is the easiest mistake available here and puts those points
+on the wrong side of the comparison. `MatchStatsSummary` gains `rallyDepthOnServe` /
+`rallyDepthOnReturn`, the same `[RallyDepthStat]` shape as the existing `rallyDepth` and
+summing back to it, carrying all four phases per side so a future serve-side S+1 metric
+needs no new counters.
+
+The two win-rate lines show by default and the two share lines start hidden
+(`TrendMetric.startsHidden`, which generalises the old `isOpponentFramed`-only rule): the
+win rates are the verdict, the shares say how often the question comes up. Both sides gate
+to `nil` when that side carries no ending-shot data, so a match archived before
+`PointStat.endingShot` existed gaps rather than reading as "you never played a rally".
 
 ## 4. Presentation
 

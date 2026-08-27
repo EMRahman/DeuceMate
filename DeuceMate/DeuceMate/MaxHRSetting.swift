@@ -30,15 +30,4 @@ struct MaxHRSetting: DynamicProperty {
         )
     }
 
-    /// `true` when `resolved` reflects the player's own data rather than the
-    /// 190 bpm fallback. Uses `HRZone.isUsableBirthYear` rather than comparing
-    /// `resolved` against 190, which is also a legitimate age-derived result
-    /// (age 30) — the exact distinction that helper exists to make.
-    var isCalibrated: Bool {
-        if HRZone.isValidOverride(manualOverride) { return true }
-        // No `birthYear > 0` guard: `isUsableBirthYear` already rejects
-        // anything at or below 1900, and restating part of its rule here would
-        // be exactly the re-derivation this type exists to avoid.
-        return HRZone.isUsableBirthYear(birthYear)
-    }
 }

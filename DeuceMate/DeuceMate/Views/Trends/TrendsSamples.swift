@@ -30,21 +30,12 @@ final class TrendsSamples: ObservableObject {
     /// added, with no field list to keep in sync.
     private var cachedRecords: [MatchRecord] = []
 
-    /// The resolved max HR the cached samples were derived with. It is a live
-    /// setting (`MaxHRSetting`) applied retroactively to archived matches, so
-    /// editing a birth year in Settings changes every hard-zone counter without
-    /// touching a single record — leaving the records-only check above unable
-    /// to notice. Same composite-key reasoning as `MatchDetailView`'s
-    /// `.task(id: "\(playerNTRP)-\(resolvedMaxHR)")`.
-    private var cachedMaxHR: Int?
 
-    /// Recomputes `samples` only if something that could change the result has
-    /// actually changed since the last call — the records themselves, or the
-    /// max-HR yardstick the zone counters are measured against.
-    func refresh(records: [MatchRecord], maxHR: Int) {
-        guard records != cachedRecords || maxHR != cachedMaxHR else { return }
+    /// Recomputes `samples` from `records` only if something that could
+    /// change the result has actually changed since the last call.
+    func refresh(records: [MatchRecord]) {
+        guard records != cachedRecords else { return }
         cachedRecords = records
-        cachedMaxHR = maxHR
-        samples = PerformanceTrends.samples(from: records, maxHR: maxHR)
+        samples = PerformanceTrends.samples(from: records)
     }
 }

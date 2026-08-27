@@ -110,22 +110,16 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     }
     public let rallyDepth: [EndingShot: DepthCount]
     public let pointsWithEndingShot: Int
-
-    // MARK: - Heart rate — recorder-only, sampled
-
-    /// Points carrying a usable `heartRateBPM` reading. This is the ONLY valid
-    /// denominator for the HR metrics: a match recorded with Health access off
-    /// has 0 here and must produce no dot at all, never a 0 bpm one
-    /// (docs/features/PERFORMANCE_TRENDS_PLAN.md §3.4). `TrendMetric`'s gates
-    /// enforce that; these counters stay raw.
-    public let hrSampledPoints: Int
-    public let hrSumBPM: Int
-    /// Points spent in Z4 or Z5 — "the hard zones" — and how many were won.
-    /// Zone attribution depends on the `maxHR` this sample was built with, so
-    /// two samples of the same match built with different `maxHR` values
-    /// legitimately differ here. See `init?(record:maxHR:)`.
-    public let hardZonePoints: Int
-    public let hardZoneWins: Int
+    /// `rallyDepth` split by who served. The split is on `PointStat.server`,
+    /// NOT on `EndingShot.serve` — that case is the *phase* a point ended in, so
+    /// a point ending on the return shot is still a point I served. Getting
+    /// those two axes confused is the easiest mistake available here.
+    public let rallyDepthOnServe: [EndingShot: DepthCount]
+    public let rallyDepthOnReturn: [EndingShot: DepthCount]
+    /// Denominators for the share metrics: points on that side that carry an
+    /// ending shot at all. Zero means no coverage, never "no rallies".
+    public let pointsWithEndingShotOnServe: Int
+    public let pointsWithEndingShotOnReturn: Int
 
     // MARK: - Movement
 
@@ -148,38 +142,25 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     /// reproduces `MatchStatsSummary.averageSteps` exactly, so the trend and
     /// the text export's "Avg Steps / Point" can never disagree.
     public let stepSumLoad: Int
-    /// `MatchRecord.totalDistanceMeters` rounded to whole metres, so trend
-    /// ratios stay `Int`/`Int`. `nil` when the match recorded no distance.
-    public let distanceMetres: Int?
-    /// Whole minutes of match play, truncated to match `MatchDurations
-    /// .minutesString`. `nil` when no duration is resolvable. Not HealthKit
-    /// data — this is the one Movement counter that survives an iCloud
-    /// restore and exists without Health access.
-    public let elapsedMinutes: Int?
 
     // MARK: - Fatigue — first played set vs last played set
 
     /// One side of the fatigue comparison. Each family carries its own
-    /// denominator: win rate counts every point in the set, HR counts only
-    /// HR-sampled points, movement only step-sampled ones. Sharing one
-    /// denominator across the three would repeat §3.6's mixed-denominator
-    /// mistake in a new place.
+    /// denominator: win rate counts every point in the set, movement only the
+    /// step-sampled ones. Sharing one denominator across both would repeat
+    /// §3.6's mixed-denominator mistake in a new place.
     public struct SetSlice: Equatable, Sendable {
         public let setIndex: Int
         public let points: Int
         public let pointsWon: Int
-        public let hrSampledPoints: Int
-        public let hrSumBPM: Int
         public let stepSampledPoints: Int
         public let stepSumLoad: Int
 
-        public init(setIndex: Int, points: Int, pointsWon: Int, hrSampledPoints: Int,
-                    hrSumBPM: Int, stepSampledPoints: Int, stepSumLoad: Int) {
+        public init(setIndex: Int, points: Int, pointsWon: Int,
+                    stepSampledPoints: Int, stepSumLoad: Int) {
             self.setIndex = setIndex
             self.points = points
             self.pointsWon = pointsWon
-            self.hrSampledPoints = hrSampledPoints
-            self.hrSumBPM = hrSumBPM
             self.stepSampledPoints = stepSampledPoints
             self.stepSumLoad = stepSumLoad
         }
@@ -228,14 +209,14 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         forcedErrorsConceded: Int, forcedErrorsCaused: Int, breakPointOpps: Int,
         breakPointWins: Int, breakPointsFaced: Int, breakPointsLost: Int, bigPointTotal: Int,
         bigPointWins: Int, rallyDepth: [EndingShot: DepthCount], pointsWithEndingShot: Int,
-        // Health-derived counters default to "absent" so a caller that only
-        // cares about the tennis metrics (every existing test) stays valid and
-        // gets a sample with no health coverage — which is exactly what a match
+        rallyDepthOnServe: [EndingShot: DepthCount] = [:],
+        rallyDepthOnReturn: [EndingShot: DepthCount] = [:],
+        pointsWithEndingShotOnServe: Int = 0, pointsWithEndingShotOnReturn: Int = 0,
+        // Movement counters default to "absent" so a caller that only cares
+        // about the tennis metrics (every existing test) stays valid and gets a
+        // sample with no movement coverage — which is exactly what a match
         // recorded without Health access produces.
-        hrSampledPoints: Int = 0, hrSumBPM: Int = 0,
-        hardZonePoints: Int = 0, hardZoneWins: Int = 0,
         stepSampledPoints: Int = 0, stepSumLoad: Int = 0, stepSampledPointsWon: Int = 0,
-        distanceMetres: Int? = nil, elapsedMinutes: Int? = nil,
         fatigue: FatigueSplit? = nil
     ) {
         self.matchID = matchID
@@ -278,15 +259,13 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         self.bigPointWins = bigPointWins
         self.rallyDepth = rallyDepth
         self.pointsWithEndingShot = pointsWithEndingShot
-        self.hrSampledPoints = hrSampledPoints
-        self.hrSumBPM = hrSumBPM
-        self.hardZonePoints = hardZonePoints
-        self.hardZoneWins = hardZoneWins
+        self.rallyDepthOnServe = rallyDepthOnServe
+        self.rallyDepthOnReturn = rallyDepthOnReturn
+        self.pointsWithEndingShotOnServe = pointsWithEndingShotOnServe
+        self.pointsWithEndingShotOnReturn = pointsWithEndingShotOnReturn
         self.stepSampledPoints = stepSampledPoints
         self.stepSumLoad = stepSumLoad
         self.stepSampledPointsWon = stepSampledPointsWon
-        self.distanceMetres = distanceMetres
-        self.elapsedMinutes = elapsedMinutes
         self.fatigue = fatigue
     }
 
@@ -294,34 +273,27 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     /// point tracking, or too few categorized points so far. In-progress
     /// matches ARE eligible once they clear the categorized-points
     /// threshold — their stats simply reflect the match as scored so far.
-    /// `maxHR` is the player's currently resolved maximum heart rate
-    /// (`HRZone.resolveMaxHR`). It affects ONLY the hard-zone counters — every
-    /// other field, including `hrSumBPM`, is yardstick-free. Because it is a
-    /// live setting applied retroactively to archived matches, a caller that
-    /// caches samples must invalidate on it changing as well as on the records
-    /// changing (the iOS `TrendsSamples` cache does).
-    public init?(record: MatchRecord, maxHR: Int = 190) {
+    public init?(record: MatchRecord) {
         guard !record.matchFormat.config.disablesPointTracking else { return nil }
 
         let summary = MatchStatsSummary(stats: record.stats, focal: .me,
-                                        setElapsedSeconds: record.setElapsedSeconds,
-                                        maxHR: maxHR)
+                                        setElapsedSeconds: record.setElapsedSeconds)
         // MatchStatsSummary has no direct categorizedPoints field; derive it
         // from the two it does expose.
         let categorizedTotal = summary.totalPoints - summary.uncategorizedCount
         guard categorizedTotal >= Self.minimumCategorizedPoints else { return nil }
 
-        var depth: [EndingShot: DepthCount] = [:]
-        for stat in summary.rallyDepth {
-            depth[stat.shot] = DepthCount(total: stat.total, wins: stat.wins)
+        func depthDictionary(_ stats: [MatchStatsSummary.RallyDepthStat]) -> [EndingShot: DepthCount] {
+            var out: [EndingShot: DepthCount] = [:]
+            for stat in stats {
+                out[stat.shot] = DepthCount(total: stat.total, wins: stat.wins)
+            }
+            return out
         }
+        let depth = depthDictionary(summary.rallyDepth)
         let pointsWithShot = summary.rallyDepth.reduce(0) { $0 + $1.total }
-
-        // Heart rate. `hrTimeline` holds exactly the points that carried a
-        // usable reading, so its count is the honest denominator; a match with
-        // Health off yields 0 and therefore no dots at all.
-        let hrPoints = summary.hrTimeline
-        let hardZoneStats = summary.zoneWinRates.filter { Self.hardZones.contains($0.zone) }
+        let serveDepth = depthDictionary(summary.rallyDepthOnServe)
+        let returnDepth = depthDictionary(summary.rallyDepthOnReturn)
 
         // Movement. The sampled timeline only — never StepsSeries' totalSteps
         // fallback, which would make steps-per-point a constant by construction.
@@ -352,24 +324,17 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
             breakPointsFaced: summary.breakPointsFaced, breakPointsLost: summary.breakPointsLost,
             bigPointTotal: summary.bigPointTotal, bigPointWins: summary.bigPointWins,
             rallyDepth: depth, pointsWithEndingShot: pointsWithShot,
-            hrSampledPoints: hrPoints.count,
-            hrSumBPM: hrPoints.reduce(0) { $0 + $1.bpm },
-            hardZonePoints: hardZoneStats.reduce(0) { $0 + $1.total },
-            hardZoneWins: hardZoneStats.reduce(0) { $0 + $1.wins },
+            rallyDepthOnServe: serveDepth, rallyDepthOnReturn: returnDepth,
+            pointsWithEndingShotOnServe: summary.rallyDepthOnServe.reduce(0) { $0 + $1.total },
+            pointsWithEndingShotOnReturn: summary.rallyDepthOnReturn.reduce(0) { $0 + $1.total },
             stepSampledPoints: stepPoints.count,
             stepSumLoad: stepPoints.reduce(0) { $0 + $1.perPointSteps },
             stepSampledPointsWon: stepPoints.filter(\.wonByFocal).count,
-            distanceMetres: record.totalDistanceMeters.flatMap { $0 > 0 ? Int($0.rounded()) : nil },
-            elapsedMinutes: Self.elapsedMinutes(record),
             fatigue: Self.fatigueSplit(record: record, summary: summary)
         )
     }
 
     // MARK: - Fatigue split
-
-    /// Z4 and Z5 — "the hard zones", pooled because either alone is too thin
-    /// on a recreational match to trend.
-    private static let hardZones: Set<HRZone> = [.z4, .z5]
 
     /// The two sets the fatigue metrics compare: the **first played set** and
     /// the **last played set**, both needing `minimumFatigueSetPoints`. `nil`
@@ -415,12 +380,10 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
               firstCounts.points >= minimumFatigueSetPoints,
               finalCounts.points >= minimumFatigueSetPoints else { return nil }
 
-        // Bucket both timelines once rather than re-filtering them per slice.
-        let hrBySet = Dictionary(grouping: summary.hrTimeline, by: \.setIndex)
+        // Bucket the timeline once rather than re-filtering it per slice.
         let stepsBySet = Dictionary(grouping: summary.stepsTimeline, by: \.setIndex)
 
         func slice(_ index: Int, _ counts: (points: Int, won: Int)) -> SetSlice {
-            let hr = hrBySet[index] ?? []
             // `stepsTimeline` is chronological, so `dropFirst` removes this
             // set's non-comparable opening delta (see the note above).
             let steps = (stepsBySet[index] ?? []).dropFirst()
@@ -428,8 +391,6 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
                 setIndex: index,
                 points: counts.points,
                 pointsWon: counts.won,
-                hrSampledPoints: hr.count,
-                hrSumBPM: hr.reduce(0) { $0 + $1.bpm },
                 stepSampledPoints: steps.count,
                 stepSumLoad: steps.reduce(0) { $0 + $1.perPointSteps }
             )
@@ -439,21 +400,4 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
                             finalSet: slice(finalIndex, finalCounts))
     }
 
-    /// Whole minutes of play, or `nil` when there is no finished duration to
-    /// report. Two guards, for two different reasons:
-    ///
-    /// - **In progress**: `minutesPerMatch` is the one metric whose numerator
-    ///   is a whole-match absolute rather than a rate, so a live match would
-    ///   plot its elapsed-so-far beside finished matches and drag the window's
-    ///   pooled mean down — the same partial-reading problem that excludes an
-    ///   in-progress match from `fatigueSplit`.
-    /// - **Zero**: the seconds are truncated to minutes, so a sub-minute
-    ///   duration yields 0, and a 0-minute dot would break this type's own
-    ///   nil-never-zero rule.
-    private static func elapsedMinutes(_ record: MatchRecord) -> Int? {
-        guard !record.isInProgress,
-              let seconds = MatchDurations.matchElapsedSeconds(record) else { return nil }
-        let minutes = Int(seconds) / 60
-        return minutes > 0 ? minutes : nil
-    }
 }

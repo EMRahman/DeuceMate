@@ -127,22 +127,12 @@ public enum PerformanceTrends {
 
     /// Below this, a change is reported `.flat`. One threshold per unit, each
     /// set at roughly "smaller than this is measurement noise, not a trend":
-    /// a percentage point, a tenth of a ratio, two bpm, half a step, half a
-    /// metre, two minutes.
-    ///
-    /// `delta(for:in:)` returns `.flat` for a `.neutral` metric before it gets
-    /// here, so today only `.percent`, `.ratio` and `.steps` are ever consulted
-    /// — every `.bpm`/`.metres`/`.minutes` metric is currently neutral. The
-    /// other three are kept, and correct, for the moment one of those units
-    /// gains an orientation.
+    /// a percentage point, a tenth of a ratio, half a step.
     public static func minimumChange(for unit: TrendMetric.Unit) -> Double {
         switch unit {
         case .percent: return 1.0
         case .ratio:   return 0.1
-        case .bpm:     return 2.0
         case .steps:   return 0.5
-        case .metres:  return 0.5
-        case .minutes: return 2.0
         }
     }
 
@@ -153,14 +143,9 @@ public enum PerformanceTrends {
     /// in-progress match, which is eligible once it clears the categorized-
     /// points threshold, its `isInProgress` flag telling callers apart from
     /// a completed match.
-    ///
-    /// `maxHR` is the player's currently resolved maximum heart rate and feeds
-    /// only the hard-zone counters. It is a live setting applied retroactively
-    /// to archived matches, so a caller caching the result must invalidate on
-    /// it as well as on `records` — see `MatchTrendSample.init?(record:maxHR:)`.
-    public static func samples(from records: [MatchRecord], maxHR: Int = 190) -> [MatchTrendSample] {
+    public static func samples(from records: [MatchRecord]) -> [MatchTrendSample] {
         records
-            .compactMap { MatchTrendSample(record: $0, maxHR: maxHR) }
+            .compactMap { MatchTrendSample(record: $0) }
             .sorted { $0.startTime < $1.startTime }
     }
 

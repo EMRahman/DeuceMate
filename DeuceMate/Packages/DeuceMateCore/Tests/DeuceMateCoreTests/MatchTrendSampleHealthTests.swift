@@ -1,5 +1,5 @@
-// MatchTrendSampleHealthTests.swift — the heart-rate, movement and fatigue
-// counters, and the five traps docs/features/HEALTH_TRENDS_PLAN.md §2 names.
+// MatchTrendSampleHealthTests.swift — the movement and fatigue counters,
+// and the traps docs/features/HEALTH_TRENDS_PLAN.md §2 names.
 // The recurring theme: health data is SPARSE, so every assertion here is really
 // about telling "no data" apart from "zero".
 import XCTest
@@ -13,31 +13,24 @@ final class MatchTrendSampleHealthTests: XCTestCase {
         var index: Int
         var points: Int
         var wins: Int
-        /// bpm stamped on this set's points, or nil for no HR at all.
-        var bpm: Int?
-        /// How many of the set's points carry `bpm`. nil == all of them.
-        var bpmOnFirst: Int?
         /// Steps accumulated per point, or nil for no step sampling.
         var stepDelta: Int?
         /// How many of the set's points carry a step sample. nil == all.
         var stepsOnFirst: Int?
 
-        init(index: Int, points: Int, wins: Int, bpm: Int? = nil,
-             bpmOnFirst: Int? = nil, stepDelta: Int? = nil, stepsOnFirst: Int? = nil) {
+        init(index: Int, points: Int, wins: Int,
+             stepDelta: Int? = nil, stepsOnFirst: Int? = nil) {
             self.index = index
             self.points = points
             self.wins = wins
-            self.bpm = bpm
-            self.bpmOnFirst = bpmOnFirst
             self.stepDelta = stepDelta
             self.stepsOnFirst = stepsOnFirst
         }
     }
 
     /// Builds a categorized match from set specs. Timestamps increase across
-    /// the whole match so `hrTimeline` / `stepsTimeline` order matches play
-    /// order, and step cumulatives run continuously across sets the way a real
-    /// workout's do.
+    /// the whole match so `stepsTimeline` order matches play order, and step
+    /// cumulatives run continuously across sets the way a real workout's do.
     private func makeRecord(
         sets: [SetSpec],
         inProgress: Bool = false,
@@ -53,7 +46,6 @@ final class MatchTrendSampleHealthTests: XCTestCase {
             for i in 0..<spec.points {
                 let carriesSteps = spec.stepDelta != nil && i < (spec.stepsOnFirst ?? spec.points)
                 if let delta = spec.stepDelta, carriesSteps { cumulative += delta }
-                let carriesBPM = spec.bpm != nil && i < (spec.bpmOnFirst ?? spec.points)
                 stats.append(PointStat(
                     timestamp: Date(timeIntervalSince1970: offset),
                     setIndex: spec.index,
@@ -67,7 +59,6 @@ final class MatchTrendSampleHealthTests: XCTestCase {
                         ? .me : .opponent,
                     outcome: .winner,
                     endingShot: .rally,
-                    heartRateBPM: carriesBPM ? spec.bpm : nil,
                     stepsCumulative: carriesSteps ? cumulative : nil
                 ))
                 offset += 30
@@ -90,14 +81,11 @@ final class MatchTrendSampleHealthTests: XCTestCase {
 
     func test_healthCounters_mapFromTheSampledTimelines() throws {
         let record = makeRecord(
-            sets: [SetSpec(index: 0, points: 30, wins: 18, bpm: 150, stepDelta: 4)],
-            totalDistanceMeters: 900.4,
+            sets: [SetSpec(index: 0, points: 30, wins: 18, stepDelta: 4)],
             matchElapsedSeconds: 3600
         )
         let sample = try XCTUnwrap(MatchTrendSample(record: record))
 
-        XCTAssertEqual(sample.hrSampledPoints, 30)
-        XCTAssertEqual(sample.hrSumBPM, 30 * 150)
         XCTAssertEqual(sample.stepSampledPoints, 30)
         // The first sampled point is the BASELINE and carries a load of 0 —
         // MatchStatsSummary.sampledStepLoads' rule — so 30 samples yield 29
@@ -108,8 +96,6 @@ final class MatchTrendSampleHealthTests: XCTestCase {
         XCTAssertEqual(pooledAverage,
                        MatchStatsSummary.averageSteps(
                            MatchStatsSummary(stats: record.stats, focal: .me).stepsTimeline))
-        XCTAssertEqual(sample.distanceMetres, 900)
-        XCTAssertEqual(sample.elapsedMinutes, 60)
     }
 
     // MARK: - Trap 2: never the totalSteps linear fallback
@@ -120,17 +106,16 @@ final class MatchTrendSampleHealthTests: XCTestCase {
         // flat steps-per-point of totalSteps/n — a number that measures
         // nothing. Trends must decline to plot it.
         let record = makeRecord(
-            sets: [SetSpec(index: 0, points: 30, wins: 18, bpm: 150)],
+            sets: [SetSpec(index: 0, points: 30, wins: 18)],
             totalSteps: 5000
         )
         let sample = try XCTUnwrap(MatchTrendSample(record: record))
 
         XCTAssertEqual(sample.stepSampledPoints, 0)
         XCTAssertEqual(sample.stepSumLoad, 0)
-        XCTAssertNil(TrendMetric.stepsPerPoint.rawPair(in: sample))
         XCTAssertNil(TrendMetric.stepsPerPointWon.rawPair(in: sample))
-        // HR is unaffected — the two families gate independently.
-        XCTAssertNotNil(TrendMetric.avgHeartRate.rawPair(in: sample))
+        // The tennis metrics are unaffected — the families gate independently.
+        XCTAssertNotNil(TrendMetric.pointsWon.rawPair(in: sample))
     }
 
     // MARK: - Trap 1: nil is never zero
@@ -142,36 +127,35 @@ final class MatchTrendSampleHealthTests: XCTestCase {
 
         // Tennis metrics are untouched.
         XCTAssertNotNil(TrendMetric.pointsWon.rawPair(in: sample))
-        // Every health metric declines to produce a pair.
-        for metric: TrendMetric in [.avgHeartRate, .hardZoneShare, .hardZoneWinRate,
-                                    .stepsPerPoint, .stepsPerPointWon, .metresPerPoint] {
+        // Every movement metric declines to produce a pair.
+        for metric: TrendMetric in [.stepsPerPointWon, .stepsPerPointFirstSet, .stepsPerPointFinalSet] {
             XCTAssertNil(metric.rawPair(in: sample), "\(metric) invented data from nothing")
         }
     }
 
     func test_pooling_skipsHealthFreeMatchesRatherThanCountingThemAsZero() throws {
-        let withHR = try XCTUnwrap(MatchTrendSample(record: makeRecord(
-            sets: [SetSpec(index: 0, points: 30, wins: 18, bpm: 150)],
-            matchElapsedSeconds: 3600)))
-        let withoutHR = try XCTUnwrap(MatchTrendSample(record: makeRecord(
-            sets: [SetSpec(index: 0, points: 30, wins: 18)],
-            matchElapsedSeconds: 3600)))
+        // 30 points at 4 steps each, 15 won: 116 steps over 15 sampled wins.
+        let withSteps = try XCTUnwrap(MatchTrendSample(record: makeRecord(
+            sets: [SetSpec(index: 0, points: 30, wins: 15, stepDelta: 4)])))
+        let withoutSteps = try XCTUnwrap(MatchTrendSample(record: makeRecord(
+            sets: [SetSpec(index: 0, points: 30, wins: 15)])))
 
         let series = try XCTUnwrap(
-            PerformanceTrends.series(for: .avgHeartRate, in: [withoutHR, withHR]))
-        // One plottable dot, and the pooled figure is the HR match's own
-        // average — not halved by a phantom 0 bpm match.
+            PerformanceTrends.series(for: .stepsPerPointWon, in: [withoutSteps, withSteps]))
+        // One plottable dot, and the pooled figure is the sampled match's own
+        // rate — not halved by a phantom zero-step match.
         XCTAssertEqual(series.points.count, 1)
-        XCTAssertEqual(series.pooled?.value ?? 0, 150, accuracy: 0.001)
+        XCTAssertEqual(series.pooled?.numerator, withSteps.stepSumLoad)
+        XCTAssertEqual(series.pooled?.denominator, withSteps.stepSampledPointsWon)
     }
 
     // MARK: - The fatigue set-pair rule
 
     func test_fatigue_comparesTheFirstAndLastPlayedSet_notAdjacentOnes() throws {
         let record = makeRecord(sets: [
-            SetSpec(index: 0, points: 30, wins: 21, bpm: 140, stepDelta: 4),
-            SetSpec(index: 1, points: 26, wins: 13, bpm: 150, stepDelta: 5),
-            SetSpec(index: 2, points: 28, wins: 11, bpm: 160, stepDelta: 6)
+            SetSpec(index: 0, points: 30, wins: 21, stepDelta: 4),
+            SetSpec(index: 1, points: 26, wins: 13, stepDelta: 5),
+            SetSpec(index: 2, points: 28, wins: 11, stepDelta: 6)
         ])
         let split = try XCTUnwrap(MatchTrendSample(record: record)?.fatigue)
 
@@ -181,35 +165,34 @@ final class MatchTrendSampleHealthTests: XCTestCase {
         XCTAssertEqual(split.firstSet.pointsWon, 21)
         XCTAssertEqual(split.finalSet.points, 28)
         XCTAssertEqual(split.finalSet.pointsWon, 11)
-        XCTAssertEqual(split.finalSet.hrSumBPM, 28 * 160)
+        XCTAssertEqual(split.finalSet.stepSampledPoints, 27, "the set's opening delta is dropped")
     }
 
     func test_fatigue_isNilWhenEitherSetIsTooShort() throws {
         // A super-tiebreak decider is a "set" by index but not by workload.
         let record = makeRecord(sets: [
-            SetSpec(index: 0, points: 30, wins: 18, bpm: 150, stepDelta: 4),
-            SetSpec(index: 1, points: 15, wins: 6, bpm: 160, stepDelta: 5)
+            SetSpec(index: 0, points: 30, wins: 18, stepDelta: 4),
+            SetSpec(index: 1, points: 15, wins: 6, stepDelta: 5)
         ])
         XCTAssertNil(MatchTrendSample(record: record)?.fatigue)
     }
 
     func test_fatigue_isNilForASingleSetMatch() throws {
-        let record = makeRecord(sets: [SetSpec(index: 0, points: 30, wins: 18, bpm: 150, stepDelta: 4)])
+        let record = makeRecord(sets: [SetSpec(index: 0, points: 30, wins: 18, stepDelta: 4)])
         XCTAssertNil(MatchTrendSample(record: record)?.fatigue)
     }
 
     func test_fatigue_isNilForAnInProgressMatch_butTheOtherCountersSurvive() throws {
         let record = makeRecord(sets: [
-            SetSpec(index: 0, points: 30, wins: 18, bpm: 150, stepDelta: 4),
-            SetSpec(index: 1, points: 24, wins: 10, bpm: 160, stepDelta: 5)
+            SetSpec(index: 0, points: 30, wins: 18, stepDelta: 4),
+            SetSpec(index: 1, points: 24, wins: 10, stepDelta: 5)
         ], inProgress: true)
         let sample = try XCTUnwrap(MatchTrendSample(record: record))
 
         XCTAssertTrue(sample.isInProgress)
         XCTAssertNil(sample.fatigue, "a set still being played is a partial reading")
-        // The live match still contributes to every non-fatigue health metric.
-        XCTAssertNotNil(TrendMetric.avgHeartRate.rawPair(in: sample))
-        XCTAssertNotNil(TrendMetric.stepsPerPoint.rawPair(in: sample))
+        // The live match still contributes to every non-fatigue metric.
+        XCTAssertNotNil(TrendMetric.stepsPerPointWon.rawPair(in: sample))
         XCTAssertNil(TrendMetric.winRateFirstSet.rawPair(in: sample))
     }
 
@@ -230,17 +213,18 @@ final class MatchTrendSampleHealthTests: XCTestCase {
     // MARK: - Trap 3: each family gates on its own denominator
 
     func test_fatiguePairs_requireCoverageInBothSets_neverDrawOneLineAlone() throws {
-        // HR sampling only started in the second set — a real pattern when the
-        // watch's HR stream drops out early on. The win-rate pair is unaffected.
+        // Step sampling only started in the second set — a real pattern when the
+        // watch's stream drops out early on. The win-rate pair is unaffected,
+        // because it counts every point rather than the sampled ones.
         let record = makeRecord(sets: [
             SetSpec(index: 0, points: 30, wins: 21),
-            SetSpec(index: 1, points: 26, wins: 10, bpm: 160)
+            SetSpec(index: 1, points: 26, wins: 10, stepDelta: 5)
         ])
         let sample = try XCTUnwrap(MatchTrendSample(record: record))
 
         XCTAssertNotNil(sample.fatigue)
-        XCTAssertNil(TrendMetric.avgHeartRateFirstSet.rawPair(in: sample))
-        XCTAssertNil(TrendMetric.avgHeartRateFinalSet.rawPair(in: sample),
+        XCTAssertNil(TrendMetric.stepsPerPointFirstSet.rawPair(in: sample))
+        XCTAssertNil(TrendMetric.stepsPerPointFinalSet.rawPair(in: sample),
                      "the covered half must not be plotted without its partner")
         XCTAssertNotNil(TrendMetric.winRateFirstSet.rawPair(in: sample))
         XCTAssertNotNil(TrendMetric.winRateFinalSet.rawPair(in: sample))
@@ -248,38 +232,7 @@ final class MatchTrendSampleHealthTests: XCTestCase {
 
     // MARK: - Trap 5: zones follow the supplied yardstick
 
-    func test_hardZoneCounters_followTheSuppliedMaxHR() throws {
-        let record = makeRecord(sets: [SetSpec(index: 0, points: 30, wins: 18, bpm: 150)])
-
-        // 150/190 = 79% — Z3, below the hard zones.
-        let untrained = try XCTUnwrap(MatchTrendSample(record: record, maxHR: 190))
-        XCTAssertEqual(untrained.hardZonePoints, 0)
-        XCTAssertNil(TrendMetric.hardZoneWinRate.rawPair(in: untrained))
-        XCTAssertEqual(TrendMetric.hardZoneShare.rawPair(in: untrained)?.numerator, 0)
-
-        // 150/175 = 86% — Z4. Same match, different resolved max HR.
-        let older = try XCTUnwrap(MatchTrendSample(record: record, maxHR: 175))
-        XCTAssertEqual(older.hardZonePoints, 30)
-        XCTAssertEqual(older.hardZoneWins, 18)
-        XCTAssertEqual(TrendMetric.hardZoneShare.rawPair(in: older)?.numerator, 30)
-
-        // The bpm average is yardstick-free and must NOT move.
-        XCTAssertEqual(untrained.hrSumBPM, older.hrSumBPM)
-    }
-
     // MARK: - Coverage gates
-
-    func test_hrMetrics_gateAtTenSamples() throws {
-        let thin = makeRecord(sets: [SetSpec(index: 0, points: 30, wins: 18, bpm: 150, bpmOnFirst: 9)])
-        let thinSample = try XCTUnwrap(MatchTrendSample(record: thin))
-        XCTAssertEqual(thinSample.hrSampledPoints, 9)
-        XCTAssertNil(TrendMetric.avgHeartRate.rawPair(in: thinSample))
-
-        let enough = makeRecord(sets: [SetSpec(index: 0, points: 30, wins: 18, bpm: 150, bpmOnFirst: 10)])
-        let enoughSample = try XCTUnwrap(MatchTrendSample(record: enough))
-        XCTAssertEqual(enoughSample.hrSampledPoints, 10)
-        XCTAssertNotNil(TrendMetric.avgHeartRate.rawPair(in: enoughSample))
-    }
 
     // MARK: - Orientation
 
@@ -353,40 +306,111 @@ final class MatchTrendSampleHealthTests: XCTestCase {
                        "identical movement must not plot as a fatigue signal")
     }
 
-    /// `hardZoneWinRate` gated only on hard-zone points, so it drew a dot from
-    /// a sample its two sibling metrics — and the screen's coverage footer —
-    /// both considered too thin to exist.
-    func test_hardZoneWinRate_requiresTheSameHRCoverageAsItsSiblings() throws {
-        // 6 readings at 180 bpm: Z5 at maxHR 190, but below minimumHRSamples.
-        let record = makeRecord(sets: [SetSpec(index: 0, points: 40, wins: 20, bpm: 180, bpmOnFirst: 6)])
-        let sample = try XCTUnwrap(MatchTrendSample(record: record, maxHR: 190))
+    // MARK: - Rally length by serving side
 
-        XCTAssertEqual(sample.hardZonePoints, 6, "the readings are in Z5")
-        XCTAssertNil(TrendMetric.avgHeartRate.rawPair(in: sample))
-        XCTAssertNil(TrendMetric.hardZoneShare.rawPair(in: sample))
-        XCTAssertNil(TrendMetric.hardZoneWinRate.rawPair(in: sample),
-                     "must not plot under a footer that says there is no HR data")
+    /// Points with an explicit server / ending-shot / won triple, so a test can
+    /// state the exact shape it needs. 24 points clears the 20-point
+    /// categorized-eligibility bar.
+    private func makeMixedRecord(_ points: [(server: Player, shot: EndingShot?, won: Bool)]) -> MatchRecord {
+        let stats = points.enumerated().map { i, p in
+            PointStat(
+                timestamp: Date(timeIntervalSince1970: Double(i) * 30),
+                setIndex: 0,
+                server: p.server,
+                winner: p.won ? .me : .opponent,
+                outcome: .winner,
+                endingShot: p.shot
+            )
+        }
+        return MatchRecord(
+            startTime: Date(timeIntervalSince1970: 0),
+            endTime: Date(timeIntervalSince1970: 3600),
+            setScores: [SetScore()], stats: stats, iWon: true
+        )
     }
 
-    /// `minutesPerMatch` is the only metric whose numerator is a whole-match
-    /// absolute, so a still-growing duration can't be plotted beside finished
-    /// matches — and a sub-minute duration must be absent, not zero.
-    func test_minutesPerMatch_isNilForInProgressAndSubMinuteMatches() throws {
-        let live = makeRecord(sets: [SetSpec(index: 0, points: 30, wins: 18)],
-                              inProgress: true, matchElapsedSeconds: 480)
-        let liveSample = try XCTUnwrap(MatchTrendSample(record: live))
-        XCTAssertNil(liveSample.elapsedMinutes)
-        XCTAssertNil(TrendMetric.minutesPerMatch.rawPair(in: liveSample),
-                     "8 minutes so far is not a match length")
+    /// 12 points on my serve (6 rallies, 2 of them won) and 12 on return
+    /// (8 rallies, 6 of them won) — the owner's scenario: rallies on my serve
+    /// go badly, rallies on their serve go well.
+    private func makeServerSplitRecord() -> MatchRecord {
+        var points: [(server: Player, shot: EndingShot?, won: Bool)] = []
+        // My serve: 6 rally (2 won), 4 ending on the serve, 2 on the return.
+        for i in 0..<6 { points.append((.me, .rally, i < 2)) }
+        for _ in 0..<4 { points.append((.me, .serve, true)) }
+        for _ in 0..<2 { points.append((.me, .return, false)) }
+        // Their serve: 8 rally (6 won), 4 ending on the serve.
+        for i in 0..<8 { points.append((.opponent, .rally, i < 6)) }
+        for _ in 0..<4 { points.append((.opponent, .serve, false)) }
+        return makeMixedRecord(points)
+    }
 
-        let brief = makeRecord(sets: [SetSpec(index: 0, points: 30, wins: 18)],
-                               matchElapsedSeconds: 45)
-        let briefSample = try XCTUnwrap(MatchTrendSample(record: brief))
-        XCTAssertNil(briefSample.elapsedMinutes, "truncating 45s to 0 minutes must yield nil, not 0")
-        XCTAssertNil(TrendMetric.minutesPerMatch.rawPair(in: briefSample))
+    /// The split axis is `PointStat.server`, NOT `EndingShot.serve`. A point
+    /// ending on the RETURN shot is still a point I served — reading the side
+    /// off the phase is the easiest mistake available here, and it would put
+    /// those two points on the wrong side of the comparison.
+    func test_rallyDepthBySide_partitionsOnServerNotOnEndingShot() throws {
+        let sample = try XCTUnwrap(MatchTrendSample(record: makeServerSplitRecord()))
 
-        let normal = makeRecord(sets: [SetSpec(index: 0, points: 30, wins: 18)],
-                                matchElapsedSeconds: 3600)
-        XCTAssertEqual(try XCTUnwrap(MatchTrendSample(record: normal)).elapsedMinutes, 60)
+        // The two `.return`-phase points were served by me, so they belong to
+        // the serve side and count toward its denominator.
+        XCTAssertEqual(sample.rallyDepthOnServe[.return]?.total, 2)
+        XCTAssertNil(sample.rallyDepthOnReturn[.return],
+                     "no point on their serve ended on the return shot")
+        XCTAssertEqual(sample.pointsWithEndingShotOnServe, 12)
+        XCTAssertEqual(sample.pointsWithEndingShotOnReturn, 12)
+
+        // Summing the two sides reproduces the unsplit breakdown exactly.
+        for shot in EndingShot.allCases {
+            let split = (sample.rallyDepthOnServe[shot]?.total ?? 0)
+                + (sample.rallyDepthOnReturn[shot]?.total ?? 0)
+            XCTAssertEqual(split, sample.rallyDepth[shot]?.total ?? 0, "\(shot)")
+        }
+        XCTAssertEqual(sample.pointsWithEndingShotOnServe + sample.pointsWithEndingShotOnReturn,
+                       sample.pointsWithEndingShot)
+    }
+
+    func test_rallyMetrics_readTheirOwnSide() throws {
+        let sample = try XCTUnwrap(MatchTrendSample(record: makeServerSplitRecord()))
+
+        let shareServe = try XCTUnwrap(TrendMetric.rallyShareOnServe.rawPair(in: sample))
+        XCTAssertEqual(shareServe.numerator, 6)
+        XCTAssertEqual(shareServe.denominator, 12)
+
+        let winServe = try XCTUnwrap(TrendMetric.rallyWinOnServe.rawPair(in: sample))
+        XCTAssertEqual(winServe.numerator, 2)
+        XCTAssertEqual(winServe.denominator, 6)
+
+        let shareReturn = try XCTUnwrap(TrendMetric.rallyShareOnReturn.rawPair(in: sample))
+        XCTAssertEqual(shareReturn.numerator, 8)
+        XCTAssertEqual(shareReturn.denominator, 12)
+
+        let winReturn = try XCTUnwrap(TrendMetric.rallyWinOnReturn.rawPair(in: sample))
+        XCTAssertEqual(winReturn.numerator, 6)
+        XCTAssertEqual(winReturn.denominator, 8)
+    }
+
+    /// `PointStat.endingShot` is optional and decoded with `decodeIfPresent`, so
+    /// matches archived before it existed carry none. Those must gap, not read
+    /// as "you never played a rally".
+    func test_rallyMetrics_areNilWithoutEndingShotData() throws {
+        let legacy = makeMixedRecord((0..<24).map { i in
+            (i.isMultiple(of: 2) ? .me : .opponent, nil, i < 12)
+        })
+        let sample = try XCTUnwrap(MatchTrendSample(record: legacy))
+
+        XCTAssertEqual(sample.pointsWithEndingShotOnServe, 0)
+        for metric: TrendMetric in [.rallyShareOnServe, .rallyShareOnReturn,
+                                    .rallyWinOnServe, .rallyWinOnReturn] {
+            XCTAssertNil(metric.rawPair(in: sample), "\(metric) invented a rally count")
+        }
+    }
+
+    /// The share lines carry the context and the win lines carry the verdict, so
+    /// only the win lines are on screen before the reader asks for more.
+    func test_rallyShareMetrics_startHidden_winRatesDoNot() {
+        XCTAssertTrue(TrendMetric.rallyShareOnServe.startsHidden)
+        XCTAssertTrue(TrendMetric.rallyShareOnReturn.startsHidden)
+        XCTAssertFalse(TrendMetric.rallyWinOnServe.startsHidden)
+        XCTAssertFalse(TrendMetric.rallyWinOnReturn.startsHidden)
     }
 }

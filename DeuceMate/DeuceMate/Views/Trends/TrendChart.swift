@@ -51,37 +51,21 @@ extension TrendMetric {
         case .breakPointsSaved:                               return .cyan
         case .bigPointWin:                                    return .orange
         case .pointsWon:                                      return .green
-        case .avgHeartRate:                                   return .red
-        case .hardZoneShare:                                  return .orange
-        case .hardZoneWinRate:                                return .green
-        case .stepsPerPoint:                                  return .blue
         case .stepsPerPointWon:                               return .teal
-        case .metresPerPoint:                                 return .indigo
-        case .minutesPerMatch:                                return .brown
+        // Rally-by-server: each side keeps one hue across its share and win
+        // lines, so the legend reads as two pairs rather than four unrelated
+        // series.
+        case .rallyShareOnServe, .rallyWinOnServe:            return .orange
+        case .rallyShareOnReturn, .rallyWinOnReturn:          return .indigo
         // Fatigue pairs: first set vs final set, distinct enough to read
         // apart at a glance since the gap between them IS the metric.
         case .winRateFirstSet:                                return .green
         case .winRateFinalSet:                                return .orange
-        case .avgHeartRateFirstSet:                           return .pink
-        case .avgHeartRateFinalSet:                           return .red
         case .stepsPerPointFirstSet:                          return .cyan
         case .stepsPerPointFinalSet:                          return .blue
         }
     }
 
-    /// The metric counts something that happened to/because of the
-    /// OPPONENT (their double faults, unforced errors, winners, or errors
-    /// the recorder caused them into) rather than the recorder's own shot.
-    /// These default hidden (§6.3: "the opponent's own trend is one legend
-    /// tap away") and render dashed when shown.
-    var isOpponentFramed: Bool {
-        switch self {
-        case .doubleFaultsConceded, .unforcedErrorsDrawn, .forcedErrorsCaused, .winnersConceded:
-            return true
-        default:
-            return false
-        }
-    }
 }
 
 struct TrendChart: View {
@@ -125,13 +109,19 @@ struct TrendChart: View {
         self.sampleCount = sampleCount
         self.dateByIndex = dateByIndex
         // Opponent-framed metrics start hidden; everything else starts shown.
-        _hiddenMetrics = State(initialValue: Set(series.map(\.metric).filter(\.isOpponentFramed)))
+        _hiddenMetrics = State(initialValue: Set(series.map(\.metric).filter(\.startsHidden)))
     }
 
     private enum RallyDepthMode: String, CaseIterable, Identifiable {
-        case mix, winRate
+        case mix, winRate, byServer
         var id: String { rawValue }
-        var label: String { self == .mix ? "Mix" : "Win Rate" }
+        var label: String {
+            switch self {
+            case .mix:      return "Mix"
+            case .winRate:  return "Win Rate"
+            case .byServer: return "By Server"
+            }
+        }
     }
 
     /// Narrows the Serve & Return group's six metrics to one question at a
@@ -181,7 +171,7 @@ struct TrendChart: View {
     /// present, in this order. Ratio-unit metrics (only W:UE today) stay the
     /// exception they always were: a single unbounded value per match reads
     /// better as a sparkline row than as a chart one match can blow out.
-    private static let unitOrder: [TrendMetric.Unit] = [.percent, .bpm, .steps, .metres, .minutes]
+    private static let unitOrder: [TrendMetric.Unit] = [.percent, .steps]
 
     private func bucket(_ unit: TrendMetric.Unit) -> [TrendSeries] {
         series.filter { $0.metric.unit == unit }
@@ -491,6 +481,17 @@ struct TrendChart: View {
     private var depthWinSeries: [TrendSeries] {
         series.filter { [.depthWinServe, .depthWinReturn, .depthWinServePlusOne, .depthWinRally].contains($0.metric) }
     }
+    /// Rally length split by who served — a different question from the two
+    /// modes above, which are about which PHASE points end in regardless of
+    /// side. All four are percentages, so they share the existing line chart
+    /// and this mode costs no extra chart. The two share lines start hidden
+    /// (`TrendMetric.startsHidden`), so the default view is the two win rates:
+    /// "rallies on my serve go badly, rallies on their serve go well" is the
+    /// actionable half, and the share lines say how often it comes up.
+    private var depthByServerSeries: [TrendSeries] {
+        series.filter { [.rallyWinOnServe, .rallyWinOnReturn,
+                         .rallyShareOnServe, .rallyShareOnReturn].contains($0.metric) }
+    }
 
     @ViewBuilder
     private var rallyDepthBody: some View {
@@ -513,6 +514,13 @@ struct TrendChart: View {
                 rallyDepthWinRateChart
                 selectionSummary(for: depthWinSeries)
                 staticLegend(for: depthWinSeries)
+            case .byServer:
+                let shown = plottable(depthByServerSeries)
+                lineChart(for: shown, unit: .percent)
+                selectionSummary(for: shown)
+                // The tappable legend, not `staticLegend`: the two share lines
+                // start hidden and this is how they come back.
+                legend(for: shown)
             }
         }
     }

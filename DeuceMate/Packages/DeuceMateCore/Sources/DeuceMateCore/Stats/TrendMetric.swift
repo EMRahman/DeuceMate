@@ -8,7 +8,7 @@ import Foundation
 /// screen's layout (§6.2).
 public enum TrendMetricGroup: String, CaseIterable, Identifiable, Sendable {
     case errors, attack, rallyDepth, serveReturn, pressure
-    case heartRate, movement, fatigue
+    case effort, fatigue
 
     public var id: String { rawValue }
 
@@ -19,8 +19,7 @@ public enum TrendMetricGroup: String, CaseIterable, Identifiable, Sendable {
         case .rallyDepth:  return "Rally Depth"
         case .serveReturn: return "Serve & Return"
         case .pressure:    return "Pressure"
-        case .heartRate:   return "Heart Rate"
-        case .movement:    return "Movement"
+        case .effort:      return "Effort"
         case .fatigue:     return "Fatigue"
         }
     }
@@ -44,10 +43,9 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
     case depthWinServe, depthWinReturn, depthWinServePlusOne, depthWinRally
     case firstServeIn, secondServeIn, firstServeWin, secondServeWin, returnWinFirst, returnWinSecond
     case breakPointsConverted, breakPointsSaved, bigPointWin, pointsWon
-    case avgHeartRate, hardZoneShare, hardZoneWinRate
-    case stepsPerPoint, stepsPerPointWon, metresPerPoint, minutesPerMatch
+    case rallyShareOnServe, rallyShareOnReturn, rallyWinOnServe, rallyWinOnReturn
+    case stepsPerPointWon
     case winRateFirstSet, winRateFinalSet
-    case avgHeartRateFirstSet, avgHeartRateFinalSet
     case stepsPerPointFirstSet, stepsPerPointFinalSet
 
     public var id: String { rawValue }
@@ -58,7 +56,7 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
     /// `.percent` and `.ratio` describe a share; the rest name a real unit,
     /// which is what makes them un-poolable onto one Y axis with the others —
     /// `TrendChart` buckets its series by this value for exactly that reason.
-    public enum Unit: Hashable, Sendable { case percent, ratio, bpm, steps, metres, minutes }
+    public enum Unit: Hashable, Sendable { case percent, ratio, steps }
 
     /// A metric's value on one match, as the pair it came from so the UI can
     /// print "12/38" as well as "32%". Mirrors `RatioDisplay`
@@ -88,11 +86,11 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
             return .serveReturn
         case .breakPointsConverted, .breakPointsSaved, .bigPointWin, .pointsWon:
             return .pressure
-        case .avgHeartRate, .hardZoneShare, .hardZoneWinRate:
-            return .heartRate
-        case .stepsPerPoint, .stepsPerPointWon, .metresPerPoint, .minutesPerMatch:
-            return .movement
-        case .winRateFirstSet, .winRateFinalSet, .avgHeartRateFirstSet, .avgHeartRateFinalSet,
+        case .rallyShareOnServe, .rallyShareOnReturn, .rallyWinOnServe, .rallyWinOnReturn:
+            return .rallyDepth
+        case .stepsPerPointWon:
+            return .effort
+        case .winRateFirstSet, .winRateFinalSet,
              .stepsPerPointFirstSet, .stepsPerPointFinalSet:
             return .fatigue
         }
@@ -129,17 +127,13 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         case .breakPointsSaved:        return "Break Points Saved"
         case .bigPointWin:             return "Big-Point Win %"
         case .pointsWon:               return "Points Won"
-        case .avgHeartRate:            return "Avg Heart Rate"
-        case .hardZoneShare:           return "Time in Z4–Z5"
-        case .hardZoneWinRate:         return "Win Rate in Z4–Z5"
-        case .stepsPerPoint:           return "Steps per Point"
+        case .rallyShareOnServe:       return "Rallies — On My Serve"
+        case .rallyShareOnReturn:      return "Rallies — On Return"
+        case .rallyWinOnServe:         return "Rally Win — On My Serve"
+        case .rallyWinOnReturn:        return "Rally Win — On Return"
         case .stepsPerPointWon:        return "Steps per Point Won"
-        case .metresPerPoint:          return "Metres per Point"
-        case .minutesPerMatch:         return "Minutes per Match"
         case .winRateFirstSet:         return "Points Won — First Set"
         case .winRateFinalSet:         return "Points Won — Final Set"
-        case .avgHeartRateFirstSet:    return "Avg HR — First Set"
-        case .avgHeartRateFinalSet:    return "Avg HR — Final Set"
         case .stepsPerPointFirstSet:   return "Steps/Point — First Set"
         case .stepsPerPointFinalSet:   return "Steps/Point — Final Set"
         }
@@ -177,28 +171,20 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
             return "of big points"
         case .pointsWon:
             return "of all points"
-        case .avgHeartRate:
-            return "across points with a heart-rate reading"
-        case .hardZoneShare:
-            return "of points with a heart-rate reading"
-        case .hardZoneWinRate:
-            return "of points in Z4–Z5"
-        case .stepsPerPoint:
-            return "across points with a step sample"
+        case .rallyShareOnServe:
+            return "of my service points with a recorded ending shot"
+        case .rallyShareOnReturn:
+            return "of return points with a recorded ending shot"
+        case .rallyWinOnServe:
+            return "of rallies on my serve"
+        case .rallyWinOnReturn:
+            return "of rallies on return"
         case .stepsPerPointWon:
             return "for each point won"
-        case .metresPerPoint:
-            return "across all points"
-        case .minutesPerMatch:
-            return "per match"
         case .winRateFirstSet:
             return "of points in the first set"
         case .winRateFinalSet:
             return "of points in the final set"
-        case .avgHeartRateFirstSet:
-            return "across first-set points with a heart-rate reading"
-        case .avgHeartRateFinalSet:
-            return "across final-set points with a heart-rate reading"
         case .stepsPerPointFirstSet:
             return "across first-set points with a step sample"
         case .stepsPerPointFinalSet:
@@ -215,14 +201,15 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
              .wueRatio, .aggressionIndex, .firstServeIn, .secondServeIn, .firstServeWin, .secondServeWin,
              .returnWinFirst, .returnWinSecond, .depthWinServe, .depthWinReturn,
              .depthWinServePlusOne, .depthWinRally, .breakPointsConverted, .breakPointsSaved,
-             .bigPointWin, .pointsWon, .hardZoneWinRate, .winRateFirstSet, .winRateFinalSet:
+             .bigPointWin, .pointsWon, .winRateFirstSet, .winRateFinalSet,
+             .rallyWinOnServe, .rallyWinOnReturn:
             return .higher
         case .depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally,
-             // Effort and load are context, not achievement: running more is
-             // neither good nor bad without knowing what it bought. Only
-             // `stepsPerPointWon` — cost per point actually won — is oriented.
-             .avgHeartRate, .hardZoneShare, .stepsPerPoint, .metresPerPoint, .minutesPerMatch,
-             .avgHeartRateFirstSet, .avgHeartRateFinalSet,
+             // How often points reach a rally is a style, not a grade — the
+             // paired win rate is what says whether that style pays. Per-set
+             // step load is likewise context: moving less late is only bad if
+             // the win rate fell with it, which is the chart above it.
+             .rallyShareOnServe, .rallyShareOnReturn,
              .stepsPerPointFirstSet, .stepsPerPointFinalSet:
             return .neutral
         }
@@ -232,14 +219,8 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .wueRatio:
             return .ratio
-        case .avgHeartRate, .avgHeartRateFirstSet, .avgHeartRateFinalSet:
-            return .bpm
-        case .stepsPerPoint, .stepsPerPointWon, .stepsPerPointFirstSet, .stepsPerPointFinalSet:
+        case .stepsPerPointWon, .stepsPerPointFirstSet, .stepsPerPointFinalSet:
             return .steps
-        case .metresPerPoint:
-            return .metres
-        case .minutesPerMatch:
-            return .minutes
         default:
             return .percent
         }
@@ -252,13 +233,7 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .wueRatio, .aggressionIndex, .ownErrorShare,
              .depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally,
-             // A summed bpm is not a quantity anyone wants plotted, and
-             // `stepsPerPointWon`'s numerator is the same match step load
-             // `stepsPerPoint` already draws — it would duplicate that line.
-             .avgHeartRate, .avgHeartRateFirstSet, .avgHeartRateFinalSet,
-             .hardZoneShare, .stepsPerPointWon,
-             // Denominator 1: the "count" and the rate are the same number.
-             .minutesPerMatch:
+             .rallyShareOnServe, .rallyShareOnReturn:
             return false
         default:
             return true
@@ -331,28 +306,27 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         case .pointsWon:
             return (sample.pointsWon, sample.totalPoints)
 
-        // Health-derived metrics. Every one of these returns `nil` — never a
-        // zero pair — when the match lacks the sampling the metric needs, so a
-        // match recorded with Health access off leaves a visible gap instead of
-        // a dot on the floor (PERFORMANCE_TRENDS_PLAN.md §3.4).
-        case .avgHeartRate:
-            guard sample.hrSampledPoints >= Self.minimumHRSamples else { return nil }
-            return (sample.hrSumBPM, sample.hrSampledPoints)
-        case .hardZoneShare:
-            guard sample.hrSampledPoints >= Self.minimumHRSamples else { return nil }
-            return (sample.hardZonePoints, sample.hrSampledPoints)
-        case .hardZoneWinRate:
-            // BOTH gates: without the sample-count one, a match with 6 HR
-            // readings that all happen to be Z5 plots a win rate while its two
-            // sibling metrics correctly refuse — and the section footer, which
-            // counts `minimumHRSamples` coverage, says the window has no
-            // heart-rate data at all.
-            guard sample.hrSampledPoints >= Self.minimumHRSamples,
-                  sample.hardZonePoints >= Self.minimumHardZonePoints else { return nil }
-            return (sample.hardZoneWins, sample.hardZonePoints)
-        case .stepsPerPoint:
-            guard sample.stepSampledPoints >= Self.minimumStepSamples else { return nil }
-            return (sample.stepSumLoad, sample.stepSampledPoints)
+        // Rally length by SERVING SIDE. The split is on who served, which is a
+        // different axis from `EndingShot` — `.serve` is the phase a point
+        // ended in, so a point ending on the return shot is still a point I
+        // served. `nil` (not zero) when that side carries no ending-shot data,
+        // which is every match archived before `PointStat.endingShot` existed.
+        case .rallyShareOnServe:
+            guard sample.pointsWithEndingShotOnServe > 0 else { return nil }
+            return (sample.rallyDepthOnServe[.rally]?.total ?? 0, sample.pointsWithEndingShotOnServe)
+        case .rallyShareOnReturn:
+            guard sample.pointsWithEndingShotOnReturn > 0 else { return nil }
+            return (sample.rallyDepthOnReturn[.rally]?.total ?? 0, sample.pointsWithEndingShotOnReturn)
+        case .rallyWinOnServe:
+            guard let depth = sample.rallyDepthOnServe[.rally] else { return nil }
+            return (depth.wins, depth.total)
+        case .rallyWinOnReturn:
+            guard let depth = sample.rallyDepthOnReturn[.rally] else { return nil }
+            return (depth.wins, depth.total)
+
+        // Movement. `nil` — never a zero pair — when the match lacks the step
+        // sampling the metric needs, so a match recorded with Health access off
+        // leaves a visible gap (PERFORMANCE_TRENDS_PLAN.md §3.4).
         case .stepsPerPointWon:
             // `stepSampledPointsWon`, NOT `pointsWon`: the numerator covers only
             // the sampled window, so a full-match denominator would make the
@@ -361,14 +335,6 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
             guard sample.stepSampledPoints >= Self.minimumStepSamples,
                   sample.stepSampledPointsWon > 0 else { return nil }
             return (sample.stepSumLoad, sample.stepSampledPointsWon)
-        case .metresPerPoint:
-            guard let metres = sample.distanceMetres, sample.totalPoints > 0 else { return nil }
-            return (metres, sample.totalPoints)
-        case .minutesPerMatch:
-            guard let minutes = sample.elapsedMinutes else { return nil }
-            // Denominator 1: pooling a block then reduces to the mean match
-            // length, which is the figure this metric is asking for.
-            return (minutes, 1)
 
         // Fatigue pairs. Each checks BOTH slices before returning either, so a
         // set that lacks the sampling can never leave its partner drawn alone —
@@ -377,12 +343,6 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
             guard let split = sample.fatigue else { return nil }
             let slice = self == .winRateFirstSet ? split.firstSet : split.finalSet
             return (slice.pointsWon, slice.points)
-        case .avgHeartRateFirstSet, .avgHeartRateFinalSet:
-            guard let split = sample.fatigue,
-                  split.firstSet.hrSampledPoints >= Self.minimumFatigueSamples,
-                  split.finalSet.hrSampledPoints >= Self.minimumFatigueSamples else { return nil }
-            let slice = self == .avgHeartRateFirstSet ? split.firstSet : split.finalSet
-            return (slice.hrSumBPM, slice.hrSampledPoints)
         case .stepsPerPointFirstSet, .stepsPerPointFinalSet:
             guard let split = sample.fatigue,
                   split.firstSet.stepSampledPoints >= Self.minimumFatigueSamples,
@@ -392,14 +352,27 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// Metrics that start hidden behind a legend tap. Two families: the
+    /// opponent-framed counters (their trend is one tap away, not the headline),
+    /// and the rally SHARE lines, whose paired win rates carry the actionable
+    /// half of the same question.
+    public var startsHidden: Bool {
+        isOpponentFramed || self == .rallyShareOnServe || self == .rallyShareOnReturn
+    }
+
+    /// The metric counts something that happened to/because of the OPPONENT
+    /// rather than the recorder's own shot.
+    public var isOpponentFramed: Bool {
+        switch self {
+        case .doubleFaultsConceded, .unforcedErrorsDrawn, .forcedErrorsCaused, .winnersConceded:
+            return true
+        default:
+            return false
+        }
+    }
+
     // MARK: - Health coverage gates
 
-    /// Fewest heart-rate samples a match needs before its HR metrics mean
-    /// anything. Same bar `PulseCoachInsights.generate` sets before it will say
-    /// a word about heart rate (PulseCoachInsights.swift:19).
-    public static let minimumHRSamples = 10
-    /// Fewest Z4+Z5 points before a win rate over them is worth plotting.
-    public static let minimumHardZonePoints = 5
     /// Fewest sampled step points, matching `StepsCoachInsights`' own
     /// `timeline.count >= 10`.
     public static let minimumStepSamples = 10
