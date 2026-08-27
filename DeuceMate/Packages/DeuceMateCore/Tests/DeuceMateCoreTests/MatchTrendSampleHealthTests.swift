@@ -186,6 +186,26 @@ final class MatchTrendSampleHealthTests: XCTestCase {
         XCTAssertNotNil(TrendMetric.winRateSet2.rawPair(in: sample))
     }
 
+    /// A straight-sets win never reaches the decider. `.standard`'s
+    /// `finalSetStyle` says the decider WOULD be a super-tiebreak, but a match
+    /// that ends 6-4 6-3 stops at set index 1, and that set is an ordinary
+    /// second set. Classifying it by "is this the last set played" mislabels
+    /// every straight-sets match: Set 2 vanishes and the Super TB series fills
+    /// up with regular second sets.
+    func test_straightSetsWin_hasNoDecidingTiebreak() throws {
+        let record = makeRecord(sets: [
+            SetSpec(index: 0, points: 30, wins: 18),
+            SetSpec(index: 1, points: 28, wins: 17)
+        ], matchFormat: .standard)
+        let sample = try XCTUnwrap(MatchTrendSample(record: record))
+
+        XCTAssertNil(sample.decidingTiebreakSlice, "the match never reached a decider")
+        XCTAssertNotNil(sample.fullSetSlice(1), "set 2 is an ordinary set here")
+        XCTAssertEqual(TrendMetric.winRateSet2.rawPair(in: sample)?.numerator, 17)
+        XCTAssertEqual(TrendMetric.winRateSet2.rawPair(in: sample)?.denominator, 28)
+        XCTAssertNil(TrendMetric.winRateDecidingTiebreak.rawPair(in: sample))
+    }
+
     /// A super-tiebreak is a complete set at ~12 points, so holding it to the
     /// 20-point full-set bar would silently drop the decider from every
     /// `.standard` three-setter.

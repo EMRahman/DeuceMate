@@ -348,9 +348,19 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
 
         // The decider is a super-tiebreak when the FORMAT says so — `.standard`,
         // the default, plays its third set as a 10-point tiebreak, while
-        // `.bestOf3FullFinalSet` plays a real one. This is exact for a completed
-        // match: the deciding set only exists when the match went the distance.
-        let decidesWithTiebreak = record.matchFormat.config.finalSetStyle == .superTiebreak
+        // `.bestOf3FullFinalSet` plays a real one.
+        //
+        // But the format only describes what the decider WOULD be; a match has
+        // to actually reach it. The deciding set is the one that can only be
+        // played at one-set-all, which for a best-of-(2n−1) is index 2n−2 — set
+        // index 2 in a best-of-3. Testing "is this the last set played" instead
+        // mislabels every straight-sets win: a 6-4 6-3 in `.standard` ends at
+        // index 1, and flagging that ordinary second set as the decider drops
+        // Set 2 from the chart entirely while filling the Super TB series with
+        // regular second sets.
+        let config = record.matchFormat.config
+        let decidesWithTiebreak = config.finalSetStyle == .superTiebreak
+        let decidingSetIndex = config.setsToWin * 2 - 2
 
         // Bucket the timeline once rather than re-filtering it per set.
         let stepsBySet = Dictionary(grouping: summary.stepsTimeline, by: \.setIndex)
@@ -366,7 +376,9 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
                 pointsWon: counts.won,
                 stepSampledPoints: steps.count,
                 stepSumLoad: steps.reduce(0) { $0 + $1.perPointSteps },
-                isDecidingTiebreak: index == decidingIndex && decidesWithTiebreak
+                isDecidingTiebreak: decidesWithTiebreak
+                    && index == decidingSetIndex
+                    && index == decidingIndex
             )
         }
     }

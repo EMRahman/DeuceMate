@@ -188,6 +188,30 @@ struct TrendChart: View {
     private func bucket(_ unit: TrendMetric.Unit) -> [TrendSeries] {
         series.filter { $0.metric.unit == unit }
     }
+
+    /// Subheading for one unit bucket's chart inside a group.
+    ///
+    /// Fatigue needs this in a way the other groups don't: its series are named
+    /// for WHICH SET they are ("Set 1", "Set 2"), not for what is being
+    /// measured, so its two charts are otherwise unlabelled and a reader can't
+    /// tell the points-won chart from the steps one except by the axis. Every
+    /// other group's legend already names the quantity on every line, so they
+    /// keep the plain unit caption.
+    private func chartCaption(for unit: TrendMetric.Unit) -> String? {
+        switch (group, unit) {
+        case (.fatigue, .percent):
+            // Accurate in both display modes: the numerator Count mode plots is
+            // literally the points won in that set.
+            return "Points Won"
+        case (.fatigue, .steps):
+            // Count mode plots the set's raw step total, not the per-point rate.
+            return displayMode == .count ? "Steps" : "Steps per Point"
+        default:
+            // Elsewhere the caption only ever described a per-point unit, which
+            // Count mode's raw numerators would make untrue.
+            return displayMode == .count ? nil : unit.axisCaption
+        }
+    }
     private var ratioSeries: [TrendSeries] { series.filter { $0.metric.unit == .ratio } }
 
     @ViewBuilder
@@ -202,13 +226,11 @@ struct TrendChart: View {
                 // coverage in this window (a Health-free archive's bpm bucket).
                 // Both mean "draw nothing here", not "draw an empty axis".
                 if !shown.isEmpty && !shown.allSatisfy({ $0.points.isEmpty }) {
-                    // Count mode plots raw numerators (whole-match step or
-                    // metre totals), not the per-point rate the caption names,
-                    // so the caption is suppressed rather than left lying.
-                    if displayMode != .count, let caption = unit.axisCaption {
+                    if let caption = chartCaption(for: unit) {
                         Text(caption)
-                            .font(.caption2)
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
+                            .accessibilityAddTraits(.isHeader)
                     }
                     lineChart(for: shown, unit: unit)
                     selectionSummary(for: shown)
