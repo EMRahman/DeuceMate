@@ -7,7 +7,7 @@ date: 2026-08-26
 implemented_date: 2026-08-26
 blocked_by: null
 delivers: "The movement half of docs/features/PERFORMANCE_TRENDS_PLAN.md, plus rally length split by serving side. Shipped first as three groups and 13 metrics; reduced in the same branch to two groups and 5 metrics after review — see section 3's 'What was cut, and why', which is the part to read before proposing a new metric here."
-metric_count: "4 fatigue metrics in 1 group (2 charts), plus 8 per-serving-side rally-depth share metrics in their own group (1 mode-switched chart)."
+metric_count: "8 fatigue metrics in 1 group (2 charts of 4 series each), plus 8 per-serving-side rally-depth share metrics in their own group (1 mode-switched chart)."
 scope:
   in_scope:
     - "Packages/DeuceMateCore/Sources/DeuceMateCore/Stats/MatchTrendSample.swift (health counters, a maxHR parameter, the fatigue set-pair rule)"
@@ -37,7 +37,7 @@ key_data_model_facts:
   - "MatchStatsSummary.rallyDepthOnServe + rallyDepthOnReturn sum back to rallyDepth, which is the cheapest assertion available that the partition is right."
   - "A private STORED property makes a SwiftUI View's synthesized memberwise init private too (unlike a private property-wrapped one), so views holding a MaxHRSetting declare it internal."
 decisions:
-  fatigue_basis: "set-based — first played set vs last played set, both needing 20 points (owner decision over chronological halves)"
+  fatigue_basis: "set-based, one series per played set (Set 1/2/3), with a deciding super-tiebreak carried as its own series and colour since .standard plays its third set that way"
   zones: "cut. Shipped in the first pass at the owner's request, then removed with the rest of heart rate — a metric that needs a yardstick the user can change is not worth a chart"
   group_count: "two — Fatigue, and Rally Depth — By Service. The screen budget is the binding constraint, not the metric count: 8 of the per-side metrics share one mode-switched chart"
   keeping_a_chart: "a chart earns its place only if the number moving tells the player to do something differently. Load and duration are context, not instruction"
@@ -96,7 +96,7 @@ because they were better" is unknowable — every efficiency metric carries that
 5. **Zones are a moving yardstick** — handled by the composite cache key and a calibration
    caption, never by silently re-deriving behind the user's back.
 
-## 3. The catalogue — 4 metrics, 2 charts, 1 group
+## 3. The catalogue — 8 metrics, 2 charts, 1 group
 
 The first cut of this feature shipped 13 metrics across three groups and **8 charts**, on a
 screen that already had five groups. Most of them reported *load* rather than anything a
@@ -104,35 +104,53 @@ player can act on, so the catalogue was reduced to the ones that pass a single t
 this number, moving, tell you to do something differently?
 
 ### Fatigue
-| Metric pair | numerator / denominator | unit | better |
-|---|---|---|---|
-| `winRateFirstSet` / `winRateFinalSet` | points won in set / points in set | `.percent` | higher |
-| `stepsPerPointFirstSet` / `stepsPerPointFinalSet` | Σ steps in set / step samples in set | `.steps` | neutral |
+| Metric family | series | numerator / denominator | unit | better |
+|---|---|---|---|---|
+| Points won | Set 1, Set 2, Set 3, Set 3 (Super TB) | points won in set / points in set | `.percent` | higher |
+| Steps per point | Set 1, Set 2, Set 3, Set 3 (Super TB) | Σ steps in set / step samples in set | `.steps` | neutral |
 
-Two charts, and together they separate *do I fade* from *why*: a win rate that drops while
-step load holds is a decision or technique problem; both dropping together is conditioning.
-The win-rate pair needs **no HealthKit data at all**, so it is the one thing here that
-still works for a player who never granted Health access and for an archive restored from
-iCloud, where health data is permanently gone.
+Two charts, four series each. Together they separate *do I fade* from *why*: a win rate
+that drops across the sets while step load holds is a decision or technique problem; both
+dropping together is conditioning. The points-won chart needs **no HealthKit data at all**,
+so it is the one thing here that still works for a player who never granted Health access
+and for an archive restored from iCloud, where health data is permanently gone.
 
-### The set-pair rule (used by both Fatigue pairs)
+**The decider is its own series when the format plays it as a super-tiebreak.**
+`.standard` — the app's default — plays its third set as a 10-point tiebreak, while
+`.bestOf3FullFinalSet` plays a real one. Pooling the two would compare a dozen-odd points
+against sixty, so `winRateDecidingTiebreak` / `stepsPerPointDecidingTiebreak` carry it
+separately, labelled "Set 3 (Super TB)" and coloured **purple** — deliberately outside the
+green → orange → red set-1-to-3 ramp, so it reads as a different kind of thing rather than
+as the end of the progression. A match contributes to `winRateSet3` **or** to
+`winRateDecidingTiebreak`, never both.
 
-Resolved once per match: the **first played set** and the **last played set**, both needing
-20 points. It is a rule, not a search — hunting for "the first two sets that qualify" would
-let the metric mean set 1 vs 3 on one match and set 2 vs 3 on the next. Single-set formats
-therefore produce no fatigue dots; a ~15-point super-tiebreak decider is excluded by the
-20-point gate, so a full set is never compared against a 10-point tiebreak; and in-progress
-matches produce none at all, since their final set is still being played.
+The two kinds also gate differently: a full set needs `minimumFullSetPoints` (20, cited
+from `RecCoachInsights`), a super-tiebreak needs `minimumTiebreakPoints` (10). Holding the
+tiebreak to the full-set bar would silently drop the decider from every `.standard`
+three-setter — the format the app defaults to.
 
-Each pair checks **both** slices before returning either, so a set that lacks coverage can
-never leave its partner drawn alone. The two step slices additionally drop each set's first
-sample: a `stepsTimeline` entry's load is measured from the previous sample, so a set's
-opening entry is the match-wide baseline (load 0) in the first set and spans the whole
-inter-set changeover in the final one. Both distortions push the same way — "you moved more
+Each set gates **independently**. A match that went two sets simply has no Set 3 dot, and
+that gap is the honest reading rather than missing data. This deliberately replaces the
+earlier first-vs-final *pair*, where both lines were suppressed unless both sets had
+coverage: half of a two-line comparison reads as the whole answer, but a gap in a named
+"Set 1" line does not.
+
+### Structural rules on the slices
+
+Two rules live in `MatchTrendSample.setSlices` rather than in the metrics, because they are
+about whether the match can support a per-set reading at all:
+
+- **At least two sets.** A single-set match has nothing to compare across, which also
+  excludes the tiebreak-only formats and `.quick4Games`.
+- **Nothing from an in-progress match.** Its last set is still being played, so its rates
+  would drift point by point. Every other counter on the sample stays valid for a live
+  match.
+
+The step slices drop each set's first sample: a `stepsTimeline` entry's load is measured from the previous sample, so a set's
+opening entry is the match-wide baseline (load 0) in the opening set and spans the whole
+inter-set changeover in every later one. Both distortions push the same way — "you moved more
 when tired" — in the metric that exists to answer exactly that. Two sets of identical
-movement read 3.87 vs 4.00 before the drop and equal after it. The whole-match figure would
-keep its baseline entry to stay equal to `MatchStatsSummary.averageSteps`, which is why the
-per-set and whole-match conventions deliberately differ.
+movement read 3.87 vs 4.00 before the drop and equal after it.
 
 ### What was cut, and why
 

@@ -45,8 +45,8 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
     case breakPointsConverted, breakPointsSaved, bigPointWin, pointsWon
     case servedShareServe, servedShareReturn, servedShareServePlusOne, servedShareRally
     case returnedShareServe, returnedShareReturn, returnedShareServePlusOne, returnedShareRally
-    case winRateFirstSet, winRateFinalSet
-    case stepsPerPointFirstSet, stepsPerPointFinalSet
+    case winRateSet1, winRateSet2, winRateSet3, winRateDecidingTiebreak
+    case stepsPerPointSet1, stepsPerPointSet2, stepsPerPointSet3, stepsPerPointDecidingTiebreak
 
     public var id: String { rawValue }
 
@@ -89,8 +89,8 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         case .servedShareServe, .servedShareReturn, .servedShareServePlusOne, .servedShareRally,
              .returnedShareServe, .returnedShareReturn, .returnedShareServePlusOne, .returnedShareRally:
             return .rallyDepthByService
-        case .winRateFirstSet, .winRateFinalSet,
-             .stepsPerPointFirstSet, .stepsPerPointFinalSet:
+        case .winRateSet1, .winRateSet2, .winRateSet3, .winRateDecidingTiebreak,
+             .stepsPerPointSet1, .stepsPerPointSet2, .stepsPerPointSet3, .stepsPerPointDecidingTiebreak:
             return .fatigue
         }
     }
@@ -133,10 +133,14 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         case .servedShareReturn, .returnedShareReturn:             return "Ending on Return"
         case .servedShareServePlusOne, .returnedShareServePlusOne: return "Ending on S+1"
         case .servedShareRally, .returnedShareRally:               return "Ending in Rally"
-        case .winRateFirstSet:         return "Points Won — First Set"
-        case .winRateFinalSet:         return "Points Won — Final Set"
-        case .stepsPerPointFirstSet:   return "Steps/Point — First Set"
-        case .stepsPerPointFinalSet:   return "Steps/Point — Final Set"
+        // Both fatigue charts share one vocabulary — the chart's own unit
+        // caption says which quantity is being plotted, so repeating it in four
+        // legend chips would be noise.
+        case .winRateSet1, .stepsPerPointSet1:   return "Set 1"
+        case .winRateSet2, .stepsPerPointSet2:   return "Set 2"
+        case .winRateSet3, .stepsPerPointSet3:   return "Set 3"
+        case .winRateDecidingTiebreak, .stepsPerPointDecidingTiebreak:
+            return "Set 3 (Super TB)"
         }
     }
 
@@ -176,14 +180,16 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
             return "of my service points with a recorded ending shot"
         case .returnedShareServe, .returnedShareReturn, .returnedShareServePlusOne, .returnedShareRally:
             return "of return points with a recorded ending shot"
-        case .winRateFirstSet:
-            return "of points in the first set"
-        case .winRateFinalSet:
-            return "of points in the final set"
-        case .stepsPerPointFirstSet:
-            return "across first-set points with a step sample"
-        case .stepsPerPointFinalSet:
-            return "across final-set points with a step sample"
+        case .winRateSet1:  return "of points in set 1"
+        case .winRateSet2:  return "of points in set 2"
+        case .winRateSet3:  return "of points in set 3"
+        case .winRateDecidingTiebreak:
+            return "of points in the deciding super tiebreak"
+        case .stepsPerPointSet1: return "across set 1 points with a step sample"
+        case .stepsPerPointSet2: return "across set 2 points with a step sample"
+        case .stepsPerPointSet3: return "across set 3 points with a step sample"
+        case .stepsPerPointDecidingTiebreak:
+            return "across super-tiebreak points with a step sample"
         }
     }
 
@@ -195,7 +201,8 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
              .wueRatio, .aggressionIndex, .firstServeIn, .secondServeIn, .firstServeWin, .secondServeWin,
              .returnWinFirst, .returnWinSecond, .depthWinServe, .depthWinReturn,
              .depthWinServePlusOne, .depthWinRally, .breakPointsConverted, .breakPointsSaved,
-             .bigPointWin, .pointsWon, .winRateFirstSet, .winRateFinalSet:
+             .bigPointWin, .pointsWon,
+             .winRateSet1, .winRateSet2, .winRateSet3, .winRateDecidingTiebreak:
             return .higher
         case .depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally,
              // Where points END is a style, not a grade — on either side of
@@ -204,7 +211,8 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
              // chart above it.
              .servedShareServe, .servedShareReturn, .servedShareServePlusOne, .servedShareRally,
              .returnedShareServe, .returnedShareReturn, .returnedShareServePlusOne, .returnedShareRally,
-             .stepsPerPointFirstSet, .stepsPerPointFinalSet:
+             .stepsPerPointSet1, .stepsPerPointSet2, .stepsPerPointSet3,
+             .stepsPerPointDecidingTiebreak:
             return .neutral
         }
     }
@@ -213,7 +221,8 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .wueRatio:
             return .ratio
-        case .stepsPerPointFirstSet, .stepsPerPointFinalSet:
+        case .stepsPerPointSet1, .stepsPerPointSet2, .stepsPerPointSet3,
+             .stepsPerPointDecidingTiebreak:
             return .steps
         default:
             return .percent
@@ -316,19 +325,17 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         case .returnedShareServePlusOne: return returnedSharePair(.servePlusOne, in: sample)
         case .returnedShareRally:        return returnedSharePair(.rally, in: sample)
 
-        // Fatigue pairs. Each checks BOTH slices before returning either, so a
-        // set that lacks the sampling can never leave its partner drawn alone —
-        // one line of a two-line comparison reads as a complete answer.
-        case .winRateFirstSet, .winRateFinalSet:
-            guard let split = sample.fatigue else { return nil }
-            let slice = self == .winRateFirstSet ? split.firstSet : split.finalSet
-            return (slice.pointsWon, slice.points)
-        case .stepsPerPointFirstSet, .stepsPerPointFinalSet:
-            guard let split = sample.fatigue,
-                  split.firstSet.stepSampledPoints >= Self.minimumFatigueSamples,
-                  split.finalSet.stepSampledPoints >= Self.minimumFatigueSamples else { return nil }
-            let slice = self == .stepsPerPointFirstSet ? split.firstSet : split.finalSet
-            return (slice.stepSumLoad, slice.stepSampledPoints)
+        // Fatigue, one series per set. Each set gates independently: a match
+        // that only went two sets has no set-3 dot, and that gap is the honest
+        // reading rather than missing data.
+        case .winRateSet1: return winRatePair(sample.fullSetSlice(0))
+        case .winRateSet2: return winRatePair(sample.fullSetSlice(1))
+        case .winRateSet3: return winRatePair(sample.fullSetSlice(2))
+        case .winRateDecidingTiebreak: return winRatePair(sample.decidingTiebreakSlice)
+        case .stepsPerPointSet1: return setStepsPair(sample.fullSetSlice(0))
+        case .stepsPerPointSet2: return setStepsPair(sample.fullSetSlice(1))
+        case .stepsPerPointSet3: return setStepsPair(sample.fullSetSlice(2))
+        case .stepsPerPointDecidingTiebreak: return setStepsPair(sample.decidingTiebreakSlice)
         }
     }
 
@@ -349,8 +356,33 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
 
     // MARK: - Health coverage gates
 
-    /// Fewest samples in EACH of the two compared sets, per family.
+    /// Fewest samples a set needs before its step figure is worth plotting.
     public static let minimumFatigueSamples = 5
+    /// Fewest points a FULL set must contain to be plotted. Same number
+    /// `RecCoachInsights`' set-duration decline rule requires
+    /// (RecCoachInsights.swift:277) — one threshold, cited rather than
+    /// re-invented.
+    public static let minimumFullSetPoints = 20
+    /// The same bar for a deciding super-tiebreak, which is a complete set at
+    /// around a dozen points. Holding it to the full-set minimum would silently
+    /// drop the decider from every `.standard` three-setter — the format the app
+    /// defaults to.
+    public static let minimumTiebreakPoints = 10
+
+    /// A set's win rate, gated on the point count appropriate to its kind.
+    private func winRatePair(_ slice: MatchTrendSample.SetSlice?) -> (Int, Int)? {
+        guard let slice else { return nil }
+        let minimum = slice.isDecidingTiebreak ? Self.minimumTiebreakPoints : Self.minimumFullSetPoints
+        guard slice.points >= minimum else { return nil }
+        return (slice.pointsWon, slice.points)
+    }
+
+    /// A set's steps per point. Gated on step SAMPLES, not on the set's point
+    /// count — the two denominators are different things.
+    private func setStepsPair(_ slice: MatchTrendSample.SetSlice?) -> (Int, Int)? {
+        guard let slice, slice.stepSampledPoints >= Self.minimumFatigueSamples else { return nil }
+        return (slice.stepSumLoad, slice.stepSampledPoints)
+    }
 
     private func depthSharePair(_ shot: EndingShot, in sample: MatchTrendSample) -> (Int, Int)? {
         guard sample.pointsWithEndingShot > 0 else { return nil }

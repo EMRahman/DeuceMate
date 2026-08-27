@@ -165,8 +165,10 @@ final class TrendMetricTests: XCTestCase {
     func test_everyMetric_hasItsExpectedUnit() {
         let nonPercent: [TrendMetric: TrendMetric.Unit] = [
             .wueRatio: .ratio,
-            .stepsPerPointFirstSet: .steps,
-            .stepsPerPointFinalSet: .steps
+            .stepsPerPointSet1: .steps,
+            .stepsPerPointSet2: .steps,
+            .stepsPerPointSet3: .steps,
+            .stepsPerPointDecidingTiebreak: .steps
         ]
         for metric in TrendMetric.allCases {
             XCTAssertEqual(metric.unit, nonPercent[metric] ?? .percent, "\(metric)")

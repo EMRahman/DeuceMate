@@ -99,8 +99,8 @@ struct TrendsView: View {
         let subject: String
         switch group {
         case .fatigue:
-            covered = scopedSamples.filter { $0.fatigue != nil }.count
-            subject = "two comparable sets"
+            covered = scopedSamples.filter { !$0.setSlices.isEmpty }.count
+            subject = "two or more completed sets"
         case .errors, .attack, .rallyDepth, .rallyDepthByService, .serveReturn, .pressure:
             return nil
         }

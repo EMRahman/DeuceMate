@@ -58,12 +58,17 @@ extension TrendMetric {
         case .servedShareReturn, .returnedShareReturn:             return .indigo
         case .servedShareServePlusOne, .returnedShareServePlusOne: return .pink
         case .servedShareRally, .returnedShareRally:               return .brown
-        // Fatigue pairs: first set vs final set, distinct enough to read
-        // apart at a glance since the gap between them IS the metric.
-        case .winRateFirstSet:                                return .green
-        case .winRateFinalSet:                                return .orange
-        case .stepsPerPointFirstSet:                          return .cyan
-        case .stepsPerPointFinalSet:                          return .blue
+        // Fatigue: one hue per set, shared by both fatigue charts so "orange
+        // is set 2" holds across them. The set 1 → 3 ramp runs green → orange →
+        // red (fresh to worn); the deciding super-tiebreak breaks OUT of that
+        // ramp into purple rather than sitting at its end, because it is a
+        // third set by position but not by workload — a dozen-odd points
+        // against sixty — and must not be read as a like-for-like set 3.
+        case .winRateSet1, .stepsPerPointSet1:                return .green
+        case .winRateSet2, .stepsPerPointSet2:                return .orange
+        case .winRateSet3, .stepsPerPointSet3:                return .red
+        case .winRateDecidingTiebreak, .stepsPerPointDecidingTiebreak:
+            return .purple
         }
     }
 

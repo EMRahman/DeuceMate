@@ -31,13 +31,17 @@ final class MatchTrendSampleHealthTests: XCTestCase {
     /// Builds a categorized match from set specs. Timestamps increase across
     /// the whole match so `stepsTimeline` order matches play order, and step
     /// cumulatives run continuously across sets the way a real workout's do.
+    /// Defaults to `.bestOf3FullFinalSet` so a third set in these fixtures is a
+    /// TRUE third set. `.standard` — the app's default — plays its decider as a
+    /// super-tiebreak, which is a different series; the tests that care pass it
+    /// explicitly.
     private func makeRecord(
         sets: [SetSpec],
         inProgress: Bool = false,
         totalSteps: Int? = nil,
         totalDistanceMeters: Double? = nil,
         matchElapsedSeconds: TimeInterval = 3600,
-        matchFormat: MatchFormat = .standard
+        matchFormat: MatchFormat = .bestOf3FullFinalSet
     ) -> MatchRecord {
         var stats: [PointStat] = []
         var cumulative = 1000
@@ -89,19 +93,20 @@ final class MatchTrendSampleHealthTests: XCTestCase {
             SetSpec(index: 0, points: 30, wins: 18, stepDelta: 4),
             SetSpec(index: 1, points: 30, wins: 12, stepDelta: 4)
         ])
-        let split = try XCTUnwrap(MatchTrendSample(record: record)?.fatigue)
+        let slices = try XCTUnwrap(MatchTrendSample(record: record)).setSlices
 
-        XCTAssertEqual(split.firstSet.points, 30)
-        XCTAssertEqual(split.firstSet.pointsWon, 18)
-        XCTAssertEqual(split.finalSet.points, 30)
-        XCTAssertEqual(split.finalSet.pointsWon, 12)
+        XCTAssertEqual(slices.map(\.setIndex), [0, 1])
+        XCTAssertEqual(slices[0].points, 30)
+        XCTAssertEqual(slices[0].pointsWon, 18)
+        XCTAssertEqual(slices[1].points, 30)
+        XCTAssertEqual(slices[1].pointsWon, 12)
 
         // 30 samples each, less each set's own opening delta.
-        XCTAssertEqual(split.firstSet.stepSampledPoints, 29)
-        XCTAssertEqual(split.finalSet.stepSampledPoints, 29)
-        XCTAssertEqual(split.firstSet.stepSumLoad, 4 * 29)
-        XCTAssertEqual(split.finalSet.stepSumLoad, 4 * 29)
-        XCTAssertNotEqual(split.firstSet.points, split.firstSet.stepSampledPoints,
+        XCTAssertEqual(slices[0].stepSampledPoints, 29)
+        XCTAssertEqual(slices[1].stepSampledPoints, 29)
+        XCTAssertEqual(slices[0].stepSumLoad, 4 * 29)
+        XCTAssertEqual(slices[1].stepSumLoad, 4 * 29)
+        XCTAssertNotEqual(slices[0].points, slices[0].stepSampledPoints,
                           "the two families must not share a denominator")
     }
 
@@ -115,7 +120,7 @@ final class MatchTrendSampleHealthTests: XCTestCase {
         // Tennis metrics are untouched.
         XCTAssertNotNil(TrendMetric.pointsWon.rawPair(in: sample))
         // Every movement metric declines to produce a pair.
-        for metric: TrendMetric in [.stepsPerPointFirstSet, .stepsPerPointFinalSet] {
+        for metric: TrendMetric in [.stepsPerPointSet1, .stepsPerPointSet2] {
             XCTAssertNil(metric.rawPair(in: sample), "\(metric) invented data from nothing")
         }
     }
@@ -137,35 +142,76 @@ final class MatchTrendSampleHealthTests: XCTestCase {
 
     // MARK: - The fatigue set-pair rule
 
-    func test_fatigue_comparesTheFirstAndLastPlayedSet_notAdjacentOnes() throws {
+    /// Every played set gets its own series — the middle set is no longer
+    /// collapsed away into a first-vs-last comparison.
+    func test_everyPlayedSet_getsItsOwnSeries() throws {
         let record = makeRecord(sets: [
             SetSpec(index: 0, points: 30, wins: 21, stepDelta: 4),
             SetSpec(index: 1, points: 26, wins: 13, stepDelta: 5),
             SetSpec(index: 2, points: 28, wins: 11, stepDelta: 6)
         ])
-        let split = try XCTUnwrap(MatchTrendSample(record: record)?.fatigue)
+        let sample = try XCTUnwrap(MatchTrendSample(record: record))
 
-        XCTAssertEqual(split.firstSet.setIndex, 0)
-        XCTAssertEqual(split.finalSet.setIndex, 2)
-        XCTAssertEqual(split.firstSet.points, 30)
-        XCTAssertEqual(split.firstSet.pointsWon, 21)
-        XCTAssertEqual(split.finalSet.points, 28)
-        XCTAssertEqual(split.finalSet.pointsWon, 11)
-        XCTAssertEqual(split.finalSet.stepSampledPoints, 27, "the set's opening delta is dropped")
+        XCTAssertEqual(sample.setSlices.map(\.setIndex), [0, 1, 2])
+        XCTAssertEqual(TrendMetric.winRateSet1.rawPair(in: sample)?.numerator, 21)
+        XCTAssertEqual(TrendMetric.winRateSet2.rawPair(in: sample)?.numerator, 13)
+        XCTAssertEqual(TrendMetric.winRateSet3.rawPair(in: sample)?.numerator, 11)
+        XCTAssertEqual(TrendMetric.winRateSet3.rawPair(in: sample)?.denominator, 28)
+        // A full third set is not a super-tiebreak, so that series stays empty.
+        XCTAssertNil(TrendMetric.winRateDecidingTiebreak.rawPair(in: sample))
+        XCTAssertEqual(sample.setSlices[2].stepSampledPoints, 27, "the set's opening delta is dropped")
     }
 
-    func test_fatigue_isNilWhenEitherSetIsTooShort() throws {
-        // A super-tiebreak decider is a "set" by index but not by workload.
-        let record = makeRecord(sets: [
-            SetSpec(index: 0, points: 30, wins: 18, stepDelta: 4),
-            SetSpec(index: 1, points: 15, wins: 6, stepDelta: 5)
+    /// `.standard` — the app's DEFAULT format — plays its third set as a
+    /// 10-point super-tiebreak. Averaging that in with true third sets would
+    /// compare a dozen-odd points against sixty, so it plots as its own series
+    /// (and, in the chart, its own colour).
+    func test_decidingSuperTiebreak_plotsSeparatelyFromATrueThirdSet() throws {
+        let superTB = makeRecord(sets: [
+            SetSpec(index: 0, points: 30, wins: 18),
+            SetSpec(index: 1, points: 28, wins: 12),
+            SetSpec(index: 2, points: 14, wins: 6)      // a 10-point tiebreak
+        ], matchFormat: .standard)
+        let sample = try XCTUnwrap(MatchTrendSample(record: superTB))
+
+        XCTAssertTrue(try XCTUnwrap(sample.decidingTiebreakSlice).isDecidingTiebreak)
+        XCTAssertEqual(sample.decidingTiebreakSlice?.setIndex, 2)
+        XCTAssertNil(sample.fullSetSlice(2), "a super-tiebreak must not also count as Set 3")
+        XCTAssertNil(TrendMetric.winRateSet3.rawPair(in: sample))
+        XCTAssertEqual(TrendMetric.winRateDecidingTiebreak.rawPair(in: sample)?.numerator, 6)
+        XCTAssertEqual(TrendMetric.winRateDecidingTiebreak.rawPair(in: sample)?.denominator, 14)
+
+        // The two earlier sets are ordinary full sets in both formats.
+        XCTAssertNotNil(TrendMetric.winRateSet1.rawPair(in: sample))
+        XCTAssertNotNil(TrendMetric.winRateSet2.rawPair(in: sample))
+    }
+
+    /// A super-tiebreak is a complete set at ~12 points, so holding it to the
+    /// 20-point full-set bar would silently drop the decider from every
+    /// `.standard` three-setter.
+    func test_tiebreakDecider_isGatedAtItsOwnMinimum() throws {
+        func decider(points: Int) throws -> TrendMetric.Ratio? {
+            let record = makeRecord(sets: [
+                SetSpec(index: 0, points: 30, wins: 18),
+                SetSpec(index: 1, points: 28, wins: 12),
+                SetSpec(index: 2, points: points, wins: points / 2)
+            ], matchFormat: .standard)
+            return TrendMetric.winRateDecidingTiebreak.ratio(in: try XCTUnwrap(MatchTrendSample(record: record)))
+        }
+        XCTAssertNil(try decider(points: 9), "below the tiebreak minimum")
+        XCTAssertNotNil(try decider(points: 10), "a 10-point tiebreak is a complete set")
+        // And a full set is still held to the higher bar.
+        let shortFullSet = makeRecord(sets: [
+            SetSpec(index: 0, points: 30, wins: 18),
+            SetSpec(index: 1, points: 19, wins: 9)
         ])
-        XCTAssertNil(MatchTrendSample(record: record)?.fatigue)
+        XCTAssertNil(TrendMetric.winRateSet2.rawPair(in: try XCTUnwrap(MatchTrendSample(record: shortFullSet))))
     }
 
-    func test_fatigue_isNilForASingleSetMatch() throws {
+    func test_setSlices_areEmptyForASingleSetMatch() throws {
         let record = makeRecord(sets: [SetSpec(index: 0, points: 30, wins: 18, stepDelta: 4)])
-        XCTAssertNil(MatchTrendSample(record: record)?.fatigue)
+        XCTAssertEqual(MatchTrendSample(record: record)?.setSlices, [],
+                       "one set has nothing to compare across")
     }
 
     func test_fatigue_isNilForAnInProgressMatch_butTheOtherCountersSurvive() throws {
@@ -176,24 +222,10 @@ final class MatchTrendSampleHealthTests: XCTestCase {
         let sample = try XCTUnwrap(MatchTrendSample(record: record))
 
         XCTAssertTrue(sample.isInProgress)
-        XCTAssertNil(sample.fatigue, "a set still being played is a partial reading")
+        XCTAssertEqual(sample.setSlices, [], "a set still being played is a partial reading")
         // The live match still contributes to every non-fatigue metric.
         XCTAssertNotNil(TrendMetric.pointsWon.rawPair(in: sample))
-        XCTAssertNil(TrendMetric.winRateFirstSet.rawPair(in: sample))
-    }
-
-    func test_fatigueSetPoints_gateAtTwentyPoints() throws {
-        let short = makeRecord(sets: [
-            SetSpec(index: 0, points: 30, wins: 18),
-            SetSpec(index: 1, points: 19, wins: 9)
-        ])
-        XCTAssertNil(MatchTrendSample(record: short)?.fatigue)
-
-        let long = makeRecord(sets: [
-            SetSpec(index: 0, points: 30, wins: 18),
-            SetSpec(index: 1, points: 20, wins: 9)
-        ])
-        XCTAssertNotNil(MatchTrendSample(record: long)?.fatigue)
+        XCTAssertNil(TrendMetric.winRateSet1.rawPair(in: sample))
     }
 
     // MARK: - Trap 3: each family gates on its own denominator
@@ -208,29 +240,34 @@ final class MatchTrendSampleHealthTests: XCTestCase {
         ])
         let sample = try XCTUnwrap(MatchTrendSample(record: record))
 
-        XCTAssertNotNil(sample.fatigue)
-        XCTAssertNil(TrendMetric.stepsPerPointFirstSet.rawPair(in: sample))
-        XCTAssertNil(TrendMetric.stepsPerPointFinalSet.rawPair(in: sample),
-                     "the covered half must not be plotted without its partner")
-        XCTAssertNotNil(TrendMetric.winRateFirstSet.rawPair(in: sample))
-        XCTAssertNotNil(TrendMetric.winRateFinalSet.rawPair(in: sample))
+        XCTAssertEqual(sample.setSlices.count, 2)
+        // Each set gates on its OWN sampling now that every set is its own named
+        // series: an uncovered set leaves a visible gap in the Set 1 line rather
+        // than suppressing Set 2's real reading. (The old first-vs-final pair
+        // suppressed both, because half of a two-line comparison reads as the
+        // whole answer — with named per-set lines it does not.)
+        XCTAssertNil(TrendMetric.stepsPerPointSet1.rawPair(in: sample))
+        XCTAssertNotNil(TrendMetric.stepsPerPointSet2.rawPair(in: sample))
+        // Win rate counts every point, so it is unaffected by step sampling.
+        XCTAssertNotNil(TrendMetric.winRateSet1.rawPair(in: sample))
+        XCTAssertNotNil(TrendMetric.winRateSet2.rawPair(in: sample))
     }
 
-    /// The fatigue steps pair compared a first set carrying the match-wide
-    /// baseline (load 0) against a final set whose opening delta spans the
+    /// The step slices once compared an opening set carrying the match-wide
+    /// baseline (load 0) against a later set whose opening delta spans the
     /// changeover, so identical movement read as a rise in effort.
     func test_fatigueSteps_readEqualWhenMovementIsIdentical() throws {
         let record = makeRecord(sets: [
             SetSpec(index: 0, points: 30, wins: 18, stepDelta: 4),
             SetSpec(index: 1, points: 30, wins: 12, stepDelta: 4)
         ])
-        let split = try XCTUnwrap(MatchTrendSample(record: record)?.fatigue)
+        let slices = try XCTUnwrap(MatchTrendSample(record: record)).setSlices
 
-        let first = Double(split.firstSet.stepSumLoad) / Double(split.firstSet.stepSampledPoints)
-        let final = Double(split.finalSet.stepSumLoad) / Double(split.finalSet.stepSampledPoints)
+        let first = Double(slices[0].stepSumLoad) / Double(slices[0].stepSampledPoints)
+        let final = Double(slices[1].stepSumLoad) / Double(slices[1].stepSampledPoints)
         XCTAssertEqual(first, 4.0, accuracy: 0.001)
         XCTAssertEqual(final, 4.0, accuracy: 0.001,
-                       "the final set's opening delta spans the changeover and must be dropped")
+                       "the later set's opening delta spans the changeover and must be dropped")
         XCTAssertEqual(first, final, accuracy: 0.001,
                        "identical movement must not plot as a fatigue signal")
     }
