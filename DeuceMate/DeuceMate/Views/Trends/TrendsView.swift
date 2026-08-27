@@ -25,6 +25,7 @@ struct TrendsView: View {
 
     @State private var displayMode: TrendDisplayMode = .rate
 
+
     private var window: TrendWindow {
         if windowRaw == "all" { return .all }
         if windowRaw.hasPrefix("last"), let n = Int(windowRaw.dropFirst(4)) { return .last(n) }
@@ -48,9 +49,10 @@ struct TrendsView: View {
     /// distinct from `TrendMetricGroup`'s own declaration order (which
     /// `TrendMetric.metrics(in:)` and every other Core consumer are
     /// indifferent to). Errors first, then Serve & Return, Attack, Rally
-    /// Depth, Pressure.
+    /// Depth (whole-match, then split by serving side), Pressure, Fatigue.
     private let groupDisplayOrder: [TrendMetricGroup] = [
-        .errors, .serveReturn, .attack, .rallyDepth, .pressure
+        .errors, .serveReturn, .attack, .rallyDepth, .rallyDepthByService, .pressure,
+        .fatigue
     ]
 
     private var scopedSamples: [MatchTrendSample] {
@@ -79,6 +81,32 @@ struct TrendsView: View {
     /// #121). `scopedSamples` is oldest-first, matching `TrendPoint.index`.
     private var dateByIndex: [Int: Date] {
         Dictionary(uniqueKeysWithValues: scopedSamples.enumerated().map { ($0.offset, $0.element.startTime) })
+    }
+
+    /// How many scoped matches can actually support the Fatigue comparison.
+    ///
+    /// Health data is device-local and does NOT survive an iCloud restore: the
+    /// canonical archive is health-stripped and the Health sidecar is excluded
+    /// from backup, so after a fresh-install restore the tennis metrics come
+    /// back and these do not. A partly-covered health chart is therefore a
+    /// normal state that has to be explained rather than left mysterious —
+    /// the same reasoning as the partial-tracking caption above.
+    private func coverageNote(for group: TrendMetricGroup) -> String? {
+        let total = scopedSamples.count
+        guard total > 0 else { return nil }
+
+        let covered: Int
+        let subject: String
+        switch group {
+        case .fatigue:
+            covered = scopedSamples.filter { !$0.setSlices.isEmpty }.count
+            subject = "two or more completed sets"
+        case .errors, .attack, .rallyDepth, .rallyDepthByService, .serveReturn, .pressure:
+            return nil
+        }
+
+        return "\(covered) of \(total) match\(total == 1 ? "" : "es") in this window "
+            + "\(covered == 1 ? "has" : "have") \(subject)."
     }
 
     var body: some View {
@@ -127,9 +155,21 @@ struct TrendsView: View {
                 }
                 ForEach(groupDisplayOrder) { group in
                     let groupSeries = PerformanceTrends.series(for: group, in: scopedSamples)
-                    if !groupSeries.isEmpty {
-                        Section(group.displayLabel) {
+                    // `!groupSeries.isEmpty` is not the right test: a group
+                    // whose metrics all exist but carry no plottable point —
+                    // every health group on an archive recorded without Health
+                    // access — still returns a full series array. Ask whether
+                    // any of them has a point before drawing a section of
+                    // empty charts.
+                    if groupSeries.contains(where: { !$0.points.isEmpty }) {
+                        Section {
                             TrendChart(group: group, series: groupSeries, displayMode: displayMode, sampleCount: scopedSamples.count, dateByIndex: dateByIndex)
+                        } header: {
+                            Text(group.displayLabel)
+                        } footer: {
+                            if let note = coverageNote(for: group) {
+                                Text(note)
+                            }
                         }
                     }
                 }

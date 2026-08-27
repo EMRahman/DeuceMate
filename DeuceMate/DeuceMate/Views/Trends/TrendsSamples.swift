@@ -30,6 +30,7 @@ final class TrendsSamples: ObservableObject {
     /// added, with no field list to keep in sync.
     private var cachedRecords: [MatchRecord] = []
 
+
     /// Recomputes `samples` from `records` only if something that could
     /// change the result has actually changed since the last call.
     func refresh(records: [MatchRecord]) {

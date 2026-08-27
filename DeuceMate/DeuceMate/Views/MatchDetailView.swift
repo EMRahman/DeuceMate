@@ -15,8 +15,12 @@ struct MatchDetailView: View {
     // the phone archive and to restore it on "Sync to iPhone".
     @EnvironmentObject private var store: PhoneStatsStore
 
-    @AppStorage("userBirthYear") private var userBirthYear: Int = 0
-    @AppStorage("userMaxHROverride") private var userMaxHROverride: Int = 0
+    /// Shared reader for the two stored max-HR settings (see MaxHRSetting) so
+    /// this view doesn't carry its own copy of their UserDefaults keys.
+    /// Not `private`: a private *stored* property (unlike a private property-
+    /// wrapped one) makes the synthesized memberwise init private too, and
+    /// callers construct this view as `MatchDetailView(record:)`.
+    var maxHRSetting = MaxHRSetting()
     @AppStorage("playerNTRP") private var playerNTRP: String = "3.0–3.5"
     @State private var tab: Tab = .stats
     @State private var setFilter: SetFilter = .all
@@ -240,12 +244,7 @@ struct MatchDetailView: View {
         filteredStats.contains { $0.outcome != .uncategorized }
     }
 
-    private var resolvedMaxHR: Int {
-        HRZone.resolveMaxHR(
-            manualOverride: userMaxHROverride > 0 ? userMaxHROverride : nil,
-            birthYear: userBirthYear > 0 ? userBirthYear : nil
-        )
-    }
+    private var resolvedMaxHR: Int { maxHRSetting.resolved }
 
     private var meSummary: MatchStatsSummary {
         MatchStatsSummary(

@@ -123,6 +123,15 @@ public struct MatchStatsSummary: Sendable {
         public let wins: Int
     }
     public let rallyDepth: [RallyDepthStat]
+    /// `rallyDepth` partitioned by who served, so a caller can ask "how do MY
+    /// service points end, and how do I do there?" separately from the return
+    /// side. The split is on `PointStat.server`, which is a different axis from
+    /// `EndingShot` entirely: `.serve` is the *phase* a point ended in, so a
+    /// point ending on the return shot is still a point I served. Both arrays
+    /// omit empty buckets exactly as `rallyDepth` does, and summing the two
+    /// reproduces it.
+    public let rallyDepthOnServe: [RallyDepthStat]
+    public let rallyDepthOnReturn: [RallyDepthStat]
 
     // MARK: - Score-state win rates (optional — nil if no gameScoreAtStart data)
 
@@ -251,17 +260,23 @@ public struct MatchStatsSummary: Sendable {
         let normalPts = stats.filter { !isBig($0) }
         let normalWins = normalPts.filter { $0.winner == focal }.count
 
-        // Rally depth
+        // Rally depth. One filtered pass feeds all three breakdowns — the
+        // whole match and the two serving sides.
         let shotPts = stats.filter { $0.endingShot != nil }
-        let rallyStats: [RallyDepthStat] = EndingShot.allCases.compactMap { shot in
-            let pts = shotPts.filter { $0.endingShot == shot }
-            guard !pts.isEmpty else { return nil }
-            return RallyDepthStat(
-                shot: shot,
-                total: pts.count,
-                wins: pts.filter { $0.winner == focal }.count
-            )
+        func depthStats(_ pts: [PointStat]) -> [RallyDepthStat] {
+            EndingShot.allCases.compactMap { shot in
+                let inShot = pts.filter { $0.endingShot == shot }
+                guard !inShot.isEmpty else { return nil }
+                return RallyDepthStat(
+                    shot: shot,
+                    total: inShot.count,
+                    wins: inShot.filter { $0.winner == focal }.count
+                )
+            }
         }
+        let rallyStats = depthStats(shotPts)
+        let serveDepthStats = depthStats(shotPts.filter { $0.server == focal })
+        let returnDepthStats = depthStats(shotPts.filter { $0.server == other })
 
         // Score states
         let scorePts = stats.filter { $0.gameScoreAtStart != nil }
@@ -338,6 +353,8 @@ public struct MatchStatsSummary: Sendable {
         normalPointTotal = normalPts.count
         normalPointWins = normalWins
         rallyDepth = rallyStats
+        rallyDepthOnServe = serveDepthStats
+        rallyDepthOnReturn = returnDepthStats
         scoreStates = scoreStateStats
         self.setElapsedSeconds = setElapsedSeconds
 

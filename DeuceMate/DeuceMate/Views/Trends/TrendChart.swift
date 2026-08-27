@@ -51,22 +51,27 @@ extension TrendMetric {
         case .breakPointsSaved:                               return .cyan
         case .bigPointWin:                                    return .orange
         case .pointsWon:                                      return .green
+        // The per-side mix reuses the whole-match phase hues above — only one
+        // side is on screen at a time, so "teal means the point ended on the
+        // serve" holds everywhere rather than being relearned per chart.
+        case .servedShareServe, .returnedShareServe:               return .teal
+        case .servedShareReturn, .returnedShareReturn:             return .indigo
+        case .servedShareServePlusOne, .returnedShareServePlusOne: return .pink
+        case .servedShareRally, .returnedShareRally:               return .brown
+        // Fatigue: one hue per set, shared by both fatigue charts so "orange
+        // is set 2" holds across them. The set 1 → 3 ramp runs green → orange →
+        // red (fresh to worn); the deciding super-tiebreak breaks OUT of that
+        // ramp into purple rather than sitting at its end, because it is a
+        // third set by position but not by workload — a dozen-odd points
+        // against sixty — and must not be read as a like-for-like set 3.
+        case .winRateSet1, .stepsPerPointSet1:                return .green
+        case .winRateSet2, .stepsPerPointSet2:                return .orange
+        case .winRateSet3, .stepsPerPointSet3:                return .red
+        case .winRateDecidingTiebreak, .stepsPerPointDecidingTiebreak:
+            return .purple
         }
     }
 
-    /// The metric counts something that happened to/because of the
-    /// OPPONENT (their double faults, unforced errors, winners, or errors
-    /// the recorder caused them into) rather than the recorder's own shot.
-    /// These default hidden (§6.3: "the opponent's own trend is one legend
-    /// tap away") and render dashed when shown.
-    var isOpponentFramed: Bool {
-        switch self {
-        case .doubleFaultsConceded, .unforcedErrorsDrawn, .forcedErrorsCaused, .winnersConceded:
-            return true
-        default:
-            return false
-        }
-    }
 }
 
 struct TrendChart: View {
@@ -91,6 +96,7 @@ struct TrendChart: View {
 
     @State private var hiddenMetrics: Set<TrendMetric>
     @State private var rallyDepthMode: RallyDepthMode = .mix
+    @State private var serviceSide: ServiceSide = .onServe
     /// Tap/drag-selected match index, shared across whichever chart shape
     /// this group currently shows — `PERFORMANCE_TRENDS_PLAN.md` §6.3
     /// specified "the date appears in the axis label and in the selection
@@ -110,13 +116,22 @@ struct TrendChart: View {
         self.sampleCount = sampleCount
         self.dateByIndex = dateByIndex
         // Opponent-framed metrics start hidden; everything else starts shown.
-        _hiddenMetrics = State(initialValue: Set(series.map(\.metric).filter(\.isOpponentFramed)))
+        _hiddenMetrics = State(initialValue: Set(series.map(\.metric).filter(\.startsHidden)))
     }
 
     private enum RallyDepthMode: String, CaseIterable, Identifiable {
         case mix, winRate
         var id: String { rawValue }
         var label: String { self == .mix ? "Mix" : "Win Rate" }
+    }
+
+    /// Which serving side the "Rally Depth — By Service" group is showing. Not
+    /// persisted, matching `rallyDepthMode` on its sibling group rather than the
+    /// Serve & Return filter, which the owner asked to remember.
+    private enum ServiceSide: String, CaseIterable, Identifiable {
+        case onServe, onReturns
+        var id: String { rawValue }
+        var label: String { self == .onServe ? "On Serve" : "On Returns" }
     }
 
     /// Narrows the Serve & Return group's six metrics to one question at a
@@ -149,6 +164,8 @@ struct TrendChart: View {
         VStack(alignment: .leading, spacing: 10) {
             if group == .rallyDepth {
                 rallyDepthBody
+            } else if group == .rallyDepthByService {
+                rallyDepthByServiceBody
             } else if group == .serveReturn {
                 serveReturnBody
             } else {
@@ -159,10 +176,42 @@ struct TrendChart: View {
 
     // MARK: - Standard groups (Errors, Attack, Pressure)
 
-    /// Ratio-unit metrics (currently only W:UE) can't share a 0–1 percent
-    /// axis with everything else in Attack, so they render as their own
-    /// compact rows below the shared chart instead of distorting its scale.
-    private var percentSeries: [TrendSeries] { series.filter { $0.metric.unit == .percent } }
+    /// A metric's unit IS the axis it belongs on. Percentages, bpm, steps per
+    /// point, metres and minutes cannot share one Y scale — plotted together,
+    /// Swift Charts infers a single domain and the small-magnitude series
+    /// flatten against the bottom. So a group renders one chart per unit
+    /// present, in this order. Ratio-unit metrics (only W:UE today) stay the
+    /// exception they always were: a single unbounded value per match reads
+    /// better as a sparkline row than as a chart one match can blow out.
+    private static let unitOrder: [TrendMetric.Unit] = [.percent, .steps]
+
+    private func bucket(_ unit: TrendMetric.Unit) -> [TrendSeries] {
+        series.filter { $0.metric.unit == unit }
+    }
+
+    /// Subheading for one unit bucket's chart inside a group.
+    ///
+    /// Fatigue needs this in a way the other groups don't: its series are named
+    /// for WHICH SET they are ("Set 1", "Set 2"), not for what is being
+    /// measured, so its two charts are otherwise unlabelled and a reader can't
+    /// tell the points-won chart from the steps one except by the axis. Every
+    /// other group's legend already names the quantity on every line, so they
+    /// keep the plain unit caption.
+    private func chartCaption(for unit: TrendMetric.Unit) -> String? {
+        switch (group, unit) {
+        case (.fatigue, .percent):
+            // Accurate in both display modes: the numerator Count mode plots is
+            // literally the points won in that set.
+            return "Points Won"
+        case (.fatigue, .steps):
+            // Count mode plots the set's raw step total, not the per-point rate.
+            return displayMode == .count ? "Steps" : "Steps per Point"
+        default:
+            // Elsewhere the caption only ever described a per-point unit, which
+            // Count mode's raw numerators would make untrue.
+            return displayMode == .count ? nil : unit.axisCaption
+        }
+    }
     private var ratioSeries: [TrendSeries] { series.filter { $0.metric.unit == .ratio } }
 
     @ViewBuilder
@@ -170,11 +219,22 @@ struct TrendChart: View {
         if series.isEmpty || series.allSatisfy({ $0.points.isEmpty }) {
             emptyState
         } else {
-            if !percentSeries.isEmpty {
-                let shown = plottable(percentSeries)
-                lineChart(for: shown)
-                selectionSummary(for: shown)
-                legend(for: shown)
+            ForEach(Self.unitOrder, id: \.self) { unit in
+                let shown = plottable(bucket(unit))
+                // Empty for either reason — no metric of that unit in this
+                // group, or none of them with coverage in this window — means
+                // "draw nothing here", not "draw an empty axis".
+                if !shown.isEmpty {
+                    if let caption = chartCaption(for: unit) {
+                        Text(caption)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                    lineChart(for: shown, unit: unit)
+                    selectionSummary(for: shown)
+                    legend(for: shown)
+                }
             }
             ForEach(ratioSeries) { s in
                 TrendSparkline(series: s, displayMode: displayMode, color: s.metric.chartColor, sampleCount: sampleCount)
@@ -192,17 +252,40 @@ struct TrendChart: View {
         displayMode == .count ? Double(point.ratio.numerator) : point.value
     }
 
-    /// `series`, filtering out — in Count mode only — any metric with
-    /// `supportsCountMode == false` (aggressionIndex, ownErrorShare): its
-    /// 0...1 fraction plotted against a raw-count axis would read as
-    /// pinned near zero, so it drops out of Count mode rather than
-    /// misrepresenting it. Every metric is plottable in Rate mode. Callers
-    /// must route BOTH `lineChart(for:)` and `legend(for:)` through this
-    /// same filtered list — passing the chart a filtered list and the
+    /// `series`, narrowed to what this chart can actually draw. Two filters:
+    ///
+    /// - **No data in this window.** A metric can exist in the group and have
+    ///   no match to plot — "Set 3" for a player whose format decides with a
+    ///   super-tiebreak, or a rally phase that never occurred. Its line is
+    ///   absent either way; keeping it would leave a legend chip that toggles
+    ///   nothing.
+    /// - **Count mode only:** any metric with `supportsCountMode == false`
+    ///   (aggressionIndex, ownErrorShare, the rally shares). A 0...1 fraction
+    ///   plotted against a raw-count axis reads as pinned near zero, so it
+    ///   drops out of Count mode rather than misrepresenting itself.
+    ///
+    /// Callers must route BOTH `lineChart(for:)` and `legend(for:)` through
+    /// this same filtered list — passing the chart a filtered list and the
     /// legend the unfiltered one left a legend chip toggleable with no
-    /// corresponding line to toggle (Codex review, PR #121).
+    /// corresponding line to toggle (Codex review, PR #121). The empty-series
+    /// filter above is that same bug arriving by a different route.
     private func plottable(_ series: [TrendSeries]) -> [TrendSeries] {
-        displayMode == .count ? series.filter { $0.metric.supportsCountMode } : series
+        withData(series).filter { displayMode != .count || $0.metric.supportsCountMode }
+    }
+
+    /// The no-data filter ALONE, for charts that plot rates whatever the
+    /// display mode says.
+    ///
+    /// The normalized stacks are exactly that: `areaMarks` plots
+    /// `point.value` directly and never consults `plottedValue`, so a share
+    /// renders identically in Rate and Count. Routing them through
+    /// `plottable` dropped every series in Count mode — the shares are
+    /// `supportsCountMode == false` precisely because a share has no count
+    /// form — which emptied Rally Depth — By Service and, because the Rally
+    /// Depth group gated on its share series, took its working Win Rate mode
+    /// down with it (Codex review, PR #122).
+    private func withData(_ series: [TrendSeries]) -> [TrendSeries] {
+        series.filter { !$0.points.isEmpty }
     }
 
     /// `points` split into runs of consecutive `TrendPoint.index` values —
@@ -355,8 +438,12 @@ struct TrendChart: View {
     /// just `self.series`) so callers can narrow to a subset — e.g. Serve &
     /// Return's filter picks 2 of its 6 metrics — and must already be
     /// display-mode-filtered via `plottable(_:)` before calling.
-    private func lineChart(for series: [TrendSeries]) -> some View {
-        Chart {
+    private func lineChart(for series: [TrendSeries], unit: TrendMetric.Unit) -> some View {
+        // Bound once: `runColorScale` walks every series' runs, and reading it
+        // twice in the modifier below doubled that on every body pass — now
+        // multiplied by however many unit buckets a group renders.
+        let scale = runColorScale(for: series)
+        return Chart {
             ForEach(series) { s in
                 if !hiddenMetrics.contains(s.metric) {
                     lineMarks(for: s)
@@ -368,14 +455,14 @@ struct TrendChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             }
         }
-        .chartForegroundStyleScale(domain: runColorScale(for: series).domain, range: runColorScale(for: series).range)
+        .chartForegroundStyleScale(domain: scale.domain, range: scale.range)
         .chartXScale(domain: chartXDomain)
         .chartYAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine()
                 AxisValueLabel {
                     if let v = value.as(Double.self) {
-                        Text(displayMode == .count ? "\(Int(v.rounded()))" : "\(Int((v * 100).rounded()))%")
+                        Text(displayMode == .count ? "\(Int(v.rounded()))" : unit.axisText(v))
                             .font(.caption2)
                     }
                 }
@@ -432,7 +519,11 @@ struct TrendChart: View {
             // helper as standardBody for a single source of truth, not two
             // copies of the same predicate to keep in sync.
             let shown = plottable(selected)
-            lineChart(for: shown)
+            // All six Serve & Return metrics are percentages; `unit` is passed
+            // explicitly (rather than defaulted) so adding a bpm- or steps-unit
+            // metric to this group fails to compile instead of quietly
+            // rendering against a percentage axis.
+            lineChart(for: shown, unit: .percent)
             selectionSummary(for: shown)
             legend(for: shown)
         }
@@ -441,10 +532,38 @@ struct TrendChart: View {
     // MARK: - Rally depth
 
     private var depthShareSeries: [TrendSeries] {
-        series.filter { [.depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally].contains($0.metric) }
+        withData(series.filter { [.depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally].contains($0.metric) })
     }
     private var depthWinSeries: [TrendSeries] {
-        series.filter { [.depthWinServe, .depthWinReturn, .depthWinServePlusOne, .depthWinRally].contains($0.metric) }
+        plottable(series.filter { [.depthWinServe, .depthWinReturn, .depthWinServePlusOne, .depthWinRally].contains($0.metric) })
+    }
+    /// The same four-phase mix as `depthShareSeries`, scoped to one serving
+    /// side. Which side is on screen is the group's own picker, so the two
+    /// arrays are never rendered together.
+    private func serviceSideSeries(_ side: ServiceSide) -> [TrendSeries] {
+        let metrics: [TrendMetric] = side == .onServe
+            ? [.servedShareServe, .servedShareReturn, .servedShareServePlusOne, .servedShareRally]
+            : [.returnedShareServe, .returnedShareReturn, .returnedShareServePlusOne, .returnedShareRally]
+        return withData(series.filter { metrics.contains($0.metric) })
+    }
+
+    @ViewBuilder
+    private var rallyDepthByServiceBody: some View {
+        Picker("Serving Side", selection: $serviceSide) {
+            ForEach(ServiceSide.allCases) { side in
+                Text(side.label).tag(side)
+            }
+        }
+        .pickerStyle(.segmented)
+
+        let sideSeries = serviceSideSeries(serviceSide)
+        if sideSeries.isEmpty {
+            emptyState
+        } else {
+            stackedChart(for: sideSeries)
+            selectionSummary(for: sideSeries)
+            staticLegend(for: sideSeries)
+        }
     }
 
     @ViewBuilder
@@ -456,15 +575,23 @@ struct TrendChart: View {
         }
         .pickerStyle(.segmented)
 
-        if depthShareSeries.allSatisfy({ $0.points.isEmpty }) {
-            emptyState
-        } else {
-            switch rallyDepthMode {
-            case .mix:
+        // Gated per mode, on the series that mode actually draws. Gating both
+        // on the share series let a gap in one suppress the other — the exact
+        // coupling that turned the Count-mode filter bug into a Win Rate
+        // outage.
+        switch rallyDepthMode {
+        case .mix:
+            if depthShareSeries.isEmpty {
+                emptyState
+            } else {
                 rallyDepthStackedChart
                 selectionSummary(for: depthShareSeries)
                 staticLegend(for: depthShareSeries)
-            case .winRate:
+            }
+        case .winRate:
+            if depthWinSeries.isEmpty {
+                emptyState
+            } else {
                 rallyDepthWinRateChart
                 selectionSummary(for: depthWinSeries)
                 staticLegend(for: depthWinSeries)
@@ -502,8 +629,16 @@ struct TrendChart: View {
     }
 
     private var rallyDepthStackedChart: some View {
-        Chart {
-            ForEach(depthShareSeries) { s in
+        stackedChart(for: depthShareSeries)
+    }
+
+    /// The normalized stacked-area mix. Shared by the whole-match Rally Depth
+    /// group and the per-serving-side one, which differ only in which four
+    /// share series they hand over.
+    private func stackedChart(for shareSeries: [TrendSeries]) -> some View {
+        let scale = runColorScale(for: shareSeries)
+        return Chart {
+            ForEach(shareSeries) { s in
                 areaMarks(for: s)
             }
             if let selectedIndex, chartXDomain.contains(selectedIndex) {
@@ -512,7 +647,7 @@ struct TrendChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             }
         }
-        .chartForegroundStyleScale(domain: runColorScale(for: depthShareSeries).domain, range: runColorScale(for: depthShareSeries).range)
+        .chartForegroundStyleScale(domain: scale.domain, range: scale.range)
         .chartXScale(domain: chartXDomain)
         .chartYAxis {
             // .automatic, not an explicit [0.0, 0.5, 1.0]: normalized
@@ -544,7 +679,8 @@ struct TrendChart: View {
     }
 
     private var rallyDepthWinRateChart: some View {
-        Chart {
+        let scale = runColorScale(for: depthWinSeries)
+        return Chart {
             ForEach(depthWinSeries) { s in
                 lineMarks(for: s)
             }
@@ -554,14 +690,16 @@ struct TrendChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             }
         }
-        .chartForegroundStyleScale(domain: runColorScale(for: depthWinSeries).domain, range: runColorScale(for: depthWinSeries).range)
+        .chartForegroundStyleScale(domain: scale.domain, range: scale.range)
         .chartXScale(domain: chartXDomain)
         .chartYAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine()
                 AxisValueLabel {
                     if let v = value.as(Double.self) {
-                        Text(displayMode == .count ? "\(Int(v.rounded()))" : "\(Int((v * 100).rounded()))%")
+                        Text(displayMode == .count
+                             ? "\(Int(v.rounded()))"
+                             : TrendMetric.Unit.percent.axisText(v))
                             .font(.caption2)
                     }
                 }

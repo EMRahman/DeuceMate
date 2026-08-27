@@ -61,121 +61,142 @@ struct PastMatchesView: View {
         return f
     }()
 
+    /// The archive list, extracted from `body`.
+    ///
+    /// `body` had grown large enough that the Swift type-checker gave up on it
+    /// as a single expression once the Trends section gained a second stored
+    /// property — the exact symptom TECHNICAL_DEBT #13 predicts for this file.
+    /// This is a pure move: no behaviour change, no reordering.
+    @ViewBuilder
+    private var archiveList: some View {
+        List {
+            // Compute archive data once at the top so both sections can
+            // reference pastRecords (e.g. the live-match footer needs it).
+            let archiveIDs = Set(store.history.map(\.id))
+            let activeID = syncService.activeMatchID
+            // Exclude permanently-deleted (tombstoned) ids: a queued watch
+            // delete may not have pruned the cached mirror yet, and a stale
+            // "On Apple Watch only" row must not let "Sync to iPhone" undo a
+            // permanent delete.
+            let watchOnly = syncService.isPaired
+                ? syncService.watchMirror.filter {
+                    !archiveIDs.contains($0.id) && !store.tombstoneIDs.contains($0.id)
+                  }
+                : []
+            // store.history is already newest-first; only combine and
+            // re-sort when there are watch-only rows (rare; ≤10), so the
+            // common path skips re-sorting the whole archive each render.
+            let pastRecords: [MatchRecord] = watchOnly.isEmpty
+                ? store.history.filter { $0.id != activeID }
+                : (store.history + watchOnly)
+                    .filter { $0.id != activeID }
+                    .sorted { $0.startTime > $1.startTime }
+
+            // Trends — reads store.history directly, not pastRecords,
+            // since watch-mirror rows may carry no stats (§6.1 of
+            // docs/features/PERFORMANCE_TRENDS_PLAN.md).
+            TrendsSection(records: store.history)
+
+            // Live Match section
+            if let liveRecord = store.history.first(where: { $0.id == activeID }) {
+                Section {
+                    Button { selected = liveRecord } label: {
+                        rowView(for: liveRecord, location: rowLocation(for: liveRecord, inHistory: true))
+                    }
+                    .buttonStyle(.plain)
+                    Button {
+                        showScoreboard = true
+                    } label: {
+                        Label("Live Scoreboard", systemImage: "tv.fill")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(theme.colors.server)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 2)
+                    }
+                    .buttonStyle(.plain)
+                } header: {
+                    Text("Live Match")
+                } footer: {
+                    // Show iCloud status here only when there are no past
+                    // records; otherwise it appears in the Past Matches footer.
+                    if pastRecords.isEmpty {
+                        iCloudStatusLabel
+                            .font(.footnote)
+                    }
+                }
+            }
+
+            // Past Matches — the phone archive plus matches still on the
+            // watch but removed from the phone (rendered from the watch
+            // mirror, badged "On Apple Watch only"). Mirror rows are
+            // hidden when no watch is paired.
+            if !pastRecords.isEmpty {
+                Section {
+                    ForEach(pastRecords) { record in
+                        pastMatchRow(record, archiveIDs: archiveIDs)
+                    }
+                } header: {
+                    Text("Past Matches")
+                } footer: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(archiveFooterText)
+                        iCloudStatusLabel
+                    }
+                    .font(.footnote)
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .refreshable {
+            syncService.requestFullHistorySync()
+        }
+    }
+
+    /// The screen's content and its toolbar, split out from `body`'s
+    /// presentation chain (four sheets, a cover, an alert and a confirmation
+    /// dialog). Swift type-checks a modifier chain as one expression, and this
+    /// one had grown past the compiler's budget — splitting it in two is a pure
+    /// move, no behaviour change.
+    @ViewBuilder
+    private var screenContent: some View {
+        Group {
+            if hasNoRows {
+                ScrollView {
+                    emptyStateView
+                        .padding(.top, 60)
+                }
+                .refreshable {
+                    syncService.requestFullHistorySync()
+                }
+            } else {
+                archiveList
+            }
+        }
+        .navigationTitle("Matches")
+        .navigationBarTitleDisplayMode(.inline)
+        .tint(theme.colors.me)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    showManualEntry = true
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .accessibilityLabel("Manual match entry")
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "gear")
+                }
+            }
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            Group {
-                if hasNoRows {
-                    ScrollView {
-                        emptyStateView
-                            .padding(.top, 60)
-                    }
-                    .refreshable {
-                        syncService.requestFullHistorySync()
-                    }
-                } else {
-                    List {
-                        // Compute archive data once at the top so both sections can
-                        // reference pastRecords (e.g. the live-match footer needs it).
-                        let archiveIDs = Set(store.history.map(\.id))
-                        let activeID = syncService.activeMatchID
-                        // Exclude permanently-deleted (tombstoned) ids: a queued watch
-                        // delete may not have pruned the cached mirror yet, and a stale
-                        // "On Apple Watch only" row must not let "Sync to iPhone" undo a
-                        // permanent delete.
-                        let watchOnly = syncService.isPaired
-                            ? syncService.watchMirror.filter {
-                                !archiveIDs.contains($0.id) && !store.tombstoneIDs.contains($0.id)
-                              }
-                            : []
-                        // store.history is already newest-first; only combine and
-                        // re-sort when there are watch-only rows (rare; ≤10), so the
-                        // common path skips re-sorting the whole archive each render.
-                        let pastRecords: [MatchRecord] = watchOnly.isEmpty
-                            ? store.history.filter { $0.id != activeID }
-                            : (store.history + watchOnly)
-                                .filter { $0.id != activeID }
-                                .sorted { $0.startTime > $1.startTime }
-
-                        // Trends — reads store.history directly, not pastRecords,
-                        // since watch-mirror rows may carry no stats (§6.1 of
-                        // docs/features/PERFORMANCE_TRENDS_PLAN.md).
-                        TrendsSection(records: store.history)
-
-                        // Live Match section
-                        if let liveRecord = store.history.first(where: { $0.id == activeID }) {
-                            Section {
-                                Button { selected = liveRecord } label: {
-                                    rowView(for: liveRecord, location: rowLocation(for: liveRecord, inHistory: true))
-                                }
-                                .buttonStyle(.plain)
-                                Button {
-                                    showScoreboard = true
-                                } label: {
-                                    Label("Live Scoreboard", systemImage: "tv.fill")
-                                        .font(.body.weight(.semibold))
-                                        .foregroundStyle(theme.colors.server)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(.vertical, 2)
-                                }
-                                .buttonStyle(.plain)
-                            } header: {
-                                Text("Live Match")
-                            } footer: {
-                                // Show iCloud status here only when there are no past
-                                // records; otherwise it appears in the Past Matches footer.
-                                if pastRecords.isEmpty {
-                                    iCloudStatusLabel
-                                        .font(.footnote)
-                                }
-                            }
-                        }
-
-                        // Past Matches — the phone archive plus matches still on the
-                        // watch but removed from the phone (rendered from the watch
-                        // mirror, badged "On Apple Watch only"). Mirror rows are
-                        // hidden when no watch is paired.
-                        if !pastRecords.isEmpty {
-                            Section {
-                                ForEach(pastRecords) { record in
-                                    pastMatchRow(record, archiveIDs: archiveIDs)
-                                }
-                            } header: {
-                                Text("Past Matches")
-                            } footer: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(archiveFooterText)
-                                    iCloudStatusLabel
-                                }
-                                .font(.footnote)
-                            }
-                        }
-                    }
-                    .listStyle(.insetGrouped)
-                    .refreshable {
-                        syncService.requestFullHistorySync()
-                    }
-                }
-            }
-            .navigationTitle("Matches")
-            .navigationBarTitleDisplayMode(.inline)
-            .tint(theme.colors.me)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        showManualEntry = true
-                    } label: {
-                        Image(systemName: "square.and.pencil")
-                    }
-                    .accessibilityLabel("Manual match entry")
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showSettings = true
-                    } label: {
-                        Image(systemName: "gear")
-                    }
-                }
-            }
+            screenContent
             .sheet(item: $selected) { record in
                 NavigationStack {
                     MatchDetailView(record: record)

@@ -7,6 +7,7 @@ date: 2026-08-25
 implemented_date: 2026-08-26
 blocked_by: null
 delivers: "docs/features/IPHONE_COMPANION_APP_PLAN.md §'Future work (explicitly deferred)' → 'Phone-only stats — career-level rollups across matches: serve % over time, W:UE trend lines, opponent-specific records. Add fields to MatchStatsSummary or a new CareerStatsSummary and surface a third screen on iOS.' This plan delivers the first two; opponent-specific records are NOT deliverable — see key_data_model_facts."
+follow_on: "docs/features/HEALTH_TRENDS_PLAN.md — adds the Fatigue and Effort groups (5 metrics) from the movement data this plan's catalogue does not read, plus rally length split by serving side (4 metrics inside this plan's own Rally Depth group), along with the .steps TrendMetric.Unit case and the per-unit chart bucketing it needs. Its catalogue was cut from 13 metrics after review; that plan's section 3 records what went and why."
 closes_backlog_item: "TECHNICAL_DEBT.md #7 — Convert formatted string stats to typed values in MatchStatsSummary. Its recorded trigger is 'Before localization, structured stats export, or graphing'. This feature graphs the W:UE ratio, so the trigger fires here. PR 1."
 touches_backlog_item: "TECHNICAL_DEBT.md #13 — Split PastMatchesView. Its recorded trigger is 'Opportunistically on the next substantial edit, before the file crosses ~1k lines.' This is that edit, so all Trends UI lands in new files under Views/Trends/ and PastMatchesView grows by ~6 lines rather than ~300. #13 is not closed — the existing 745 lines are untouched."
 scope:
@@ -299,6 +300,14 @@ feature does not mean. Core types are named `PerformanceTrends` / `MatchTrendSam
 ---
 
 ## 4. The metric catalogue
+
+> **Extended since.** The catalogue below is the tennis half. The movement half — Fatigue
+> and Effort, 5 metrics — plus rally length split by serving side (4 metrics that live
+> inside §4.3's own Rally Depth group, behind a third "By Server" mode) landed separately in
+> [`HEALTH_TRENDS_PLAN.md`](HEALTH_TRENDS_PLAN.md), which also introduced the `.steps`
+> `TrendMetric.Unit` case and the one-chart-per-unit rule in `TrendChart`. The design rules
+> stated here (nil-not-zero, filter-before-window, pooled Σnum/Σden, orientation by
+> `betterDirection`) apply unchanged to those metrics.
 
 `TrendMetric` is the single catalogue. Adding a metric is one case plus one `switch` arm
 plus one test — the same data-driven shape `MatchFormatConfig` uses for match formats.

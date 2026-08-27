@@ -125,12 +125,14 @@ public enum PerformanceTrends {
     /// Fewest matches in EACH half of a block before a delta is emitted.
     public static let minimumBlockMatches = 2
 
-    /// Below this, a change is reported `.flat`: 1 percentage point for
-    /// `.percent` metrics, 0.1 ratio units for `.ratio` metrics.
+    /// Below this, a change is reported `.flat`. One threshold per unit, each
+    /// set at roughly "smaller than this is measurement noise, not a trend":
+    /// a percentage point, a tenth of a ratio, half a step.
     public static func minimumChange(for unit: TrendMetric.Unit) -> Double {
         switch unit {
         case .percent: return 1.0
-        case .ratio: return 0.1
+        case .ratio:   return 0.1
+        case .steps:   return 0.5
         }
     }
 

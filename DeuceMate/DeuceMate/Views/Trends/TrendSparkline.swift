@@ -20,6 +20,8 @@ extension TrendMetric {
         case .ratio:
             guard ratio.denominator > 0 else { return ratio.numerator > 0 ? "∞ : 1" : "—" }
             return String(format: "%.1f : 1", ratio.value)
+        case .steps:
+            return String(format: "%.1f steps", ratio.value)
         }
     }
 
@@ -27,6 +29,28 @@ extension TrendMetric {
     func formatCount(_ ratio: Ratio?) -> String {
         guard let ratio else { return "—" }
         return "\(ratio.numerator)/\(ratio.denominator)"
+    }
+}
+
+extension TrendMetric.Unit {
+    /// Y-axis tick text for a raw value in this unit. Charts group their series
+    /// by unit and hand the bucket's unit here, so a bpm axis can never be
+    /// labelled as a percentage — which is what happened when the formatting
+    /// was hard-coded to `value * 100` for every chart.
+    func axisText(_ value: Double) -> String {
+        switch self {
+        case .percent: return "\(Int((value * 100).rounded()))%"
+        case .ratio:   return String(format: "%.1f", value)
+        case .steps:   return String(format: "%.0f", value)
+        }
+    }
+
+    /// Short suffix naming the unit, for a chart's section caption.
+    var axisCaption: String? {
+        switch self {
+        case .percent, .ratio: return nil
+        case .steps:   return "steps per point"
+        }
     }
 }
 
@@ -161,6 +185,8 @@ struct TrendSparkline: View {
             return " \(verb) \(Int(magnitude.rounded())) percentage points"
         case .ratio:
             return " \(verb) \(String(format: "%.1f", magnitude))"
+        case .steps:
+            return " \(verb) \(String(format: "%.1f", magnitude)) steps"
         }
     }
 }

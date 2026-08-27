@@ -20,6 +20,7 @@ struct TrendsSection: View {
     @Environment(\.appTheme) private var theme
     @StateObject private var samplesCache = TrendsSamples()
 
+
     /// Completed matches only — the archive-screen headline has no room for
     /// its own filter controls, so it silently takes the feature's default
     /// (TrendFilter()'s includeInProgress: false), matching the full Trends

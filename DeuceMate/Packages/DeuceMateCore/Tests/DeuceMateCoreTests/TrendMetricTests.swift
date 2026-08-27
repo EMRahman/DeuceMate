@@ -144,20 +144,43 @@ final class TrendMetricTests: XCTestCase {
         }
     }
 
-    func test_supportsCountMode_falseExactlyForRatioAndShareMetrics() {
+    func test_supportsCountMode_falseExactlyForMetricsWithNoMeaningfulCount() {
         let expectedFalse: Set<TrendMetric> = [
             .wueRatio, .aggressionIndex, .ownErrorShare,
-            .depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally
+            .depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally,
+            // A rally SHARE is a style, not a count anyone wants plotted raw —
+            // on either side of the serve.
+            .servedShareServe, .servedShareReturn, .servedShareServePlusOne, .servedShareRally,
+            .returnedShareServe, .returnedShareReturn, .returnedShareServePlusOne, .returnedShareRally
         ]
         for metric in TrendMetric.allCases {
             XCTAssertEqual(metric.supportsCountMode, !expectedFalse.contains(metric), "\(metric)")
         }
     }
 
-    func test_wueRatio_isRatioUnit_everythingElseIsPercent() {
+    /// Pins every non-percent metric to its unit. `TrendChart` buckets its
+    /// series by `unit` and gives each bucket its own Y axis, so a metric
+    /// silently landing in the wrong bucket is a chart that plots bpm against a
+    /// percentage scale — visible only to someone who happens to look.
+    func test_everyMetric_hasItsExpectedUnit() {
+        let nonPercent: [TrendMetric: TrendMetric.Unit] = [
+            .wueRatio: .ratio,
+            .stepsPerPointSet1: .steps,
+            .stepsPerPointSet2: .steps,
+            .stepsPerPointSet3: .steps,
+            .stepsPerPointDecidingTiebreak: .steps
+        ]
         for metric in TrendMetric.allCases {
-            let expected: TrendMetric.Unit = metric == .wueRatio ? .ratio : .percent
-            XCTAssertEqual(metric.unit, expected, "\(metric)")
+            XCTAssertEqual(metric.unit, nonPercent[metric] ?? .percent, "\(metric)")
+        }
+    }
+
+    /// A `switch` exhaustiveness canary: adding a `Unit` case without giving it
+    /// a flat-change threshold would otherwise fail to compile here rather than
+    /// silently defaulting, but this also pins the values themselves.
+    func test_minimumChange_isDefinedForEveryUnit() {
+        for unit: TrendMetric.Unit in [.percent, .ratio, .steps] {
+            XCTAssertGreaterThan(PerformanceTrends.minimumChange(for: unit), 0, "\(unit)")
         }
     }
 

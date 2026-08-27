@@ -110,6 +110,67 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     }
     public let rallyDepth: [EndingShot: DepthCount]
     public let pointsWithEndingShot: Int
+    /// `rallyDepth` split by who served. The split is on `PointStat.server`,
+    /// NOT on `EndingShot.serve` — that case is the *phase* a point ended in, so
+    /// a point ending on the return shot is still a point I served. Getting
+    /// those two axes confused is the easiest mistake available here.
+    public let rallyDepthOnServe: [EndingShot: DepthCount]
+    public let rallyDepthOnReturn: [EndingShot: DepthCount]
+    /// Denominators for the share metrics: points on that side that carry an
+    /// ending shot at all. Zero means no coverage, never "no rallies".
+    public let pointsWithEndingShotOnServe: Int
+    public let pointsWithEndingShotOnReturn: Int
+
+
+    // MARK: - Fatigue — one slice per played set
+
+    /// One played set's counters. Each family carries its own denominator: win
+    /// rate counts every point in the set, movement only the step-sampled ones.
+    /// Sharing one denominator across both would repeat §3.6's
+    /// mixed-denominator mistake in a new place.
+    public struct SetSlice: Equatable, Sendable {
+        public let setIndex: Int
+        public let points: Int
+        public let pointsWon: Int
+        public let stepSampledPoints: Int
+        public let stepSumLoad: Int
+        /// `true` when this set is the match's decider AND the format plays the
+        /// decider as a 10-point super-tiebreak rather than a full set — which
+        /// `.standard`, the default format, does. A super-tiebreak is a third
+        /// set by position but not by workload (a dozen-odd points against
+        /// sixty), so it plots as its own series rather than being averaged in
+        /// with true third sets.
+        public let isDecidingTiebreak: Bool
+
+        public init(setIndex: Int, points: Int, pointsWon: Int,
+                    stepSampledPoints: Int, stepSumLoad: Int,
+                    isDecidingTiebreak: Bool = false) {
+            self.setIndex = setIndex
+            self.points = points
+            self.pointsWon = pointsWon
+            self.stepSampledPoints = stepSampledPoints
+            self.stepSumLoad = stepSumLoad
+            self.isDecidingTiebreak = isDecidingTiebreak
+        }
+    }
+
+    /// One slice per played set, ordered by `setIndex`. Empty when the match
+    /// can't support a per-set reading at all — see `setSlices(record:summary:)`.
+    /// Coverage minimums are NOT applied here; they belong to the metrics, which
+    /// need different ones for a full set and a super-tiebreak.
+    public let setSlices: [SetSlice]
+
+    /// The slice for `index`, but only when it is a genuine full set — a
+    /// deciding super-tiebreak is excluded so it can't also be plotted as
+    /// "Set 3".
+    public func fullSetSlice(_ index: Int) -> SetSlice? {
+        setSlices.first { $0.setIndex == index && !$0.isDecidingTiebreak }
+    }
+
+    /// The deciding set when the format played it as a super-tiebreak.
+    public var decidingTiebreakSlice: SetSlice? {
+        setSlices.first(where: \.isDecidingTiebreak)
+    }
 
     // MARK: - Eligibility
 
@@ -117,6 +178,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     /// threshold `RecCoachInsights.generate` already uses to refuse thin
     /// data (RecCoachInsights.swift:78) — one number, cited not re-invented.
     public static let minimumCategorizedPoints = 20
+
 
     public init(
         matchID: UUID, startTime: Date, matchType: MatchType, matchFormat: MatchFormat,
@@ -129,7 +191,11 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         winnersHit: Int, winnersConceded: Int, unforcedErrorsHit: Int, unforcedErrorsDrawn: Int,
         forcedErrorsConceded: Int, forcedErrorsCaused: Int, breakPointOpps: Int,
         breakPointWins: Int, breakPointsFaced: Int, breakPointsLost: Int, bigPointTotal: Int,
-        bigPointWins: Int, rallyDepth: [EndingShot: DepthCount], pointsWithEndingShot: Int
+        bigPointWins: Int, rallyDepth: [EndingShot: DepthCount], pointsWithEndingShot: Int,
+        rallyDepthOnServe: [EndingShot: DepthCount] = [:],
+        rallyDepthOnReturn: [EndingShot: DepthCount] = [:],
+        pointsWithEndingShotOnServe: Int = 0, pointsWithEndingShotOnReturn: Int = 0,
+        setSlices: [SetSlice] = []
     ) {
         self.matchID = matchID
         self.startTime = startTime
@@ -171,6 +237,11 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         self.bigPointWins = bigPointWins
         self.rallyDepth = rallyDepth
         self.pointsWithEndingShot = pointsWithEndingShot
+        self.rallyDepthOnServe = rallyDepthOnServe
+        self.rallyDepthOnReturn = rallyDepthOnReturn
+        self.pointsWithEndingShotOnServe = pointsWithEndingShotOnServe
+        self.pointsWithEndingShotOnReturn = pointsWithEndingShotOnReturn
+        self.setSlices = setSlices
     }
 
     /// `nil` when the match is ineligible (§3.5): a format that disables
@@ -187,11 +258,17 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         let categorizedTotal = summary.totalPoints - summary.uncategorizedCount
         guard categorizedTotal >= Self.minimumCategorizedPoints else { return nil }
 
-        var depth: [EndingShot: DepthCount] = [:]
-        for stat in summary.rallyDepth {
-            depth[stat.shot] = DepthCount(total: stat.total, wins: stat.wins)
+        func depthDictionary(_ stats: [MatchStatsSummary.RallyDepthStat]) -> [EndingShot: DepthCount] {
+            var out: [EndingShot: DepthCount] = [:]
+            for stat in stats {
+                out[stat.shot] = DepthCount(total: stat.total, wins: stat.wins)
+            }
+            return out
         }
+        let depth = depthDictionary(summary.rallyDepth)
         let pointsWithShot = summary.rallyDepth.reduce(0) { $0 + $1.total }
+        let serveDepth = depthDictionary(summary.rallyDepthOnServe)
+        let returnDepth = depthDictionary(summary.rallyDepthOnReturn)
 
         self.init(
             matchID: record.id, startTime: record.startTime, matchType: record.matchType,
@@ -217,7 +294,101 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
             breakPointOpps: summary.breakPointOpps, breakPointWins: summary.breakPointWins,
             breakPointsFaced: summary.breakPointsFaced, breakPointsLost: summary.breakPointsLost,
             bigPointTotal: summary.bigPointTotal, bigPointWins: summary.bigPointWins,
-            rallyDepth: depth, pointsWithEndingShot: pointsWithShot
+            rallyDepth: depth, pointsWithEndingShot: pointsWithShot,
+            rallyDepthOnServe: serveDepth, rallyDepthOnReturn: returnDepth,
+            pointsWithEndingShotOnServe: summary.rallyDepthOnServe.reduce(0) { $0 + $1.total },
+            pointsWithEndingShotOnReturn: summary.rallyDepthOnReturn.reduce(0) { $0 + $1.total },
+            setSlices: Self.setSlices(record: record, summary: summary)
         )
     }
+
+    // MARK: - Per-set slices
+
+    /// One slice per played set, ordered by `setIndex`, or empty when the match
+    /// can't support a per-set reading.
+    ///
+    /// Two structural rules live here rather than in the metrics:
+    ///
+    /// - **At least two sets.** A single-set match has nothing to compare
+    ///   across, so it contributes no fatigue data at all. This also excludes
+    ///   the tiebreak-only formats (`.superTiebreak`, `.perpetualSuperTiebreak`)
+    ///   and `.quick4Games`, all of which play one set.
+    /// - **Nothing from an in-progress match.** Its last set is still being
+    ///   played, so its rates would drift point by point. Every other counter on
+    ///   the sample stays valid for a live match.
+    ///
+    /// Point-count minimums are deliberately NOT applied here: a full set and a
+    /// 10-point super-tiebreak need different ones, and that is the metrics'
+    /// business (`TrendMetric.minimumFullSetPoints` / `minimumTiebreakPoints`).
+    ///
+    /// `record.stats` needs no sorting — every figure is a per-set count, so
+    /// point order within a set is irrelevant.
+    ///
+    /// The step slices deliberately **drop each set's first sample**. A
+    /// `stepsTimeline` entry's load is measured from the previous sample, so a
+    /// set's first entry is not comparable to the rest: in the opening set it is
+    /// the match-wide baseline (load 0 by definition), and in every later set it
+    /// spans the whole inter-set changeover. Both distortions push the same way
+    /// — "you moved more when tired" — in the metric that exists to answer that
+    /// question. Two sets of identical movement read 3.87 vs 4.00 before this
+    /// drop and equal after it.
+    private static func setSlices(record: MatchRecord, summary: MatchStatsSummary) -> [SetSlice] {
+        var pointsBySet: [Int: (points: Int, won: Int)] = [:]
+        for stat in record.stats {
+            var entry = pointsBySet[stat.setIndex] ?? (points: 0, won: 0)
+            entry.points += 1
+            if stat.winner == .me { entry.won += 1 }
+            pointsBySet[stat.setIndex] = entry
+        }
+
+        // Only the set actually IN PLAY is a partial reading — a live match's
+        // earlier sets are finished and as good as any completed match's. The
+        // whole match used to be dropped, which made the screen's "Include
+        // In-Progress Matches" toggle a lie for this group alone: every other
+        // group honoured it while Fatigue silently plotted nothing.
+        let setInPlay = record.isInProgress ? pointsBySet.keys.max() : nil
+        let playedSets = pointsBySet.keys.sorted().filter { $0 != setInPlay }
+        guard playedSets.count >= 2, let decidingIndex = playedSets.last else { return [] }
+
+        // The decider is a super-tiebreak when the FORMAT says so — `.standard`,
+        // the default, plays its third set as a 10-point tiebreak, while
+        // `.bestOf3FullFinalSet` plays a real one.
+        //
+        // But the format only describes what the decider WOULD be; a match has
+        // to actually reach it. The deciding set is the one that can only be
+        // played at one-set-all, which for a best-of-(2n−1) is index 2n−2 — set
+        // index 2 in a best-of-3. Testing "is this the last set played" instead
+        // mislabels every straight-sets win: a 6-4 6-3 in `.standard` ends at
+        // index 1, and flagging that ordinary second set as the decider drops
+        // Set 2 from the chart entirely while filling the Super TB series with
+        // regular second sets.
+        let config = record.matchFormat.config
+        let decidesWithTiebreak = config.finalSetStyle == .superTiebreak
+        let decidingSetIndex = config.setsToWin * 2 - 2
+
+        // Bucket the timeline once rather than re-filtering it per set.
+        let stepsBySet = Dictionary(grouping: summary.stepsTimeline, by: \.setIndex)
+
+        // `decidingIndex` is the last set in scope, so for a live match it is
+        // the last FINISHED one — never the decider, which the match has not
+        // reached. The `decidingSetIndex` test below already enforces that; this
+        // is why it must stay rather than be simplified to "the last set".
+        return playedSets.map { index in
+            let counts = pointsBySet[index] ?? (points: 0, won: 0)
+            // `stepsTimeline` is chronological, so `dropFirst` removes this
+            // set's non-comparable opening delta (see the note above).
+            let steps = (stepsBySet[index] ?? []).dropFirst()
+            return SetSlice(
+                setIndex: index,
+                points: counts.points,
+                pointsWon: counts.won,
+                stepSampledPoints: steps.count,
+                stepSumLoad: steps.reduce(0) { $0 + $1.perPointSteps },
+                isDecidingTiebreak: decidesWithTiebreak
+                    && index == decidingSetIndex
+                    && index == decidingIndex
+            )
+        }
+    }
+
 }

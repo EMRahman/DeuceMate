@@ -125,4 +125,5 @@ struct TrendsSamplesTests {
         ])
         #expect(Set(cache.samples.map(\.matchID)) == Set([idA, idB]))
     }
+
 }
