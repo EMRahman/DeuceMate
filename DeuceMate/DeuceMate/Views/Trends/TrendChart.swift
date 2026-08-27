@@ -221,11 +221,10 @@ struct TrendChart: View {
         } else {
             ForEach(Self.unitOrder, id: \.self) { unit in
                 let shown = plottable(bucket(unit))
-                // A bucket can be empty for two different reasons — no metric
-                // of that unit in this group, or every one of them lacking
-                // coverage in this window (a Health-free archive's bpm bucket).
-                // Both mean "draw nothing here", not "draw an empty axis".
-                if !shown.isEmpty && !shown.allSatisfy({ $0.points.isEmpty }) {
+                // Empty for either reason — no metric of that unit in this
+                // group, or none of them with coverage in this window — means
+                // "draw nothing here", not "draw an empty axis".
+                if !shown.isEmpty {
                     if let caption = chartCaption(for: unit) {
                         Text(caption)
                             .font(.caption.weight(.semibold))
@@ -253,17 +252,27 @@ struct TrendChart: View {
         displayMode == .count ? Double(point.ratio.numerator) : point.value
     }
 
-    /// `series`, filtering out — in Count mode only — any metric with
-    /// `supportsCountMode == false` (aggressionIndex, ownErrorShare): its
-    /// 0...1 fraction plotted against a raw-count axis would read as
-    /// pinned near zero, so it drops out of Count mode rather than
-    /// misrepresenting it. Every metric is plottable in Rate mode. Callers
-    /// must route BOTH `lineChart(for:)` and `legend(for:)` through this
-    /// same filtered list — passing the chart a filtered list and the
+    /// `series`, narrowed to what this chart can actually draw. Two filters:
+    ///
+    /// - **No data in this window.** A metric can exist in the group and have
+    ///   no match to plot — "Set 3" for a player whose format decides with a
+    ///   super-tiebreak, or a rally phase that never occurred. Its line is
+    ///   absent either way; keeping it would leave a legend chip that toggles
+    ///   nothing.
+    /// - **Count mode only:** any metric with `supportsCountMode == false`
+    ///   (aggressionIndex, ownErrorShare, the rally shares). A 0...1 fraction
+    ///   plotted against a raw-count axis reads as pinned near zero, so it
+    ///   drops out of Count mode rather than misrepresenting itself.
+    ///
+    /// Callers must route BOTH `lineChart(for:)` and `legend(for:)` through
+    /// this same filtered list — passing the chart a filtered list and the
     /// legend the unfiltered one left a legend chip toggleable with no
-    /// corresponding line to toggle (Codex review, PR #121).
+    /// corresponding line to toggle (Codex review, PR #121). The empty-series
+    /// filter above is that same bug arriving by a different route.
     private func plottable(_ series: [TrendSeries]) -> [TrendSeries] {
-        displayMode == .count ? series.filter { $0.metric.supportsCountMode } : series
+        series
+            .filter { !$0.points.isEmpty }
+            .filter { displayMode != .count || $0.metric.supportsCountMode }
     }
 
     /// `points` split into runs of consecutive `TrendPoint.index` values —
@@ -510,10 +519,10 @@ struct TrendChart: View {
     // MARK: - Rally depth
 
     private var depthShareSeries: [TrendSeries] {
-        series.filter { [.depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally].contains($0.metric) }
+        plottable(series.filter { [.depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally].contains($0.metric) })
     }
     private var depthWinSeries: [TrendSeries] {
-        series.filter { [.depthWinServe, .depthWinReturn, .depthWinServePlusOne, .depthWinRally].contains($0.metric) }
+        plottable(series.filter { [.depthWinServe, .depthWinReturn, .depthWinServePlusOne, .depthWinRally].contains($0.metric) })
     }
     /// The same four-phase mix as `depthShareSeries`, scoped to one serving
     /// side. Which side is on screen is the group's own picker, so the two
@@ -522,7 +531,7 @@ struct TrendChart: View {
         let metrics: [TrendMetric] = side == .onServe
             ? [.servedShareServe, .servedShareReturn, .servedShareServePlusOne, .servedShareRally]
             : [.returnedShareServe, .returnedShareReturn, .returnedShareServePlusOne, .returnedShareRally]
-        return series.filter { metrics.contains($0.metric) }
+        return plottable(series.filter { metrics.contains($0.metric) })
     }
 
     @ViewBuilder
@@ -535,7 +544,7 @@ struct TrendChart: View {
         .pickerStyle(.segmented)
 
         let sideSeries = serviceSideSeries(serviceSide)
-        if sideSeries.allSatisfy({ $0.points.isEmpty }) {
+        if sideSeries.isEmpty {
             emptyState
         } else {
             stackedChart(for: sideSeries)
@@ -553,7 +562,7 @@ struct TrendChart: View {
         }
         .pickerStyle(.segmented)
 
-        if depthShareSeries.allSatisfy({ $0.points.isEmpty }) {
+        if depthShareSeries.isEmpty {
             emptyState
         } else {
             switch rallyDepthMode {
