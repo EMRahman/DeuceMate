@@ -148,8 +148,10 @@ final class TrendMetricTests: XCTestCase {
         let expectedFalse: Set<TrendMetric> = [
             .wueRatio, .aggressionIndex, .ownErrorShare,
             .depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally,
-            // A rally SHARE is a style, not a count anyone wants plotted raw.
-            .rallyShareOnServe, .rallyShareOnReturn
+            // A rally SHARE is a style, not a count anyone wants plotted raw —
+            // on either side of the serve.
+            .servedShareServe, .servedShareReturn, .servedShareServePlusOne, .servedShareRally,
+            .returnedShareServe, .returnedShareReturn, .returnedShareServePlusOne, .returnedShareRally
         ]
         for metric in TrendMetric.allCases {
             XCTAssertEqual(metric.supportsCountMode, !expectedFalse.contains(metric), "\(metric)")
@@ -163,7 +165,6 @@ final class TrendMetricTests: XCTestCase {
     func test_everyMetric_hasItsExpectedUnit() {
         let nonPercent: [TrendMetric: TrendMetric.Unit] = [
             .wueRatio: .ratio,
-            .stepsPerPointWon: .steps,
             .stepsPerPointFirstSet: .steps,
             .stepsPerPointFinalSet: .steps
         ]

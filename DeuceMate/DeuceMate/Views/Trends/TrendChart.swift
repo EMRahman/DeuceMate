@@ -51,12 +51,13 @@ extension TrendMetric {
         case .breakPointsSaved:                               return .cyan
         case .bigPointWin:                                    return .orange
         case .pointsWon:                                      return .green
-        case .stepsPerPointWon:                               return .teal
-        // Rally-by-server: each side keeps one hue across its share and win
-        // lines, so the legend reads as two pairs rather than four unrelated
-        // series.
-        case .rallyShareOnServe, .rallyWinOnServe:            return .orange
-        case .rallyShareOnReturn, .rallyWinOnReturn:          return .indigo
+        // The per-side mix reuses the whole-match phase hues above — only one
+        // side is on screen at a time, so "teal means the point ended on the
+        // serve" holds everywhere rather than being relearned per chart.
+        case .servedShareServe, .returnedShareServe:               return .teal
+        case .servedShareReturn, .returnedShareReturn:             return .indigo
+        case .servedShareServePlusOne, .returnedShareServePlusOne: return .pink
+        case .servedShareRally, .returnedShareRally:               return .brown
         // Fatigue pairs: first set vs final set, distinct enough to read
         // apart at a glance since the gap between them IS the metric.
         case .winRateFirstSet:                                return .green
@@ -90,6 +91,7 @@ struct TrendChart: View {
 
     @State private var hiddenMetrics: Set<TrendMetric>
     @State private var rallyDepthMode: RallyDepthMode = .mix
+    @State private var serviceSide: ServiceSide = .onServe
     /// Tap/drag-selected match index, shared across whichever chart shape
     /// this group currently shows — `PERFORMANCE_TRENDS_PLAN.md` §6.3
     /// specified "the date appears in the axis label and in the selection
@@ -113,15 +115,18 @@ struct TrendChart: View {
     }
 
     private enum RallyDepthMode: String, CaseIterable, Identifiable {
-        case mix, winRate, byServer
+        case mix, winRate
         var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .mix:      return "Mix"
-            case .winRate:  return "Win Rate"
-            case .byServer: return "By Server"
-            }
-        }
+        var label: String { self == .mix ? "Mix" : "Win Rate" }
+    }
+
+    /// Which serving side the "Rally Depth — By Service" group is showing. Not
+    /// persisted, matching `rallyDepthMode` on its sibling group rather than the
+    /// Serve & Return filter, which the owner asked to remember.
+    private enum ServiceSide: String, CaseIterable, Identifiable {
+        case onServe, onReturns
+        var id: String { rawValue }
+        var label: String { self == .onServe ? "On Serve" : "On Returns" }
     }
 
     /// Narrows the Serve & Return group's six metrics to one question at a
@@ -154,6 +159,8 @@ struct TrendChart: View {
         VStack(alignment: .leading, spacing: 10) {
             if group == .rallyDepth {
                 rallyDepthBody
+            } else if group == .rallyDepthByService {
+                rallyDepthByServiceBody
             } else if group == .serveReturn {
                 serveReturnBody
             } else {
@@ -481,16 +488,33 @@ struct TrendChart: View {
     private var depthWinSeries: [TrendSeries] {
         series.filter { [.depthWinServe, .depthWinReturn, .depthWinServePlusOne, .depthWinRally].contains($0.metric) }
     }
-    /// Rally length split by who served — a different question from the two
-    /// modes above, which are about which PHASE points end in regardless of
-    /// side. All four are percentages, so they share the existing line chart
-    /// and this mode costs no extra chart. The two share lines start hidden
-    /// (`TrendMetric.startsHidden`), so the default view is the two win rates:
-    /// "rallies on my serve go badly, rallies on their serve go well" is the
-    /// actionable half, and the share lines say how often it comes up.
-    private var depthByServerSeries: [TrendSeries] {
-        series.filter { [.rallyWinOnServe, .rallyWinOnReturn,
-                         .rallyShareOnServe, .rallyShareOnReturn].contains($0.metric) }
+    /// The same four-phase mix as `depthShareSeries`, scoped to one serving
+    /// side. Which side is on screen is the group's own picker, so the two
+    /// arrays are never rendered together.
+    private func serviceSideSeries(_ side: ServiceSide) -> [TrendSeries] {
+        let metrics: [TrendMetric] = side == .onServe
+            ? [.servedShareServe, .servedShareReturn, .servedShareServePlusOne, .servedShareRally]
+            : [.returnedShareServe, .returnedShareReturn, .returnedShareServePlusOne, .returnedShareRally]
+        return series.filter { metrics.contains($0.metric) }
+    }
+
+    @ViewBuilder
+    private var rallyDepthByServiceBody: some View {
+        Picker("Serving Side", selection: $serviceSide) {
+            ForEach(ServiceSide.allCases) { side in
+                Text(side.label).tag(side)
+            }
+        }
+        .pickerStyle(.segmented)
+
+        let sideSeries = serviceSideSeries(serviceSide)
+        if sideSeries.allSatisfy({ $0.points.isEmpty }) {
+            emptyState
+        } else {
+            stackedChart(for: sideSeries)
+            selectionSummary(for: sideSeries)
+            staticLegend(for: sideSeries)
+        }
     }
 
     @ViewBuilder
@@ -514,13 +538,6 @@ struct TrendChart: View {
                 rallyDepthWinRateChart
                 selectionSummary(for: depthWinSeries)
                 staticLegend(for: depthWinSeries)
-            case .byServer:
-                let shown = plottable(depthByServerSeries)
-                lineChart(for: shown, unit: .percent)
-                selectionSummary(for: shown)
-                // The tappable legend, not `staticLegend`: the two share lines
-                // start hidden and this is how they come back.
-                legend(for: shown)
             }
         }
     }
@@ -555,9 +572,16 @@ struct TrendChart: View {
     }
 
     private var rallyDepthStackedChart: some View {
-        let scale = runColorScale(for: depthShareSeries)
+        stackedChart(for: depthShareSeries)
+    }
+
+    /// The normalized stacked-area mix. Shared by the whole-match Rally Depth
+    /// group and the per-serving-side one, which differ only in which four
+    /// share series they hand over.
+    private func stackedChart(for shareSeries: [TrendSeries]) -> some View {
+        let scale = runColorScale(for: shareSeries)
         return Chart {
-            ForEach(depthShareSeries) { s in
+            ForEach(shareSeries) { s in
                 areaMarks(for: s)
             }
             if let selectedIndex, chartXDomain.contains(selectedIndex) {

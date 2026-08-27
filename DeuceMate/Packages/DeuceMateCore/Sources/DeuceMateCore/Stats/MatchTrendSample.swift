@@ -121,27 +121,6 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     public let pointsWithEndingShotOnServe: Int
     public let pointsWithEndingShotOnReturn: Int
 
-    // MARK: - Movement
-
-    /// Entries in `MatchStatsSummary.stepsTimeline` — points that carried a
-    /// real `stepsCumulative` sample. Deliberately NOT `StepsSeries.make`'s
-    /// output: that falls back to spreading `MatchRecord.totalSteps` evenly
-    /// across points (StepsSeries.swift:66-79), under which "steps per point"
-    /// is `totalSteps / n` by construction — a constant, not a measurement.
-    public let stepSampledPoints: Int
-    /// Points **among the step-sampled ones** that the recorder won. The
-    /// all-match `pointsWon` is the wrong denominator for a steps-per-point-won
-    /// rate: `stepSumLoad` only covers the sampled window, so pairing the two
-    /// divides a partial numerator by a full denominator and the rate falls as
-    /// step coverage falls — reported as an improvement, since this is the one
-    /// health metric with an orientation. `StepPoint.wonByFocal` makes the
-    /// matching count free.
-    public let stepSampledPointsWon: Int
-    /// Σ `perPointSteps` over the timeline, including its baseline first entry
-    /// (which carries a load of 0). Pairing it with `stepSampledPoints`
-    /// reproduces `MatchStatsSummary.averageSteps` exactly, so the trend and
-    /// the text export's "Avg Steps / Point" can never disagree.
-    public let stepSumLoad: Int
 
     // MARK: - Fatigue — first played set vs last played set
 
@@ -212,11 +191,6 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         rallyDepthOnServe: [EndingShot: DepthCount] = [:],
         rallyDepthOnReturn: [EndingShot: DepthCount] = [:],
         pointsWithEndingShotOnServe: Int = 0, pointsWithEndingShotOnReturn: Int = 0,
-        // Movement counters default to "absent" so a caller that only cares
-        // about the tennis metrics (every existing test) stays valid and gets a
-        // sample with no movement coverage — which is exactly what a match
-        // recorded without Health access produces.
-        stepSampledPoints: Int = 0, stepSumLoad: Int = 0, stepSampledPointsWon: Int = 0,
         fatigue: FatigueSplit? = nil
     ) {
         self.matchID = matchID
@@ -263,9 +237,6 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         self.rallyDepthOnReturn = rallyDepthOnReturn
         self.pointsWithEndingShotOnServe = pointsWithEndingShotOnServe
         self.pointsWithEndingShotOnReturn = pointsWithEndingShotOnReturn
-        self.stepSampledPoints = stepSampledPoints
-        self.stepSumLoad = stepSumLoad
-        self.stepSampledPointsWon = stepSampledPointsWon
         self.fatigue = fatigue
     }
 
@@ -295,10 +266,6 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         let serveDepth = depthDictionary(summary.rallyDepthOnServe)
         let returnDepth = depthDictionary(summary.rallyDepthOnReturn)
 
-        // Movement. The sampled timeline only — never StepsSeries' totalSteps
-        // fallback, which would make steps-per-point a constant by construction.
-        let stepPoints = summary.stepsTimeline
-
         self.init(
             matchID: record.id, startTime: record.startTime, matchType: record.matchType,
             matchFormat: record.matchFormat, recorderWon: record.iWon,
@@ -327,9 +294,6 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
             rallyDepthOnServe: serveDepth, rallyDepthOnReturn: returnDepth,
             pointsWithEndingShotOnServe: summary.rallyDepthOnServe.reduce(0) { $0 + $1.total },
             pointsWithEndingShotOnReturn: summary.rallyDepthOnReturn.reduce(0) { $0 + $1.total },
-            stepSampledPoints: stepPoints.count,
-            stepSumLoad: stepPoints.reduce(0) { $0 + $1.perPointSteps },
-            stepSampledPointsWon: stepPoints.filter(\.wonByFocal).count,
             fatigue: Self.fatigueSplit(record: record, summary: summary)
         )
     }

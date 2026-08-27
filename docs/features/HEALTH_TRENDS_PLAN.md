@@ -7,7 +7,7 @@ date: 2026-08-26
 implemented_date: 2026-08-26
 blocked_by: null
 delivers: "The movement half of docs/features/PERFORMANCE_TRENDS_PLAN.md, plus rally length split by serving side. Shipped first as three groups and 13 metrics; reduced in the same branch to two groups and 5 metrics after review — see section 3's 'What was cut, and why', which is the part to read before proposing a new metric here."
-metric_count: "5 movement/fatigue metrics in 2 groups (3 charts), plus 4 rally-by-server metrics inside the existing Rally Depth group (0 new charts)."
+metric_count: "4 fatigue metrics in 1 group (2 charts), plus 8 per-serving-side rally-depth share metrics in their own group (1 mode-switched chart)."
 scope:
   in_scope:
     - "Packages/DeuceMateCore/Sources/DeuceMateCore/Stats/MatchTrendSample.swift (health counters, a maxHR parameter, the fatigue set-pair rule)"
@@ -39,7 +39,7 @@ key_data_model_facts:
 decisions:
   fatigue_basis: "set-based — first played set vs last played set, both needing 20 points (owner decision over chronological halves)"
   zones: "cut. Shipped in the first pass at the owner's request, then removed with the rest of heart rate — a metric that needs a yardstick the user can change is not worth a chart"
-  group_count: "two — Fatigue and Effort — plus a third mode on the existing Rally Depth picker. The screen budget is the binding constraint, not the metric count"
+  group_count: "two — Fatigue, and Rally Depth — By Service. The screen budget is the binding constraint, not the metric count: 8 of the per-side metrics share one mode-switched chart"
   keeping_a_chart: "a chart earns its place only if the number moving tells the player to do something differently. Load and duration are context, not instruction"
   pairs_not_deltas: "fatigue ships as first-set/final-set metric PAIRS on one chart; the gap between the lines is the fatigue. TrendMetric.Ratio is Int/Int and cannot carry a signed difference"
   empty_denominator: "nil, never zero — inherited from PERFORMANCE_TRENDS_PLAN.md §3.4"
@@ -96,7 +96,7 @@ because they were better" is unknowable — every efficiency metric carries that
 5. **Zones are a moving yardstick** — handled by the composite cache key and a calibration
    caption, never by silently re-deriving behind the user's back.
 
-## 3. The catalogue — 5 metrics, 3 charts, 2 groups
+## 3. The catalogue — 4 metrics, 2 charts, 1 group
 
 The first cut of this feature shipped 13 metrics across three groups and **8 charts**, on a
 screen that already had five groups. Most of them reported *load* rather than anything a
@@ -114,16 +114,6 @@ step load holds is a decision or technique problem; both dropping together is co
 The win-rate pair needs **no HealthKit data at all**, so it is the one thing here that
 still works for a player who never granted Health access and for an archive restored from
 iCloud, where health data is permanently gone.
-
-### Effort
-| Metric | numerator / denominator | unit | better |
-|---|---|---|---|
-| `stepsPerPointWon` | Σ per-point steps / points won **among step-sampled points** | `.steps` | **lower** |
-
-How much running one won point costs you; falling means winning more cheaply. Its
-denominator counts wins within the step-sampled window, not the whole match — pairing a
-partial numerator with a full denominator made the rate fall as coverage fell, which in the
-one metric with an orientation reported a dropped stream as a fitness gain.
 
 ### The set-pair rule (used by both Fatigue pairs)
 
@@ -151,39 +141,45 @@ per-set and whole-match conventions deliberately differ.
 | `avgHeartRate`, `hardZoneShare`, `hardZoneWinRate`, `avgHeartRateFirstSet`, `avgHeartRateFinalSet` | **Heart rate dropped entirely.** Zones depend on a max-HR yardstick that shifts under the user (see the retired trap 5 below), "win rate in Z4–Z5" largely restates the fade signal, and step sampling survives in cases where the HR stream doesn't. Dropping them removed the `maxHR` parameter, the `TrendsSamples` composite cache key and the calibration caption with them. |
 | `metresPerPoint` | Collinear with steps per point — two charts saying the same thing. |
 | `minutesPerMatch` | Match length is context, not performance, and every archive row already shows it. |
-| `stepsPerPoint` (whole-match) | Running more is neither good nor bad on its own. Its counters stay: `stepsPerPointWon` needs them for its numerator and its gate. |
+| `stepsPerPoint` (whole-match) | Running more is neither good nor bad on its own. |
+| `stepsPerPointWon` (the Effort group) | Cut in a second pass, with the group it was alone in. It was the best available answer to "am I getting fitter", but it is confounded by opponent strength — a weak opponent hands out cheap points and the line falls without any change in the player — and one chart per season-scale question was not worth the screen. Its whole-match step counters went with it. |
 
 Do not re-propose these without a reason that survives the test above. The `.bpm`, `.metres`
 and `.minutes` `Unit` cases went with them, leaving `.steps` as the only unit this feature
 added — the unit bucketing itself stays, because Fatigue holds a percent chart and a steps
 chart.
 
-## 3a. Rally length by serving side
+## 3a. Rally Depth — By Service
 
-Four metrics answering a question the tennis catalogue could not: **do my service points go
-long, and does that cost me?** They live in the existing `.rallyDepth` group behind a third
-mode on its segmented picker, so they add **no chart at all**.
+The whole-match Mix chart answers "where do my points end?" — but it pools the two sides of
+the serve, which are different games. **Rally Depth — By Service** is its own group showing
+the same four-phase normalized stack, scoped to one serving side at a time via an
+On Serve / On Returns picker.
 
-| Metric | numerator / denominator | better |
-|---|---|---|
-| `rallyWinOnServe` | rally points won on my serve / rally points on my serve | higher |
-| `rallyWinOnReturn` | rally points won on return / rally points on return | higher |
-| `rallyShareOnServe` | rally points on my serve / my service points with an ending shot | neutral |
-| `rallyShareOnReturn` | rally points on return / return points with an ending shot | neutral |
+Eight share metrics, four per side (`servedShare*` / `returnedShare*`), each taken against
+**that side's own** ending-shot total so each stack fills to 100% of the side rather than to
+some fraction of the match. Read across the picker: a rally slice that is large on your
+serve and small on return says your service points are the ones going long.
+
+An earlier pass shipped this as four metrics (rally share + rally win per side) behind a
+third mode on the Rally Depth picker. It was replaced by the full per-side mix at the
+owner's request: the mix shows the whole distribution rather than just the rally slice, and
+a separate group gives it a heading rather than burying it in a picker. The per-side **win
+rates** went with that change — the counters are still there (`DepthCount.wins`), so a
+Win Rate mode on this group is a small addition if the shares turn out to raise the
+question.
 
 The split axis is **`PointStat.server`, not `EndingShot.serve`**. `EndingShot` records the
 *phase* a point ended in, so a point ending on the return shot is still a point I served;
 reading the side off the phase is the easiest mistake available here and puts those points
 on the wrong side of the comparison. `MatchStatsSummary` gains `rallyDepthOnServe` /
 `rallyDepthOnReturn`, the same `[RallyDepthStat]` shape as the existing `rallyDepth` and
-summing back to it, carrying all four phases per side so a future serve-side S+1 metric
-needs no new counters.
+summing back to it, carrying all four phases per side.
 
-The two win-rate lines show by default and the two share lines start hidden
-(`TrendMetric.startsHidden`, which generalises the old `isOpponentFramed`-only rule): the
-win rates are the verdict, the shares say how often the question comes up. Both sides gate
-to `nil` when that side carries no ending-shot data, so a match archived before
-`PointStat.endingShot` existed gaps rather than reading as "you never played a rally".
+Both sides gate to `nil` when that side carries no ending-shot data, so a match archived
+before `PointStat.endingShot` existed gaps rather than reading as "you never played a
+rally". The per-side metrics reuse the whole-match phase colours, since only one side is on
+screen at a time — "teal means the point ended on the serve" then holds everywhere.
 
 ## 4. Presentation
 

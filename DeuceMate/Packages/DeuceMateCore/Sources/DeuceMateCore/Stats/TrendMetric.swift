@@ -8,7 +8,7 @@ import Foundation
 /// screen's layout (§6.2).
 public enum TrendMetricGroup: String, CaseIterable, Identifiable, Sendable {
     case errors, attack, rallyDepth, serveReturn, pressure
-    case effort, fatigue
+    case rallyDepthByService, fatigue
 
     public var id: String { rawValue }
 
@@ -19,7 +19,7 @@ public enum TrendMetricGroup: String, CaseIterable, Identifiable, Sendable {
         case .rallyDepth:  return "Rally Depth"
         case .serveReturn: return "Serve & Return"
         case .pressure:    return "Pressure"
-        case .effort:      return "Effort"
+        case .rallyDepthByService: return "Rally Depth — By Service"
         case .fatigue:     return "Fatigue"
         }
     }
@@ -43,8 +43,8 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
     case depthWinServe, depthWinReturn, depthWinServePlusOne, depthWinRally
     case firstServeIn, secondServeIn, firstServeWin, secondServeWin, returnWinFirst, returnWinSecond
     case breakPointsConverted, breakPointsSaved, bigPointWin, pointsWon
-    case rallyShareOnServe, rallyShareOnReturn, rallyWinOnServe, rallyWinOnReturn
-    case stepsPerPointWon
+    case servedShareServe, servedShareReturn, servedShareServePlusOne, servedShareRally
+    case returnedShareServe, returnedShareReturn, returnedShareServePlusOne, returnedShareRally
     case winRateFirstSet, winRateFinalSet
     case stepsPerPointFirstSet, stepsPerPointFinalSet
 
@@ -86,10 +86,9 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
             return .serveReturn
         case .breakPointsConverted, .breakPointsSaved, .bigPointWin, .pointsWon:
             return .pressure
-        case .rallyShareOnServe, .rallyShareOnReturn, .rallyWinOnServe, .rallyWinOnReturn:
-            return .rallyDepth
-        case .stepsPerPointWon:
-            return .effort
+        case .servedShareServe, .servedShareReturn, .servedShareServePlusOne, .servedShareRally,
+             .returnedShareServe, .returnedShareReturn, .returnedShareServePlusOne, .returnedShareRally:
+            return .rallyDepthByService
         case .winRateFirstSet, .winRateFinalSet,
              .stepsPerPointFirstSet, .stepsPerPointFinalSet:
             return .fatigue
@@ -127,11 +126,13 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         case .breakPointsSaved:        return "Break Points Saved"
         case .bigPointWin:             return "Big-Point Win %"
         case .pointsWon:               return "Points Won"
-        case .rallyShareOnServe:       return "Rallies — On My Serve"
-        case .rallyShareOnReturn:      return "Rallies — On Return"
-        case .rallyWinOnServe:         return "Rally Win — On My Serve"
-        case .rallyWinOnReturn:        return "Rally Win — On Return"
-        case .stepsPerPointWon:        return "Steps per Point Won"
+        // Deliberately the same four labels as the whole-match mix: only one
+        // side is on screen at a time (the group's own picker chooses it), so
+        // repeating the side in every legend entry would be noise.
+        case .servedShareServe, .returnedShareServe:               return "Ending on Serve"
+        case .servedShareReturn, .returnedShareReturn:             return "Ending on Return"
+        case .servedShareServePlusOne, .returnedShareServePlusOne: return "Ending on S+1"
+        case .servedShareRally, .returnedShareRally:               return "Ending in Rally"
         case .winRateFirstSet:         return "Points Won — First Set"
         case .winRateFinalSet:         return "Points Won — Final Set"
         case .stepsPerPointFirstSet:   return "Steps/Point — First Set"
@@ -171,16 +172,10 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
             return "of big points"
         case .pointsWon:
             return "of all points"
-        case .rallyShareOnServe:
+        case .servedShareServe, .servedShareReturn, .servedShareServePlusOne, .servedShareRally:
             return "of my service points with a recorded ending shot"
-        case .rallyShareOnReturn:
+        case .returnedShareServe, .returnedShareReturn, .returnedShareServePlusOne, .returnedShareRally:
             return "of return points with a recorded ending shot"
-        case .rallyWinOnServe:
-            return "of rallies on my serve"
-        case .rallyWinOnReturn:
-            return "of rallies on return"
-        case .stepsPerPointWon:
-            return "for each point won"
         case .winRateFirstSet:
             return "of points in the first set"
         case .winRateFinalSet:
@@ -194,22 +189,21 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
 
     public var betterDirection: BetterDirection {
         switch self {
-        case .doubleFaults, .unforcedErrors, .forcedErrorsConceded, .ownErrorShare, .winnersConceded,
-             .stepsPerPointWon:
+        case .doubleFaults, .unforcedErrors, .forcedErrorsConceded, .ownErrorShare, .winnersConceded:
             return .lower
         case .doubleFaultsConceded, .unforcedErrorsDrawn, .forcedErrorsCaused, .winners,
              .wueRatio, .aggressionIndex, .firstServeIn, .secondServeIn, .firstServeWin, .secondServeWin,
              .returnWinFirst, .returnWinSecond, .depthWinServe, .depthWinReturn,
              .depthWinServePlusOne, .depthWinRally, .breakPointsConverted, .breakPointsSaved,
-             .bigPointWin, .pointsWon, .winRateFirstSet, .winRateFinalSet,
-             .rallyWinOnServe, .rallyWinOnReturn:
+             .bigPointWin, .pointsWon, .winRateFirstSet, .winRateFinalSet:
             return .higher
         case .depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally,
-             // How often points reach a rally is a style, not a grade — the
-             // paired win rate is what says whether that style pays. Per-set
-             // step load is likewise context: moving less late is only bad if
-             // the win rate fell with it, which is the chart above it.
-             .rallyShareOnServe, .rallyShareOnReturn,
+             // Where points END is a style, not a grade — on either side of
+             // the serve. Per-set step load is likewise context: moving less
+             // late is only bad if the win rate fell with it, which is the
+             // chart above it.
+             .servedShareServe, .servedShareReturn, .servedShareServePlusOne, .servedShareRally,
+             .returnedShareServe, .returnedShareReturn, .returnedShareServePlusOne, .returnedShareRally,
              .stepsPerPointFirstSet, .stepsPerPointFinalSet:
             return .neutral
         }
@@ -219,7 +213,7 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .wueRatio:
             return .ratio
-        case .stepsPerPointWon, .stepsPerPointFirstSet, .stepsPerPointFinalSet:
+        case .stepsPerPointFirstSet, .stepsPerPointFinalSet:
             return .steps
         default:
             return .percent
@@ -233,7 +227,8 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .wueRatio, .aggressionIndex, .ownErrorShare,
              .depthShareServe, .depthShareReturn, .depthShareServePlusOne, .depthShareRally,
-             .rallyShareOnServe, .rallyShareOnReturn:
+             .servedShareServe, .servedShareReturn, .servedShareServePlusOne, .servedShareRally,
+             .returnedShareServe, .returnedShareReturn, .returnedShareServePlusOne, .returnedShareRally:
             return false
         default:
             return true
@@ -306,35 +301,20 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         case .pointsWon:
             return (sample.pointsWon, sample.totalPoints)
 
-        // Rally length by SERVING SIDE. The split is on who served, which is a
-        // different axis from `EndingShot` — `.serve` is the phase a point
-        // ended in, so a point ending on the return shot is still a point I
-        // served. `nil` (not zero) when that side carries no ending-shot data,
-        // which is every match archived before `PointStat.endingShot` existed.
-        case .rallyShareOnServe:
-            guard sample.pointsWithEndingShotOnServe > 0 else { return nil }
-            return (sample.rallyDepthOnServe[.rally]?.total ?? 0, sample.pointsWithEndingShotOnServe)
-        case .rallyShareOnReturn:
-            guard sample.pointsWithEndingShotOnReturn > 0 else { return nil }
-            return (sample.rallyDepthOnReturn[.rally]?.total ?? 0, sample.pointsWithEndingShotOnReturn)
-        case .rallyWinOnServe:
-            guard let depth = sample.rallyDepthOnServe[.rally] else { return nil }
-            return (depth.wins, depth.total)
-        case .rallyWinOnReturn:
-            guard let depth = sample.rallyDepthOnReturn[.rally] else { return nil }
-            return (depth.wins, depth.total)
-
-        // Movement. `nil` — never a zero pair — when the match lacks the step
-        // sampling the metric needs, so a match recorded with Health access off
-        // leaves a visible gap (PERFORMANCE_TRENDS_PLAN.md §3.4).
-        case .stepsPerPointWon:
-            // `stepSampledPointsWon`, NOT `pointsWon`: the numerator covers only
-            // the sampled window, so a full-match denominator would make the
-            // rate fall as step coverage falls — and this metric is oriented
-            // `.lower`, so that reads as a fitness gain.
-            guard sample.stepSampledPoints >= Self.minimumStepSamples,
-                  sample.stepSampledPointsWon > 0 else { return nil }
-            return (sample.stepSumLoad, sample.stepSampledPointsWon)
+        // The whole-match mix, partitioned by WHO SERVED. That split is on
+        // `PointStat.server`, a different axis from `EndingShot` — `.serve` is
+        // the phase a point ended in, so a point ending on the return shot is
+        // still a point I served. `nil` (not zero) when that side carries no
+        // ending-shot data, which is every match archived before
+        // `PointStat.endingShot` existed.
+        case .servedShareServe:         return servedSharePair(.serve, in: sample)
+        case .servedShareReturn:        return servedSharePair(.return, in: sample)
+        case .servedShareServePlusOne:  return servedSharePair(.servePlusOne, in: sample)
+        case .servedShareRally:         return servedSharePair(.rally, in: sample)
+        case .returnedShareServe:        return returnedSharePair(.serve, in: sample)
+        case .returnedShareReturn:       return returnedSharePair(.return, in: sample)
+        case .returnedShareServePlusOne: return returnedSharePair(.servePlusOne, in: sample)
+        case .returnedShareRally:        return returnedSharePair(.rally, in: sample)
 
         // Fatigue pairs. Each checks BOTH slices before returning either, so a
         // set that lacks the sampling can never leave its partner drawn alone —
@@ -352,13 +332,9 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Metrics that start hidden behind a legend tap. Two families: the
-    /// opponent-framed counters (their trend is one tap away, not the headline),
-    /// and the rally SHARE lines, whose paired win rates carry the actionable
-    /// half of the same question.
-    public var startsHidden: Bool {
-        isOpponentFramed || self == .rallyShareOnServe || self == .rallyShareOnReturn
-    }
+    /// Metrics that start hidden behind a legend tap: the opponent-framed
+    /// counters, whose trend is one tap away rather than the headline.
+    public var startsHidden: Bool { isOpponentFramed }
 
     /// The metric counts something that happened to/because of the OPPONENT
     /// rather than the recorder's own shot.
@@ -373,9 +349,6 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
 
     // MARK: - Health coverage gates
 
-    /// Fewest sampled step points, matching `StepsCoachInsights`' own
-    /// `timeline.count >= 10`.
-    public static let minimumStepSamples = 10
     /// Fewest samples in EACH of the two compared sets, per family.
     public static let minimumFatigueSamples = 5
 
@@ -388,6 +361,18 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
     private func depthWinPair(_ shot: EndingShot, in sample: MatchTrendSample) -> (Int, Int)? {
         guard let depth = sample.rallyDepth[shot] else { return nil }
         return (depth.wins, depth.total)
+    }
+
+    /// Mirrors `depthSharePair`, scoped to the points the recorder served.
+    private func servedSharePair(_ shot: EndingShot, in sample: MatchTrendSample) -> (Int, Int)? {
+        guard sample.pointsWithEndingShotOnServe > 0 else { return nil }
+        return (sample.rallyDepthOnServe[shot]?.total ?? 0, sample.pointsWithEndingShotOnServe)
+    }
+
+    /// Mirrors `depthSharePair`, scoped to the points the opponent served.
+    private func returnedSharePair(_ shot: EndingShot, in sample: MatchTrendSample) -> (Int, Int)? {
+        guard sample.pointsWithEndingShotOnReturn > 0 else { return nil }
+        return (sample.rallyDepthOnReturn[shot]?.total ?? 0, sample.pointsWithEndingShotOnReturn)
     }
 
     /// One match's plottable value: `rawPair` plus the empty-denominator

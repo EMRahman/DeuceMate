@@ -49,10 +49,10 @@ struct TrendsView: View {
     /// distinct from `TrendMetricGroup`'s own declaration order (which
     /// `TrendMetric.metrics(in:)` and every other Core consumer are
     /// indifferent to). Errors first, then Serve & Return, Attack, Rally
-    /// Depth, Pressure — then the three health groups.
+    /// Depth (whole-match, then split by serving side), Pressure, Fatigue.
     private let groupDisplayOrder: [TrendMetricGroup] = [
-        .errors, .serveReturn, .attack, .rallyDepth, .pressure,
-        .effort, .fatigue
+        .errors, .serveReturn, .attack, .rallyDepth, .rallyDepthByService, .pressure,
+        .fatigue
     ]
 
     private var scopedSamples: [MatchTrendSample] {
@@ -83,8 +83,7 @@ struct TrendsView: View {
         Dictionary(uniqueKeysWithValues: scopedSamples.enumerated().map { ($0.offset, $0.element.startTime) })
     }
 
-    /// How many scoped matches actually carry what a movement-derived group
-    /// needs.
+    /// How many scoped matches can actually support the Fatigue comparison.
     ///
     /// Health data is device-local and does NOT survive an iCloud restore: the
     /// canonical archive is health-stripped and the Health sidecar is excluded
@@ -99,13 +98,10 @@ struct TrendsView: View {
         let covered: Int
         let subject: String
         switch group {
-        case .effort:
-            covered = scopedSamples.filter { $0.stepSampledPoints >= TrendMetric.minimumStepSamples }.count
-            subject = "step data"
         case .fatigue:
             covered = scopedSamples.filter { $0.fatigue != nil }.count
             subject = "two comparable sets"
-        case .errors, .attack, .rallyDepth, .serveReturn, .pressure:
+        case .errors, .attack, .rallyDepth, .rallyDepthByService, .serveReturn, .pressure:
             return nil
         }
 
