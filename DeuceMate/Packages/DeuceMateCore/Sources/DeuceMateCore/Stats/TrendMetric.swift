@@ -340,8 +340,15 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// Metrics that start hidden behind a legend tap: the opponent-framed
-    /// counters, whose trend is one tap away rather than the headline.
-    public var startsHidden: Bool { isOpponentFramed }
+    /// counters, whose trend is one tap away rather than the headline — unless
+    /// the metric IS a headline row. Promoting one to the archive card and then
+    /// hiding its line in the very chart that card taps through to would answer
+    /// the question the card raises with a blank space. `forcedErrorsCaused` is
+    /// opponent-framed in the sense the chart means (it counts the opponent's
+    /// shot, which is what earns it the dashed pairing with the forced errors
+    /// it mirrors) while still being one of the four things the player is asked
+    /// to watch.
+    public var startsHidden: Bool { isOpponentFramed && !Self.headline.contains(self) }
 
     /// The metric counts something that happened to/because of the OPPONENT
     /// rather than the recorder's own shot.
@@ -421,6 +428,19 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         allCases.filter { $0.group == group }
     }
 
-    /// The four rows on the archive screen (§1.1).
-    public static let headline: [TrendMetric] = [.doubleFaults, .unforcedErrors, .winners, .wueRatio]
+    /// The four rows on the archive screen (§1.1). Ordered as one question —
+    /// what, among the things I control, is improving or slipping? — running
+    /// from the points I hand over to the points I take: double faults, then
+    /// unforced errors, then the pressure that forces an error out of the
+    /// opponent, then the winner.
+    ///
+    /// `forcedErrorsCaused` took W:UE's place here (owner request). W:UE is a
+    /// ratio of two rows already on the card rather than a fifth thing to work
+    /// on, and it is the card's only unbounded, count-less metric; forcing an
+    /// error is a distinct skill the player owns, and the missing half of "how
+    /// I take a point" next to `winners`. W:UE is unchanged in the Attack
+    /// group, where the sparkline row a `.ratio` unit needs already lives.
+    public static let headline: [TrendMetric] = [
+        .doubleFaults, .unforcedErrors, .forcedErrorsCaused, .winners
+    ]
 }

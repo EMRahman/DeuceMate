@@ -184,7 +184,27 @@ final class TrendMetricTests: XCTestCase {
         }
     }
 
-    func test_headline_isDoubleFaultsUnforcedErrorsWinnersWUE() {
-        XCTAssertEqual(TrendMetric.headline, [.doubleFaults, .unforcedErrors, .winners, .wueRatio])
+    /// The card reads as one question — what, among the things I control, is
+    /// improving or slipping? — running from the points I hand over to the
+    /// points I take. The ORDER carries that, so it is pinned, not just
+    /// membership.
+    func test_headline_runsFromErrorsGivenAwayToPointsTaken() {
+        XCTAssertEqual(TrendMetric.headline,
+                       [.doubleFaults, .unforcedErrors, .forcedErrorsCaused, .winners])
+    }
+
+    /// A headline metric must not start hidden in the chart its card taps
+    /// through to, or the card raises a question the destination answers with a
+    /// blank space. `forcedErrorsCaused` stays opponent-framed — that is what
+    /// earns it the dashed line paired with the forced errors it mirrors — so
+    /// the two properties have to come apart rather than one aliasing the other.
+    func test_headlineMetrics_areNeverHiddenByDefault() {
+        for metric in TrendMetric.headline {
+            XCTAssertFalse(metric.startsHidden, "\(metric) headlines the archive card")
+        }
+        XCTAssertTrue(TrendMetric.forcedErrorsCaused.isOpponentFramed,
+                      "still dashed, still paired with forcedErrorsConceded")
+        XCTAssertTrue(TrendMetric.unforcedErrorsDrawn.startsHidden,
+                      "a non-headline opponent-framed metric still starts hidden")
     }
 }
