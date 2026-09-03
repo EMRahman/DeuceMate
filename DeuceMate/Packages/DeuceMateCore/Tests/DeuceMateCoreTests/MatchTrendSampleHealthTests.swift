@@ -35,9 +35,15 @@ final class MatchTrendSampleHealthTests: XCTestCase {
     /// TRUE third set. `.standard` — the app's default — plays its decider as a
     /// super-tiebreak, which is a different series; the tests that care pass it
     /// explicitly.
+    /// `setsReached` overrides how many `SetScore`s the record carries. It
+    /// defaults to one per spec, which is the norm; pass a higher number for the
+    /// state a live match sits in throughout every changeover — the next set
+    /// started, with no point played in it yet, so it exists in `setScores` and
+    /// not in `stats`. `ScoringEngine.completeSet` creates exactly that gap.
     private func makeRecord(
         sets: [SetSpec],
         inProgress: Bool = false,
+        setsReached: Int? = nil,
         totalSteps: Int? = nil,
         totalDistanceMeters: Double? = nil,
         matchElapsedSeconds: TimeInterval = 3600,
@@ -71,7 +77,7 @@ final class MatchTrendSampleHealthTests: XCTestCase {
         return MatchRecord(
             startTime: Date(timeIntervalSince1970: 0),
             endTime: inProgress ? nil : Date(timeIntervalSince1970: offset),
-            setScores: [SetScore()],
+            setScores: (0..<max(setsReached ?? sets.count, 1)).map { _ in SetScore() },
             stats: stats,
             iWon: inProgress ? nil : true,
             matchFormat: matchFormat,
@@ -256,15 +262,83 @@ final class MatchTrendSampleHealthTests: XCTestCase {
         XCTAssertNotNil(TrendMetric.pointsWon.rawPair(in: sample))
     }
 
-    /// A live match still in its second set has exactly one finished set, which
-    /// is nothing to compare across — the same bar a completed one-set match
-    /// fails.
-    func test_inProgressMatch_inItsSecondSet_hasNothingToCompare() throws {
+    /// The state a live match spends most of its life in: second set underway,
+    /// first set finished. That first set is final, and "Set 1" is its own
+    /// cross-match series, so it plots. Judging the two-set bar on what survives
+    /// the in-play drop instead left Fatigue plotting a live match only once it
+    /// reached a THIRD set, which is the toggle broken again by a narrower route.
+    func test_inProgressMatch_inItsSecondSet_stillContributesItsFinishedFirstSet() throws {
         let record = makeRecord(sets: [
-            SetSpec(index: 0, points: 30, wins: 18),
-            SetSpec(index: 1, points: 12, wins: 7)               // still being played
+            SetSpec(index: 0, points: 30, wins: 18, stepDelta: 4),
+            SetSpec(index: 1, points: 12, wins: 7, stepDelta: 4) // still being played
+        ], inProgress: true)
+        let sample = try XCTUnwrap(MatchTrendSample(record: record))
+
+        XCTAssertEqual(sample.setSlices.map(\.setIndex), [0])
+        XCTAssertEqual(TrendMetric.winRateSet1.rawPair(in: sample)?.numerator, 18)
+        XCTAssertEqual(TrendMetric.winRateSet1.rawPair(in: sample)?.denominator, 30)
+        XCTAssertNotNil(TrendMetric.stepsPerPointSet1.rawPair(in: sample))
+        XCTAssertNil(TrendMetric.winRateSet2.rawPair(in: sample),
+                     "the set in play would drift point by point")
+    }
+
+    /// The reported bug, and the state a live match is in for every changeover:
+    /// first set finished, second set started but still 0-0. Its second set
+    /// exists in `setScores` and not yet in `stats`, so inferring the set in
+    /// play from the points pointed at the FINISHED first set — dropping it as
+    /// though it were being played, and leaving the match a set short of the
+    /// two-set bar as well. Both readings have to come off `setScores`.
+    func test_inProgressMatch_atZeroZeroInTheSecondSet_stillPlotsTheFinishedFirst() throws {
+        let record = makeRecord(sets: [
+            SetSpec(index: 0, points: 30, wins: 18, stepDelta: 4)
+        ], inProgress: true, setsReached: 2)   // second set under way, no point played
+        let sample = try XCTUnwrap(MatchTrendSample(record: record))
+
+        XCTAssertEqual(sample.setSlices.map(\.setIndex), [0],
+                       "the finished first set is not the set in play")
+        XCTAssertEqual(TrendMetric.winRateSet1.rawPair(in: sample)?.numerator, 18)
+        XCTAssertEqual(TrendMetric.winRateSet1.rawPair(in: sample)?.denominator, 30)
+        XCTAssertNotNil(TrendMetric.stepsPerPointSet1.rawPair(in: sample))
+        XCTAssertNil(TrendMetric.winRateSet2.rawPair(in: sample),
+                     "a set with no points played is no reading at all")
+    }
+
+    /// The mirror of the above: a live match in its first set carries one set
+    /// score, so it is still a one-set match and contributes nothing.
+    /// The two-set bar is about the MATCH, not about how many sets have
+    /// finished — so a live match still in its FIRST set has nothing at all.
+    func test_inProgressMatch_inItsFirstSet_hasNoFinishedSet() throws {
+        let record = makeRecord(sets: [
+            SetSpec(index: 0, points: 24, wins: 13, stepDelta: 4)  // still being played
         ], inProgress: true)
         XCTAssertEqual(MatchTrendSample(record: record)?.setSlices, [])
+    }
+
+    /// A tiebreak-only format never plays a second set, so it stays out of
+    /// Fatigue whether it is live or finished — the exclusion the two-set bar
+    /// exists for, unaffected by loosening it for live matches.
+    func test_singleSetFormat_staysOutOfFatigue_evenWhileLive() throws {
+        let record = makeRecord(sets: [
+            SetSpec(index: 0, points: 30, wins: 18, stepDelta: 4)
+        ], inProgress: true, matchFormat: .superTiebreak)
+        XCTAssertEqual(MatchTrendSample(record: record)?.setSlices, [])
+    }
+
+    /// A live perpetual tiebreak's first tiebreak sits at set index 0, which is
+    /// also that format's positional decider index (`setsToWin * 2 - 2 == 0`).
+    /// The format plays no regular sets, so nothing in it is a "deciding super
+    /// tiebreak" in the Set-3 sense the series means — `isDecidingSuperTiebreak`
+    /// carries that `playRegularSets` guard, and a bare positional test would
+    /// have filed this under "Set 3 (Super TB)".
+    func test_livePerpetualTiebreak_neverFilesItsFirstTiebreakAsTheDecider() throws {
+        let record = makeRecord(sets: [
+            SetSpec(index: 0, points: 30, wins: 18),
+            SetSpec(index: 1, points: 6, wins: 3)                // still being played
+        ], inProgress: true, matchFormat: .perpetualSuperTiebreak)
+        let sample = try XCTUnwrap(MatchTrendSample(record: record))
+
+        XCTAssertEqual(sample.setSlices.map(\.setIndex), [0])
+        XCTAssertNil(sample.decidingTiebreakSlice)
     }
 
     /// The decider only exists once the match reaches it, so a live match's

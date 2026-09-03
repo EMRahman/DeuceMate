@@ -309,13 +309,18 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     ///
     /// Two structural rules live here rather than in the metrics:
     ///
-    /// - **At least two sets.** A single-set match has nothing to compare
-    ///   across, so it contributes no fatigue data at all. This also excludes
-    ///   the tiebreak-only formats (`.superTiebreak`, `.perpetualSuperTiebreak`)
-    ///   and `.quick4Games`, all of which play one set.
-    /// - **Nothing from an in-progress match.** Its last set is still being
-    ///   played, so its rates would drift point by point. Every other counter on
-    ///   the sample stays valid for a live match.
+    /// - **The match reached a second set.** A single-set match has nothing to
+    ///   compare across, so it contributes no fatigue data at all. This also
+    ///   excludes the tiebreak-only formats (`.superTiebreak`,
+    ///   `.perpetualSuperTiebreak`) and `.quick4Games`, all of which play one
+    ///   set. The bar counts sets REACHED, from `setScores` — a match whose
+    ///   second set is under way has reached it even before its first point.
+    /// - **Nothing from the set in play.** An in-progress match's current set is
+    ///   still being played, so its rates would drift point by point. Only that
+    ///   set is dropped: its finished sets are as good as any completed match's,
+    ///   and every other counter on the sample stays valid for a live match.
+    ///   Which set that is comes from `setScores`, never from the points — see
+    ///   the note in the body.
     ///
     /// Point-count minimums are deliberately NOT applied here: a full set and a
     /// 10-point super-tiebreak need different ones, and that is the metrics'
@@ -341,14 +346,44 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
             pointsBySet[stat.setIndex] = entry
         }
 
-        // Only the set actually IN PLAY is a partial reading — a live match's
-        // earlier sets are finished and as good as any completed match's. The
-        // whole match used to be dropped, which made the screen's "Include
-        // In-Progress Matches" toggle a lie for this group alone: every other
-        // group honoured it while Fatigue silently plotted nothing.
-        let setInPlay = record.isInProgress ? pointsBySet.keys.max() : nil
+        // Which set is IN PLAY comes from `setScores`, not from the points.
+        // `ScoringEngine.completeSet` appends the next set's empty `SetScore`
+        // the instant one is won, so a live match sitting at "second set, 0-0"
+        // already carries two set scores while its points still only reach set
+        // index 0. Reading the set in play off the highest set index in `stats`
+        // therefore pointed at the FINISHED first set and dropped it as though
+        // it were still being played — and a match spends the whole changeover
+        // in exactly that state, which is when a player is most likely to open
+        // Trends mid-match. `LiveScoreboardView` already splits a live record
+        // this way (`setScores.dropLast()` for the finished sets, `.last` for
+        // the one in play); this is the same rule, stated once more here.
+        //
+        // The highest set index carrying points stays as a FLOOR: a record
+        // whose points somehow run past its set scores must not have a set
+        // still in play mistaken for a finished one. It also keeps the rule
+        // working on a record with no set scores at all.
+        let highestSetWithPoints = pointsBySet.keys.max() ?? -1
+        let setInPlay: Int? = record.isInProgress
+            ? max(record.setScores.count - 1, highestSetWithPoints)
+            : nil
+
+        // The match must have REACHED a second set. Counting sets reached —
+        // rather than sets carrying points, or sets left after the drop below —
+        // is what keeps this a statement about the MATCH: it still excludes the
+        // one-set formats and a live match in its first set, while a best-of-3
+        // that has started its second contributes the first. Judging it on what
+        // survived the drop demanded two FINISHED sets, so Fatigue plotted a
+        // live match only once it reached a third — the rarest state it is ever
+        // in. "Set 1" is its own cross-match series, so a lone finished first
+        // set belongs on it; the absent Set 2 dot is the honest gap, exactly as
+        // Set 3 is absent for a completed straight-sets win.
+        let setsReached = max(record.setScores.count, highestSetWithPoints + 1)
+        guard setsReached >= 2 else { return [] }
+
+        // `setInPlay` is at or above every set carrying points, so `!=` drops
+        // exactly the tail — never a set from the middle.
         let playedSets = pointsBySet.keys.sorted().filter { $0 != setInPlay }
-        guard playedSets.count >= 2, let decidingIndex = playedSets.last else { return [] }
+        guard let decidingIndex = playedSets.last else { return [] }
 
         // The decider is a super-tiebreak when the FORMAT says so — `.standard`,
         // the default, plays its third set as a 10-point tiebreak, while
@@ -362,17 +397,22 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         // index 1, and flagging that ordinary second set as the decider drops
         // Set 2 from the chart entirely while filling the Super TB series with
         // regular second sets.
+        // `MatchFormatConfig.isDecidingSuperTiebreak(setIndex:)` is that exact
+        // positional test, and it additionally requires `playRegularSets` —
+        // which matters now that a live match can be in scope with a single
+        // finished set: the perpetual-tiebreak format's set 0 is both the
+        // format's decider index and the only played set, and would otherwise be
+        // labelled "Set 3 (Super TB)" the moment its second tiebreak began.
         let config = record.matchFormat.config
-        let decidesWithTiebreak = config.finalSetStyle == .superTiebreak
-        let decidingSetIndex = config.setsToWin * 2 - 2
 
         // Bucket the timeline once rather than re-filtering it per set.
         let stepsBySet = Dictionary(grouping: summary.stepsTimeline, by: \.setIndex)
 
         // `decidingIndex` is the last set in scope, so for a live match it is
         // the last FINISHED one — never the decider, which the match has not
-        // reached. The `decidingSetIndex` test below already enforces that; this
-        // is why it must stay rather than be simplified to "the last set".
+        // reached. `isDecidingSuperTiebreak(setIndex:)` below already enforces
+        // that positionally; this is why it must stay rather than be simplified
+        // to "the last set".
         return playedSets.map { index in
             let counts = pointsBySet[index] ?? (points: 0, won: 0)
             // `stepsTimeline` is chronological, so `dropFirst` removes this
@@ -384,8 +424,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
                 pointsWon: counts.won,
                 stepSampledPoints: steps.count,
                 stepSumLoad: steps.reduce(0) { $0 + $1.perPointSteps },
-                isDecidingTiebreak: decidesWithTiebreak
-                    && index == decidingSetIndex
+                isDecidingTiebreak: config.isDecidingSuperTiebreak(setIndex: index)
                     && index == decidingIndex
             )
         }

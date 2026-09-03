@@ -140,14 +140,24 @@ coverage: half of a two-line comparison reads as the whole answer, but a gap in 
 Two rules live in `MatchTrendSample.setSlices` rather than in the metrics, because they are
 about whether the match can support a per-set reading at all:
 
-- **At least two sets.** A single-set match has nothing to compare across, which also
-  excludes the tiebreak-only formats and `.quick4Games`.
+- **The match reached a second set.** A single-set match has nothing to compare across,
+  which also excludes the tiebreak-only formats and `.quick4Games`. The bar counts every set
+  the match has reached, the one in play included — it is a statement about the match, not
+  about how much of it has finished.
 - **Nothing from the set in play.** An in-progress match's current set would drift point by
   point, so it is dropped — but only it. Its earlier sets are finished and count normally,
   which is what the screen's "Include In-Progress Matches" toggle promises. Dropping the
   whole match (the first cut) made that toggle a lie for this group alone: every other group
   honoured it while Fatigue silently plotted nothing, so a live three-setter showed no
   fatigue at all despite having two completed sets.
+
+  Applying the two-set bar *after* that drop (the second cut) left the toggle broken by a
+  narrower route: it then demanded two **finished** sets, so a live match only ever plotted
+  once it had reached a third — the rarest state it is ever in, and never the one a player
+  checking Trends mid-match is actually in. A best-of-3 in its second set has a genuinely
+  finished first set, and "Set 1" is its own cross-match series, so that set plots and the
+  absent Set 2 dot is the honest gap — exactly as Set 3 is absent for a completed
+  straight-sets win.
 
 The step slices drop each set's first sample: a `stepsTimeline` entry's load is measured from the previous sample, so a set's
 opening entry is the match-wide baseline (load 0) in the opening set and spans the whole
