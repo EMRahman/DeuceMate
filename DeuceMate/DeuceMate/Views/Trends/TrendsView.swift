@@ -99,8 +99,14 @@ struct TrendsView: View {
         let subject: String
         switch group {
         case .fatigue:
+            // "More than one set" is exactly what `setSlices` gates on — a
+            // match that never reached a second set contributes nothing, and
+            // one that did contributes every set except the one still in play.
+            // The older "two or more completed sets" wording described a bar
+            // the slices no longer apply, and would have called a live match
+            // in its second set uncovered while its Set 1 dot sat on the chart.
             covered = scopedSamples.filter { !$0.setSlices.isEmpty }.count
-            subject = "two or more completed sets"
+            subject = "more than one set"
         case .errors, .attack, .rallyDepth, .rallyDepthByService, .serveReturn, .pressure:
             return nil
         }
