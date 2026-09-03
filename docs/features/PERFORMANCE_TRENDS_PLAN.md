@@ -112,13 +112,13 @@ Trends screen onto `PastMatchesView`'s existing `NavigationStack`.
 │ TRENDS                  >  │        │ [Last 5│Last 10│Last 20│All] │
 │  Double Faults  ▁▃▂▅▂▁▂  ↓ │        │ [All│Singles│Doubles]        │
 │  Unforced Err   ▅▄▆▃▄▂▃  ↓ │        │ [All formats ▾]   [Rate│#]   │
-│  Winners        ▂▃▄▃▅▆▅  ↑ │        │                              │
-│  W:UE ratio     ▂▂▃▄▄▅▅  ↑ │        │ ERRORS                       │
+│  FE Caused      ▂▃▄▃▅▆▅  ↑ │        │                              │
+│  Winners        ▂▂▃▄▄▅▅  ↑ │        │ ERRORS                       │
 └────────────────────────────┘        │ ┌──────────────────────────┐ │
                                       │ │ ╲    ╱╲                  │ │
  LIVE MATCH                           │ │  ╲__╱  ╲___              │ │
    ...                                │ └──────────────────────────┘ │
-                                      │ ●DF ●UE ○FE caused ○FE conc  │
+                                      │ ●DF ●UE ●FE caused ○FE conc  │
  PAST MATCHES                         │                              │
    12 Aug   6–4 6–2   Won             │ ATTACK  ...                  │
    05 Aug   3–6 6–7   Lost            │ RALLY DEPTH  ...             │
@@ -127,6 +127,19 @@ Trends screen onto `PastMatchesView`'s existing `NavigationStack`.
 
 The inline rows are the four headline metrics; the arrow compares the recent half of the
 window against the prior half. The full screen groups every metric the app has a stat for.
+
+The four read as one question — **what, among the things I control, is improving or
+slipping?** — running from the points I hand over to the points I take: double faults,
+unforced errors, the pressure that forces an error out of the opponent, the winner. Forced
+Errors Caused replaced the W:UE ratio there (owner request, after the first release): W:UE
+is a ratio of two rows already on the card rather than a fifth thing to work on, and it is
+the card's only unbounded, count-less metric. It keeps its place in the Attack group, where
+the sparkline row a `.ratio` unit needs already lives.
+
+That promotion is also why `startsHidden` is no longer a plain alias of `isOpponentFramed`:
+Forced Errors Caused counts the opponent's shot, which is what earns it the dashed line
+paired with Forced Errors Conceded, but a headline row cannot start hidden in the very chart
+its card taps through to (`●FE caused` above, where it used to be `○`).
 
 ---
 
@@ -538,7 +551,7 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
     public static func metrics(in group: TrendMetricGroup) -> [TrendMetric]
     /// The four rows on the archive screen.
     public static let headline: [TrendMetric] = [.doubleFaults, .unforcedErrors,
-                                                 .winners, .wueRatio]
+                                                 .forcedErrorsCaused, .winners]
 }
 ```
 
