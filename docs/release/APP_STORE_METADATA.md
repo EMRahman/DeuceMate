@@ -145,13 +145,13 @@ NEW: PERFORMANCE TRENDS
   errors, break-point pressure, and rally depth.
 • See whether each metric is moving in the right direction, with clear
   match-by-match charts and an at-a-glance archive summary.
-• Filter Trends by match type, format, date window, and whether live matches
+• Filter Trends by match type, format, recent-match window, and whether live matches
   are included.
 • Choose rates or totals to spot both efficiency changes and the volume behind
   them.
-• When you record an optional HealthKit workout, Trends can also reveal
-  heart-rate, movement, and set-by-set fatigue patterns. These charts simply
-  stay out of the way for matches without that data.
+• Trends also compares set-by-set win rates for fatigue. When you record
+  optional HealthKit movement data, it adds steps per point; that series stays
+  out of the way for matches without the data.
 
 IMPROVED
 • Trends preserves gaps where a match does not contain enough relevant data,
@@ -162,7 +162,7 @@ IMPROVED
 No account, subscription, ads, or tracking — just your tennis, on your devices.
 ```
 
-**Character count:** 1,195 characters (including line breaks)
+**Character count:** 1,200 characters (including line breaks)
 
 > **Scope.** 1.1.0 is build 4. Version 1.2.0 is a minor release because Trends
 > is a new archive-analysis experience, with new Core derivation and iPhone UI;
@@ -412,11 +412,11 @@ permissions, no accounts, no in-app purchases, no ads, no tracking.
 WHAT CHANGED IN 1.2.0
 - iPhone: the new Trends screen turns match history into performance charts.
   It shows match-by-match rates or totals for serve and return, errors and
-  winners, break-point pressure, and rally depth; users can filter by date
-  window, singles/doubles, format, and include in-progress matches.
-- Optional HealthKit workout data adds heart-rate, movement, and set-by-set
-  fatigue trends when it exists. Matches without HealthKit data leave those
-  charts empty; nothing is inferred or uploaded.
+  winners, break-point pressure, and rally depth; users can filter by a
+  recent-match window, singles/doubles, format, and include in-progress matches.
+- The Fatigue section compares set-by-set win rates. Optional HealthKit movement
+  data adds steps per point where available; matches without it omit that series.
+  Nothing is inferred or uploaded.
 - The archive's Trends summary surfaces the four most useful error/attack
   signals before the user opens the full charts.
 
