@@ -269,10 +269,11 @@ App Store Connect requires at least one set of iPhone screenshots. Provide the
 
 Suggested iPhone screenshot content (in order):
 1. Live scoreboard mirroring an in-progress match
-2. Match history list
-3. Match statistics (serve / return / break points)
-4. Points timeline graph
-5. Settings showing the spoken-announcements toggle
+2. Match history list with the Trends summary visible
+3. Trends overview showing several match-by-match series
+4. Match statistics (serve / return / break points)
+5. Points timeline graph
+6. Settings showing the spoken-announcements toggle
 
 ### Apple Watch screenshots (Required for the Watch app)
 
