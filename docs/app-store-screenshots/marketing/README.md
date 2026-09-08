@@ -17,7 +17,7 @@ requires one consistent size across an iPhone screenshot set.
 
 | Frame | Headline | Why it exists |
 |---|---|---|
-| 01 | Score on your **wrist**. | The one thing the old gallery never said: this is an Apple Watch scorer, and the iPhone is its companion. The Watch is oversized relative to true scale and sits in front of the phone so the score survives thumbnail size. |
+| 01 | Score on your **wrist**. | The iPhone subhead adds “Every match recorded. Your trends revealed.” The Watch is oversized relative to true scale and sits in front of the phone so the score survives thumbnail size. |
 | 02 | See where the match **turned**. | The momentum graph is the most distinctive image the app produces. |
 | 03 | Hand your match to an **AI coach**. | The differentiator — the "Open in ChatGPT / Claude / Gemini" rows are the payload of the frame. |
 
