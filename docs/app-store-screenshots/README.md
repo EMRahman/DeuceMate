@@ -37,17 +37,20 @@ Watch section, where framing a Watch inside a drawn Watch adds nothing.
 
 Directory: [`iphone-6.9/`](./iphone-6.9/)
 
-All five PNGs are **1320 x 2868**, portrait, with no alpha. They were captured
-on the iPhone 17 Pro Max simulator using the latest completed match with point
-statistics, `44ACB61B-BBF0-444C-86BC-2A0125E0DF6D` (5 August 2026, 3-6 1-6,
-124 tracked points), from `deucemate_archive_2026-08-06.json`.
+All five PNGs are **1320 x 2868**, portrait, with no alpha. Items 1–4 were
+captured on the iPhone 17 Pro Max simulator using the point-tracked match
+`44ACB61B-BBF0-444C-86BC-2A0125E0DF6D` (5 August 2026, 3-6 1-6, 124 tracked
+points), from `deucemate_archive_2026-08-06.json`. Item 5 was refreshed on 8
+September 2026 from the supplied full-fidelity archive after excluding its five
+newest short-format matches (three Super Tiebreak and two Perpetual Points), so
+the shot shows the Trends summary and only the full match history.
 
 1. `01-match-overview.png` - completed score, result, points split, and graph
 2. `02-points-momentum.png` - full-screen point momentum, authentic health
    overlays, and outcome filters
 3. `03-match-stats.png` - outcome and serve comparisons
 4. `04-coaching-insights.png` - match duration and data-driven coaching
-5. `05-match-archive.png` - match history and statistics availability
+5. `05-match-archive.png` - Trends summary plus full match history
 
 This one 6.9-inch set satisfies the iPhone screenshot-size requirement; do not
 mix in the older 6.3/6.5-inch files from `docs/website/screenshots/` for this

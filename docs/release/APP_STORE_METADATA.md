@@ -83,6 +83,7 @@ iPHONE COMPANION APP
 • Spoken, umpire-style score announcements through your iPhone or a Bluetooth speaker
 • Unlimited match history archived on your phone
 • Detailed per-match and per-set statistics: serve, return, break points, winners and errors, pressure points, rally depth, and more
+• Trends across your match history, so you can see whether the parts of your game that matter are improving
 • Interactive points timeline graph
 • Export a match or generate an AI-coaching prompt to review with your favourite AI app
 
@@ -131,6 +132,43 @@ Start scoring like a pro with DeuceMate. Game, set, match!
 ---
 
 ## What's New (4000 characters max)
+
+### Version 1.2.0 - Performance Trends
+
+```
+See the bigger picture with Trends — a new way to follow your tennis over time.
+
+NEW: PERFORMANCE TRENDS
+• Open Trends from your match archive to see how your game changes across
+  recent matches, not just one result at a time.
+• Follow the statistics that shape your game: serving, returns, winners and
+  errors, break-point pressure, and rally depth.
+• See whether each metric is moving in the right direction, with clear
+  match-by-match charts and an at-a-glance archive summary.
+• Filter Trends by match type, format, recent-match window, and whether live matches
+  are included.
+• Choose rates or totals to spot both efficiency changes and the volume behind
+  them.
+• Trends also compares set-by-set win rates for fatigue. When you record
+  optional HealthKit movement data, it adds steps per point; that series stays
+  out of the way for matches without the data.
+
+IMPROVED
+• Trends preserves gaps where a match does not contain enough relevant data,
+  rather than treating missing tracking as a zero.
+• Super-tiebreaks and completed sets in an in-progress match are represented
+  correctly in fatigue analysis.
+
+No account, subscription, ads, or tracking — just your tennis, on your devices.
+```
+
+**Character count:** 1,200 characters (including line breaks)
+
+> **Scope.** 1.1.0 is build 4. Version 1.2.0 is a minor release because Trends
+> is a new archive-analysis experience, with new Core derivation and iPhone UI;
+> build 5 continues the App Store Connect build sequence.
+
+---
 
 ### Version 1.1.0 - Watch match-start improvements and archive fixes
 
@@ -231,10 +269,11 @@ App Store Connect requires at least one set of iPhone screenshots. Provide the
 
 Suggested iPhone screenshot content (in order):
 1. Live scoreboard mirroring an in-progress match
-2. Match history list
-3. Match statistics (serve / return / break points)
-4. Points timeline graph
-5. Settings showing the spoken-announcements toggle
+2. Match history list with the Trends summary visible
+3. Trends overview showing several match-by-match series
+4. Match statistics (serve / return / break points)
+5. Points timeline graph
+6. Settings showing the spoken-announcements toggle
 
 ### Apple Watch screenshots (Required for the Watch app)
 
@@ -361,20 +400,25 @@ App Review Information persists across versions in App Store Connect, so the
 previous submission's text is probably still sitting in the field — check it
 rather than assuming the field is empty.
 
-Used for the 1.1.0 submission (19 August 2026). 1,391 of 4,000 characters.
+Use the following for the 1.2.0 submission. Replace the final devices-tested
+line with the exact physical-device / TestFlight evidence from this release
+candidate before pasting it into App Store Connect. ~1,520 of 4,000 characters
+before that replacement.
 
 ```
-This is a maintenance update to a previously approved app. No new
+This is an update to a previously approved app. No new
 permissions, no accounts, no in-app purchases, no ads, no tracking.
 
-WHAT CHANGED IN 1.1.0
-- Apple Watch: the "change ends" reminder now persists on the scoreboard until
-  the first point of the next set; the last match format and singles/doubles
-  choice are remembered; the start screen states whether point tracking, Health
-  and Pulse Coach will record the match.
-- Fixes: the Health indicator now updates as soon as access is granted; a
-  just-finished match is correctly shown as stored on both devices; the
-  delete-confirmation in the iPhone archive stays on screen until answered.
+WHAT CHANGED IN 1.2.0
+- iPhone: the new Trends screen turns match history into performance charts.
+  It shows match-by-match rates or totals for serve and return, errors and
+  winners, break-point pressure, and rally depth; users can filter by a
+  recent-match window, singles/doubles, format, and include in-progress matches.
+- The Fatigue section compares set-by-set win rates. Optional HealthKit movement
+  data adds steps per point where available; matches without it omit that series.
+  Nothing is inferred or uploaded.
+- The archive's Trends summary surfaces the four most useful error/attack
+  signals before the user opens the full charts.
 
 REVIEWING WITHOUT AN APPLE WATCH
 The iPhone app is fully usable on its own. On an iPhone with no Watch paired,
@@ -388,8 +432,9 @@ HealthKit (Watch at first launch; iPhone for per-point heart rate) and location
 usable with every prompt denied. No ATT, camera, mic, photos, contacts,
 calendar, notifications or Bluetooth.
 
-Devices tested: iPhone 16 (iOS 26.6) and Apple Watch Series 7 45mm
-(watchOS 26.6), plus the same iPhone unpaired.
+Devices tested: [replace with the exact iPhone model + iOS version, Apple Watch
+model + watchOS version, TestFlight build 1.2.0 (5), and unpaired-iPhone path
+verified for this release candidate].
 ```
 
 The no-Watch paragraph is the one that earns its place: this is a Watch-first
