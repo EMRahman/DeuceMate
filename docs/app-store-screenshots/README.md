@@ -8,9 +8,9 @@ Two kinds of asset live here:
 - **Raw product screenshots** (`iphone-6.9/`, `watch-45mm/`) — captured 6 August
   2026 from the current codebase and physical Watch hardware, with no device
   frames, marketing overlays, or alpha channel.
-- **iPhone 6.1-inch Trends captures** (`iphone-6.1/`) — selected Trends views
-  captured on the iPhone 16 simulator profile for manual upload to the 6.1-inch
-  slot. Keep these separate from the 6.9-inch set: they are 1178 x 2556 rather
+- **iPhone 6.3-inch Trends captures** (`iphone-6.3/`) — selected Trends views
+  captured on the iPhone 16 simulator profile for manual upload to the 6.3-inch
+  slot. Keep these separate from the 6.9-inch set: they are 1179 x 2556 rather
   than 1320 x 2868.
 
 ## iPhone upload order (8 slots)
@@ -60,14 +60,14 @@ This one 6.9-inch set satisfies the iPhone screenshot-size requirement; do not
 mix in the older 6.3/6.5-inch files from `docs/website/screenshots/` for this
 slot.
 
-## iPhone 6.1-inch Trends
+## iPhone 6.3-inch Trends
 
-Directory: [`iphone-6.1/`](./iphone-6.1/)
+Directory: [`iphone-6.3/`](./iphone-6.3/)
 
 These two raw captures were taken on the exact iPhone 16 simulator profile
-(1178 x 2556, no alpha) from the supplied archive after excluding its five
+(1179 x 2556, no alpha) from the supplied archive after excluding its five
 newest short-format test matches. They are intended for manual upload to the
-iPhone 6.1-inch screenshot slot; do not mix them into `iphone-6.9/`.
+iPhone 6.3-inch screenshot slot; do not mix them into `iphone-6.9/`.
 
 1. `01-trends-overview.png` - trend window controls and Errors / Serve & Return
 2. `02-trends-serve-return.png` - Serve & Return and Attack history
