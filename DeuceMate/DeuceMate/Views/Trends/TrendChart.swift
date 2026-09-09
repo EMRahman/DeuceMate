@@ -724,10 +724,12 @@ struct TrendChart: View {
     /// metric's line on and off (opponent-framed metrics start hidden;
     /// §6.3).
     /// Adaptive grid, not a single HStack: six chips squeezed into one row
-    /// each get a sliver of width and wrap character-by-character. Letting
-    /// chips flow onto as many rows as needed at a legible minimum width
-    /// keeps every label on one line.
-    private static let legendColumns = [GridItem(.adaptive(minimum: 110), spacing: 8)]
+    /// each get a sliver of width and wrap character-by-character. The 145pt
+    /// minimum deliberately keeps iPhone layouts at two columns — 110pt let
+    /// the 6.9-inch width select three columns whose long labels were then
+    /// truncated — while still allowing more columns on genuinely wide
+    /// layouts.
+    private static let legendColumns = [GridItem(.adaptive(minimum: 145), spacing: 8)]
 
     private func legend(for series: [TrendSeries]) -> some View {
         LazyVGrid(columns: Self.legendColumns, alignment: .leading, spacing: 6) {

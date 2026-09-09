@@ -5,15 +5,15 @@ Two kinds of asset live here:
 - **Advertisement frames** ([`iphone-6.9-marketing/`](./iphone-6.9-marketing/)) —
   three art-directed frames with headlines and device framing, generated from
   [`marketing/`](./marketing/). These lead the gallery.
-- **Raw product screenshots** (`iphone-6.9/`, `watch-45mm/`) — captured 6 August
-  2026 from the current codebase and physical Watch hardware, with no device
-  frames, marketing overlays, or alpha channel.
+- **Raw product screenshots** (`iphone-6.9/`, `watch-45mm/`) — captured from the
+  current codebase and physical Watch hardware, with no device frames,
+  marketing overlays, or alpha channel. Capture dates are recorded below.
 
-## iPhone upload order (8 slots)
+## iPhone upload order (10 slots)
 
 The App Store shows roughly the first three screenshots in search results, so
 the ad frames take those slots and the raw captures follow for anyone who taps
-through. All eight are 1320 x 2868 with no alpha — a set must be one size.
+through. All ten are 1320 x 2868 with no alpha — a set must be one size.
 
 | # | File | Kind |
 |---|------|------|
@@ -25,6 +25,8 @@ through. All eight are 1320 x 2868 with no alpha — a set must be one size.
 | 6 | `iphone-6.9/03-match-stats.png` | raw |
 | 7 | `iphone-6.9/04-coaching-insights.png` | raw |
 | 8 | `iphone-6.9/05-match-archive.png` | raw |
+| 9 | `iphone-6.9/06-trends-overview.png` | raw — Trends filters and Errors |
+| 10 | `iphone-6.9/07-trends-serve-return.png` | raw — Serve & Return and Attack |
 
 Slot 1 exists because nothing in the previous all-iPhone gallery told a shopper
 browsing on an iPhone that this is an **Apple Watch** app — the single most
@@ -37,13 +39,12 @@ Watch section, where framing a Watch inside a drawn Watch adds nothing.
 
 Directory: [`iphone-6.9/`](./iphone-6.9/)
 
-All five PNGs are **1320 x 2868**, portrait, with no alpha. Items 1–4 were
+All seven PNGs are **1320 x 2868**, portrait, with no alpha. Items 1–4 were
 captured on the iPhone 17 Pro Max simulator using the point-tracked match
 `44ACB61B-BBF0-444C-86BC-2A0125E0DF6D` (5 August 2026, 3-6 1-6, 124 tracked
-points), from `deucemate_archive_2026-08-06.json`. Item 5 was refreshed on 8
+points), from `deucemate_archive_2026-08-06.json`. Items 5–7 were captured in
 September 2026 from the supplied full-fidelity archive after excluding its five
-newest short-format matches (three Super Tiebreak and two Perpetual Points), so
-the shot shows the Trends summary and only the full match history.
+newest short-format matches (three Super Tiebreak and two Perpetual Points).
 
 1. `01-match-overview.png` - completed score, result, points split, and graph
 2. `02-points-momentum.png` - full-screen point momentum, authentic health
@@ -51,10 +52,12 @@ the shot shows the Trends summary and only the full match history.
 3. `03-match-stats.png` - outcome and serve comparisons
 4. `04-coaching-insights.png` - match duration and data-driven coaching
 5. `05-match-archive.png` - Trends summary plus full match history
+6. `06-trends-overview.png` - trend filters, Errors, and Serve & Return
+7. `07-trends-serve-return.png` - Serve & Return and Attack history
 
 This one 6.9-inch set satisfies the iPhone screenshot-size requirement; do not
 mix in the older 6.3/6.5-inch files from `docs/website/screenshots/` for this
-slot.
+slot. App Store Connect scales this highest-resolution set for smaller iPhones.
 
 ## Apple Watch
 
@@ -96,8 +99,10 @@ calories, and heart-rate samples alongside its score and point outcomes. Those
 real measurements are visible in the graph and Pulse Coach capture; no health
 values were generated or invented for the screenshots.
 
-These folders contain the screenshots uploaded to App Store Connect on 6 August
-2026. The separate hardware demo/review video described in
+The original August captures were uploaded to App Store Connect on 6 August
+2026. The September 1.2.0 replacements and additions — marketing frame 1 and
+raw iPhone items 5–7 — remain pending manual replacement/upload. The separate
+hardware demo/review video described in
 `docs/release/SUBMISSION_REVIEW.md` still needs to be recorded on the physical
 iPhone and
 Apple Watch and attached in App Store Connect.
