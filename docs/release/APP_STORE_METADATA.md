@@ -76,6 +76,9 @@ Keep your attention on the match with quick, reliable controls:
 • Swipe up when you win a point
 • Swipe down when your opponent wins a point
 • Swipe left to undo
+
+With point tracking enabled:
+
 • Swipe right to view live statistics
 • Double-tap to mark second-serve context
 
@@ -99,7 +102,7 @@ FOLLOW LIVE ON IPHONE
 • Stadium-style scoreboard mirrored from your Watch in real time
 • Spoken, umpire-style announcements through iPhone or a Bluetooth speaker
 • Optional iPhone scoring input
-• Manual entry for completed matches
+• Reconstruct an in-progress match on iPhone, then resume it on your Watch
 • Unlimited match archive on iPhone
 
 UNDERSTAND EVERY MATCH
@@ -154,7 +157,7 @@ REQUIREMENTS
 Built by a recreational tennis player for players who want dependable scorekeeping without losing focus on the game.
 ```
 
-**Character count:** 3,881 characters (under the 4,000-character limit)
+**Character count:** 3,950 characters (under the 4,000-character limit)
 
 ---
 
