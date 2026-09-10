@@ -67,67 +67,97 @@ tennis,score,match,tiebreak,sports,watch,referee,umpire,deuce,padel,game,set,sta
 ## Description (4000 characters max)
 
 ```
-DeuceMate is a tennis scoring app for Apple Watch — with an iPhone companion app for live score viewing, spoken announcements, and a complete match archive with detailed statistics. Score on your wrist; review everything on your phone.
+Stay focused on your tennis while DeuceMate handles the score, server rotation, serving side, and changeovers. Score naturally from your wrist, follow the match live on iPhone, and review detailed statistics when play is over.
 
-SCORE ON APPLE WATCH
-• Swipe up/down to award points; swipe left to undo
-• Automatic tennis scoring (love, fifteen, deuce, advantage)
-• Game, set, and tiebreak tracking handled for you
-• Standard tiebreaks, super tiebreaks, and multiple match formats
-• Singles and doubles with full service-order management
-• Large, glanceable score display; current server always visible
-• Side-change reminders at the correct games
+GESTURE-FIRST WATCH SCORING
 
-iPHONE COMPANION APP
-• Live stadium-style scoreboard that mirrors the watch in real time
-• Spoken, umpire-style score announcements through your iPhone or a Bluetooth speaker
-• Unlimited match history archived on your phone
-• Detailed per-match and per-set statistics: serve, return, break points, winners and errors, pressure points, rally depth, and more
-• Trends across your match history, so you can see whether the parts of your game that matter are improving
-• Interactive points timeline graph
-• Export a match or generate an AI-coaching prompt to review with your favourite AI app
+Keep your attention on the match with quick, reliable controls:
 
-OPTIONAL FITNESS TRACKING (APPLE WATCH)
-• Link a HealthKit workout to record your match as a Tennis activity
-• Live heart rate, calories, steps, and distance during play
-• Heart-rate zone statistics and coaching insights
-• Entirely optional — the app works fully without it
+• Swipe up when you win a point
+• Swipe down when your opponent wins a point
+• Swipe left to undo
 
-COURT COMPASS (OPTIONAL)
-• Enable "Check Changeover" for compass guidance on which end to take
-• Uses the watch's built-in compass heading only — no GPS, no location tracking
+With point tracking enabled:
 
-UNDO ANYTHING
-• Full undo back to the start of the match, restoring complete game state
+• Swipe right to view live statistics
+• Double-tap to mark second-serve context
 
-PERFECT FOR
-✓ Recreational players keeping official scores
-✓ Club matches without an umpire
-✓ Coaches tracking student progress
-✓ Padel players (compatible scoring system)
-✓ Practice sessions to track improvement
+A glanceable scoreboard keeps the score and current server clear.
 
-PRIVACY FIRST
+TENNIS RULES HANDLED AUTOMATICALLY
+
+DeuceMate tracks the details that are easy to forget:
+
+• Love, fifteen, thirty, forty, deuce, and advantage
+• Games, sets, standard tiebreaks, and super tiebreaks
+• Server rotation and doubles service order
+• Deuce and ad serving sides
+• Court-end changes, changeover prompts, and break points
+• Singles and doubles matches
+
+Choose from six formats: club or league best of three with a deciding super tiebreak, best of three with a full final set, Quick 4, a single super tiebreak, perpetual tiebreaks, or continuous points.
+
+FOLLOW LIVE ON IPHONE
+
+• Stadium-style scoreboard mirrored from your Watch in real time
+• Spoken, umpire-style announcements through iPhone or a Bluetooth speaker
+• Optional iPhone scoring input
+• Reconstruct an in-progress match on iPhone, then resume it on your Watch
+• Unlimited match archive on iPhone
+
+UNDERSTAND EVERY MATCH
+
+Turn point-by-point scoring into useful match analysis:
+
+• Tag winners, forced errors, unforced errors, double faults, and ending shots
+• Compare serve, return, break-point, pressure, rally, and score-state performance
+• Filter statistics by set or across the complete match
+• Explore an interactive momentum graph with optional heart-rate and steps overlays
+• Review data-driven coaching and Pulse Coach insights
+
+Export a match summary, full point-by-point data, or a self-contained interactive web report. You can also generate a structured coaching prompt to review with your favourite AI app. Sharing is always initiated by you.
+
+UNDERSTAND TRENDS ACROSS MATCHES
+
+• See how your game changes over time across your match history
+• Compare serving, returning, attack, errors, pressure, rally depth, and optional fitness data
+• Filter by match type, format, or time window
+
+OPTIONAL HEALTH AND FITNESS
+
+With your permission, DeuceMate records your match as a Tennis workout through Apple Health, including heart rate, calories, steps, distance, and match timers. Review heart-rate zones and fitness insights during and after play. Health access is optional; every scoring feature remains available without it.
+
+OPTIONAL COURT COMPASS
+
+Enable Check Changeover for compass guidance on which end to take. It uses the Watch’s built-in compass heading only—not GPS or location tracking.
+
+BUILT TO FINISH THE MATCH
+
+Your in-progress match is saved automatically after every point and when the app moves to the background or your Watch sleeps. Full undo works across points, games, and set boundaries, all the way back to the start of the match.
+
+PRIVATE BY DESIGN
+
 • No account required
-• No analytics, no tracking, no ads
-• The developer collects no data and operates no servers
-• Match data is stored on your devices and in your personal iCloud Drive archive
-• Watch ↔ iPhone sync uses Apple's WatchConnectivity, with no developer server
+• No ads, third-party analytics, developer tracking, or developer-operated servers
+• Match data stays on your Apple devices and in your personal iCloud Drive archive when available
+• Watch-to-iPhone sync uses Apple’s WatchConnectivity
 • Core scoring and match review work offline
-• DeuceMate's automatic iCloud Drive archive excludes HealthKit measurements
-• You can choose to export match and HealthKit data to another person, a manual backup, or an AI service; the recipient then handles that data
+• HealthKit measurements are excluded from the automatic iCloud Drive archive
+• You choose when to export or share data, including with another person, a manual backup, or an AI service
 
 NO SUBSCRIPTION. NO ADS. NO TRACKING.
-Completely free for unlimited match tracking.
+
+DeuceMate is completely free for unlimited match tracking.
 
 REQUIREMENTS
-• iPhone running iOS 17.0 or later
-• Apple Watch running watchOS 9.0 or later (Series 4 or later, SE, or Ultra)
 
-Start scoring like a pro with DeuceMate. Game, set, match!
+• iPhone running iOS 17.0 or later
+• Apple Watch running watchOS 9.0 or later
+
+Built by a recreational tennis player for players who want dependable scorekeeping without losing focus on the game.
 ```
 
-**Character count:** ~2,250 characters (well under 4,000 limit)
+**Character count:** 3,950 characters (under the 4,000-character limit)
 
 ---
 
