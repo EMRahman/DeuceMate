@@ -6,6 +6,15 @@ findings in a Claude-assisted re-audit. Each item has been
 reviewed, contextualised against the actual runtime behaviour, and
 prioritised.
 
+This register covers both engineering debt and improvements to existing
+behaviour. The 18 September 2026 review adds four explicitly classified
+items: #22 (live-input feedback), #23 (manual-score correctness), #24
+(accessibility), and #25 (export recovery). They were not individually
+tracked here before that review. The separately requested first-time
+walkthrough is a **new product feature**, planned in
+[`FIRST_TIME_WALKTHROUGH_PLAN.md`](FIRST_TIME_WALKTHROUGH_PLAN.md); it does
+not reopen completed match-start item #5.
+
 **How this file is organised.** Everything still needing attention is at the
 top — the [open items](#open-items) table, ranked highest work-priority first,
 then detail sections grouped by subject. Work that has landed (and the one item
@@ -50,6 +59,10 @@ when the item should constrain future changes.
 | [3](#3--replace-stringly-typed-settings-keys-with-typed-keys) | Settings | Replace stringly-typed settings keys with typed keys | Medium today; **high change risk** | Next engineering-risk cleanup after persistence containment | Large, splittable per setting category |
 | [20](#20--make-health-derived-field-classification-mechanically-exhaustive) | Health/Privacy | Make Health-derived field classification mechanically exhaustive | No current bug; **high privacy risk on expansion** | Before adding any Health-derived field or export surface | Medium design; small first guards |
 | [4a-write](#4a-write--surface-save-failures) | Persistence | Surface live-state and archive save failures | Medium impact; low likelihood | After, or alongside, read containment | Small–medium |
+| [23](#23--validate-manual-match-scores-and-explain-invalid-input) | Correctness | Validate manual match scores and explain invalid input | Medium; inconsistent records can be resumed on Watch | Next manual-entry fix, after persistence containment | Small–medium |
+| [22](#22--show-disconnected-live-scoring-and-command-send-failures) | Sync / UX | Show disconnected live scoring and command send failures | Medium; input feedback can imply an unsent point counted | Next live-input reliability fix | Small–medium |
+| [24](#24--add-accessible-watch-scoring-actions) | Accessibility | Add accessible Watch scoring actions | Core scoring has no named accessibility actions | Coordinate with walkthrough shared controls | Small–medium |
+| [25](#25--make-interactive-html-export-failures-recoverable) | Export / UX | Make interactive HTML export failures recoverable | Low; failed export disappears with no explanation | Independent usability fix | Small |
 | [11](#11--de-duplicate-appthemeswift-into-core) | Duplication | De-duplicate `AppTheme.swift` (still byte-identical) | Medium change risk | Before the next theme edit | Small |
 | [12](#12--extract-the-point-categorisation-flow-state-machine-into-core) | Duplication | Extract point-categorisation flow state machine into Core | Medium change risk | Before the next outcome / ending-shot change | Medium |
 | [21](#21--record-an-executable-local-verification-gate) | Verification | Record an executable local verification gate | Medium regression/process risk | Establish now; require for scoring, persistence, and sync PRs | Small |
@@ -702,6 +715,145 @@ the next substantial edit **to the existing content**, before the file crosses
 
 ---
 
+### 22 — Show disconnected live scoring and command send failures
+
+**Classification:** Existing-feature reliability/usability defect, tracked in
+the improvement backlog. The status UI is an enhancement to the presentation;
+it addresses a concrete gap in the existing input path.
+
+**Verified 18 September 2026:** `LiveScoreboardView.liveBadge` always renders
+`LIVE`. `handleSwipe` previews a point and produces a haptic without checking
+`PhoneMatchSyncService.isWatchReachable`. `sendScoreCommand` uses
+`queueOnFailure: false`; `MatchSyncTransport.sendControl` drops an unreachable
+send and only logs an asynchronous send error. The user receives no indication
+that their input could not be sent. Categorisation buttons use the same
+unreported, non-queued transport path.
+
+**Proposed scope:** Reflect session reachability in the badge; show **Watch
+disconnected** while unavailable, retain the last received score, suppress
+scoring previews/gestures and categorisation actions while disconnected, and
+return send failures to the UI with a short actionable message. Restore input
+on reconnection. A haptic may indicate a recognised gesture; it must not be
+presented as proof that the watch applied the point. Reachability alone is
+also not proof that the displayed score is current.
+
+Keep live commands non-queued. Do not add automatic retries: an ambiguous
+delivery failure can otherwise double-score. Explicit application
+acknowledgements would need command identity and deduplication and are outside
+this small feedback fix.
+
+**Verification:** Disconnected input sends nothing and shows no misleading
+preview; a connection lost during send produces visible feedback; reconnect
+restores controls; existing match-ID and pending-point guards still hold.
+
+**Existing related documentation:** `KNOWN_LIMITATIONS.md` #1 concerns
+oversized checkpoints, a different cause of a frozen scoreboard that this
+change does not solve. The disconnect copy in
+`DUAL_DEVICE_MATCH_BROADCAST_PLAN.md` concerns a proposed peer-broadcast feature,
+not the current paired Watch/iPhone path.
+
+**Key files:** `LiveScoreboardView.swift`, `PhoneMatchSyncService.swift`,
+`MatchSyncTransport.swift`, and `LivePointCategoryPanel.swift` if its caller
+cannot provide the disabled/error state alone.
+
+---
+
+### 23 — Validate manual match scores and explain invalid input
+
+**Classification:** Correctness defect plus a small validation-UX improvement.
+This is not a new match-entry feature.
+
+**Verified 18 September 2026:**
+`ManualMatchEntryView.isCompletedSetValid` accepts a completed 7–6 set whenever
+the tiebreak point sum is nonzero. A 1–0 tiebreak therefore passes. The
+in-progress tiebreak branches of `isValid` return `true` without checking
+whether the entered tiebreak has already ended. Save is disabled for other
+invalid inputs without explaining which field needs correction.
+
+**Proposed scope:** Extract a pure manual-entry validator returning a useful
+reason. Validate completed set scores as reachable final scores, tiebreak
+completion and agreement with the recorded set winner, and that the current
+set/match is still in progress. Reuse the configured targets and shared
+scoring predicates where applicable; a predicate meaning "threshold reached"
+alone does not prove that a manually entered final score is reachable. Show
+the validation reason near the relevant inputs and Save action.
+
+**Verification:** Reject 7–6 with a 1–0 tiebreak, reversed tiebreak winners,
+already-complete current tiebreaks, and an additional live set after a
+straight-sets win. Accept ordinary, extended, and deciding tiebreak examples
+appropriate to each supported manual-entry format. Preserve manual-entry
+server reconstruction and existing valid save behaviour.
+
+**Key files:** `ManualMatchEntryView.swift`; a small Core validator and its
+tests; shared `ScoringEngine` / `MatchFormatConfig` predicates as consumers,
+not a rewrite of valid live scoring rules.
+
+---
+
+### 24 — Add accessible Watch scoring actions
+
+**Classification:** Accessibility enhancement addressing usability debt in
+the existing scoring surface. Broader than an internal code cleanup, but
+small enough for this improvement register rather than a separate feature
+plan.
+
+**Verified 18 September 2026:** Watch `ContentView` exposes raw drag and
+double-tap handlers for scoring, undo, stats, and second serve, but no named
+`accessibilityAction` equivalents. Existing server labels do not supply
+these operations. Confirm actual VoiceOver behaviour on a device during
+implementation rather than treating static inspection as an accessibility
+audit of the whole app.
+
+**Proposed scope:** Add **Point to me**, **Point to opponent**, **Undo last
+point**, **Show stats**, and **Toggle second serve** actions where available,
+with a coherent score/next-server announcement. Route them through the same
+guarded action dispatch as gestures. Pending categorisation, changeover
+acknowledgement, doubles decisions, and match completion must retain their
+existing protections; do not call low-level mutation methods around them.
+
+**Verification:** Complete scoring, undo, and stats access with VoiceOver;
+verify unavailable actions do not bypass a modal or a completed-match guard.
+Check the second-serve action and the smallest supported watch layout.
+
+**Dependency:** Coordinate shared input and display extraction with
+[`FIRST_TIME_WALKTHROUGH_PLAN.md`](FIRST_TIME_WALKTHROUGH_PLAN.md) so practice
+and real scoring offer the same accessible operations. This improvement can
+ship independently of the walkthrough.
+
+**Key files:** Watch `ContentView.swift`, its shared input helper if extracted,
+and existing point-category controls where accessible focus needs adjustment.
+
+---
+
+### 25 — Make interactive HTML export failures recoverable
+
+**Classification:** Existing-feature error-handling/usability debt.
+
+**Verified 18 September 2026:** The detached HTML-generation task in
+`MatchDetailView` catches a temporary-file write failure and returns `nil`.
+The export menu includes **Interactive Web Page** only when `htmlExportURL`
+exists, so a failure silently removes the feature. This is separate from
+#4a-write: the failed file here is a share artifact, not the canonical archive.
+
+**Proposed scope:** Represent export preparation as loading/ready/failed;
+keep the menu entry discoverable, show a readable failure message, and offer
+Retry. Preserve off-main-thread generation, existing file protection, and
+per-export health disclosure before sharing. Do not present an earlier file
+as a successfully regenerated report after a failed retry.
+
+**Verification:** Inject a failed write, confirm visible failure and no share
+sheet, retry successfully, then share the new URL. Check loading cannot launch
+duplicate preparation tasks and text exports remain available.
+
+**Existing related documentation:**
+`INTERACTIVE_HTML_EXPORT_PLAN.md` owns the original export feature; this is
+a focused follow-up fix, not a change to that plan's report schema or viewer.
+
+**Key files:** `MatchDetailView.swift` and an injectable export-file writer
+seam if needed to exercise failure/retry deterministically.
+
+---
+
 ## Archive — completed and parked items
 
 Kept in full: each entry records what the problem was, what was done,
@@ -813,6 +965,12 @@ point tracking regardless of the user's setting).
 format + singles/doubles, `MatchSetupDefaults`) and `[Watch] State what the next
 match will record` (the Points/Health/Pulse tracking strip, `MatchTrackingStatus`).
 Taps from the start screen to the first point: 5 → 3.
+
+**Separate follow-up, proposed 18 September 2026:**
+[`FIRST_TIME_WALKTHROUGH_PLAN.md`](FIRST_TIME_WALKTHROUGH_PLAN.md) teaches
+gestures, error stats, service rotation/side, and changeover/set-end reminders
+in an isolated practice session. It is a new onboarding feature; this
+completed setup simplification remains closed.
 
 ---
 
