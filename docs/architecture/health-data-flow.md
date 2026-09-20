@@ -307,3 +307,13 @@ Before you touch anything in this map, know these:
   are *supposed* to carry health; the compliance boundary there is the user
   consent, not stripping. Do not "fix" them by stripping — fix them by making the
   disclosure accurate (`HealthExportConsent` is the single source of truth).
+
+
+## Animated guide
+
+The guide creates only synthetic, in-memory `PointStat`s with no heart rate or
+step samples. It neither constructs a workout manager nor requests Health/location
+access, starts/stops workouts, acquires heading or calibrates a compass. Normal
+app-launch Health authorization remains separate; the first-use guide waits for
+that presentation's completion, including denial. No guide record reaches any
+archive, sidecar, backup or export path. See [match-lifecycle.md](match-lifecycle.md).

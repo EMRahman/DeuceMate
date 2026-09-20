@@ -1123,26 +1123,7 @@ class ScoreViewModel: ObservableObject {
     }
 
     private func text(for reason: ScoringChangeoverReason) -> String {
-        switch reason {
-        case .oddGames:
-            return "Odd games – players change ends"
-        case .evenGames:
-            return "Even games – balls change ends"
-        case .setCompletePlayers:
-            return "Set complete – players change ends"
-        case .setCompleteBalls:
-            return "Set complete – balls change ends"
-        case .setCompletePlayersAndBalls:
-            return "Set complete – players & balls change ends"
-        case .tiebreakSixPoints:
-            return "Every 6 tiebreak points – players & balls change ends"
-        case .tiebreakOddPoint:
-            return "Odd tiebreak point – balls change ends"
-        case .tiebreakBegins(let games):
-            return "Games at \(games)-\(games) – tiebreak begins"
-        case .suddenDeathBegins(let games):
-            return "Games at \(games)-\(games) – sudden death point"
-        }
+        reason.displayText
     }
 
     private func speechText(for reason: ScoringChangeoverReason) -> String {
@@ -1706,10 +1687,24 @@ class ScoreViewModel: ObservableObject {
         }
     }
 
+    @Published private(set) var stateRestorationSucceeded = false
+    @Published var launchPresentationReady = false
+
+    /// The guide may only enter when there is no production session, including warmup.
+    var walkthroughIsIdle: Bool {
+        currentServer == nil && matchStartTime == nil && sessionStartTime == nil
+            && !workoutManager.isRunning && pendingStatPoint == nil
+            && pendingChangeoverAck == nil && !isChangeoverPending
+            && currentMatchStats.isEmpty && history.isEmpty
+            && !hasInProgressMatchData
+    }
+
     func loadState() {
+        stateRestorationSucceeded = false
         do {
             let data = try Data(contentsOf: stateFileURL)
             let state = try JSONDecoder().decode(AppState.self, from: data)
+            stateRestorationSucceeded = true
             sets = state.sets
             currentPointsMe = state.currentPointsMe
             currentPointsOpponent = state.currentPointsOpponent
@@ -1752,6 +1747,7 @@ class ScoreViewModel: ObservableObject {
                 }
             }
         } catch {
+            stateRestorationSucceeded = (error as? CocoaError)?.code == .fileReadNoSuchFile
             #if DEBUG
             print("Warning: Failed to load previous state")
             #endif

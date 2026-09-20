@@ -23,7 +23,7 @@ external resources** on open — the AI-app links are user-clicked navigations, 
 fetches. *(Later schema history: v5 added per-point step deltas; v6 added in-set
 game scores; v7 replaced them with full pre-point match scores; v8 added each
 point's tiebreak state for iOS-parity chart bands; v9 added per-player Serving
-counts and palette metadata.)*
+counts and palette metadata; v10 adds after-point game/match labels for graph inspection while preserving before-point history scores.)*
 
 Chosen over a hosted "share a link" approach because it needs **no server, no
 hosting, no database, no link expiry**, and adds **no networking** to an app that
@@ -74,6 +74,9 @@ MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
   landed-second-serve and double-fault buckets, plus overlapping Ace and Serve FE
   tags. The interactive viewer mirrors those rules only to decide which emitted
   points receive a selected SVG mark; every Me/Opp pill displays its Swift count.
+  Serving and Outcomes controls hide when no categorised points exist. Uncategorised
+  points are excluded from serve counts and scatter marks in mixed matches; their
+  default second-serve flag must not imply a tracked first serve.
 
 - **Recorder-only HR.** Heart rate / steps / distance / calories are the
   *recorder's* physiology. They populate only the `me` perspective and the

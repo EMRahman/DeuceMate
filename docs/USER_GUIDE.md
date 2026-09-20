@@ -7,6 +7,7 @@ and FAQs, see the [support page](https://emrahman.github.io/DeuceMate/support.ht
 
 **Contents**
 
+- [Animated guide](#animated-guide)
 - [Score Tracking](#score-tracking)
 - [Match Logistics](#match-logistics)
 - [Point Outcome Tracking & Quantitative Analysis](#point-outcome-tracking--quantitative-analysis)
@@ -17,6 +18,28 @@ and FAQs, see the [support page](https://emrahman.github.io/DeuceMate/support.ht
 - [Requirements](#requirements)
 
 ---
+
+## Animated guide
+
+On the watch, open **Guide → Animated guide** while no match or setup is active.
+New users may also see **Learn the controls → Show guide / Not now** after launch
+restoration and the Health permission presentation finish. Not now or dismissal
+suppresses future automatic offers; Guide remains available.
+
+Watch nine situations: winning, losing and undoing a point, recording an
+unforced error, marking a second serve, recording a double fault, finding the
+error stats, winning a game, and the 6–3 set-end reminder. Point tracking must
+be enabled in a real match to record the outcomes and find their statistics.
+The guide animates each gesture and shows the response. It selects categories,
+scrolls stats and acknowledges messages for you. Use **Next** or **Previous**
+at any time; the result waits for you. Previous starts that example again.
+There are no lesson or replay menus and no gestures for you to perform.
+Reduce Motion uses static arrows with the same explanations and screen responses.
+
+The guide works offline, changes no real score or setting, and saves no match or
+workout. **Done** closes the final Ready to play screen. Enable **Track point
+outcome** in Settings before a real match to collect error statistics; detailed
+shot tracking adds the ending-shot selection shown in the error example.
 
 ## Score Tracking
 
@@ -237,6 +260,11 @@ When ≥10 heart-rate tagged points are available, the engine generates up to th
 
 ### Points graph
 
+In the expanded graph, **Serving** appears with **Outcomes** only when point
+outcome data was collected. This applies to singles and doubles. Points recorded
+with tracking off still contribute to the score graph, but never to serve pills
+or serve markers; the current tracking setting does not change older match data.
+
 An interactive timeline view on iPhone plots cumulative points for both players across the whole match, with the following overlays and controls:
 
 - **Per-player outcome scatter** — independently toggle Winner / Unforced / Forced / Double Fault dots for you and your opponent
@@ -244,7 +272,7 @@ An interactive timeline view on iPhone plots cumulative points for both players 
 - **Heart-rate overlay** — when HealthKit was active, BPM is plotted as a secondary axis (toggle on/off)
 - **Steps overlay** — real per-point cumulative step counts plotted as a secondary axis (toggle on/off)
 - **Set-boundary bands** — alternating background bands mark where each set begins and ends; tiebreak segments are visually distinct
-- **Touch-to-inspect** — tap or drag along the chart to see the score, scatter markers, and overlay values at that point
+- **Touch-to-inspect** — tap or drag along the chart to see cumulative point totals and the tennis score **after the selected point**, alongside scatter markers and overlay values
 - **Expandable fullscreen view** — tap the expand icon for a fullscreen chart with pinch-to-zoom and pan; landscape orientation is enabled inside this view for a wider field of view
 
 ---

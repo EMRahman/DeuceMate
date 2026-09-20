@@ -1,6 +1,7 @@
 //ContentView.swift
 import SwiftUI
 import WatchKit
+import DeuceMateCore
 
 struct ContentView: View {
     @EnvironmentObject var viewModel: ScoreViewModel
@@ -89,41 +90,36 @@ struct ContentView: View {
     /// so the previewed outcome can never disagree with the committed one.
     func pointTarget(for value: DragGesture.Value) -> ScoreViewModel.Player? {
         guard !swipeScoringBlocked, !viewModel.isMatchComplete() else { return nil }
-        let h = value.translation.width
-        let v = value.translation.height
-        guard abs(h) <= abs(v) else { return nil }
-        if v < -20 { return .me }
-        if v > 20 { return .opponent }
-        return nil
+        switch ScoreInputAction.drag(horizontal: value.translation.width, vertical: value.translation.height) {
+        case .win: return .me
+        case .lose: return .opponent
+        default: return nil
+        }
     }
 
     func handleSwipe(value: DragGesture.Value) {
-        if swipeScoringBlocked { return }
+        if let action = ScoreInputAction.drag(horizontal: value.translation.width, vertical: value.translation.height) {
+            performInput(action)
+        }
+    }
 
-        let horizontalAmount = value.translation.width
-        let verticalAmount = value.translation.height
-
-        if abs(horizontalAmount) > abs(verticalAmount) {
-            if horizontalAmount < -20 {
-                viewModel.undo()
-                if let last = viewModel.lastScoredPlayer {
-                    triggerHighlight(for: last)
-                }
-            } else if horizontalAmount > 40
-                        && abs(horizontalAmount) > 2 * abs(verticalAmount)
-                        && viewModel.statsTrackingEnabled
-                        && (!viewModel.currentMatchStats.isEmpty || viewModel.matchStartTime != nil) {
-                // Right-swipe → live stats. Higher threshold + horizontal bias
-                // so it doesn't fire when the user overshoots a left-swipe undo.
+    private func performInput(_ action: ScoreInputAction) {
+        guard !swipeScoringBlocked else { return }
+        switch action {
+        case .undo:
+            viewModel.undo()
+            if let last = viewModel.lastScoredPlayer { triggerHighlight(for: last) }
+        case .stats:
+            if viewModel.statsTrackingEnabled
+                && (!viewModel.currentMatchStats.isEmpty || viewModel.matchStartTime != nil) {
                 viewModel.showStatsView = true
             }
-        } else if let target = pointTarget(for: value) {
+        case .win, .lose:
+            guard !viewModel.isMatchComplete() else { return }
+            let target: Player = action == .win ? .me : .opponent
             triggerHighlight(for: target)
-            if target == .me {
-                viewModel.winPoint(player: .me)
-            } else {
-                viewModel.losePoint(player: .me)
-            }
+            if target == .me { viewModel.winPoint(player: .me) }
+            else { viewModel.losePoint(player: .me) }
         }
     }
 
@@ -310,6 +306,10 @@ struct ContentView: View {
                     handleSwipe(value: value)
                 }
         )
+        .accessibilityAction(named: Text("Win point")) { performInput(.win) }
+        .accessibilityAction(named: Text("Lose point")) { performInput(.lose) }
+        .accessibilityAction(named: Text("Undo point")) { performInput(.undo) }
+        .accessibilityAction(named: Text("Open live stats")) { performInput(.stats) }
         // Categorization sheet: keyed off pendingStatPoint so a kill-mid-flow
         // re-presents it on relaunch (pendingStatPoint persists in AppState v2).
         .sheet(isPresented: pendingStatBinding) {
@@ -395,48 +395,20 @@ struct ContentView: View {
     private func scoreRow(for player: ScoreViewModel.Player) -> some View {
         let isMe = player == .me
 
-        HStack(spacing: 4) {
+        ScoringScoreRow(isMe: isMe, label: isMe ? "Me" : "Op",
+                        indicatorWidth: viewModel.matchType == .doubles ? 34 : 20,
+                        background: rowBackground(for: player),
+                        preview: livePreviewTarget == player) {
             serverIndicator(for: player)
-                .frame(width: viewModel.matchType == .doubles ? 34 : 20)
-
-            Text(isMe ? "Me" : "Op")
-                .font(.headline)
-                .frame(width: 30, alignment: .leading)
-
+        } cells: {
             ForEach(scoreboardSets, id: \.index) { index, set in
                 scoreCell(for: player, index: index, set: set)
             }
-
+        } badge: {
             if !viewModel.isMatchComplete() && !viewModel.isTiebreakOnlyFormat {
                 pointBadge(for: player)
             }
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(rowBackground(for: player))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.white.opacity(0.12))
-                )
-        )
-        // Live preview: the row that will receive the point lights up green (a
-        // win for me) or red (a loss) while the finger is still down.
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .fill((player == .me ? Color.green : Color.red)
-                    .opacity(livePreviewTarget == player ? 0.22 : 0))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(livePreviewTarget == player
-                            ? (player == .me ? Color.green : Color.red)
-                            : .clear,
-                        lineWidth: 3)
-        )
-        .animation(.easeOut(duration: 0.12), value: livePreviewTarget)
     }
 
     @ViewBuilder
@@ -527,19 +499,10 @@ struct ContentView: View {
     @ViewBuilder
     private func pointBadge(for player: ScoreViewModel.Player) -> some View {
         let flashColor = player == .me ? palette.me : palette.opponent
-        Text(viewModel.displayedScore(for: player))
-            .font(.body.weight(.semibold))
-            .frame(width: 32, alignment: .trailing)
-            .padding(.vertical, 4)
-            .padding(.horizontal, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(cellBackground(for: player, isActive: true).opacity(0.35))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(flashColor.opacity(lastScoredPlayer == player ? highlightOpacity : 0))
-                    )
-            )
+        ScoringPointBadge(label: viewModel.displayedScore(for: player),
+                          background: cellBackground(for: player, isActive: true),
+                          flashColor: flashColor,
+                          flashOpacity: lastScoredPlayer == player ? highlightOpacity : 0)
     }
 
     @ViewBuilder
@@ -667,6 +630,15 @@ struct EndsSwitchReminderBanner: View {
 struct HeartRateBadgeView: View {
     @ObservedObject var workoutManager: WorkoutManager
 
+    var body: some View {
+        HeartRateBadgeContent(heartRate: workoutManager.currentHeartRate)
+    }
+}
+
+/// Shared badge drawing; the guide passes a scripted value without a workout manager.
+struct HeartRateBadgeContent: View {
+    let heartRate: Double?
+
     private enum HeartRateBand {
         case low, moderate, high, max
 
@@ -681,7 +653,6 @@ struct HeartRateBadgeView: View {
     }
 
     var body: some View {
-        let heartRate = workoutManager.currentHeartRate
         let bpmText = heartRate.map { "\(Int($0.rounded()))" } ?? "--"
         VStack(spacing: 1) {
             Text("❤️")
@@ -706,7 +677,7 @@ struct HeartRateBadgeView: View {
     }
 
     private var heartRateColor: Color {
-        guard let heartRate = workoutManager.currentHeartRate else { return .white.opacity(0.6) }
+        guard let heartRate = heartRate else { return .white.opacity(0.6) }
         return band(for: heartRate).color
     }
 
@@ -806,6 +777,7 @@ struct CompassBadgeView: View {
 // MARK: - CourtSideView
 
 struct CourtSideView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let isDeuceSide: Bool
     let server: ScoreViewModel.Player?
     var centered: Bool = false
@@ -850,7 +822,7 @@ struct CourtSideView: View {
                 .frame(width: centered ? 14 : (isLeftSide ? 26 : 0))
         }
         .frame(height: 14)
-        .animation(.easeInOut(duration: 0.5), value: isLeftSide)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: isLeftSide)
     }
 
     private var serverOnLeft: Bool {

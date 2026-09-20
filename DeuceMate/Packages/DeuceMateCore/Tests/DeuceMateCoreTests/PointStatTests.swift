@@ -39,6 +39,20 @@ final class PointStatTests: XCTestCase {
 
     // MARK: - Identifiers
 
+    func test_servingCategories_excludeUncategorizedPointsForEitherServer() {
+        for server in [Player.me, .opponent] {
+            for isSecondServe in [false, true] {
+                let untracked = PointStat(setIndex: 0, server: server, winner: server,
+                                          outcome: .uncategorized, isSecondServe: isSecondServe)
+                for category in ServingPointCategory.allCases {
+                    XCTAssertFalse(category.matches(untracked, server: server), "\(category), \(server)")
+                }
+                // The server is still known for the point history and inspector.
+                XCTAssertTrue(untracked.wasServing(server))
+            }
+        }
+    }
+
     func test_categoryEnums_identifyThemselvesByRawValue() {
         // The graph/chip lists are `Identifiable`-driven; ids must be the stable
         // persisted raw values, and unique within each enum.

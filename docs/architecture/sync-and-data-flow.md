@@ -202,3 +202,15 @@ stripped result is subsequently pushed to the iCloud backup on the usual
 debounced schedule — so a Replace also overwrites the previous iCloud backup
 once it lands. A full-fidelity manual import can repopulate missing sidecar data
 after an automatic restore.
+
+
+## Animated guide has no sync route
+
+The watch walkthrough uses a disposable Core `WalkthroughSession` and shared
+value/callback displays. It constructs no `MatchRecord` or transport payload,
+registers no remote-command handler, and never sends a live checkpoint, archive,
+announcement or clear-active signal. Normal app launch bookkeeping and production
+remote messages continue independently. If a real session becomes active while
+the guide is presented, Home dismisses the guide without changing the real match.
+The two version flags remain watch-local; the current theme is read through the
+normal environment. See the separate branch in [match-lifecycle.md](match-lifecycle.md).
