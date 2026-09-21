@@ -297,6 +297,10 @@ struct HomeView: View {
     @Environment(\.openURL) private var openURL
     @State private var showMatchView = false
     @State private var showInstructions = false
+    @StateObject private var walkthrough = WalkthroughCoordinator()
+    @State private var showWalkthrough = false
+    @State private var walkthroughIsOffer = false
+    @State private var guideWalkthroughRequested = false
     @State private var showSettings = false
     @State private var showEndMatchConfirmation = false
     @State private var showMatchSetupSheet = false
@@ -765,9 +769,27 @@ struct HomeView: View {
             }
             } // NavigationStack
         }
-        .sheet(isPresented: $showInstructions) {
+        .sheet(isPresented: $showInstructions, onDismiss: {
+            guard guideWalkthroughRequested else { return }
+            guideWalkthroughRequested = false
+            guard walkthroughAvailable else { return }
+            walkthrough.markSeen()
+            walkthroughIsOffer = false
+            showWalkthrough = true
+        }) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 5) {
+                    Button("Animated guide") {
+                        guard walkthroughAvailable else { return }
+                        guideWalkthroughRequested = true
+                        showInstructions = false
+                    }
+                    .disabled(!walkthroughAvailable)
+                    if !walkthroughAvailable {
+                        Text("The animated guide is available after the current match or setup has ended.")
+                            .font(.footnote)
+                    }
+                    Divider()
                     VStack(alignment: .leading, spacing: 10) {
                             HStack(alignment: .top) {
                                 Text("Swipe to Score:")
@@ -909,7 +931,19 @@ struct HomeView: View {
                 showMatchView = true
             }
         }
+        .sheet(isPresented: $showWalkthrough, onDismiss: {
+            walkthrough.markSeen()
+        }) {
+            WalkthroughEntryView(offer: walkthroughIsOffer, coordinator: walkthrough)
+        }
+        .onChange(of: viewModel.launchPresentationReady) { _ in evaluateWalkthroughOffer() }
+        .onChange(of: showInstructions) { _ in evaluateWalkthroughOffer() }
+        .onChange(of: walkthroughAvailable) { available in
+            if !available { showWalkthrough = false }
+            else { evaluateWalkthroughOffer() }
+        }
         .onAppear {
+            evaluateWalkthroughOffer()
             hasPastMatches = !StatsStore.shared.loadHistory().isEmpty
             // Health access can be revoked from the iPhone while the app is
             // backgrounded, so re-read it whenever the start screen appears.
@@ -918,6 +952,24 @@ struct HomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .watchMatchHistoryDidChange)) { _ in
             hasPastMatches = !StatsStore.shared.loadHistory().isEmpty
         }
+    }
+
+    private var walkthroughAvailable: Bool {
+        viewModel.launchPresentationReady && viewModel.walkthroughIsIdle
+            && !showMatchView && !showMatchSetupSheet && !showSettings && !showHistory
+            && !showEndMatchConfirmation && !viewModel.shouldOpenMatchView
+    }
+
+    private func evaluateWalkthroughOffer() {
+        guard walkthroughAvailable, !showInstructions, !showWalkthrough, !guideWalkthroughRequested else { return }
+        let historyReadCount = StatsStore.shared.loadHistoryOrNil()?.count
+        guard walkthrough.shouldOffer(launchReady: viewModel.launchPresentationReady,
+            stateReadSucceeded: viewModel.stateRestorationSucceeded,
+            historyCount: historyReadCount, idle: walkthroughAvailable,
+            modalActive: showInstructions || showWalkthrough) else { return }
+        walkthrough.markSeen()
+        walkthroughIsOffer = true
+        showWalkthrough = true
     }
 
 }

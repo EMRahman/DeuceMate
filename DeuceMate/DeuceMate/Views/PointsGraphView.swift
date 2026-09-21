@@ -207,8 +207,8 @@ private struct PointsGraphData {
     /// Total outcome counts attributed to the opponent across the whole match.
     let oppOutcomeCounts: [OutcomeCategory: Int]
     /// Server-attributed first/second/DF/Ace/Serve-FE counts for each player.
-    /// These are computed over all points so the Serving section also works for
-    /// score-only matches whose outcomes were not categorised.
+    /// Only categorised points contribute: score-only points do not establish
+    /// first/second-serve tracking. Controls hide with the outcome pills.
     let myServingCounts: [ServingPointCategory: Int]
     let oppServingCounts: [ServingPointCategory: Int]
     /// (me, opp) cumulative score at each pointIndex from 0…stats.count.
@@ -220,8 +220,8 @@ private struct PointsGraphData {
     /// look up the dots at a touched point in O(1) without re-filtering the
     /// flat array each frame.
     let scatterByPoint: [Int: [ScatterEntry]]
-    /// Full pre-point match-score snapshots, shared with the Points tab.
-    let matchScoreByID: [PointStat.ID: PointMatchScore.Snapshot]
+    /// Scores after the selected rally, aligned with cumulative point totals.
+    let matchScoreByID: [PointStat.ID: PointMatchScore.PostPointSnapshot]
     /// The chart's x-axis is 1-based after each point; bridge that index back
     /// to the stable point id used by `PointMatchScore`.
     let idByIndex: [Int: PointStat.ID]
@@ -245,7 +245,7 @@ private struct PointsGraphData {
         let stats = record.stats
         let totalSteps = record.totalSteps
         self.xDomain = 0...max(stats.count, 1)
-        self.matchScoreByID = PointMatchScore.atStart(of: stats, record: record)
+        self.matchScoreByID = PointMatchScore.afterEachPoint(of: stats, record: record)
 
         let hasAnySelection = !selectedMyOutcomes.isEmpty
             || !selectedOpponentOutcomes.isEmpty
@@ -1030,23 +1030,25 @@ private struct PointsGraphScatterControls: View {
                 }
             }
 
-            section(title: "Serving") {
-                chipRow(
-                    title: "Me",
-                    items: ServingPointCategory.allCases,
-                    isSelected: { selectedMyServing.contains($0) },
-                    toggle: { selectedMyServing.formSymmetricDifference([$0]) },
-                    label: { "\($0.displayLabel) \(myServingCounts[$0] ?? 0)" },
-                    color: { $0.color }
-                )
-                chipRow(
-                    title: "Opp",
-                    items: ServingPointCategory.allCases,
-                    isSelected: { selectedOpponentServing.contains($0) },
-                    toggle: { selectedOpponentServing.formSymmetricDifference([$0]) },
-                    label: { "\($0.displayLabel) \(oppServingCounts[$0] ?? 0)" },
-                    color: { $0.color }
-                )
+            if hasOutcomeData {
+                section(title: "Serving") {
+                    chipRow(
+                        title: "Me",
+                        items: ServingPointCategory.allCases,
+                        isSelected: { selectedMyServing.contains($0) },
+                        toggle: { selectedMyServing.formSymmetricDifference([$0]) },
+                        label: { "\($0.displayLabel) \(myServingCounts[$0] ?? 0)" },
+                        color: { $0.color }
+                    )
+                    chipRow(
+                        title: "Opp",
+                        items: ServingPointCategory.allCases,
+                        isSelected: { selectedOpponentServing.contains($0) },
+                        toggle: { selectedOpponentServing.formSymmetricDifference([$0]) },
+                        label: { "\($0.displayLabel) \(oppServingCounts[$0] ?? 0)" },
+                        color: { $0.color }
+                    )
+                }
             }
 
             if !presentEndingPhases.isEmpty {
@@ -1167,12 +1169,12 @@ private struct PointsGraphScatterControls: View {
 
 /// Compact summary rendered above the chart while the user touches it.
 /// Shows cumulative points won plus the selected point's serving side,
-/// pre-point game/match score, set-relative number, and any scatter chips.
+/// post-point game/match score, set-relative number, and any scatter chips.
 private struct PointsGraphSelectionSummary: View {
     let pointIndex: Int
     let setPointNumber: Int?
     let point: PointStat?
-    let matchScore: PointMatchScore.Snapshot?
+    let matchScore: PointMatchScore.PostPointSnapshot?
     let perPointSteps: Int?
     let me: Int
     let opp: Int
@@ -1209,14 +1211,15 @@ private struct PointsGraphSelectionSummary: View {
             if let point {
                 HStack(spacing: 5) {
                     PointServiceStatusLabel(isServing: point.server == .me)
-                    if let gameScore = point.gameScoreAtStart {
+                    if let matchScore {
                         Text("·")
-                        Text(GameScoreLabel.string(for: gameScore, server: point.server))
+                        Text("After point: \(matchScore.gameScoreLabel)")
                             .monospacedDigit()
+                            .accessibilityIdentifier("graph-score-after-point")
                     }
-                    if let matchScore, !matchScore.label.isEmpty {
+                    if let label = matchScore?.matchScoreLabel {
                         Text("·")
-                        Text(matchScore.label)
+                        Text(label)
                             .monospacedDigit()
                     }
                     if let perPointSteps {

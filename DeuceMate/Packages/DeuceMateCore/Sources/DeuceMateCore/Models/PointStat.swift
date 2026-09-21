@@ -211,10 +211,12 @@ public enum ServingPointCategory: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// Whether `point` belongs to this category for the specified server.
+    /// Uncategorized points do not establish a tracked serve attempt; their
+    /// default `isSecondServe == false` must not imply a first serve.
     /// Detailed Ace / Serve FE tags require the point to have ended on Serve;
     /// S+1 and rally forced errors intentionally do not match.
     public func matches(_ point: PointStat, server: Player) -> Bool {
-        guard point.server == server else { return false }
+        guard point.server == server, point.outcome != .uncategorized else { return false }
         switch self {
         case .firstServe:
             return !point.isSecondServe && point.outcome != .doubleFault

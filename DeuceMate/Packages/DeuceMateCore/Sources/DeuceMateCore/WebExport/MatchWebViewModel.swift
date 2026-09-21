@@ -24,7 +24,7 @@ public struct MatchWebViewModel: Encodable, Sendable {
     /// v8 adds each point's `isTiebreak` flag so regular and tiebreak chart
     /// bands can use the same distinct backgrounds as the iOS graph. v9 adds
     /// server-attributed scatter counts and serving legend metadata.
-    public static let currentSchemaVersion = 9
+    public static let currentSchemaVersion = 10
 
     public let schemaVersion: Int
     public let generatedAt: String
@@ -173,6 +173,9 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public let isBreakPoint: Bool
         public let isTiebreak: Bool
         public let gameScoreLabel: String
+        /// Graph inspection includes the rally; Points history uses the start score.
+        public let gameScoreAfterPointLabel: String?
+        public let matchScoreAfterPointLabel: String?
         /// Full recorder-perspective match score at the start of this point:
         /// completed prior sets plus the live score of this point's set.
         /// `nil` for legacy snapshots or when no segment is knowable.

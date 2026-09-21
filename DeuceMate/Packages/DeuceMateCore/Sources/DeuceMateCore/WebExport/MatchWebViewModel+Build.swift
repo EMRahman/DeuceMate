@@ -95,9 +95,9 @@ extension MatchWebViewModel {
             PointOutcome.doubleFault.rawValue:   categorized.opponentDoubleFaults
         ]
 
-        // Serving pills are score-level first/second/DF buckets plus detailed
-        // Ace / Serve-FE tags. Derive them over all points so first/second serve
-        // filtering remains available when outcome tracking was disabled.
+        // Shared matching excludes uncategorized points from first/second/DF
+        // buckets and detailed Ace / Serve-FE tags. A score-only point's default
+        // second-serve flag does not establish that it was a tracked first serve.
         let other: Player = focal == .me ? .opponent : .me
         func makeServingCounts(for server: Player) -> [String: Int] {
             Dictionary(uniqueKeysWithValues: ServingPointCategory.allCases.map { category in
@@ -245,6 +245,7 @@ extension MatchWebViewModel {
         var cumMe = 0
         var cumOpp = 0
         let matchScores = PointMatchScore.atStart(of: stats, record: record)
+        let afterScores = PointMatchScore.afterEachPoint(of: stats, record: record)
         return stats.enumerated().map { idx, pt in
             if pt.winner == .me { cumMe += 1 } else { cumOpp += 1 }
             let shot = pt.endingShot
@@ -271,6 +272,8 @@ extension MatchWebViewModel {
                 isBreakPoint: pt.isBreakPoint,
                 isTiebreak: pt.gameScoreAtStart?.isTiebreak ?? false,
                 gameScoreLabel: gameScoreLabel(pt),
+                gameScoreAfterPointLabel: afterScores[pt.id]?.gameScoreLabel,
+                matchScoreAfterPointLabel: afterScores[pt.id]?.matchScoreLabel,
                 matchScoreLabel: matchScore?.isEmpty == false ? matchScore : nil,
                 cumulativeMe: cumMe,
                 cumulativeOpp: cumOpp,

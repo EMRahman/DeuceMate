@@ -18,6 +18,16 @@ flowchart TD
     EXPORT["8 · Export & AI coaching<br/>text report, coaching prompt, or<br/>interactive HTML page · handed to<br/>ChatGPT, Claude, Gemini, ... or shared"]
     MANAGE["9 · Housekeeping<br/>free watch space (keep phone copy)<br/>or delete permanently (tombstoned)"]
 
+    HOME["Idle home after restore/authorization"]
+    OFFER["Optional first-use offer / Animated guide entry"]
+    GUIDE["Nine automatic situations<br/>in-memory scoring + points only"]
+    DISCARD["Done / dismissal: discard guide<br/>only two watch-local flags persist"]
+    HOME --> SETUP
+    HOME --> OFFER
+    OFFER --> GUIDE
+    GUIDE --> DISCARD
+    DISCARD --> HOME
+
     SETUP --> SCORE
     SCORE --> CAT
     CAT --> SCORE
@@ -136,3 +146,22 @@ which the watch owns the live match and it can be resumed and scored normally.
 This is the single deliberate exception to "the phone never authors match data."
 *Files: `ManualMatchEntryView` → `PhoneMatchSyncService` → `WatchMatchSyncService`
 → `ScoreViewModel`.*
+
+
+## Side journey: isolated animated watch guide
+
+Home waits for restoration and launch presentation to finish. Successful reads,
+empty history, no prior offer/completion and idle production state permit one
+automatic offer. Guide retains its text reference and adds Animated guide;
+entry is unavailable during live scoring, warmup, pending categorisation or setup.
+Dismissal/Not now marks offer-seen; final Done records completion.
+
+`WalkthroughViewModel` owns a disposable Core `WalkthroughSession`. Nine
+situations automatically animate score gestures, category selections, stats
+scrolling and changeover acknowledgement using existing reducer/reminder/stat
+rules. Previous/Next replace the fixture at any beat; results wait for navigation.
+There is no lesson/replay menu or required user gesture. Shared score/court/banner
+and stats views take values only; category previews are read-only fixed examples.
+Navigation/dismissal cancels tasks and rejects old generation callbacks; scene
+inactivity pauses the script. No guide path reaches persistence, sync, export,
+workout or heading. Production background and remote work stays in the normal app.

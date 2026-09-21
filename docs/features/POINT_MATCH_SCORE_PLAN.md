@@ -305,13 +305,13 @@ current set omitted); a legacy match with no snapshots.
   the outcome line are unchanged.
 
 **`PointsGraphView.swift`**
-- `PointsGraphData`: add `record`-derived inputs to `init`, call `PointMatchScore.atStart`
-  once, and in the existing single-pass loop over `stats` populate
-  `snapshotByID: [PointStat.ID: PointMatchScore.Snapshot]` plus an `idByIndex: [Int: PointStat.ID]`
+- `PointsGraphData`: add `record`-derived inputs to `init`, call `PointMatchScore.afterEachPoint`
+  once for the graph (the Points list still uses `atStart`), and in the existing single-pass loop over `stats` populate
+  `matchScoreByID: [PointStat.ID: PointMatchScore.PostPointSnapshot]` plus an `idByIndex: [Int: PointStat.ID]`
   so the x-indexed selection can reach it. Update all three construction sites — each already
   has `record` in scope.
 - `PointsGraphSelectionSummary`: add a second line below the existing
-  "Pt N · Me X · Opp Y" with the server indicator, the in-game score, and `snapshot.label`.
+  "Pt N · Me X · Opp Y" with the selected rally’s server indicator and **After point** game/match labels. Both tennis scores include the selected rally, matching the cumulative totals.
   Both call sites pass the snapshot for the selected x.
 - Lift the recorder-oriented `gameScoreLabel(_:server:)` into Core as `GameScoreLabel` alongside
   `SetScoreLabel`, then use it from the Points list, graph summary, and both web-export point-score
@@ -372,3 +372,18 @@ The following hands-on UI checks remain appropriate release smoke tests:
 - The `PointGamesScore` bug (PR 1) was found by hand-simulating the loop against a real 6–4 set.
   Derivations reconciled against a stored value are worth checking that way: confirm both sides of
   the comparison are measured at the same instant.
+
+
+### Graph inspection timing correction (2026-09-19)
+
+Cumulative totals include the selected rally. Inline/expanded graph inspection
+and HTML popups now use `PointMatchScore.afterEachPoint`, which applies that
+rally’s winner to its captured starting state through `ScoringEngine.pointWon`.
+Regular game wins reset point scores and advance games; set/match boundaries
+follow the reducer. Winning tiebreaks retain their terminal point tally.
+Unknown current-set games remain omitted for suffix histories; legacy points
+without snapshots have no invented tennis score. Points history and stored
+`gameScoreAtStart` snapshots retain their before-point semantics. HTML schema v10
+adds `gameScoreAfterPointLabel` and `matchScoreAfterPointLabel`. Regression tests
+cover opening rallies, deuce/advantage, receiver orientation, game/set/match
+boundaries, standard/deciding/endless/sudden-death breakers and incomplete history.

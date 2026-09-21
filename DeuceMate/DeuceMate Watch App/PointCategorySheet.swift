@@ -24,11 +24,34 @@ struct PointCategorySheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        if let outcome = viewModel.pendingOutcome,
-           viewModel.detailedShotTrackingEnabled {
-            EndingShotStep(pending: pending, outcome: outcome) { dismiss() }
+        PointCategoryControls(pending: pending, outcome: viewModel.pendingOutcome,
+                              detailedTracking: viewModel.detailedShotTrackingEnabled,
+                              selectOutcome: { outcome in
+                                  viewModel.selectOutcome(outcome)
+                                  if viewModel.pendingStatPoint == nil { dismiss() }
+                              },
+                              selectShot: { shot in viewModel.commitEndingShot(shot); dismiss() },
+                              cancelOutcome: { viewModel.cancelOutcomeSelection() },
+                              undo: { viewModel.undo(); dismiss() })
+    }
+}
+
+/// Value/callback presentation shared by live points and isolated practice.
+struct PointCategoryControls: View {
+    let pending: PendingPointInfo
+    let outcome: PointOutcome?
+    let detailedTracking: Bool
+    let selectOutcome: (PointOutcome) -> Void
+    let selectShot: (EndingShot) -> Void
+    let cancelOutcome: () -> Void
+    let undo: () -> Void
+
+    var body: some View {
+        if let outcome, detailedTracking {
+            EndingShotStep(pending: pending, outcome: outcome, selectShot: selectShot,
+                           cancelOutcome: cancelOutcome, undo: undo)
         } else {
-            OutcomeStep(pending: pending) { dismiss() }
+            OutcomeStep(pending: pending, selectOutcome: selectOutcome, undo: undo)
         }
     }
 }
@@ -36,9 +59,10 @@ struct PointCategorySheet: View {
 // MARK: - Step 1: outcome
 
 private struct OutcomeStep: View {
-    @EnvironmentObject var viewModel: ScoreViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let pending: PendingPointInfo
-    let onCommit: () -> Void
+    let selectOutcome: (PointOutcome) -> Void
+    let undo: () -> Void
 
     /// The outcome the user just tapped. While set, the chosen button shows a
     /// checkmark and the others dim for a brief beat (`commitDelay`) before the
@@ -100,12 +124,8 @@ private struct OutcomeStep: View {
                         ForEach(row) { outcome in
                             Button {
                                 guard selectedOutcome == nil else { return }
-                                withAnimation(.easeOut(duration: 0.12)) {
+                                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) {
                                     selectedOutcome = outcome
-                                }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + commitDelay) {
-                                    viewModel.selectOutcome(outcome)
-                                    if viewModel.pendingStatPoint == nil { onCommit() }
                                 }
                             } label: {
                                 Text(outcome.displayLabel)
@@ -122,8 +142,7 @@ private struct OutcomeStep: View {
                 }
 
                 UndoPointButton {
-                    viewModel.undo()
-                    onCommit()
+                    undo()
                 }
                 .disabled(selectedOutcome != nil)
             }
@@ -131,16 +150,26 @@ private struct OutcomeStep: View {
         }
         .padding(.horizontal, 4)
         .padding(.top, 8)
+        .task(id: selectedOutcome) {
+            guard let selectedOutcome else { return }
+            do { try await Task.sleep(nanoseconds: UInt64(commitDelay * 1_000_000_000)) }
+            catch { return }
+            guard !Task.isCancelled else { return }
+            selectOutcome(selectedOutcome)
+            self.selectedOutcome = nil
+        }
     }
 }
 
 // MARK: - Step 2: ending shot
 
 private struct EndingShotStep: View {
-    @EnvironmentObject var viewModel: ScoreViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let pending: PendingPointInfo
     let outcome: PointOutcome
-    let onCommit: () -> Void
+    let selectShot: (EndingShot) -> Void
+    let cancelOutcome: () -> Void
+    let undo: () -> Void
 
     /// The ending shot the user just tapped — drives the brief "chosen"
     /// confirmation before the point is committed and the sheet dismisses.
@@ -202,7 +231,7 @@ private struct EndingShotStep: View {
         VStack(spacing: 4) {
             HStack(alignment: .center, spacing: 5) {
                 Button {
-                    viewModel.cancelOutcomeSelection()
+                    cancelOutcome()
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.caption2.weight(.semibold))
@@ -241,12 +270,8 @@ private struct EndingShotStep: View {
                         ForEach(row, id: \.0) { (shot, label) in
                             Button {
                                 guard selectedShot == nil else { return }
-                                withAnimation(.easeOut(duration: 0.12)) {
+                                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) {
                                     selectedShot = shot
-                                }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + commitDelay) {
-                                    viewModel.commitEndingShot(shot)
-                                    onCommit()
                                 }
                             } label: {
                                 Text(label)
@@ -263,8 +288,7 @@ private struct EndingShotStep: View {
                 }
 
                 UndoPointButton {
-                    viewModel.undo()
-                    onCommit()
+                    undo()
                 }
                 .disabled(selectedShot != nil)
             }
@@ -272,6 +296,14 @@ private struct EndingShotStep: View {
         }
         .padding(.horizontal, 4)
         .padding(.top, 8)
+        .task(id: selectedShot) {
+            guard let selectedShot else { return }
+            do { try await Task.sleep(nanoseconds: UInt64(commitDelay * 1_000_000_000)) }
+            catch { return }
+            guard !Task.isCancelled else { return }
+            selectShot(selectedShot)
+            self.selectedShot = nil
+        }
     }
 }
 

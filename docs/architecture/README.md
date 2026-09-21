@@ -43,6 +43,9 @@ flowchart TB
         WVM["Live scoring engine<br/>ScoreViewModel"]
         WSTORE["Watch match store<br/>JSON file, newest 25 matches"]
         WSYNC["Watch sync service"]
+        GUIDE["Optional animated guide<br/>disposable Core scripted session"]
+        FLAGS["Two watch-local walkthrough flags"]
+        GUIDE --> FLAGS
         WUI --> WVM
         WVM --> WSTORE
         WVM --> WSYNC
@@ -98,6 +101,11 @@ services and other apps.
 The `HealthKit → … → iCloud Drive` path carries a compliance requirement of its
 own (health data must never reach iCloud). Exactly where it is stripped, excluded,
 or gated is mapped in [health-data-flow.md](health-data-flow.md).
+
+The animated guide is a separate in-memory branch: it reuses scoring/stat rules and display
+controls, but never enters the live view model, store, bridge, workout or compass.
+Only offer-seen and completion flags persist locally. See the isolated branch in
+[match-lifecycle.md](match-lifecycle.md).
 
 ## The five ownership rules
 

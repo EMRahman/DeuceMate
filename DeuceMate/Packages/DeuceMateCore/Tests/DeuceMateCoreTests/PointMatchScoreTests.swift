@@ -213,6 +213,109 @@ final class PointMatchScoreTests: XCTestCase {
         XCTAssertTrue(PointMatchScore.atStart(of: record.stats, record: record).isEmpty)
     }
 
+    func test_afterPoint_alignsOpeningPointsForSinglesAndDoubles() throws {
+        for type in [MatchType.singles, .doubles] {
+            let record = playedRecord([.me, .opponent], type: type)
+            let after = PointMatchScore.afterEachPoint(of: record.stats, record: record)
+            XCTAssertEqual(after[record.stats[0].id]?.gameScoreLabel, "15–0")
+            XCTAssertEqual(after[record.stats[1].id]?.gameScoreLabel, "15–15")
+            XCTAssertEqual(after[record.stats[1].id]?.matchScoreLabel, "0–0")
+            // The history's captured scores retain their before-point meaning.
+            XCTAssertEqual(record.stats[0].gameScoreAtStart?.server, 0)
+            XCTAssertEqual(record.stats[1].gameScoreAtStart?.server, 1)
+        }
+    }
+
+    func test_afterPoint_handlesDeuceAdvantageAndGameWin() {
+        let record = playedRecord([.me, .me, .me, .opponent, .opponent, .opponent,
+                                   .me, .opponent, .opponent, .me, .me, .me])
+        let after = PointMatchScore.afterEachPoint(of: record.stats, record: record)
+        let labels = record.stats.map { after[$0.id]?.gameScoreLabel }
+        XCTAssertEqual(Array(labels.suffix(7)), ["Deuce", "Ad Me", "Deuce", "Ad Opp", "Deuce", "Ad Me", "0–0"])
+        XCTAssertEqual(after[record.stats[11].id]?.matchScoreLabel, "1–0")
+    }
+
+    func test_afterPoint_advancesGamesAndSetsWithReceiverWinning() throws {
+        // Six games to Me, followed by Opp winning the next set's first rally.
+        let record = playedRecord(Array(repeating: .me, count: 24) + [.opponent], type: .doubles)
+        let after = PointMatchScore.afterEachPoint(of: record.stats, record: record)
+        XCTAssertEqual(after[record.stats[3].id]?.gameScoreLabel, "0–0")
+        XCTAssertEqual(after[record.stats[3].id]?.matchScoreLabel, "1–0")
+        XCTAssertEqual(after[record.stats[4].id]?.gameScoreLabel, "15–0", "Me is receiving in game two")
+        XCTAssertEqual(after[record.stats[23].id]?.matchScoreLabel, "6–0  0–0")
+        XCTAssertEqual(after[record.stats[24].id]?.gameScoreLabel, "0–15")
+        XCTAssertEqual(after[record.stats[24].id]?.matchScoreLabel, "6–0  0–0")
+
+        let complete = playedRecord(Array(repeating: .me, count: 48))
+        let last = try XCTUnwrap(complete.stats.last)
+        XCTAssertEqual(PointMatchScore.afterEachPoint(of: complete.stats, record: complete)[last.id]?.matchScoreLabel,
+                       "6–0  6–0", "No empty set is invented after match completion")
+    }
+
+    func test_afterPoint_handlesTiebreakStartFinishAndSuddenDeath() {
+        var games: [Player] = []
+        for _ in 0..<6 { games += Array(repeating: .me, count: 4) + Array(repeating: .opponent, count: 4) }
+        let record = playedRecord(games + Array(repeating: .me, count: 7))
+        let after = PointMatchScore.afterEachPoint(of: record.stats, record: record)
+        XCTAssertEqual(after[record.stats[47].id]?.matchScoreLabel, "6–6 (0–0)")
+        XCTAssertEqual(after[record.stats[48].id]?.gameScoreLabel, "1–0")
+        XCTAssertEqual(after[record.stats[54].id]?.gameScoreLabel, "7–0")
+        XCTAssertEqual(after[record.stats[54].id]?.matchScoreLabel, "7–6 (7–0)  0–0")
+
+        let quick = playedRecord(Array(games.prefix(16)) + [.opponent], format: .quick4Games)
+        let quickAfter = PointMatchScore.afterEachPoint(of: quick.stats, record: quick)
+        XCTAssertEqual(quickAfter[quick.stats[16].id]?.gameScoreLabel, "0–1")
+        XCTAssertEqual(quickAfter[quick.stats[16].id]?.matchScoreLabel, "2–3 (0–1)")
+    }
+
+    func test_afterPoint_handlesSuperTiebreakAndDecidingSet() {
+        let superTB = playedRecord(Array(repeating: .me, count: 10), format: .superTiebreak)
+        let after = PointMatchScore.afterEachPoint(of: superTB.stats, record: superTB)
+        XCTAssertEqual(after[superTB.stats[9].id]?.gameScoreLabel, "10–0")
+        XCTAssertEqual(after[superTB.stats[9].id]?.matchScoreLabel, "10–0")
+        let endless = playedRecord(Array(repeating: .opponent, count: 12), format: .perpetualSuperTiebreak)
+        XCTAssertEqual(PointMatchScore.afterEachPoint(of: endless.stats, record: endless)[endless.stats[11].id]?.matchScoreLabel,
+                       "0–12")
+
+        let point = makePoint(setIndex: 2, server: .opponent, winner: .me,
+                              serverPoints: 5, returnerPoints: 7, isTiebreak: true)
+        let decider = makeRecord(format: .standard,
+            setScores: [SetScore(gamesMe: 6, gamesOpponent: 4), SetScore(gamesMe: 4, gamesOpponent: 6),
+                        SetScore(isTieBreak: true, tieBreakPointsMe: 8, tieBreakPointsOpponent: 5)], stats: [point])
+        let selected = PointMatchScore.afterEachPoint(of: decider.stats, record: decider)[point.id]
+        XCTAssertEqual(selected?.gameScoreLabel, "8–5")
+        XCTAssertEqual(selected?.matchScoreLabel, "6–4  4–6  8–5")
+    }
+
+    func test_afterPoint_preservesUnknownHistoryWithoutInventingGames() {
+        let point = makePoint(setIndex: 1, server: .opponent, winner: .me, serverPoints: 1, returnerPoints: 0)
+        let record = makeRecord(format: .standard,
+            setScores: [SetScore(gamesMe: 6, gamesOpponent: 4), SetScore(gamesMe: 4, gamesOpponent: 2)], stats: [point])
+        let after = PointMatchScore.afterEachPoint(of: record.stats, record: record)[point.id]
+        XCTAssertEqual(after?.gameScoreLabel, "15–15")
+        XCTAssertEqual(after?.matchScoreLabel, "6–4")
+        let legacy = PointStat(setIndex: 0, server: .me, winner: .me, outcome: .uncategorized)
+        XCTAssertTrue(PointMatchScore.afterEachPoint(of: [legacy], record: record).isEmpty)
+    }
+
+    /// Record actual reducer-generated point snapshots, including game/set resets.
+    private func playedRecord(_ winners: [Player], type: MatchType = .singles,
+                              format: MatchFormat = .standard) -> MatchRecord {
+        var state = ScoringState(sets: [SetScore(isTieBreak: !format.config.playRegularSets)],
+                                 currentServer: .me, tiebreakStartServer: .me,
+                                 tiebreakFirstPointReceiver: .opponent, matchType: type, matchFormat: format)
+        var points: [PointStat] = []
+        for winner in winners {
+            points.append(PointStat(setIndex: state.sets.count - 1, server: state.currentServer ?? .me,
+                                    winner: winner, outcome: .uncategorized,
+                                    gameScoreAtStart: ScoringEngine.gameScoreSnapshotAtPointStart(state)))
+            state = ScoringEngine.pointWon(by: winner, in: state).state
+        }
+        var record = makeRecord(format: format, setScores: state.sets, stats: points)
+        record.matchType = type
+        return record
+    }
+
     private func makePoint(
         setIndex: Int,
         server: Player,

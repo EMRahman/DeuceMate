@@ -302,12 +302,42 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertTrue(vm.perspectives.me.endingLostByPhase.isEmpty)
     }
 
-    func test_scoreOnlyMatch_stillCarriesServingCounts() {
-        let vm = MatchWebViewModel.make(from: makeScoreOnlyRecord())
-        XCTAssertFalse(vm.perspectives.me.hasOutcomes)
-        XCTAssertEqual(vm.perspectives.me.servingCounts["firstServe"], 2)
-        XCTAssertEqual(vm.perspectives.me.servingCountsOpponent["firstServe"], 2)
-        XCTAssertEqual(vm.perspectives.me.servingCounts["ace"], 0)
+    func test_scoreOnlyMatch_hasNoTrackedServingCountsInSinglesOrDoubles() {
+        for type in [MatchType.singles, .doubles] {
+            var record = makeScoreOnlyRecord()
+            record.matchType = type
+            let vm = MatchWebViewModel.make(from: record)
+            for perspective in [vm.perspectives.me, vm.perspectives.opponent] {
+                XCTAssertFalse(perspective.hasOutcomes)
+                for category in ServingPointCategory.allCases {
+                    XCTAssertEqual(perspective.servingCounts[category.rawValue], 0)
+                    XCTAssertEqual(perspective.servingCountsOpponent[category.rawValue], 0)
+                }
+            }
+            // Point scoring and the underlying server/winner history stay intact.
+            XCTAssertEqual(vm.points.count, 4)
+            XCTAssertEqual(vm.points.last?.cumulativeMe, 2)
+            XCTAssertEqual(vm.points.last?.cumulativeOpp, 2)
+        }
+    }
+
+    func test_mixedTracking_excludesUncategorizedServeAttemptsInSinglesOrDoubles() {
+        for type in [MatchType.singles, .doubles] {
+            var record = makeServingRecord()
+            record.matchType = type
+            let baseline = MatchWebViewModel.make(from: record)
+            for server in [Player.me, .opponent] {
+                for second in [false, true] {
+                    record.stats.append(PointStat(setIndex: 0, server: server, winner: server,
+                                                  outcome: .uncategorized, isSecondServe: second))
+                }
+            }
+            let mixed = MatchWebViewModel.make(from: record)
+            XCTAssertTrue(mixed.perspectives.me.hasOutcomes)
+            XCTAssertEqual(mixed.perspectives.me.servingCounts, baseline.perspectives.me.servingCounts)
+            XCTAssertEqual(mixed.perspectives.me.servingCountsOpponent, baseline.perspectives.me.servingCountsOpponent)
+            XCTAssertEqual(mixed.points.count, baseline.points.count + 4)
+        }
     }
 
     // MARK: - TV-style Me vs Opp comparison (mirrors MatchDetailView)
@@ -325,7 +355,7 @@ final class MatchWebExportTests: XCTestCase {
 
     func test_comparison_sectionsAndGating_fullMatch() throws {
         let vm = MatchWebViewModel.make(from: makeRecord())
-        XCTAssertEqual(vm.schemaVersion, 9)
+        XCTAssertEqual(vm.schemaVersion, 10)
         XCTAssertTrue(allComparison(vm).hasAnyOutcomeData)
         let titles = allComparison(vm).sections.map { $0.title }
         // Outcome Breakdown leads; Serve/Return present (every point categorised).
@@ -474,6 +504,29 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertEqual(p[2].chipColorHex, WebExportColors.meLineHex)
         // Point 4: deuce game state.
         XCTAssertEqual(p[4].pointScoreLabel, "Deuce")
+    }
+
+    func test_graphScoresIncludeSelectedRallyWhileHistoryUsesStartingScores() {
+        let points = [
+            PointStat(setIndex: 0, server: .opponent, winner: .me, outcome: .uncategorized,
+                      gameScoreAtStart: snap(0, 0, false)),
+            PointStat(setIndex: 0, server: .opponent, winner: .opponent, outcome: .uncategorized,
+                      gameScoreAtStart: snap(0, 1, false))
+        ]
+        for type in [MatchType.singles, .doubles] {
+            let record = MatchRecord(startTime: Date(), setScores: [SetScore()], stats: points, matchType: type)
+            let vm = MatchWebViewModel.make(from: record)
+            XCTAssertEqual(vm.points[0].cumulativeMe, 1)
+            XCTAssertEqual(vm.points[0].gameScoreAfterPointLabel, "15–0")
+            XCTAssertEqual(vm.points[1].cumulativeOpp, 1)
+            XCTAssertEqual(vm.points[1].gameScoreAfterPointLabel, "15–15")
+            XCTAssertEqual(vm.points[1].matchScoreAfterPointLabel, "0–0")
+            XCTAssertEqual(vm.points[0].gameScoreLabel, "0–0")
+            XCTAssertEqual(vm.points[1].gameScoreLabel, "15–0")
+            let html = MatchHTMLExporter.html(for: record)
+            XCTAssertTrue(html.contains("p.gameScoreAfterPointLabel"))
+            XCTAssertTrue(html.contains("p.matchScoreAfterPointLabel"))
+        }
     }
 
     func test_matchScoreLabel_reflectsInSetGamesScore() {
@@ -644,8 +697,10 @@ final class MatchWebExportTests: XCTestCase {
         ))
         XCTAssertTrue(html.contains("function matchesServing(cat, p, who)"))
         XCTAssertTrue(html.contains("p.endingShot === \"serve\""))
-        XCTAssertTrue(html.contains("wrap.appendChild(servingSection())"),
-                      "Serving controls must not be gated on outcome tracking")
+        XCTAssertTrue(html.contains("if (focalP().hasOutcomes) wrap.appendChild(servingSection())"),
+                      "Serving controls hide alongside outcome pills when tracking was not collected")
+        XCTAssertTrue(html.contains("p.server !== who || p.outcome === \"uncategorized\""),
+                      "Untracked points must not contribute serve scatter marks in mixed matches")
     }
 
     // MARK: - AI Coach (mirrors AICoachSheet)

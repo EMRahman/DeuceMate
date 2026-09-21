@@ -338,7 +338,7 @@ public enum MatchWebTemplate {
       // Core. First/second/DF are distinct buckets; Ace and Serve FE are
       // additional detailed tags that can overlap either landed serve bucket.
       function matchesServing(cat, p, who) {
-        if (p.server !== who) return false;
+        if (p.server !== who || p.outcome === "uncategorized") return false;
         if (cat === "firstServe")       return !p.isSecondServe && p.outcome !== "doubleFault";
         if (cat === "secondServe")      return p.isSecondServe && p.outcome !== "doubleFault";
         if (cat === "doubleFault")      return p.outcome === "doubleFault";
@@ -465,10 +465,10 @@ public enum MatchWebTemplate {
 
       function controls() {
         const wrap = el("div", { class: "controls" });
-        // Outcome controls need categorised points. Serving is always available
-        // for a non-empty point history; ending-shot controls need phase data.
+        // Outcome and serving controls need categorised points; score-only
+        // histories don't establish serve attempts. Ending shots need phase data.
         if (focalP().hasOutcomes) wrap.appendChild(outcomesSection());
-        wrap.appendChild(servingSection());
+        if (focalP().hasOutcomes) wrap.appendChild(servingSection());
         const es = endingShotsSection(); if (es) wrap.appendChild(es);
         const ov = overlayToggles(); if (ov) wrap.appendChild(ov);
         return wrap;
@@ -714,9 +714,9 @@ public enum MatchWebTemplate {
         const bits = [
           ["Point", "#" + (p.index + 1) + " · Set " + (p.setIndex + 1)]
         ];
-        if (p.matchScoreLabel) bits.push(["Match", p.matchScoreLabel]);
+        if (p.matchScoreAfterPointLabel) bits.push(["Match after point", p.matchScoreAfterPointLabel]);
         bits.push(
-          ["Game", p.gameScoreLabel + (p.isBreakPoint ? "  · break pt" : "")],
+          ["Game after point", p.gameScoreAfterPointLabel || "—"],
           ["Status", serviceStatus(p, true)],
           ["Winner", lbl(p.winner)],
           ["Outcome", p.outcome === "uncategorized" ? "—" : p.outcomeLabel],
