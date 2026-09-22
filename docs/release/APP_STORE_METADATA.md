@@ -82,7 +82,13 @@ With point tracking enabled:
 • Swipe right to view live statistics
 • Double-tap to mark second-serve context
 
-A glanceable scoreboard keeps the score and current server clear.
+A glanceable scoreboard keeps score and server clear.
+
+LEARN THE CONTROLS ON YOUR WATCH
+
+• Watch nine scoring situations, from scoring and undoing a point to stats,
+  games and changeovers.
+• It works offline and never changes a real match or your settings.
 
 TENNIS RULES HANDLED AUTOMATICALLY
 
@@ -92,17 +98,18 @@ DeuceMate tracks the details that are easy to forget:
 • Games, sets, standard tiebreaks, and super tiebreaks
 • Server rotation and doubles service order
 • Deuce and ad serving sides
-• Court-end changes, changeover prompts, and break points
+• Court changes, prompts, and break points
 • Singles and doubles matches
 
-Choose from six formats: club or league best of three with a deciding super tiebreak, best of three with a full final set, Quick 4, a single super tiebreak, perpetual tiebreaks, or continuous points.
+Choose from six formats: best of three with a super tiebreak or full final set,
+Quick 4, single or perpetual super tiebreaks, or continuous points.
 
 FOLLOW LIVE ON IPHONE
 
-• Stadium-style scoreboard mirrored from your Watch in real time
+• Live score mirrored from your Watch
 • Spoken, umpire-style announcements through iPhone or a Bluetooth speaker
 • Optional iPhone scoring input
-• Reconstruct an in-progress match on iPhone, then resume it on your Watch
+• Reconstruct and resume an in-progress match
 • Unlimited match archive on iPhone
 
 UNDERSTAND EVERY MATCH
@@ -110,40 +117,45 @@ UNDERSTAND EVERY MATCH
 Turn point-by-point scoring into useful match analysis:
 
 • Tag winners, forced errors, unforced errors, double faults, and ending shots
-• Compare serve, return, break-point, pressure, rally, and score-state performance
+• Compare serve, return, pressure, rally, and score-state performance
 • Filter statistics by set or across the complete match
-• Explore an interactive momentum graph with optional heart-rate and steps overlays
+• Explore a momentum graph with optional heart-rate and steps overlays
 • Review data-driven coaching and Pulse Coach insights
 
-Export a match summary, full point-by-point data, or a self-contained interactive web report. You can also generate a structured coaching prompt to review with your favourite AI app. Sharing is always initiated by you.
+Export a match summary, point-by-point data, or interactive web report. You can
+also generate a coaching prompt for an AI app you choose. Sharing is your choice.
 
 UNDERSTAND TRENDS ACROSS MATCHES
 
-• See how your game changes over time across your match history
-• Compare serving, returning, attack, errors, pressure, rally depth, and optional fitness data
-• Filter by match type, format, or time window
+• See your game change across match history
+• Compare serving, returning, attack, errors, pressure, rally depth and fitness
+• Filter by match type, format and time window
 
 OPTIONAL HEALTH AND FITNESS
 
-With your permission, DeuceMate records your match as a Tennis workout through Apple Health, including heart rate, calories, steps, distance, and match timers. Review heart-rate zones and fitness insights during and after play. Health access is optional; every scoring feature remains available without it.
+With permission, DeuceMate records a Tennis workout through Apple Health:
+heart rate, calories, steps, distance and match timers. Health is optional;
+every scoring feature works without it.
 
 OPTIONAL COURT COMPASS
 
-Enable Check Changeover for compass guidance on which end to take. It uses the Watch’s built-in compass heading only—not GPS or location tracking.
+Enable Check Changeover for compass guidance. It uses the Watch's built-in
+heading only—not GPS or location tracking.
 
 BUILT TO FINISH THE MATCH
 
-Your in-progress match is saved automatically after every point and when the app moves to the background or your Watch sleeps. Full undo works across points, games, and set boundaries, all the way back to the start of the match.
+Your in-progress match saves after every point and when the app backgrounds or
+your Watch sleeps. Full undo works back to the start of the match.
 
 PRIVATE BY DESIGN
 
 • No account required
-• No ads, third-party analytics, developer tracking, or developer-operated servers
-• Match data stays on your Apple devices and in your personal iCloud Drive archive when available
+• No ads, analytics, tracking, or developer servers
+• Match data stays on your Apple devices and iCloud Drive when available
 • Watch-to-iPhone sync uses Apple’s WatchConnectivity
 • Core scoring and match review work offline
 • HealthKit measurements are excluded from the automatic iCloud Drive archive
-• You choose when to export or share data, including with another person, a manual backup, or an AI service
+• You choose when to export or share data
 
 NO SUBSCRIPTION. NO ADS. NO TRACKING.
 
@@ -157,11 +169,47 @@ REQUIREMENTS
 Built by a recreational tennis player for players who want dependable scorekeeping without losing focus on the game.
 ```
 
-**Character count:** 3,950 characters (under the 4,000-character limit)
+**Character count:** 3,624 characters (including line breaks; under 4,000)
 
 ---
 
 ## What's New (4000 characters max)
+
+### Version 1.2.1 - Animated Watch guide and match-handling improvements
+
+```
+Get comfortable with DeuceMate before your first serve.
+
+NEW: ANIMATED GUIDE ON APPLE WATCH
+• Open Guide → Animated guide to watch nine everyday tennis situations, from
+  scoring and undoing a point to marking a second serve, finding error stats,
+  winning a game and changing ends.
+• Each example demonstrates the gesture and its result for you. Use Next or
+  Previous whenever you like; the guide waits for you and never touches a real
+  match, setting, workout or archive.
+• New players may see a one-time offer after launch setup. The guide is always
+  available later from Guide when no match or setup is active.
+
+IMPROVED
+• Watch scoring and live statistics now use clearer, consistent score reporting.
+• You can finish a parked match at its current score from either iPhone or
+  Apple Watch. The saved result is protected from stale sync data.
+• Archive deletion is more dependable, with a confirmation that stays visible
+  until you choose whether to delete.
+
+No account, subscription, ads, or tracking — just your tennis, on your devices.
+```
+
+**Character count:** 1,063 characters (including line breaks; under 4,000)
+
+> **Scope.** The shipping targets are configured as version **1.2.1 (10)**.
+> This release adds the optional Watch guide and includes archive, completion,
+> sync-safety, and score-presentation improvements merged after the Trends
+> build. Confirm that build 10 has not already been uploaded from a different
+> commit before archiving this exact release candidate; App Store Connect will
+> not accept a replacement upload with the same version and build number.
+
+---
 
 ### Version 1.2.0 - Performance Trends
 
@@ -430,25 +478,25 @@ App Review Information persists across versions in App Store Connect, so the
 previous submission's text is probably still sitting in the field — check it
 rather than assuming the field is empty.
 
-Use the following for the 1.2.0 submission. Replace the final devices-tested
+Use the following for the 1.2.1 submission. Replace the final devices-tested
 line with the exact physical-device / TestFlight evidence from this release
-candidate before pasting it into App Store Connect. ~1,520 of 4,000 characters
-before that replacement.
+candidate before pasting it into App Store Connect. It is comfortably under the
+4,000-character field limit before that replacement.
 
 ```
 This is an update to a previously approved app. No new
 permissions, no accounts, no in-app purchases, no ads, no tracking.
 
-WHAT CHANGED IN 1.2.0
-- iPhone: the new Trends screen turns match history into performance charts.
-  It shows match-by-match rates or totals for serve and return, errors and
-  winners, break-point pressure, and rally depth; users can filter by a
-  recent-match window, singles/doubles, format, and include in-progress matches.
-- The Fatigue section compares set-by-set win rates. Optional HealthKit movement
-  data adds steps per point where available; matches without it omit that series.
-  Nothing is inferred or uploaded.
-- The archive's Trends summary surfaces the four most useful error/attack
-  signals before the user opens the full charts.
+WHAT CHANGED IN 1.2.1
+- Apple Watch: a new optional Animated guide demonstrates nine scoring
+  situations, including scoring and undoing points, second serves, errors,
+  live stats, games and changeovers. It is an in-memory demonstration only:
+  it does not score, save, sync, export, announce, start a workout, access
+  sensors, or change settings.
+- Watch scoring and live statistics use clearer, consistent score reporting.
+- A parked in-progress match can be explicitly completed at its current score
+  on iPhone or Apple Watch. The result is saved before it is sent to the other
+  device, and archive deletion confirmation is more reliable.
 
 REVIEWING WITHOUT AN APPLE WATCH
 The iPhone app is fully usable on its own. On an iPhone with no Watch paired,
@@ -463,7 +511,7 @@ usable with every prompt denied. No ATT, camera, mic, photos, contacts,
 calendar, notifications or Bluetooth.
 
 Devices tested: [replace with the exact iPhone model + iOS version, Apple Watch
-model + watchOS version, TestFlight build 1.2.0 (5), and unpaired-iPhone path
+model + watchOS version, TestFlight build 1.2.1 (10), and unpaired-iPhone path
 verified for this release candidate].
 ```
 
@@ -654,4 +702,4 @@ Center attachment limit.
 
 ---
 
-*Generated for DeuceMate v1.0.0 - 2026*
+*Prepared for DeuceMate v1.2.1 (build 10) - 2026*

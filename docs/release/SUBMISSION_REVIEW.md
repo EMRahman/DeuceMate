@@ -5,6 +5,48 @@ Current pre-flight review of DeuceMate against the
 focused on upload blockers, likely rejection reasons, and the manual work needed
 in App Store Connect.
 
+## Current release candidate — 1.2.1 (build 10), 22 September 2026
+
+The iPhone app and embedded Apple Watch app are both configured as
+`MARKETING_VERSION = 1.2.1` and `CURRENT_PROJECT_VERSION = 10` in their Debug and
+Release shipping configurations. The test targets remain at their non-shipping
+version/build values.
+
+This candidate adds the optional Watch **Animated guide** and includes clearer
+Watch score/stat presentation plus safer archive deletion and explicit
+completion of a parked match at its current score. It introduces no account,
+purchase, advertising, tracking, server, or permission change. The App Store
+Connect **What's New** and **App Review Information → Notes** to paste are in
+[`APP_STORE_METADATA.md`](APP_STORE_METADATA.md#whats-new-4000-characters-max)
+and [`APP_STORE_METADATA.md`](APP_STORE_METADATA.md#app-review-information--notes-version-updates).
+
+Before submission:
+
+- [ ] Confirm build `1.2.1 (10)` has not already been uploaded from a different
+  commit. If it has, increment both shipping targets together before archiving;
+  App Store Connect does not permit a replacement binary with the same build.
+- [ ] Archive the exact current `HEAD`, validate, upload, and install the
+  TestFlight build as an upgrade. Confirm iPhone and embedded Watch both report
+  `1.2.1 (10)`.
+- [ ] On physical hardware, run the Animated guide through its first and final
+  examples; dismiss it, reopen it from Guide while idle, and confirm it cannot
+  be opened during setup or an active match. Confirm it changes no real match,
+  history, settings, workout, or phone live score.
+- [ ] Verify the release-specific archive paths: delete a phone/archive match
+  only after its confirmation remains visible; park a Watch match, then use
+  **End at Current Score** from both Watch and iPhone in separate runs. Confirm
+  each completed result appears once, survives sync/relaunch, and is not
+  overwritten by an older checkpoint.
+- [ ] Re-run the unpaired-iPhone reviewer path: **Matches → pencil icon → Enter
+  a match manually → save → detail → statistics/Points Graph → export**.
+- [ ] Replace the placeholder device line in App Review Information → Notes
+  with the exact iPhone/iOS, Watch/watchOS, and TestFlight `1.2.1 (10)` evidence.
+
+The historical review evidence below remains useful background; it is not proof
+that this new binary was archived or tested.
+
+---
+
 ## Codex codebase audit - 11 July 2026
 
 Items marked **CODEX FINDING** were found by Codex during a fresh review of the
@@ -12,8 +54,8 @@ source, Xcode project and scheme, entitlements, privacy and store metadata,
 compiled products, tests, and a generated archive. They are current repository
 findings, not historical notes copied from an earlier PR.
 
-**Current status: rejected under Guideline 2.1 - Information Needed (August
-2026); Resolution Center reply sent 17 August 2026, Apple's decision pending.**
+**Historical status: rejected under Guideline 2.1 - Information Needed (August
+2026); Resolution Center reply sent 17 August 2026.**
 Apple cited no bug, crash, or guideline violation in the app itself. The
 rejection is the standard new-app information request: a screen recording
 captured on a physical device running the latest OS, plus six written answers
@@ -792,9 +834,10 @@ Non-blocking Release build warnings to clean up:
 - [x] `ITSAppUsesNonExemptEncryption = false` is declared on both targets.
 - [x] The iPhone target correctly omits `NSHealthUpdateUsageDescription`; it
   reads HealthKit but does not write workouts.
-- [x] App version/build is consistently `1.0.0` / `2` across both production
-  targets in Debug and Release. Test targets remain at build 1 and are not
-  shipped. **Repository update - 6 August 2026.**
+- [~] Source configuration is currently `1.2.1` / `10` across both production
+  targets in Debug and Release. Test targets remain non-shipping and are not
+  included in the App Store bundle. The current-head archive still needs the
+  validation listed in **Current release candidate** above.
 - [x] No third-party package dependencies or developer-controlled backend were
   found.
 - [x] No production force-unwraps were found in the source audit.
