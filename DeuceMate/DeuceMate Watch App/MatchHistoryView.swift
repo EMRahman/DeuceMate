@@ -156,7 +156,7 @@ struct MatchHistoryView: View {
             return "Final \(CompactScoreLine.setScore(tb, setIndex: 0, matchFormat: record.matchFormat))"
         }
         if record.matchFormat == .superTiebreak, let tb = record.setScores.first {
-            let result = record.iWon == true ? "Won" : "Lost"
+            let result = completedResultLabel(for: record)
             return "\(result) \(CompactScoreLine.setScore(tb, setIndex: 0, matchFormat: record.matchFormat))"
         }
         if record.matchFormat == .perpetualSuperTiebreak {
@@ -166,17 +166,20 @@ struct MatchHistoryView: View {
             let scoreStr = scores.count > 4
                 ? scores.prefix(3).joined(separator: ", ") + ", … (\(scores.count))"
                 : scores.joined(separator: ", ")
-            if record.iWon == nil { return "Draw \(scoreStr)" }
-            let result = record.iWon == true ? "Won" : "Lost"
+            let result = completedResultLabel(for: record)
             return "\(result) \(scoreStr)"
         }
-        let result = record.iWon == true ? "Won" : "Lost"
+        let result = completedResultLabel(for: record)
         let scores = CompactScoreLine.completed(
             setScores: record.setScores,
             matchFormat: record.matchFormat,
             separator: ", "
         )
         return "\(result) \(scores)"
+    }
+
+    private func completedResultLabel(for record: MatchRecord) -> String {
+        record.iWon.map { $0 ? "Won" : "Lost" } ?? "Draw"
     }
 
     private func inProgressScoreLabel(for record: MatchRecord) -> String {

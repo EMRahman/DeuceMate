@@ -20,6 +20,11 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     private let activateSession: (WCSessionDelegate) -> Void
     private let scheduleAfter: (TimeInterval, DispatchWorkItem) -> Void
     private var activationTimeoutWorkItem: DispatchWorkItem?
+    /// Records explicitly pushed by the phone while WCSession is still
+    /// activating. `MatchSyncTransport` can queue an unreachable activated
+    /// session, but it cannot enqueue before activation, so retain the latest
+    /// version of each match here and flush it once activation succeeds.
+    private var recordsAwaitingActivation: [UUID: MatchRecord] = [:]
 
     @Published private(set) var lastSyncDate: Date?
     @Published private(set) var isWatchReachable: Bool = false
@@ -88,9 +93,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     /// Injected so live score announcements are spoken when the watch sends a point update.
     var announcementService: LiveAnnouncementService?
 
-    private let transport = MatchSyncTransport(
-        logger: Logger(subsystem: "com.deucemate.sync", category: "Phone")
-    )
+    private let transport: MatchSyncTransport
     private let logger = Logger(subsystem: "com.deucemate.sync", category: "Phone")
 
     init(
@@ -103,12 +106,16 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         },
         scheduleAfter: @escaping (TimeInterval, DispatchWorkItem) -> Void = { delay, workItem in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
-        }
+        },
+        transport: MatchSyncTransport = MatchSyncTransport(
+            logger: Logger(subsystem: "com.deucemate.sync", category: "Phone")
+        )
     ) {
         self.activationTimeout = activationTimeout
         self.isSessionSupported = isSessionSupported
         self.activateSession = activateSession
         self.scheduleAfter = scheduleAfter
+        self.transport = transport
         super.init()
     }
 
@@ -185,7 +192,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     /// is the one-way exception used by the manual-entry recovery flow. Queued
     /// on failure so the record arrives even if the watch isn't reachable now.
     func sendManualMatch(_ record: MatchRecord) {
-        transport.sendRecordReliable(record)
+        sendRecordWhenActivated(record)
     }
 
     /// Push a match the phone holds back to the watch ("Sync to Watch", used when
@@ -195,7 +202,26 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     /// older than the watch's 25 most recent it may be trimmed straight back off
     /// — inherent to the watch's history cap; the phone can't predict it.
     func sendMatchToWatch(_ record: MatchRecord) {
+        sendRecordWhenActivated(record)
+    }
+
+    private func sendRecordWhenActivated(_ record: MatchRecord) {
+        guard transport.isActivated else {
+            recordsAwaitingActivation[record.id] = record
+            return
+        }
         transport.sendRecordReliable(record)
+    }
+
+    /// Internal so the app-target test can exercise the activation boundary with
+    /// an injected transport rather than a real WCSession.
+    func flushRecordsAwaitingActivation() {
+        guard transport.isActivated, !recordsAwaitingActivation.isEmpty else { return }
+        let records = Array(recordsAwaitingActivation.values)
+        recordsAwaitingActivation.removeAll()
+        for record in records {
+            transport.sendRecordReliable(record)
+        }
     }
 
     /// Push the current Pulse Coach settings to the watch. Queued on failure so
@@ -328,12 +354,13 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                 pendingTransferCount: session.outstandingUserInfoTransfers.count
             )
             self.finishActivation(state: Self.activationStateLabel(session.activationState))
+            if activationState == .activated {
+                self.flushRecordsAwaitingActivation()
+                self.requestFullHistorySync()
+            }
         }
         if let error {
             logger.error("activation error: \(error.localizedDescription, privacy: .public)")
-        }
-        if activationState == .activated {
-            requestFullHistorySync()
         }
     }
 

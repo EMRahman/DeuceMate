@@ -24,11 +24,14 @@ A tennis-scoring app in **three software components** built with Apple framework
 (zero third-party dependencies, by rule):
 
 1. **Apple Watch app** — where matches are scored, by swiping. It is the **source of
-   truth** for every match: scoring rules, undo, serve rotation, tiebreaks, workout
-   tracking. It keeps only the **25 most recent matches** locally.
+   truth for live scoring**: scoring rules, undo, serve rotation, tiebreaks and
+   workout tracking. It keeps only the **25 most recent matches** locally.
 2. **iPhone companion app** — a viewer and a **permanent archive**. Live scoreboard,
    spoken score announcements, match history, statistics, graphs, coaching insights,
-   and export to AI chat apps. It never invents match data; it receives it from the watch.
+   and export to AI chat apps. It does not invent points; it receives checkpoints
+   from the Watch. The user may explicitly finalize an archived in-progress
+   checkpoint with **End at Current Score**; a still-live Watch keeps its newer
+   score authoritative.
 3. **DeuceMateCore** — a shared "rulebook" package used by both apps. It holds the
    data models, the tennis scoring rules, the statistics math, and the sync wire
    format. It has **no screens** — pure logic, which is why almost all automated

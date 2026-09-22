@@ -92,14 +92,17 @@ public enum ArchiveBackupPolicy {
     private static func resolveBackup(backup: MatchRecord, local: MatchRecord?) -> MatchRecord {
         guard let local else { return backup }
 
-        if backup.iWon != nil && local.iWon == nil {
+        let backupIsCompleted = !backup.isInProgress
+        let localIsCompleted = !local.isInProgress
+
+        if backupIsCompleted && !localIsCompleted {
             // Completed backup wins; backfill health fields the local checkpoint may have captured.
             return backup.fillingMissingHealthData(from: local)
         }
-        if backup.iWon == nil && local.iWon != nil {
+        if !backupIsCompleted && localIsCompleted {
             return local
         }
-        if backup.iWon != nil && local.iWon != nil {
+        if backupIsCompleted && localIsCompleted {
             let backupEnd = backup.endTime ?? backup.startTime
             let localEnd = local.endTime ?? local.startTime
             return backupEnd > localEnd ? backup : local

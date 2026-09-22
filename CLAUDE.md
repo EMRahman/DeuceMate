@@ -74,19 +74,20 @@ frameworks only — this is a hard rule, do not add packages).
 DeuceMate/
 ├── DeuceMate.xcodeproj
 ├── DeuceMate Watch App/   watchOS app — SOURCE OF TRUTH for live scoring
-├── DeuceMate/             iOS companion — read-only archive + live spectator
+├── DeuceMate/             iOS companion — archive + live spectator
 └── Packages/DeuceMateCore/  SPM package — portable models, stats, sync wire-format
 ```
 
 Data-flow invariants — **internalise these before touching sync or persistence:**
 
-- **The watch owns every match it has touched.** The phone is a *durable,
-  read-only archive*; it never authors match results. Matches flow
-  watch → phone over `WatchConnectivity`. (Two exceptions: the phone may *issue
-  score commands* to the watch when "iPhone Input" is enabled — but the watch
-  still validates and applies them; see `MatchSyncKey.scoreCommand*`. And
-  manual match entry builds a record on the phone, saves it to the phone
-  archive, and sends a copy to the watch, which then owns the live match.)
+- **The watch owns live scoring for every match it has touched.** The phone is
+  normally a durable, read-only archive and matches flow watch → phone over
+  `WatchConnectivity`. There are three narrow exceptions: the phone may issue
+  score commands when "iPhone Input" is enabled (the watch validates/applies
+  them); manual match entry may build a record and send it to the watch; and the
+  user may explicitly complete an archived in-progress checkpoint with **End at
+  Current Score**. If that identity is still live on the watch, the watch ends
+  it using its newer live score and sends the authoritative completion back.
 - **The phone archive is canonical on-device; iCloud is backup/restore only.**
   `PhoneStatsStore` renders the UI from full-fidelity records reconstructed from
   a health-stripped Application Support history plus a backup-excluded Health
@@ -125,13 +126,13 @@ anything portable; no `.pbxproj` change needed — the package globs its sources
 | `Models/ScoreTypes.swift` | `Player`, `MatchType`, `MatchFormat` + `MatchFormatConfig` (data-driven rules), `DoublesServer`, `SetScore`. **Add a match format here.** |
 | `Models/MatchRecord.swift` | The persisted match. Custom `init(from:)` for backward-compat decoding. **See §4 before adding fields.** |
 | `Models/PointStat.swift` | `PointOutcome`, `EndingShot`, shared `ServingPointCategory` graph matching, `GameScoreSnapshot`, `PendingPointInfo`, `PointStat`. The atom from which all stats derive. |
-| `Scoring/ScoringEngine.swift` | Pure scoring reducer — `pointWon(by:in:) -> ScoringResult` over value-type `ScoringState`; side-effects come back as typed `ScoringEvent`s. The watch `ScoreViewModel` delegates here. Its perspective-neutral `isRegularGameComplete` predicate is also shared by historical score reconciliation. **Change scoring rules here, with `ScoringEngineTests`.** |
+| `Scoring/ScoringEngine.swift` | Pure scoring reducer — `pointWon(by:in:) -> ScoringResult` over value-type `ScoringState`; side-effects come back as typed `ScoringEvent`s. The watch `ScoreViewModel` delegates here. Its perspective-neutral `isRegularGameComplete` predicate is also shared by historical score reconciliation, and `leaderWhenStopped` resolves explicitly ended friendlies from sets, games, then points. **Change scoring rules here, with `ScoringEngineTests`.** |
 | `Sync/MatchSyncMessage.swift` | `MatchSyncKey` (all wire keys), `MatchSyncService` protocol, codec helpers. |
 | `Sync/MatchSyncPayloadBuilder.swift` | Pure construction of the `[String: Any]` WatchConnectivity payloads. **Build payloads here** (single source of the wire shape) rather than assembling dicts inline in the app/transport — keeps them round-trippable in package tests. |
 | `Sync/SyncIncomingPayload.swift`, `MatchSyncTransport.swift`, `MatchMergePolicy.swift` | Decode/route incoming payloads; merge policy decides watch-vs-phone winner. |
 | `Sync/MatchStorageLocation.swift` | Pure derivation of where a match lives (`both` / `phoneOnly` / `watchOnly`) from the watch's reported id manifest vs the phone's store. Drives the iOS storage-location indicators. |
 | `Sync/WatchMirror.swift`, `WatchHistoryCap.swift` | Pure merge/prune rules for the phone's mirror of the watch's rolling history; `WatchHistory.cap` (25) lives here so the watch (enforces) and phone (explains) cite one number. |
-| `Sync/ArchiveBackupPolicy.swift` | Pure one-way iCloud backup policy: builds outbound snapshots from the phone archive (stripping the five HealthKit-derived fields to comply with App Store Review Guideline 5.1.3(ii)), handles the one-time initial restore before the local archive is initialized, and defines `BackupPreview` (record count + newest date, used for the restore prompt). Used by `PhoneStatsStore`. |
+| `Sync/ArchiveBackupPolicy.swift` | Pure one-way iCloud backup policy: builds outbound snapshots from the phone archive (stripping the five HealthKit-derived fields to comply with App Store Review Guideline 5.1.3(ii)), handles the one-time initial restore before the local archive is initialized (using `isInProgress`, so completed draws remain final), and defines `BackupPreview` (record count + newest date, used for the restore prompt). Used by `PhoneStatsStore`. |
 | `Persistence/HealthSidecarPolicy.swift` | Pure split/merge policy for the phone's local archive: projects exactly the five HealthKit-derived fields into a backup-excluded sidecar and reconstructs full records in memory without overwriting existing non-nil Health values. |
 | `Persistence/ManualMatchArchiveBackup.swift` | Versioned full-fidelity JSON codec + merge/replace policy for the iPhone Settings > Backup & Transfer manual archive export/import. Manual exports intentionally include HealthKit-derived fields and must stay separate from iCloud backup policy. |
 | `Stats/MatchStatsSummary.swift` | Derives serve/return/break/error/rally stats from `[PointStat]`. The reporting core. Winner/error ratios are typed `RatioStat` (`.formatted` for display), and it additively exposes categorized-only won/lost/service-point totals — the denominators the Trends metrics below divide by so an untracked point can't silently improve a rate. |
@@ -151,18 +152,26 @@ anything portable; no `.pbxproj` change needed — the package globs its sources
 
 | File | Lines | What |
 |------|------:|------|
-| `ScoreViewModel.swift` | ~1970 | Live match state + synced settings; delegates scoring rules to Core's `ScoringEngine` (see §1); seeds/persists the remembered match setup (`applyRememberedSetupIfIdle()`/`persistMatchSetupDefaults()`, called from `loadState()`/`resetMatch()` tails and `HomeView`'s `commitServerSelection()` — never from `init`, which runs before either restore path); `trackingStatuses` resolves Core's `MatchTrackingStatus.all(...)` and forwards `WorkoutManager.$healthAccess` (not its whole `objectWillChange` — that would also fire on every live-match HR/calorie tick) into its own `objectWillChange` in `init`, so views watching only the view model still redraw on Health-access changes without extra redraws during play. ⚠️ Almost no `MARK:` anchors yet — `Grep` for the symbol and read a bounded range. |
-| `HomeView.swift` | ~1020 | Match setup / start screen: a pre-match card states the remembered Singles/Doubles + format setup (hidden mid-match) and taps through to a combined Match Setup sheet, so Start Match skips straight to who-serves-first; the same card carries the Points/Health/Pulse tracking strip, and the Settings sheet opens with the always-three row form. ⚠️ No `MARK:` anchors yet. |
+| `ScoreViewModel.swift` | ~1960 | Live match state + synced settings; delegates scoring rules to Core's `ScoringEngine` (see §1); `resetMatch` parks the live match as resumable while `endStoredMatchAtCurrentScore` completes a chosen history checkpoint and `completeCurrentMatchIfMatching` reconciles the phone ending that same live identity; seeds/persists the remembered match setup (`applyRememberedSetupIfIdle()`/`persistMatchSetupDefaults()`, called from `loadState()`/`resetMatch()` tails and `HomeView`'s `commitServerSelection()` — never from `init`, which runs before either restore path); `trackingStatuses` resolves Core's `MatchTrackingStatus.all(...)` and forwards `WorkoutManager.$healthAccess` (not its whole `objectWillChange` — that would also fire on every live-match HR/calorie tick) into its own `objectWillChange` in `init`, so views watching only the view model still redraw on Health-access changes without extra redraws during play. ⚠️ Almost no `MARK:` anchors yet — `Grep` for the symbol and read a bounded range. |
+| `HomeView.swift` | ~1010 | Match setup / start screen: a pre-match card states the remembered Singles/Doubles + format setup (hidden mid-match) and taps through to a combined Match Setup sheet, so Start Match skips straight to who-serves-first; the same card carries the Points/Health/Pulse tracking strip, and the Settings sheet opens with the always-three row form. ⚠️ No `MARK:` anchors yet. |
 | `TrackingStatusStrip.swift` | ~140 | Paints Core's `MatchTrackingStatus`: the pre-match strip (single-line icon+state chips, tap to Settings, Pulse collapsed out when Health is off) and the full-width Settings rows (always all three). |
 | `ContentView.swift` | ~953 | Live scoreboard + gesture handling. |
-| `MatchStatsView.swift` | ~260 | Production live/history stats wrapper, including resume and tracking controls; delegates its stat rows to value-based `Scoring/MatchStatsContent.swift`. |
+| `MatchStatsView.swift` | ~290 | Production live/history stats wrapper, including resume, End at Current Score, and tracking controls; failed completion keeps the sheet open with an error; delegates its stat rows to value-based `Scoring/MatchStatsContent.swift`. |
 | `Scoring/ScoringScoreRow.swift`, `Scoring/MatchStatsContent.swift` | ~50 / ~350 | Shared row/point feedback and stats body; values and callbacks only, no live view model. The existing court, sticky banner and changeover overlay in `ContentView` are reused too. |
 | `Walkthrough/WalkthroughView.swift`, `WalkthroughViewModel.swift`, `WalkthroughCoordinator.swift` | ~534 / ~21 / ~22 | Animated guide UI/adapter and two local flags. Guide entry and first-use offer live in `HomeView`; readiness follows successful state/history reads and completion of the launch authorization callback in `DeuceMateApp`. Adapter has no production dependencies. Navigation/dismissal cancels animation tasks; fixture generations and disposal reject stale beats. |
-| `Sync/WatchMatchSyncService.swift` | ~284 | Watch side of `WatchConnectivity`. |
+| `Sync/WatchMatchSyncService.swift` | ~300 | Watch side of `WatchConnectivity`, including completion reconciliation sent from the phone. |
 | `PointCategorySheet.swift`, `WorkoutManager.swift`, `MatchHistoryView.swift`, `StatsStore.swift`, `BackupExcludedFileWriter.swift`, `AppTheme.swift` | | Categorisation UI, HealthKit workout (`WorkoutManager` also publishes `healthAccess`, refreshed on foreground and in `HomeView.onAppear`), backup-excluded history/live-state persistence, theming. |
 
+Watch history completion uses `WatchStatsStoring.completeStoredMatch` (declared in
+`StatsStore.swift`): read the latest existing checkpoint, complete it and save on
+the same serial queue. Only its successfully saved snapshot may be synced or
+reported as success to the sheet. Never fall back to the sheet's stale record,
+recreate a missing ID, or use the legacy `appendMatch` (which hides write failures)
+for this operation. `StatsStoreTests` covers unreadable/missing records, write
+failures, preserved bytes, and success-only sync through the real store.
+
 Watch tests: `DeuceMate Watch AppTests/` — includes `WalkthroughWatchTests`
-for launch/restore eligibility, local flags, production isolation and stale callbacks. `DeuceMate_Watch_AppTests.swift` (~1.2k lines, 40 tests) holds the
+for launch/restore eligibility, local flags, production isolation and stale callbacks. `DeuceMate_Watch_AppTests.swift` (~1.3k lines, 45 tests) holds the
 high-level `ScoreViewModel` scenarios; `StatsStoreTests`,
 `MatchSetupDefaultsWatchTests` and `TrackingStatusWatchTests` cover the rest.
 All need `import DeuceMateCore` (see §0).
@@ -172,14 +181,14 @@ All need `import DeuceMateCore` (see §0).
 | File | Lines | What |
 |------|------:|------|
 | `Views/PointsGraphView.swift` | ~1.9k | Charts (points momentum + outcome/serving/ending-shot filters + HR/steps overlays), including set-relative point selection with the post-point score and serving side. Heavily `MARK:`-sectioned. |
-| `Views/MatchDetailView.swift` | ~1260 | Per-match detail, stats tabs, full-score/server point rows, share/export. |
+| `Views/MatchDetailView.swift` | ~1300 | Per-match detail, stats tabs, End at Current Score for in-progress records, full-score/server point rows, share/export. |
 | `Export/MatchExporter.swift` | ~630 | Plain-text + AI-prompt export. `nonisolated static` builders by section. |
-| `Views/PastMatchesView.swift` | ~771 | iPhone archive list (phone-side analogue of the watch `MatchHistoryView`); shows storage-location + iCloud indicators; hosts the Trends section (below). TECHNICAL_DEBT #13's "next substantial edit" landed as ~6 lines here — new content went to `Views/Trends/` instead of growing this file. |
+| `Views/PastMatchesView.swift` | ~870 | iPhone archive list (phone-side analogue of the watch `MatchHistoryView`); shows storage-location + iCloud indicators; hosts the Trends section (below). Permanent-delete confirmation uses a non-publishing row-frame cache (geometry changes must not rebuild the List mid-swipe). Row and overlay measurements both use global coordinates; the List's named coordinate space would not reach an overlay outside that modifier. The popover presenter stays mounted, attaches to a one-point view **before** `.position` expands its layout bounds, and retains its captured origin through dismissal. The swipe's red Delete button must have **no destructive role**: it only requests confirmation, so UIKit must not optimistically remove the row. Only the confirmation performs deletion. Substantial Trends content remains in `Views/Trends/` per TECHNICAL_DEBT #13. |
 | `Views/Trends/TrendsSection.swift`, `TrendsSamples.swift`, `TrendsView.swift`, `TrendChart.swift`, `TrendSparkline.swift` | | Cross-match performance trends UI: `TrendsSection` is the archive-screen headline — the whole card (4 sparklines) is one `NavigationLink` into the full Trends screen, the system's chevron the only affordance, with a `headlineAccessibilitySummary` collapsing the four rows into one VoiceOver announcement; below the minimum-matches threshold it's a "needs N more" line, deliberately not hidden; `TrendsView` is the full pushed screen (window/type/format filters, Rate/Count toggle, one `TrendChart` per group); `TrendChart` draws the grouped multi-line charts (`foregroundStyle(by:)` + `chartForegroundStyleScale(domain:range:)` — NOT a literal per-mark colour, which merges every metric into one connected line), the Rally Depth Mix/Win-Rate toggle, and Serve & Return's persisted Serves In/Serves Win/Returns Win filter (narrows 6 metrics to 2 at a time — no "All" option); `TrendSparkline`'s delta arrow points by `TrendDelta.change`'s raw sign (independent of the improving/declining colour), so a falling rate always points down regardless of whether falling is good or bad for that metric. `TrendChart` renders **one chart per `TrendMetric.Unit`** present in a group (percent, steps) — mixed units on one axis flatten the small-magnitude series, since Swift Charts infers a single domain; `.ratio` keeps its sparkline fallback. The **Rally Depth — By Service** group reuses Rally Depth's `stackedChart(for:)` behind an On Serve / On Returns picker, so its eight metrics cost one mode-switched chart. `TrendsView` lists it right after Rally Depth, and Fatigue after Pressure, skips any group whose every series is empty (`!groupSeries.isEmpty` is **not** the right test — a Health-free archive still returns a full series array), and captions Effort with its real step coverage. See `docs/features/PERFORMANCE_TRENDS_PLAN.md` and `docs/features/HEALTH_TRENDS_PLAN.md`. |
 | `MaxHRSetting.swift` | ~33 | The phone's shared **reader** of the max-HR setting — owns the `userBirthYear`/`userMaxHROverride` `@AppStorage` literals (both also `MatchSyncKey` raw values, §5) and `HRZone.resolveMaxHR`. Read by `MatchDetailView`; `SettingsView` keeps its own declarations since it is the settings *editor* and needs write bindings. Declared non-`private` at each site: a private **stored** property (unlike a private property-wrapped one) makes a View's synthesized memberwise init private too. |
 | `Views/SettingsView.swift` (~819), `ManualMatchEntryView.swift` (~449), `LiveScoreboardView.swift` (~506), `LivePointCategoryPanel.swift` (~222) | | Settings including Watch sync counts/fresh-Watch restore guidance and Backup & Transfer archive export/import, manual entry, live spectator, phone-side point categorisation (mirrors the watch sheet when iPhone Input is on). |
 | `Views/PulseCoach/PulseCoachSection.swift`, `Views/Coaching/RecCoachSection.swift`, `AICoachLauncher.swift`, `AICoachSheet.swift` | | HR coaching panel, recreational coaching insights, and routing a generated coaching prompt to third-party AI apps. |
-| `Sync/PhoneMatchSyncService.swift` | ~626 | Phone side of `WatchConnectivity`; a Watch manifest (including empty) acknowledges Sync Now, and live install state refreshes through `sessionWatchStateDidChange`. |
+| `Sync/PhoneMatchSyncService.swift` | ~650 | Phone side of `WatchConnectivity`; a Watch manifest (including empty) acknowledges Sync Now, live install state refreshes through `sessionWatchStateDidChange`, and explicit record pushes made during activation are flushed once the session activates. |
 | `Persistence/PhoneStatsStore.swift`, `Audio/LiveAnnouncementService.swift`, `HealthKitHRFetcher.swift` | | Health-stripped archive plus backup-excluded sidecar, manual export/import, TTS announcements, HR backfill. |
 
 Feature design docs live in `docs/features/*.md` — read the relevant plan before

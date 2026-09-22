@@ -39,7 +39,6 @@ struct DeuceMateApp: App {
                 // Start WatchConnectivity so completed/in-progress matches
                 // are delivered to the paired iPhone companion app.
                 let sync = WatchMatchSyncService.shared
-                sync.start()
                 sync.onThemeReceived = { [weak viewModel] rawValue in
                     viewModel?.applyIncomingTheme(rawValue)
                 }
@@ -58,7 +57,13 @@ struct DeuceMateApp: App {
                 sync.onStatActionReceived = { [weak viewModel] action, outcome, endingShot in
                     viewModel?.applyRemoteStatAction(action, outcome: outcome, endingShot: endingShot)
                 }
+                sync.onCompletedMatchReceived = { [weak viewModel] record in
+                    viewModel?.completeCurrentMatchIfMatching(record.id)
+                }
                 viewModel.syncService = sync
+                // Register all inbound handlers before activation. An already
+                // available phone payload can arrive immediately on start.
+                sync.start()
             }
             .onChange(of: scenePhase) { _ in
                 if scenePhase == .background {

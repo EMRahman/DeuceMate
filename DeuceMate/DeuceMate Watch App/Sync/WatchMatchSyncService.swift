@@ -36,6 +36,10 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     /// categorization action (select outcome / commit ending shot / cancel).
     /// Mirrors `onScoreCommandReceived` for the categorization sheet.
     var onStatActionReceived: ((_ action: String, _ outcome: PointOutcome?, _ endingShot: EndingShot?) -> Void)?
+    /// Called when the iPhone sends a completed version of the currently live
+    /// match. The view model finalizes its newer authoritative score and clears
+    /// the live session rather than leaving two states for the same identity.
+    var onCompletedMatchReceived: ((MatchRecord) -> Void)?
 
     private let transport = MatchSyncTransport(
         logger: Logger(subsystem: "com.deucemate.sync", category: "Watch")
@@ -264,10 +268,16 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
                 // history (so it appears in MatchHistoryView) and re-publish the
                 // manifest so the phone learns the watch now holds it — its badge
                 // flips from "iPhone only" to "both".
-                StatsStore.shared.appendMatch(record)
+                let existing = StatsStore.shared.loadHistoryOrNil()?
+                    .first(where: { $0.id == record.id })
+                let resolved = MatchMergePolicy.resolve(incoming: record, existing: existing)
+                StatsStore.shared.appendMatch(resolved)
                 sendManifest()
                 DispatchQueue.main.async {
                     NotificationCenter.default.post(name: .watchMatchHistoryDidChange, object: nil)
+                    if !record.isInProgress {
+                        self.onCompletedMatchReceived?(record)
+                    }
                 }
             case .decodeError(let key, let error):
                 logger.error("decode error for \(key, privacy: .public): \(error.localizedDescription, privacy: .public)")

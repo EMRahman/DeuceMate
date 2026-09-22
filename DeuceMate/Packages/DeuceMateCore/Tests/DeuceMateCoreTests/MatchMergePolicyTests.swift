@@ -75,6 +75,29 @@ final class MatchMergePolicyTests: XCTestCase {
         XCTAssertEqual(result.iWon, true)
     }
 
+    func test_completedDraw_replacesInProgressRecord() {
+        let id = UUID()
+        let existing = makeRecord(id: id, iWon: nil)
+        let draw = makeRecord(id: id, endTime: Date(), iWon: nil)
+
+        let result = MatchMergePolicy.resolve(incoming: draw, existing: existing)
+
+        XCTAssertFalse(result.isInProgress)
+        XCTAssertNil(result.iWon)
+        XCTAssertEqual(result.endTime, draw.endTime)
+    }
+
+    func test_inProgressCheckpoint_cannotOverwriteCompletedDraw() {
+        let id = UUID()
+        let draw = makeRecord(id: id, endTime: Date(), iWon: nil, statCount: 2)
+        let checkpoint = makeRecord(id: id, iWon: nil, statCount: 3)
+
+        let result = MatchMergePolicy.resolve(incoming: checkpoint, existing: draw)
+
+        XCTAssertFalse(result.isInProgress)
+        XCTAssertEqual(result.stats.count, 2)
+    }
+
     func test_completedExisting_inProgressIncomingWithMorePoints_keepsExisting() {
         // A late-arriving in-progress checkpoint with more points than the completed
         // record must NOT downgrade the completed match. Completed is always final.

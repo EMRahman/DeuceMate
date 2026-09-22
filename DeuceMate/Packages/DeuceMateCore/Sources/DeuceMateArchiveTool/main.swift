@@ -57,7 +57,9 @@ func runList(_ arguments: [String]) {
     let archive = loadArchive(at: arguments[2])
     for (index, record) in archive.records.enumerated() {
         let date = listDateFormatter.string(from: record.startTime)
-        let won = record.iWon.map { $0 ? "W" : "L" } ?? "?"
+        let won = record.isInProgress
+            ? "?"
+            : record.iWon.map { $0 ? "W" : "L" } ?? "D"
         print("\(index) | \(record.id.uuidString) | \(date) | \(record.matchType)/\(record.matchFormat) | \(durationMinutes(record))min | sets=[\(setScoreSummary(record))] | stats=\(record.stats.count) | \(won)")
     }
 }

@@ -9,6 +9,24 @@ import Testing
 import DeuceMateCore
 @testable import DeuceMate
 
+private final class FakePhoneSyncSession: MatchSyncSessing {
+    var isActivated = false
+    var isReachable = true
+    private(set) var sentMessages: [[String: Any]] = []
+
+    func sendMessage(
+        _ message: [String: Any],
+        replyHandler: (([String: Any]) -> Void)?,
+        errorHandler: ((Error) -> Void)?
+    ) {
+        sentMessages.append(message)
+        replyHandler?([:])
+    }
+
+    func queueUserInfo(_ userInfo: [String: Any]) {}
+    func transferFile(at url: URL, metadata: [String: Any]?) {}
+}
+
 struct DeuceMateTests {
     @MainActor
     @Test func unsupportedWatchConnectivityLeavesConnectingState() {
@@ -65,6 +83,34 @@ struct DeuceMateTests {
         #expect(service.isActivating == false)
         #expect(service.activationState == "Activated")
         #expect(service.isActivationUnavailable == false)
+    }
+
+    @MainActor
+    @Test func recordPushBeforeActivationFlushesLatestVersionAfterActivation() throws {
+        let session = FakePhoneSyncSession()
+        let service = PhoneMatchSyncService(
+            isSessionSupported: { true },
+            activateSession: { _ in },
+            scheduleAfter: { _, _ in },
+            transport: MatchSyncTransport(session: session)
+        )
+        let id = UUID()
+        let earlier = Self.liveRecord(id: id)
+        var latest = earlier
+        latest.currentPointsMe = 2
+
+        service.sendMatchToWatch(earlier)
+        service.sendMatchToWatch(latest)
+        #expect(session.sentMessages.isEmpty)
+
+        session.isActivated = true
+        service.flushRecordsAwaitingActivation()
+
+        let data = try #require(session.sentMessages.first?[MatchSyncKey.singleMatch] as? Data)
+        let sent = try MatchSyncMessage.decode(data)
+        #expect(session.sentMessages.count == 1)
+        #expect(sent.id == id)
+        #expect(sent.currentPointsMe == 2)
     }
 
     @MainActor

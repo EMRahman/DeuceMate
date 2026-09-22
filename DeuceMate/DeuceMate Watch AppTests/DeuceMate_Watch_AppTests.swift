@@ -429,13 +429,19 @@ struct DeuceMate_Watch_AppTests {
 
     /// In-memory mock so tests don't write to the real Documents directory
     /// (and don't pollute one another).
-    private final class MockStatsStore: StatsStoring {
+    private final class MockStatsStore: WatchStatsStoring {
         private(set) var records: [MatchRecord] = []
         var appendCallCount = 0
         var removeCallCount = 0
 
         func loadHistory() -> [MatchRecord] { records }
         func saveHistory(_ records: [MatchRecord]) { self.records = records }
+        func completeStoredMatch(id: UUID, at date: Date) -> [MatchRecord]? {
+            guard let index = records.firstIndex(where: { $0.id == id }),
+                  records[index].isInProgress else { return nil }
+            records[index] = records[index].endingAtCurrentScore(at: date)
+            return records
+        }
         func appendMatch(_ record: MatchRecord) {
             appendCallCount += 1
             records.removeAll { $0.id == record.id }
@@ -609,6 +615,23 @@ struct DeuceMate_Watch_AppTests {
         #expect(store.records[0].isInProgress)
     }
 
+    @Test func resetMatchParksEndlessFormatForLaterChoice() throws {
+        let store = MockStatsStore()
+        let viewModel = ScoreViewModel(statsStore: store)
+        viewModel.statsTrackingEnabled = false
+        viewModel.matchFormat = .perpetualSuperTiebreak
+        viewModel.prepareTiebreakOnlySet()
+        viewModel.currentServer = .me
+        viewModel.winPoint(player: .me)
+
+        viewModel.resetMatch()
+
+        let record = try #require(store.records.first)
+        #expect(record.matchFormat == .perpetualSuperTiebreak)
+        #expect(record.isInProgress)
+        #expect(record.endTime == nil)
+    }
+
     @Test func resumeMatchRestoresState() throws {
         let (viewModel, store) = makeStatsViewModel(startingServer: .me)
         viewModel.winPoint(player: .me)
@@ -669,6 +692,88 @@ struct DeuceMate_Watch_AppTests {
         #expect(record.iWon == nil)
         #expect(record.isInProgress)
         #expect(record.endTime == nil)
+    }
+
+    @Test func endStoredMatchCompletesFriendlyAtCurrentScore() throws {
+        let store = MockStatsStore()
+        let viewModel = ScoreViewModel(statsStore: store)
+        viewModel.statsTrackingEnabled = false
+        viewModel.currentServer = .me
+
+        // Friendly stopped at 6–1, 2–0.
+        winGames(viewModel, player: .me, count: 5)
+        winGame(viewModel, player: .opponent)
+        winGame(viewModel, player: .me)
+        winGames(viewModel, player: .me, count: 2)
+
+        // The live End Match action parks first; history owns explicit completion.
+        viewModel.resetMatch()
+        let parked = try #require(store.records.first)
+        #expect(parked.isInProgress)
+        #expect(viewModel.endStoredMatchAtCurrentScore(parked))
+
+        let record = try #require(store.records.first)
+        #expect(record.setScores[0].gamesMe == 6)
+        #expect(record.setScores[0].gamesOpponent == 1)
+        #expect(record.setScores[1].gamesMe == 2)
+        #expect(record.iWon == true)
+        #expect(record.endTime != nil)
+        #expect(!record.isInProgress)
+    }
+
+    @Test func endStoredMatchAtLevelScoreCompletesAsDraw() throws {
+        let store = MockStatsStore()
+        let viewModel = ScoreViewModel(statsStore: store)
+        viewModel.statsTrackingEnabled = false
+        viewModel.currentServer = .me
+
+        viewModel.winPoint(player: .me)
+        viewModel.winPoint(player: .opponent)
+        viewModel.resetMatch()
+        let parked = try #require(store.records.first)
+        #expect(viewModel.endStoredMatchAtCurrentScore(parked))
+
+        let record = try #require(store.records.first)
+        #expect(record.iWon == nil)
+        #expect(record.endTime != nil)
+        #expect(!record.isInProgress)
+    }
+
+    @Test func endStoredMatchUsesLatestCheckpointRatherThanOpenSheetSnapshot() throws {
+        let store = MockStatsStore()
+        let viewModel = ScoreViewModel(statsStore: store)
+        viewModel.statsTrackingEnabled = false
+        viewModel.currentServer = .me
+        viewModel.winPoint(player: .me)
+        viewModel.resetMatch()
+
+        let sheetSnapshot = try #require(store.records.first)
+        var latest = sheetSnapshot
+        latest.currentPointsOpponent = 2
+        store.appendMatch(latest)
+
+        #expect(viewModel.endStoredMatchAtCurrentScore(sheetSnapshot))
+        let completed = try #require(store.records.first)
+        #expect(completed.currentPointsMe == 1)
+        #expect(completed.currentPointsOpponent == 2)
+        #expect(completed.iWon == false)
+    }
+
+    @Test func phoneCompletionFinalizesMatchingLiveMatchAtWatchScore() throws {
+        let store = MockStatsStore()
+        let viewModel = ScoreViewModel(statsStore: store)
+        viewModel.statsTrackingEnabled = false
+        viewModel.currentServer = .me
+        viewModel.winPoint(player: .me)
+        let liveID = try #require(viewModel.currentMatchID)
+
+        viewModel.completeCurrentMatchIfMatching(liveID)
+
+        let record = try #require(store.records.first)
+        #expect(record.id == liveID)
+        #expect(record.iWon == true)
+        #expect(!record.isInProgress)
+        #expect(viewModel.currentMatchID == nil)
     }
 
     @Test func resumeWithDifferentLiveMatchParksStatsOffSession() throws {

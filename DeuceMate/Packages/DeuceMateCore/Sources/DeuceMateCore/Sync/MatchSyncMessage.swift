@@ -107,7 +107,7 @@ public protocol MatchSyncService: AnyObject {
     func sendMatch(_ record: MatchRecord, announcement: String?)
     /// Send the full history from the watch to the phone.
     func sendFullHistory(_ records: [MatchRecord])
-    /// Notify the phone that no match is currently active (match ended or abandoned).
+    /// Notify the phone that no match is currently active (completed or parked).
     func clearActiveMatch()
     /// Watch → phone mirror of the in-progress categorization state. Phone
     /// renders an identical sheet so the spectator can complete the stat from

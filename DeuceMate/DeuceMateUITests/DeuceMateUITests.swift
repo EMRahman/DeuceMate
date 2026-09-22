@@ -91,11 +91,10 @@ final class DeuceMateUITests: XCTestCase {
         )
     }
 
-    /// Regression: the permanent-delete confirmation used to be attached to the
-    /// archive row itself, so tapping the swipe action closed the swipe, tore down
-    /// the cell the dialog was anchored in, and dismissed it a moment after it
-    /// appeared — the match could never be deleted by swiping. It survived only on
-    /// the long-press path, which doesn't reconfigure the cell.
+    /// Regression coverage for the selected-row confirmation presenter: the row's
+    /// frame is captured before the swipe closes, while the stable List overlay
+    /// owns the dialog. Cancellation must keep the row tappable and repeatable;
+    /// only confirming may remove it, including after the app relaunches.
     ///
     /// No Watch is needed to reproduce it: the simulator is unpaired, so every
     /// archive row resolves to `.phoneOnly` and its swipe offers exactly "Delete"
@@ -125,8 +124,50 @@ final class DeuceMateUITests: XCTestCase {
         // Pin the identifier: after the delete, `firstMatch` would happily resolve
         // to whatever row took its place and the assertion would pass vacuously.
         let rowIdentifier = newestMatch.identifier
+        let rowFrame = newestMatch.frame
+        captureDeletionScreen(app, named: "Archive before deletion")
 
+        // Long-press path: the explicit popover must be adjacent to the row it
+        // describes, not attached to the Trends section or screen container.
+        newestMatch.press(forDuration: 1)
+        let contextDelete = app.buttons["Delete Permanently"].firstMatch
+        XCTAssertTrue(contextDelete.waitForExistence(timeout: 5))
+        contextDelete.tap()
+
+        let popover = app.descendants(matching: .any)["permanent-delete-popover"]
+        XCTAssertTrue(
+            popover.waitForExistence(timeout: 5),
+            "Long-press Delete Permanently should raise the selected-row popover"
+        )
+        captureDeletionScreen(app, named: "Long-press confirmation")
+        let popoverFrame = popover.frame
+        let horizontalGap = max(
+            rowFrame.minX - popoverFrame.maxX,
+            popoverFrame.minX - rowFrame.maxX,
+            0
+        )
+        let verticalGap = max(
+            rowFrame.minY - popoverFrame.maxY,
+            popoverFrame.minY - rowFrame.maxY,
+            0
+        )
+        XCTAssertLessThanOrEqual(
+            hypot(horizontalGap, verticalGap),
+            48,
+            "Permanent-delete popover should remain adjacent to its match row"
+        )
+
+        let cancel = app.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        cancel.tap()
+        XCTAssertFalse(popover.waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons[rowIdentifier].isHittable)
+
+        // Swipe path: closing/replacing the swipe cell must not dismiss the stable
+        // List-owned popover.
         newestMatch.swipeLeft()
+        XCTAssertFalse(popover.exists, "A full swipe must not request permanent deletion")
+        XCTAssertTrue(app.buttons[rowIdentifier].exists)
         let deleteAction = app.buttons["Delete"].firstMatch
         XCTAssertTrue(deleteAction.waitForExistence(timeout: 5))
         deleteAction.tap()
@@ -136,6 +177,8 @@ final class DeuceMateUITests: XCTestCase {
             confirm.waitForExistence(timeout: 5),
             "Swiping to Delete should raise the permanent-delete confirmation"
         )
+        captureDeletionScreen(app, named: "Swipe confirmation")
+        XCTAssertTrue(app.buttons[rowIdentifier].exists, "The row must remain until confirmation")
 
         // The heart of it: the dialog must still be there a beat later. An inverted
         // expectation reports the disappearance itself rather than a bare sleep.
@@ -146,6 +189,22 @@ final class DeuceMateUITests: XCTestCase {
         vanished.isInverted = true
         wait(for: [vanished], timeout: 3)
 
+        cancel.tap()
+        XCTAssertFalse(popover.waitForExistence(timeout: 2))
+        let retainedMatch = app.buttons[rowIdentifier]
+        XCTAssertTrue(retainedMatch.isHittable)
+        retainedMatch.tap()
+        let done = app.navigationBars.buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "Cancel must leave the row selectable")
+        done.tap()
+
+        // A second swipe on the same row must still work after cancelling and
+        // opening its detail sheet; no stale presentation may consume the gesture.
+        retainedMatch.swipeLeft()
+        XCTAssertTrue(deleteAction.waitForExistence(timeout: 5))
+        deleteAction.tap()
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+
         // Confirming still deletes — which also leaves no test match behind for the
         // seed-gated test below.
         confirm.tap()
@@ -154,6 +213,101 @@ final class DeuceMateUITests: XCTestCase {
             evaluatedWith: app.buttons[rowIdentifier]
         )
         wait(for: [rowGone], timeout: 5)
+        XCTAssertFalse(popover.exists)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(manualEntry.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons[rowIdentifier].exists, "Confirmed deletion must persist")
+    }
+
+    @MainActor
+    func testDeleteConfirmationTracksDifferentRowsAfterScrolling() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        // Create enough disposable rows to scroll even in an empty archive.
+        // Never confirm deletion of a pre-existing simulator match.
+        var createdRows: [String] = []
+        for _ in 0..<6 {
+            let manualEntry = app.buttons["Manual match entry"]
+            XCTAssertTrue(manualEntry.waitForExistence(timeout: 10))
+            manualEntry.tap()
+            let save = app.buttons["Save Match"]
+            for _ in 0..<6 where !save.isHittable {
+                app.swipeUp()
+            }
+            XCTAssertTrue(save.isHittable)
+            save.tap()
+            let newest = app.buttons.matching(
+                NSPredicate(format: "identifier BEGINSWITH 'match-row-'")
+            ).firstMatch
+            XCTAssertTrue(newest.waitForExistence(timeout: 5))
+            createdRows.append(newest.identifier)
+        }
+        XCTAssertEqual(Set(createdRows).count, 6)
+
+        let popover = app.descendants(matching: .any)["permanent-delete-popover"]
+        // Oldest first forces scrolling. Each following row then has a different
+        // source position, exposing stale or screen-centred popup anchors.
+        for (index, identifier) in createdRows.enumerated() {
+            let row = app.buttons[identifier]
+            for _ in 0..<8 {
+                if row.isHittable && row.frame.minY > 115 && row.frame.maxY < app.frame.maxY - 60 {
+                    break
+                }
+                if row.exists && row.frame.minY < 115 {
+                    app.swipeDown()
+                } else {
+                    app.swipeUp()
+                }
+            }
+            XCTAssertTrue(row.isHittable)
+            let rowFrame = row.frame
+            if index.isMultiple(of: 2) {
+                row.press(forDuration: 1)
+                let menuDelete = app.buttons["Delete Permanently"].firstMatch
+                XCTAssertTrue(menuDelete.waitForExistence(timeout: 5))
+                menuDelete.tap()
+            } else {
+                row.swipeLeft()
+                let swipeDelete = app.buttons["Delete"].firstMatch
+                XCTAssertTrue(swipeDelete.waitForExistence(timeout: 5))
+                swipeDelete.tap()
+            }
+            XCTAssertTrue(popover.waitForExistence(timeout: 5))
+            captureDeletionScreen(app, named: "Scrolled row confirmation \(index + 1)")
+            let popupFrame = popover.frame
+            XCTAssertLessThanOrEqual(
+                min(abs(popupFrame.minY - rowFrame.midY), abs(popupFrame.maxY - rowFrame.midY)),
+                48,
+                "The popup edge must point to this row's centre, even after scrolling"
+            )
+            XCTAssertTrue(row.exists)
+            app.buttons["Delete Permanently"].firstMatch.tap()
+            let removed = expectation(
+                for: NSPredicate(format: "exists == false"),
+                evaluatedWith: row
+            )
+            wait(for: [removed], timeout: 5)
+            XCTAssertFalse(popover.exists)
+            for remaining in createdRows.dropFirst(index + 1) {
+                // List virtualizes off-screen cells. Reveal each newer survivor
+                // before asserting it is still present and interactive.
+                let survivor = app.buttons[remaining]
+                for _ in 0..<8 where !survivor.isHittable {
+                    app.swipeDown()
+                }
+                XCTAssertTrue(survivor.isHittable, "Deleting one row must preserve the others")
+            }
+        }
+    }
+
+    @MainActor
+    private func captureDeletionScreen(_ app: XCUIApplication, named name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     /// Positive counterpart to the skip-when-empty gate above: a match that DOES

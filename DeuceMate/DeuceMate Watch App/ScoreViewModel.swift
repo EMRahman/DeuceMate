@@ -593,7 +593,7 @@ class ScoreViewModel: ObservableObject {
         return sets.contains { $0.gamesMe > 0 || $0.gamesOpponent > 0 || $0.tieBreakPointsMe > 0 || $0.tieBreakPointsOpponent > 0 }
     }
 
-    private let statsStore: StatsStoring
+    private let statsStore: WatchStatsStoring
 
     private let stateFileURL: URL
 
@@ -606,7 +606,7 @@ class ScoreViewModel: ObservableObject {
     /// other test suite Swift Testing happens to run concurrently.
     private let userDefaults: UserDefaults
 
-    init(statsStore: StatsStoring = StatsStore.shared, stateFileURL: URL? = nil, userDefaults: UserDefaults = .standard) {
+    init(statsStore: WatchStatsStoring = StatsStore.shared, stateFileURL: URL? = nil, userDefaults: UserDefaults = .standard) {
         self.statsStore = statsStore
         self.stateFileURL = stateFileURL
             ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -1309,55 +1309,21 @@ class ScoreViewModel: ObservableObject {
         )
     }
 
-    /// Persists the in-progress match into StatsStore (or removes it from
-    /// StatsStore if it has no stats). Returns true if a record was written.
+    /// Persists the current match into StatsStore. A normal live reset parks an
+    /// unfinished match as a resumable checkpoint; a confirmed history action
+    /// can instead complete it at the current score. Returns true if written.
     @discardableResult
-    private func finalizeCurrentMatchToStore() -> Bool {
+    private func finalizeCurrentMatchToStore(completeAtCurrentScore: Bool = false) -> Bool {
         guard let start = matchStartTime,
               let id = currentMatchID,
-              hasInProgressMatchData else {
+              hasInProgressMatchData || completeAtCurrentScore else {
             return false
         }
-        // Only count fully-completed sets toward the winner — an in-progress
-        // set where one player is merely ahead must not flip the match to
-        // "completed", or the resume flow would break for that record.
-        // Perpetual tiebreak: determine winner by counting completed tiebreaks
-        // won by each side. If equal, the player leading the current in-progress
-        // tiebreak wins. This replaces the old sentinel of always writing false.
-        let iWon: Bool?
-        if matchFormat.config.isEndless {
-            let completedTBs = sets.filter {
-                $0.isTieBreak && ScoringEngine.isTiebreakComplete(
-                    mePoints: $0.tieBreakPointsMe,
-                    oppPoints: $0.tieBreakPointsOpponent,
-                    target: 10,
-                    format: matchFormat
-                )
-            }
-            let winsMe  = completedTBs.filter { $0.tieBreakPointsMe  > $0.tieBreakPointsOpponent }.count
-            let winsOpp = completedTBs.filter { $0.tieBreakPointsOpponent > $0.tieBreakPointsMe  }.count
-            if winsMe > winsOpp {
-                iWon = true
-            } else if winsOpp > winsMe {
-                iWon = false
-            } else {
-                // Equal completed tiebreaks: check who leads the current in-progress set.
-                // Sum tiebreak and regular-game point counters — they are mutually exclusive
-                // (only one pair is non-zero depending on isTieBreak state).
-                let current = sets.last
-                let mePoints  = (current?.tieBreakPointsMe  ?? 0) + currentPointsMe
-                let oppPoints = (current?.tieBreakPointsOpponent ?? 0) + currentPointsOpponent
-                if mePoints > oppPoints {
-                    iWon = true
-                } else if oppPoints > mePoints {
-                    iWon = false
-                } else {
-                    iWon = nil
-                }
-            }
-        } else {
-            iWon = matchWinner().map { $0 == .me }
-        }
+        let shouldComplete = completeAtCurrentScore || isMatchComplete()
+        let winner = shouldComplete
+            ? ScoringEngine.leaderWhenStopped(scoringState())
+            : nil
+        let iWon = winner.map { $0 == .me }
         let totalElapsed = matchElapsedSeconds + (sessionStartTime.map { Date().timeIntervalSince($0) } ?? 0)
         var finalSetElapsed = setElapsedSeconds
         let currentSetIndex = max(sets.count - 1, 0)
@@ -1368,7 +1334,7 @@ class ScoreViewModel: ObservableObject {
         let record = MatchRecord(
             id: id,
             startTime: start,
-            endTime: (iWon != nil || matchFormat.config.isEndless) ? Date() : nil,
+            endTime: shouldComplete ? Date() : nil,
             setScores: sets,
             stats: currentMatchStats,
             iWon: iWon,
@@ -1429,9 +1395,36 @@ class ScoreViewModel: ObservableObject {
         userDefaults.set(matchType.rawValue, forKey: MatchSetupDefaults.typeKey)
     }
 
+    /// Clears the live state while preserving unfinished play as a resumable
+    /// checkpoint. Internal replacement/resume flows rely on this behavior.
     func resetMatch() {
+        clearMatch(completeAtCurrentScore: false)
+    }
+
+    /// Completes the live match only when a phone-authored completion targets
+    /// this exact identity. The watch's newer live score remains authoritative.
+    func completeCurrentMatchIfMatching(_ id: UUID) {
+        guard currentMatchID == id else { return }
+        clearMatch(completeAtCurrentScore: true)
+    }
+
+    /// Completes a parked history record without disturbing any other live
+    /// match. A full-history push carries the update without changing the
+    /// phone's active-match pointer. Only a successful storage transaction may
+    /// report completion or sync; a stale sheet must never recreate a missing ID.
+    @discardableResult
+    func endStoredMatchAtCurrentScore(_ record: MatchRecord) -> Bool {
+        guard record.isInProgress, currentMatchID != record.id else { return false }
+        guard let savedHistory = statsStore.completeStoredMatch(id: record.id, at: Date()) else {
+            return false
+        }
+        syncService?.sendFullHistory(savedHistory)
+        return true
+    }
+
+    private func clearMatch(completeAtCurrentScore: Bool) {
         workoutManager.stopWorkout()
-        finalizeCurrentMatchToStore()
+        finalizeCurrentMatchToStore(completeAtCurrentScore: completeAtCurrentScore)
         syncService?.clearActiveMatch()
         currentServer = nil
         gameCount = 0

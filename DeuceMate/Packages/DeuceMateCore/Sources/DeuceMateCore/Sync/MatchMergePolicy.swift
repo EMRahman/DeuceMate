@@ -20,18 +20,23 @@ public enum MatchMergePolicy {
     public static func resolve(incoming: MatchRecord, existing: MatchRecord?) -> MatchRecord {
         guard let existing else { return incoming }
 
+        // Completion is represented by an end time or a winner. A completed
+        // draw intentionally has no winner, so `iWon` alone is insufficient.
+        let incomingIsCompleted = !incoming.isInProgress
+        let existingIsCompleted = !existing.isInProgress
+
         // Case 2: in-progress → completed transition
-        if incoming.iWon != nil && existing.iWon == nil {
+        if incomingIsCompleted && !existingIsCompleted {
             return incoming
         }
 
         // Case 3: completed → in-progress (ignore; completed is final)
-        if incoming.iWon == nil && existing.iWon != nil {
+        if !incomingIsCompleted && existingIsCompleted {
             return existing
         }
 
         // Case 4: both completed — keep newer endTime
-        if incoming.iWon != nil && existing.iWon != nil {
+        if incomingIsCompleted && existingIsCompleted {
             let incomingEnd = incoming.endTime ?? incoming.startTime
             let existingEnd = existing.endTime ?? existing.startTime
             return incomingEnd >= existingEnd ? incoming : existing

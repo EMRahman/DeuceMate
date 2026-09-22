@@ -25,6 +25,36 @@ func styledScore(_ score: String, superSize: CGFloat) -> AttributedString {
     return result
 }
 
+/// Publishes visible archive-row frames in global coordinates. Permanent-delete
+/// presentation snapshots one of these frames before the swipe cell is torn down,
+/// so the dialog can remain owned by the stable List without losing its row origin.
+private struct MatchRowFramePreferenceKey: PreferenceKey {
+    static var defaultValue: [UUID: CGRect] = [:]
+
+    static func reduce(
+        value: inout [UUID: CGRect],
+        nextValue: () -> [UUID: CGRect]
+    ) {
+        value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
+    }
+}
+
+/// Non-publishing cache for row geometry. Swipe actions translate their row while
+/// UIKit animates; keeping those rapidly-changing frames out of SwiftUI `@State`
+/// prevents geometry observation from rebuilding the List mid-gesture.
+@MainActor
+private final class MatchRowFrameCache {
+    private var frames: [UUID: CGRect] = [:]
+
+    func replace(with frames: [UUID: CGRect]) {
+        self.frames = frames
+    }
+
+    func frame(for id: UUID) -> CGRect? {
+        frames[id]
+    }
+}
+
 struct PastMatchesView: View {
     @EnvironmentObject private var store: PhoneStatsStore
     @EnvironmentObject private var syncService: PhoneMatchSyncService
@@ -38,6 +68,10 @@ struct PastMatchesView: View {
     @State private var showICloudGuide = false
     @State private var showRestorePrompt = false
     @State private var pendingDelete: PendingDelete?
+    @State private var matchRowFrameCache = MatchRowFrameCache()
+    // Retain the origin through dismissal; clearing the pending item must not
+    // move the popover's source while its dismissal animation is still running.
+    @State private var deleteSourceFrame: CGRect?
 
     /// A match awaiting permanent-deletion confirmation. Permanent deletion is the
     /// one destructive action: it drops the phone's retained copy and, when the
@@ -45,13 +79,13 @@ struct PastMatchesView: View {
     /// everywhere. The everyday "Remove from Watch" only frees watch space (the
     /// iPhone keeps its copy) and is never routed here.
     ///
-    /// This is a snapshot taken at the moment of the tap: the confirmation dialog
-    /// renders from it alone, so it survives the row it came from being torn down
-    /// (see the dialog's placement note in `body`) and the warning text can't drift
-    /// from what `performPermanentDelete` will actually do.
-    private struct PendingDelete {
+    /// This is a snapshot taken at the moment of the tap, so the confirmation copy
+    /// can't drift from what `performPermanentDelete` will actually do. The source
+    /// frame is stored separately so it also survives confirmation dismissal.
+    private struct PendingDelete: Identifiable {
         let record: MatchRecord
         let onWatch: Bool
+        var id: UUID { record.id }
     }
 
     private static let dateFormatter: DateFormatter = {
@@ -150,13 +184,41 @@ struct PastMatchesView: View {
         .refreshable {
             syncService.requestFullHistorySync()
         }
+        .onPreferenceChange(MatchRowFramePreferenceKey.self) { frames in
+            matchRowFrameCache.replace(with: frames)
+        }
+        // Keep the presenter mounted before, during and after a request. Both
+        // measurements use global coordinates: an overlay added outside the
+        // List's named coordinate-space modifier cannot resolve that space.
+        .overlay {
+            GeometryReader { geometry in
+                let overlayFrame = geometry.frame(in: .global)
+                let sourceY = deleteSourceFrame.map {
+                    min(max($0.midY - overlayFrame.minY, 0), geometry.size.height)
+                } ?? geometry.size.height / 2
+
+                Color.clear
+                    .allowsHitTesting(false)
+                    .frame(width: 1, height: 1)
+                    .popover(
+                        item: $pendingDelete,
+                        attachmentAnchor: .rect(.bounds),
+                        arrowEdge: nil
+                    ) { pending in
+                        permanentDeletePopover(for: pending)
+                    }
+                    // Attach to the one-point view BEFORE positioning it:
+                    // position's wrapper fills the overlay and has different bounds.
+                    // Ignore the row's temporary horizontal swipe translation.
+                    .position(x: geometry.size.width / 2, y: sourceY)
+            }
+        }
     }
 
-    /// The screen's content and its toolbar, split out from `body`'s
-    /// presentation chain (four sheets, a cover, an alert and a confirmation
-    /// dialog). Swift type-checks a modifier chain as one expression, and this
-    /// one had grown past the compiler's budget — splitting it in two is a pure
-    /// move, no behaviour change.
+    /// The screen's content and its toolbar, split out from `body`'s presentation
+    /// chain (four sheets, a cover and an alert; `archiveList` owns the permanent-
+    /// delete presenter). Swift type-checks a modifier chain as one expression, and
+    /// this one had grown past the compiler's budget.
     @ViewBuilder
     private var screenContent: some View {
         Group {
@@ -238,33 +300,6 @@ struct PastMatchesView: View {
                     return ", latest \(Self.dateFormatter.string(from: date))"
                 }()
                 Text("Found a backup with \(preview.recordCount) match\(preview.recordCount == 1 ? "" : "es")\(dateStr). Restore it to this iPhone?")
-            }
-            // Deliberately attached here, at screen level, and NOT to the row it
-            // concerns: tapping a `.swipeActions` button closes the swipe, which
-            // reconfigures the underlying list cell and tears down any presentation
-            // anchored inside it — the confirmation would flash up and dismiss
-            // itself before the user could answer. Rendering from the `PendingDelete`
-            // snapshot keeps it independent of the row's lifetime. It also means one
-            // dialog for the whole archive instead of one per row.
-            .confirmationDialog(
-                "Delete permanently?",
-                isPresented: Binding(
-                    get: { pendingDelete != nil },
-                    set: { if !$0 { pendingDelete = nil } }
-                ),
-                titleVisibility: .visible,
-                presenting: pendingDelete
-            ) { pending in
-                Button("Delete Permanently", role: .destructive) {
-                    performPermanentDelete(pending)
-                }
-                Button("Cancel", role: .cancel) { pendingDelete = nil }
-            } message: { pending in
-                if pending.onWatch {
-                    Text("This deletes the match from iPhone and Apple Watch for good — this can't be undone.")
-                } else {
-                    Text("This deletes the match from iPhone for good — this can't be undone.")
-                }
             }
             .onChange(of: store.pendingRestorePreview) { _, preview in
                 if preview != nil { showRestorePrompt = true }
@@ -440,6 +475,16 @@ struct PastMatchesView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("match-row-\(record.id.uuidString)")
+        .background {
+            GeometryReader { geometry in
+                Color.clear.preference(
+                    key: MatchRowFramePreferenceKey.self,
+                    value: [
+                        record.id: geometry.frame(in: .global)
+                    ]
+                )
+            }
+        }
         // Full-swipe is reserved for the safe, recoverable "Remove from Watch" (only
         // offered on `.both`, where it is the first-declared action). Permanent
         // deletion is never a full-swipe outcome: it always takes a deliberate tap
@@ -450,6 +495,52 @@ struct PastMatchesView: View {
         .contextMenu {
             rowContextActions(for: record, location: location, onWatch: onWatch)
         }
+    }
+
+    /// App-owned confirmation content shared by swipe and context-menu deletion.
+    /// Compact iPhone layouts retain popover presentation so the arrow continues
+    /// to identify the match row rather than adapting into an unrelated sheet.
+    @ViewBuilder
+    private func permanentDeletePopover(for pending: PendingDelete) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("Delete permanently?", systemImage: "exclamationmark.triangle.fill")
+                .font(.headline)
+                .foregroundStyle(.red)
+
+            Group {
+                if pending.onWatch {
+                    Text("This deletes the match from iPhone and Apple Watch for good — this can't be undone.")
+                } else {
+                    Text("This deletes the match from iPhone for good — this can't be undone.")
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+
+            Divider()
+
+            Button(role: .destructive) {
+                performPermanentDelete(pending)
+            } label: {
+                Text("Delete Permanently")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+
+            Button(role: .cancel) {
+                pendingDelete = nil
+            } label: {
+                Text("Cancel")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding()
+        .frame(width: 320)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("permanent-delete-popover")
+        .presentationCompactAdaptation(.popover)
     }
 
     /// Resolves a row's storage location from the phone archive and the watch
@@ -523,7 +614,10 @@ struct PastMatchesView: View {
     /// `deletePermanentlyButton`.
     @ViewBuilder
     private func deleteSwipeButton(_ record: MatchRecord, onWatch: Bool) -> some View {
-        Button(role: .destructive) {
+        // A destructive swipe role optimistically removes the cell as soon as
+        // it is tapped. This action only asks for confirmation; the red tint is
+        // intentional, but the destructive role belongs to the final confirmation.
+        Button {
             requestPermanentDelete(record, onWatch: onWatch)
         } label: {
             Label("Delete", systemImage: "trash")
@@ -540,12 +634,18 @@ struct PastMatchesView: View {
         }
     }
 
-    /// Stages the permanent-delete confirmation, deferred to the next runloop so the
-    /// swipe close — or the context menu's dismissal — finishes animating first.
-    /// Presenting into a live UIKit transition can drop the dialog outright.
+    /// Stages the permanent-delete confirmation on the next runloop so the swipe or
+    /// context-menu action can begin dismissing first. The presenter is owned by the
+    /// stable List and uses the row frame captured above, so it does not need to wait
+    /// for UIKit to finish replacing the swiped cell.
     private func requestPermanentDelete(_ record: MatchRecord, onWatch: Bool) {
+        // Capture before UIKit closes and replaces the swipe/context-menu cell.
+        deleteSourceFrame = matchRowFrameCache.frame(for: record.id)
         DispatchQueue.main.async {
-            pendingDelete = PendingDelete(record: record, onWatch: onWatch)
+            pendingDelete = PendingDelete(
+                record: record,
+                onWatch: onWatch
+            )
         }
     }
 

@@ -420,6 +420,49 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertNil(ScoringEngine.matchWinner(state))
     }
 
+    // MARK: - Ending before the configured win condition
+
+    func test_leaderWhenStoppedUsesSetsBeforeCurrentSet() {
+        let state = ScoringState(
+            sets: [
+                SetScore(gamesMe: 6, gamesOpponent: 1),
+                SetScore(gamesMe: 2, gamesOpponent: 5)
+            ],
+            currentServer: .me
+        )
+
+        XCTAssertEqual(ScoringEngine.leaderWhenStopped(state), .me)
+    }
+
+    func test_leaderWhenStoppedUsesGamesThenCurrentPoints() {
+        let gamesLeader = ScoringState(
+            sets: [SetScore(gamesMe: 2, gamesOpponent: 0)],
+            currentPointsMe: 0,
+            currentPointsOpponent: 3,
+            currentServer: .me
+        )
+        XCTAssertEqual(ScoringEngine.leaderWhenStopped(gamesLeader), .me)
+
+        let pointsLeader = ScoringState(
+            sets: [SetScore(gamesMe: 2, gamesOpponent: 2)],
+            currentPointsMe: 1,
+            currentPointsOpponent: 3,
+            currentServer: .me
+        )
+        XCTAssertEqual(ScoringEngine.leaderWhenStopped(pointsLeader), .opponent)
+    }
+
+    func test_leaderWhenStoppedReturnsNilForLevelScore() {
+        let state = ScoringState(
+            sets: [SetScore(gamesMe: 1, gamesOpponent: 1)],
+            currentPointsMe: 2,
+            currentPointsOpponent: 2,
+            currentServer: .me
+        )
+
+        XCTAssertNil(ScoringEngine.leaderWhenStopped(state))
+    }
+
     // MARK: - Helpers
 
     private func point(_ state: inout ScoringState, player: Player) {

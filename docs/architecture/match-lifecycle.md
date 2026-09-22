@@ -11,7 +11,9 @@ flowchart TD
     CAT["3 · Point categorisation (optional)<br/>winner / error / double fault<br/>+ ending shot, on watch or phone"]
     HEALTH["Workout runs throughout<br/>heart rate · calories · steps"]
     CHANGE["Changeovers<br/>prompt + compass check of court end"]
-    END1["4 · Match ends<br/>workout closed, result saved on watch<br/>(newest 25 matches kept)"]
+    PARKED["4a · In Progress (parked)<br/>workout closed, score remains resumable"]
+    END1["4b · Completed normally<br/>configured format reached"]
+    EARLY["4c · Ended early<br/>completed at current score"]
     SYNC["5 · Sync to iPhone<br/>record + manifest over the bridge"]
     ARCHIVE["6 · Permanent archive on iPhone<br/>(stripped main + local Health sidecar;<br/>iCloud backup in background)"]
     INSIGHT["7 · Stats, graphs & coaching<br/>serve/return/error stats, momentum chart,<br/>Rec Coach & Pulse Coach observations"]
@@ -34,14 +36,62 @@ flowchart TD
     SCORE -.-> CHANGE
     CHANGE -.-> SCORE
     HEALTH -.-> SCORE
-    SCORE --> END1
+    SCORE -- "End Match" --> PARKED
+    PARKED -- "Resume this match" --> SCORE
+    SCORE -- "final point reaches format" --> END1
+    PARKED -- "End at Current Score<br/>(Watch or iPhone)" --> EARLY
     SCORE -- "live checkpoint after every point<br/>(scoreboard + spoken score on iPhone)" --> SYNC
     END1 --> SYNC
+    PARKED --> SYNC
+    EARLY --> SYNC
     SYNC --> ARCHIVE
     ARCHIVE --> INSIGHT
     INSIGHT --> EXPORT
     ARCHIVE --> MANAGE
 ```
+
+## Match status lifecycle
+
+This is the persisted state machine behind the journey above. **End Match** and
+**End at Current Score** deliberately mean different things:
+
+```mermaid
+stateDiagram-v2
+    state "Being Played" as BeingPlayed
+    state "In Progress" as InProgress
+    state "Completed Normally" as CompletedNormally
+    state "Ended Early" as EndedEarly
+    [*] --> New
+    New --> BeingPlayed: Start Match
+    BeingPlayed --> InProgress: End Match (park)
+    InProgress --> BeingPlayed: Resume this match
+    BeingPlayed --> CompletedNormally: Final point reaches the configured format
+    InProgress --> EndedEarly: End at Current Score
+    CompletedNormally --> [*]
+    EndedEarly --> [*]
+```
+
+- **New** — setup exists, but scoring has not started.
+- **Being Played** — the match is live on the Watch; point checkpoints are saved
+  locally and mirrored to the iPhone.
+- **In Progress** — play has been parked by **End Match**. It remains resumable
+  and retains the same match identity, score, server, timing, and point history.
+- **Completed Normally** — the configured match format reached its normal win
+  condition on a final point.
+- **Ended Early** — the player selected **End at Current Score** from the
+  in-progress match detail on Watch or iPhone. The stored score is finalized;
+  sets, then games, then current points decide the leader, and a level score is
+  a completed draw. This state cannot be resumed.
+
+Both completed routes persist the same completed `MatchRecord` shape. “Completed
+Normally” and “Ended Early” describe how it got there; they are not separate
+long-term archive statuses.
+
+For a parked Watch record, completion reads, updates and saves the existing ID
+on the archive's serial queue. An unreadable archive, missing/completed record,
+or failed save reports failure: the detail sheet stays open with an error and
+no history is synced. Only the successfully saved history snapshot is sent to
+the phone. A stale sheet record is never used to recreate an absent match.
 
 ## Stage by stage
 
@@ -75,11 +125,14 @@ calories, steps and distance; at changeovers the watch prompts the players and c
 use the compass to confirm they're heading to the correct end.
 *Files: `WorkoutManager`, `ScoreViewModel`, `ContentView`.*
 
-**4 · Match end (watch).** The final point completes the match; the workout is
-closed and its totals attached; the finished record is saved on the watch. The
-watch keeps only its newest 25 matches — older ones roll off (the phone keeps
-them; see stage 6). *Files: `ScoreViewModel`, `WorkoutManager`, `StatsStore`,
-`WatchHistoryCap`.*
+**4 · Stop or finish (watch).** A final point completes the configured format.
+The live **End Match** action instead closes the workout and parks the current
+score as an in-progress record, preserving the existing resume flow. From that
+record's history detail, **End at Current Score** explicitly completes it: sets,
+then games, then current game/tiebreak points determine the leader; a level score
+is a completed draw. The watch keeps only its newest 25 matches — older ones roll
+off (the phone keeps them; see stage 6). *Files: `HomeView`, `MatchStatsView`,
+`ScoreViewModel`, `ScoringEngine`, `WorkoutManager`, `StatsStore`, `WatchHistoryCap`.*
 
 **5 · Sync (watch → phone).** The finished record, an "active match over" signal
 and the watch's manifest (which match IDs it still holds) go to the phone. The
@@ -137,15 +190,19 @@ match permanently (tombstoned so no future sync resurrects it). A watch-only mat
 can be pulled back into the phone archive at any time.
 *Files: `PastMatchesView`, `PhoneStatsStore`, `PhoneMatchSyncService`.*
 
-## Side journey: manual match entry (phone → watch)
+## Side journeys: phone-authored archive actions
 
-The one case where a match starts on the phone: reconstructing a match from a
-paper scorecard or after a watch mishap. The form builds the match record, saves
-it **directly into the phone archive**, and sends a copy to the watch — after
-which the watch owns the live match and it can be resumed and scored normally.
-This is the single deliberate exception to "the phone never authors match data."
-*Files: `ManualMatchEntryView` → `PhoneMatchSyncService` → `WatchMatchSyncService`
-→ `ScoreViewModel`.*
+Manual entry reconstructs a match from a paper scorecard or watch mishap. The
+form saves it **directly into the phone archive** and sends a copy to the watch,
+where it can be resumed and scored normally.
+
+An in-progress iPhone archive detail also offers **End at Current Score**. The
+phone completes its stored checkpoint and reliably sends that version to a
+watch known to hold the match. If the same identity is currently live there,
+the watch completes its newer live score and sends that authoritative record
+back; if it is merely parked, the explicit completed version replaces it.
+*Files: `ManualMatchEntryView` / `MatchDetailView` → `PhoneMatchSyncService` →
+`WatchMatchSyncService` → `ScoreViewModel`.*
 
 
 ## Side journey: isolated animated watch guide
