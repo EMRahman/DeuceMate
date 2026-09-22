@@ -8,8 +8,10 @@ both sides are guaranteed to speak the same dialect
 (`MatchSyncMessage`, `MatchSyncPayloadBuilder`, `SyncIncomingPayload`,
 `MatchSyncTransport`, `MatchMergePolicy`).
 
-The golden rule from the [topology map](README.md): **match data flows watch → phone;
-the phone only sends requests and commands back, which the watch validates.**
+The golden rule from the [topology map](README.md): **the watch owns live scoring
+and match data normally flows watch → phone.** Phone → watch traffic is requests
+and validated commands, plus two explicit archive actions: manual-entry records
+and **End at Current Score** completions.
 
 ## 1. Match data — one way, watch → phone
 
@@ -20,7 +22,7 @@ flowchart LR
     W -- "live checkpoint — the full match record,<br/>re-sent after every point" --> P
     W -- "full history — all of the watch's<br/>(up to 25) matches at once" --> P
     W -- "watch manifest — the list of match IDs<br/>the watch currently holds (drives the<br/>'on watch / on phone' badges)" --> P
-    W -- "match ended / abandoned signal" --> P
+    W -- "live match cleared<br/>(completed or parked)" --> P
     W -- "announcement text for the<br/>phone to speak aloud" --> P
     W -- "pending-point mirror — 'a point is<br/>waiting to be categorised' (so the<br/>phone can show the same sheet)" --> P
 ```
@@ -39,7 +41,7 @@ matches and a fresh Watch has none, it directs the user to open a match and choo
 are refreshed through `sessionWatchStateDidChange`, rather than remaining frozen
 at activation.
 
-## 2. Requests & commands — phone → watch, watch decides
+## 2. Requests, commands & explicit archive actions — phone → watch
 
 ```mermaid
 flowchart RL
@@ -50,6 +52,7 @@ flowchart RL
     P -- "categorisation command: pick outcome /<br/>pick ending shot / cancel / undo point<br/>(only when 'iPhone Input' is on)" --> W
     P -- "delete this match from the watch<br/>(phone keeps its archive copy)" --> W
     P -- "manually entered or resumed match<br/>(handed to the watch to own)" --> W
+    P -- "End at Current Score<br/>(completed archive checkpoint)" --> W
 ```
 
 Two safety properties worth knowing as a reviewer:
@@ -57,8 +60,13 @@ Two safety properties worth knowing as a reviewer:
 - **Score commands carry the match ID the phone was displaying.** The watch
   rejects any command whose ID doesn't match its current live match, so a stale
   phone can never score points into a later, unrelated match.
+- **A phone completion is identity-scoped.** A parked Watch checkpoint accepts
+  the completed version. If the same ID is still live, the Watch completes its
+  newer current score and sends that authoritative version back; a different
+  live match is untouched.
 - **All of this is gated by the "iPhone Input" setting.** Off by default; with it
-  off, the phone is strictly read-only for the live match.
+  off, the phone cannot score the live match. End at Current Score remains an
+  explicit archive action with its own confirmation.
 
 ## 3. Settings — synced, last-write-wins
 
@@ -122,6 +130,26 @@ sequenceDiagram
 Note the shape of the second flow: the phone never updates its own scoreboard
 from the swipe — it waits for the watch's checkpoint to come back. The watch's
 record is always the truth.
+
+**An archived in-progress match is ended from the phone** (the explicit exception):
+
+```mermaid
+sequenceDiagram
+    participant U as Player
+    participant P as iPhone archive
+    participant W as Watch app
+    U->>P: Confirm End at Current Score
+    P->>P: Complete stored checkpoint<br/>(draw if level)
+    P->>W: Reliable completed record<br/>(retained during activation; queued if unreachable)
+    alt same identity is live on Watch
+        W->>W: Complete newer live score
+        W->>P: Send authoritative completion
+    else identity is parked on Watch
+        W->>W: Replace checkpoint with completion
+    else match is phone-only
+        P->>P: No Watch update needed
+    end
+```
 
 ## 5. Merging, deleting, and why deleted matches stay deleted
 

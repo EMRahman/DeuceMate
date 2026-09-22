@@ -135,6 +135,43 @@ final class ArchiveBackupPolicyTests: XCTestCase {
         XCTAssertEqual(snapshot.records.first?.stats.count, 4)
     }
 
+    func test_initialRestore_completedDrawFinalizesLocalCheckpoint() {
+        let id = UUID()
+        let start = Date(timeIntervalSince1970: 1_000)
+        let localCheckpoint = makeRecord(id: id, startTime: start, statCount: 3)
+        let completedDraw = makeRecord(
+            id: id,
+            startTime: start,
+            endTime: Date(timeIntervalSince1970: 1_100),
+            iWon: nil,
+            statCount: 4
+        )
+
+        let snapshot = ArchiveBackupPolicy.initialRestore(
+            localRecords: [localCheckpoint], localTombstones: [],
+            backupRecords: [completedDraw], backupTombstones: []
+        )
+
+        XCTAssertFalse(snapshot.records[0].isInProgress)
+        XCTAssertNil(snapshot.records[0].iWon)
+        XCTAssertEqual(snapshot.records[0].stats.count, 4)
+    }
+
+    func test_initialRestore_staleCheckpointCannotOverwriteLocalCompletedDraw() {
+        let id = UUID()
+        let start = Date(timeIntervalSince1970: 1_000)
+        let localDraw = makeRecord(id: id, startTime: start, endTime: Date(), iWon: nil, statCount: 4)
+        let staleBackup = makeRecord(id: id, startTime: start, statCount: 5)
+
+        let snapshot = ArchiveBackupPolicy.initialRestore(
+            localRecords: [localDraw], localTombstones: [],
+            backupRecords: [staleBackup], backupTombstones: []
+        )
+
+        XCTAssertFalse(snapshot.records[0].isInProgress)
+        XCTAssertEqual(snapshot.records[0].stats.count, 4)
+    }
+
     func test_initialRestore_staleInProgressBackupDoesNotOverwriteLocalCheckpoint() {
         let id = UUID()
         let start = Date(timeIntervalSince1970: 1_000)

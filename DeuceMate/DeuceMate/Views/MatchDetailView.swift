@@ -42,6 +42,7 @@ struct MatchDetailView: View {
     /// The export currently presented in the system share sheet (set directly for
     /// health-free exports, or after the user confirms the disclosure).
     @State private var activeShare: ShareRequest?
+    @State private var showEndAtCurrentScoreConfirmation = false
 
     private enum Tab { case stats, points }
 
@@ -413,9 +414,17 @@ struct MatchDetailView: View {
                     }
 
                     if record.isInProgress {
-                        Label("In Progress — view only on iPhone", systemImage: "info.circle")
+                        Label("In Progress", systemImage: "info.circle")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+
+                        Button(role: .destructive) {
+                            showEndAtCurrentScoreConfirmation = true
+                        } label: {
+                            Label("End at Current Score", systemImage: "stop.circle.fill")
+                                .fontWeight(.semibold)
+                        }
+                        .buttonStyle(.bordered)
                     }
                     if !filteredStats.isEmpty && tab == .stats {
                         pointsWonHeader
@@ -710,6 +719,18 @@ struct MatchDetailView: View {
                 filenameOpponent: exportFilename(for: record, mode: .aiOpp)
             )
         }
+        .confirmationDialog(
+            "End at current score?",
+            isPresented: $showEndAtCurrentScoreConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("End at Current Score", role: .destructive) {
+                endAtCurrentScore()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This marks the match completed and it can no longer be resumed. A tied score is saved as a draw.")
+        }
         // Per-export HealthKit disclosure (Blocker 4), shared by the export share
         // sheet and the AI Coach hand-off. Naming + the recipient clause come
         // from Core's single source; confirming proceeds full-fidelity.
@@ -736,6 +757,22 @@ struct MatchDetailView: View {
         .sheet(item: $activeShare) { request in
             ShareSheet(activityItems: request.items) { activeShare = nil }
         }
+    }
+
+    private func endAtCurrentScore() {
+        let latest = store.loadHistory().first(where: { $0.id == record.id }) ?? record
+        guard latest.isInProgress else {
+            dismiss()
+            return
+        }
+        let completed = latest.endingAtCurrentScore()
+        let shouldUpdateWatch = syncService.onWatchIDs.contains(record.id)
+            || syncService.activeMatchID == record.id
+        store.appendMatch(completed)
+        if shouldUpdateWatch {
+            syncService.sendMatchToWatch(completed)
+        }
+        dismiss()
     }
 
     // MARK: - Points list

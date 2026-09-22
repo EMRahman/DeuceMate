@@ -23,6 +23,7 @@ struct MatchStatsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var setFilter: SetFilter = .all
     @State private var showResumeConflictAlert = false
+    @State private var showEndAtCurrentScoreConfirmation = false
 
     init(stats: [PointStat],
          setScores: [SetScore],
@@ -129,6 +130,17 @@ struct MatchStatsView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(.green)
                     .padding(.vertical, 4)
+
+                    Button(role: .destructive) {
+                        showEndAtCurrentScoreConfirmation = true
+                    } label: {
+                        Label("End at Current Score", systemImage: "stop.circle.fill")
+                            .font(.caption.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.bottom, 4)
                 }
 
                 if shouldShowStatControls && availableSetFilters.count > 1 {
@@ -177,6 +189,21 @@ struct MatchStatsView: View {
             }
         } message: {
             Text("Your current match will be saved as In Progress so you can resume it later.")
+        }
+        .confirmationDialog(
+            "End at current score?",
+            isPresented: $showEndAtCurrentScoreConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("End at Current Score", role: .destructive) {
+                if let record = resumableRecord,
+                   viewModel.endStoredMatchAtCurrentScore(record) {
+                    dismiss()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This marks the match completed and it can no longer be resumed. A tied score is saved as a draw.")
         }
     }
 

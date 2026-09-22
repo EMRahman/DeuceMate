@@ -165,6 +165,54 @@ public enum ScoringEngine {
         return nil
     }
 
+    /// Returns the side leading if play stops before the configured match format
+    /// reaches its normal win condition. Match score takes precedence over set
+    /// score, which takes precedence over the current game/tiebreak score.
+    /// A completely level score returns `nil` so callers can record a draw.
+    public static func leaderWhenStopped(_ state: ScoringState) -> Player? {
+        if let winner = matchWinner(state) { return winner }
+
+        let cfg = state.matchFormat.config
+        let completed = completedSets(in: state)
+
+        if cfg.playRegularSets {
+            let setsWonMe = completed.filter { $0.gamesMe > $0.gamesOpponent }.count
+            let setsWonOpponent = completed.filter { $0.gamesOpponent > $0.gamesMe }.count
+            if setsWonMe != setsWonOpponent {
+                return setsWonMe > setsWonOpponent ? .me : .opponent
+            }
+
+            guard let current = state.sets.last else { return nil }
+            if current.gamesMe != current.gamesOpponent {
+                return current.gamesMe > current.gamesOpponent ? .me : .opponent
+            }
+            if current.isTieBreak,
+               current.tieBreakPointsMe != current.tieBreakPointsOpponent {
+                return current.tieBreakPointsMe > current.tieBreakPointsOpponent ? .me : .opponent
+            }
+        } else {
+            let completedWonMe = completed.filter {
+                $0.tieBreakPointsMe > $0.tieBreakPointsOpponent
+            }.count
+            let completedWonOpponent = completed.filter {
+                $0.tieBreakPointsOpponent > $0.tieBreakPointsMe
+            }.count
+            if completedWonMe != completedWonOpponent {
+                return completedWonMe > completedWonOpponent ? .me : .opponent
+            }
+
+            if let current = state.sets.last,
+               current.tieBreakPointsMe != current.tieBreakPointsOpponent {
+                return current.tieBreakPointsMe > current.tieBreakPointsOpponent ? .me : .opponent
+            }
+        }
+
+        if state.currentPointsMe != state.currentPointsOpponent {
+            return state.currentPointsMe > state.currentPointsOpponent ? .me : .opponent
+        }
+        return nil
+    }
+
     public static func gameScoreSnapshotAtPointStart(_ state: ScoringState) -> GameScoreSnapshot? {
         guard let server = state.currentServer else { return nil }
         let isTiebreak = state.sets.last?.isTieBreak == true

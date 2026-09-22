@@ -1,16 +1,18 @@
 // MatchRecord.swift — one persisted match, shared between watch and phone.
 import Foundation
 
-/// One persisted match. May be completed (`iWon != nil`) or in-progress
-/// (`iWon == nil`). The watch is the sole source of truth for any match it has
-/// touched; the phone is a read-only durable archive.
+/// One persisted match. Completion is represented by a non-nil `endTime` or
+/// `iWon`; a completed draw has an end time and no winner. The watch owns live
+/// scoring; the phone normally archives its records but may explicitly complete
+/// an in-progress checkpoint at its stored score.
 public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
     public let startTime: Date
     public var endTime: Date?
     public var setScores: [SetScore]
     public var stats: [PointStat]
-    /// `nil` = in-progress; `true` = user won; `false` = opponent won.
+    /// `nil` = no winner (in-progress or draw); `true` = user won;
+    /// `false` = opponent won. Use `isInProgress` to distinguish a draw.
     public var iWon: Bool?
 
     // Resume-state fields. Meaningful for in-progress matches; on completed
@@ -170,10 +172,27 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
         return f.string(from: energy)
     }
 
-    /// True while a match is actively being played. A draw (perpetual tiebreak
-    /// ending with equal tiebreaks won) has `iWon == nil` but a non-nil `endTime`,
-    /// so this correctly returns false for draws.
+    /// True while a match is actively being played. Any completed draw has
+    /// `iWon == nil` but a non-nil `endTime`, so this correctly returns false.
     public var isInProgress: Bool { iWon == nil && endTime == nil }
+
+    /// Returns this checkpoint completed at its stored score. The configured
+    /// match format does not need to have reached its normal win condition:
+    /// sets, games, then current points decide the leader; a level score is a
+    /// completed draw. Already-completed records are returned unchanged.
+    public func endingAtCurrentScore(at date: Date = Date()) -> MatchRecord {
+        guard isInProgress else { return self }
+        let state = ScoringState(
+            sets: setScores,
+            currentPointsMe: currentPointsMe,
+            currentPointsOpponent: currentPointsOpponent,
+            matchFormat: matchFormat
+        )
+        var completed = self
+        completed.endTime = date
+        completed.iWon = ScoringEngine.leaderWhenStopped(state).map { $0 == .me }
+        return completed
+    }
 
     // App Store Review Guideline 5.1.3(ii): the iCloud backup must never contain
     // health measurements. Strip all five HealthKit-derived fields before pushing.

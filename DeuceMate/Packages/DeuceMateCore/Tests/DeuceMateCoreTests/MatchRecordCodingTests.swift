@@ -73,6 +73,47 @@ final class MatchRecordCodingTests: XCTestCase {
         XCTAssertEqual(decoded.doublesServiceIndex, 2)
     }
 
+    func test_endingAtCurrentScoreCompletesCheckpointWithoutChangingIdentity() {
+        let id = UUID()
+        let end = Date(timeIntervalSince1970: 2_000)
+        let checkpoint = MatchRecord(
+            id: id,
+            startTime: Date(timeIntervalSince1970: 1_000),
+            setScores: [
+                SetScore(gamesMe: 6, gamesOpponent: 1),
+                SetScore(gamesMe: 2, gamesOpponent: 0)
+            ],
+            stats: [],
+            iWon: nil,
+            currentServer: .me,
+            matchFormat: .standard
+        )
+
+        let completed = checkpoint.endingAtCurrentScore(at: end)
+
+        XCTAssertEqual(completed.id, id)
+        XCTAssertEqual(completed.endTime, end)
+        XCTAssertEqual(completed.iWon, true)
+        XCTAssertFalse(completed.isInProgress)
+    }
+
+    func test_endingAtCurrentScoreCompletesLevelCheckpointAsDraw() {
+        let checkpoint = MatchRecord(
+            startTime: Date(),
+            setScores: [SetScore(gamesMe: 2, gamesOpponent: 2)],
+            stats: [],
+            iWon: nil,
+            currentPointsMe: 2,
+            currentPointsOpponent: 2
+        )
+
+        let completed = checkpoint.endingAtCurrentScore()
+
+        XCTAssertNil(completed.iWon)
+        XCTAssertNotNil(completed.endTime)
+        XCTAssertFalse(completed.isInProgress)
+    }
+
     func test_pointStat_missingOptionalFields_defaultsGracefully() throws {
         // Simulate a record written before isBreakPoint / gameScoreAtStart shipped.
         let minimalJSON = """
