@@ -24,6 +24,7 @@ struct MatchStatsView: View {
     @State private var setFilter: SetFilter = .all
     @State private var showResumeConflictAlert = false
     @State private var showEndAtCurrentScoreConfirmation = false
+    @State private var showEndAtCurrentScoreError = false
 
     init(stats: [PointStat],
          setScores: [SetScore],
@@ -199,11 +200,18 @@ struct MatchStatsView: View {
                 if let record = resumableRecord,
                    viewModel.endStoredMatchAtCurrentScore(record) {
                     dismiss()
+                } else {
+                    showEndAtCurrentScoreError = true
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This marks the match completed and it can no longer be resumed. A tied score is saved as a draw.")
+        }
+        .alert("Unable to Complete Match", isPresented: $showEndAtCurrentScoreError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The saved match could not be updated. Reopen Match History and try again.")
         }
     }
 

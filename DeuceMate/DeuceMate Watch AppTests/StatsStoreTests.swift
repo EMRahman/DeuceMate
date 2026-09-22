@@ -141,4 +141,130 @@ struct StatsStoreTests {
 
         #expect(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
     }
+
+    // MARK: - Confirmed history completion
+
+    @Test func completionPersistsDrawAndReturnsExactlyTheSavedHistory() throws {
+        let url = makeTempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = StatsStore(fileURL: url)
+        let record = makeRecord()
+        let other = makeRecord()
+        store.saveHistory([record, other])
+        let end = Date(timeIntervalSince1970: 2_000_000)
+
+        let saved = try #require(store.completeStoredMatch(id: record.id, at: end))
+
+        #expect(saved == [record.endingAtCurrentScore(at: end), other])
+        #expect(saved[0].endTime == end)
+        #expect(saved[0].iWon == nil)
+        #expect(!saved[0].isInProgress)
+        #expect(StatsStore(fileURL: url).loadHistoryOrNil() == saved)
+        #expect(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+    }
+
+    @Test func completionDoesNotCreateAnAbsentArchive() {
+        let url = makeTempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = StatsStore(fileURL: url)
+
+        #expect(store.completeStoredMatch(id: UUID(), at: Date()) == nil)
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test func completionDoesNotRewriteAnAlreadyCompletedRecord() throws {
+        let url = makeTempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = StatsStore(fileURL: url)
+        let completed = makeRecord().endingAtCurrentScore(at: Date(timeIntervalSince1970: 2_000_000))
+        store.saveHistory([completed])
+        let before = try Data(contentsOf: url)
+
+        #expect(store.completeStoredMatch(id: completed.id, at: Date()) == nil)
+        #expect(try Data(contentsOf: url) == before)
+    }
+
+    enum CompletionFailure: CaseIterable {
+        case unreadableArchive, missingRecord, failedWrite
+    }
+
+    @MainActor
+    @Test(arguments: CompletionFailure.allCases)
+    func completionFailureDoesNotDismissOrSync(_ failure: CompletionFailure) throws {
+        let url = makeTempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let sheetSnapshot = makeRecord()
+        let other = makeRecord()
+        try JSONEncoder().encode([sheetSnapshot, other]).write(to: url)
+        var writeAttempts = 0
+        let store = StatsStore(fileURL: url, writeHistory: { records, fileURL in
+            writeAttempts += 1
+            if failure == .failedWrite { throw CocoaError(.fileWriteNoPermission) }
+            try BackupExcludedFileWriter.write(records, to: fileURL)
+        })
+        let viewModel = ScoreViewModel(statsStore: store, stateFileURL: makeTempURL())
+        let sync = CompletionSyncSpy()
+        viewModel.syncService = sync
+
+        // Simulate the archive changing after the history sheet captured its record.
+        switch failure {
+        case .unreadableArchive:
+            try writeCorrupt(to: url)
+        case .missingRecord:
+            store.removeMatch(id: sheetSnapshot.id)
+        case .failedWrite:
+            break
+        }
+        writeAttempts = 0
+        let before = try Data(contentsOf: url)
+
+        // MatchStatsView uses this Bool to gate dismissal; false shows its error.
+        #expect(!viewModel.endStoredMatchAtCurrentScore(sheetSnapshot))
+        #expect(sync.calls.isEmpty)
+        #expect(try Data(contentsOf: url) == before)
+        #expect(writeAttempts == (failure == .failedWrite ? 1 : 0))
+        #expect(viewModel.currentMatchID == nil)
+    }
+
+    @MainActor
+    @Test func successfulCompletionUsesLatestStoredScoreAndSyncsSavedSnapshot() throws {
+        let url = makeTempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = StatsStore(fileURL: url)
+        let sheetSnapshot = makeRecord()
+        var latest = sheetSnapshot
+        latest.setScores = [SetScore(gamesMe: 0, gamesOpponent: 0)]
+        latest.currentPointsOpponent = 2
+        let other = makeRecord()
+        store.saveHistory([latest, other])
+        let viewModel = ScoreViewModel(statsStore: store, stateFileURL: makeTempURL())
+        let sync = CompletionSyncSpy()
+        viewModel.syncService = sync
+
+        #expect(viewModel.endStoredMatchAtCurrentScore(sheetSnapshot))
+
+        let saved = try #require(store.loadHistoryOrNil())
+        #expect(saved.count == 2)
+        #expect(saved[0].id == sheetSnapshot.id)
+        #expect(saved[0].currentPointsOpponent == 2)
+        #expect(saved[0].iWon == false)
+        #expect(!saved[0].isInProgress)
+        #expect(saved[1] == other)
+        #expect(sync.calls == ["fullHistory"])
+        #expect(sync.histories == [saved])
+        #expect(viewModel.currentMatchID == nil)
+    }
+
+    private final class CompletionSyncSpy: MatchSyncService {
+        var calls: [String] = []
+        var histories: [[MatchRecord]] = []
+        var lastSyncDate: Date? { nil }
+        func start() { calls.append("start") }
+        func sendMatch(_ record: MatchRecord, announcement: String?) { calls.append("match") }
+        func clearActiveMatch() { calls.append("clearActiveMatch") }
+        func sendFullHistory(_ records: [MatchRecord]) {
+            calls.append("fullHistory")
+            histories.append(records)
+        }
+    }
 }

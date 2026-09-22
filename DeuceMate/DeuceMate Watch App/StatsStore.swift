@@ -5,10 +5,19 @@ import DeuceMateCore
 
 private let statsStoreLogger = Logger(subsystem: "com.deucemate.persistence", category: "WatchStatsStore")
 
+/// Watch-only persistence capability for an explicit history completion. Unlike
+/// the legacy append API, success means the existing record was actually saved.
+protocol WatchStatsStoring: StatsStoring {
+    /// Read, update and save on the store's serial queue. Returns the saved
+    /// history, or nil for an unreadable archive, missing/completed ID or failed
+    /// write. Never recreates a record from a stale history-sheet snapshot.
+    func completeStoredMatch(id: UUID, at date: Date) -> [MatchRecord]?
+}
+
 /// JSON-backed `StatsStoring` implementation for the watch target. Persists to
 /// `matchHistory.json` in the app's Documents directory. All file I/O is
 /// funnelled through a serial queue to prevent read/write races.
-final class StatsStore: StatsStoring {
+final class StatsStore: WatchStatsStoring {
     static let shared = StatsStore()
 
     /// Maximum number of matches retained on the watch. Older matches are
@@ -20,20 +29,27 @@ final class StatsStore: StatsStoring {
     private let queue = DispatchQueue(label: "com.deucemate.statsstore", qos: .utility)
 
     private let fileURL: URL
+    private let writeHistory: ([MatchRecord], URL) throws -> Void
 
     /// Production initializer — persists to `matchHistory.json` in the app's
     /// Documents directory.
-    init() {
-        fileURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("matchHistory.json")
-        excludeExistingArchiveFromBackup()
+    convenience init() {
+        self.init(fileURL: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("matchHistory.json"))
     }
 
     /// Test-only initializer that points the store at an explicit file, so the
     /// decode-failure and write-guard behaviour can be exercised without
-    /// touching (or clobbering) the real Documents archive.
-    init(fileURL: URL) {
+    /// touching (or clobbering) the real Documents archive. The writer seam makes
+    /// save failures deterministic in tests without relying on file permissions.
+    init(
+        fileURL: URL,
+        writeHistory: @escaping ([MatchRecord], URL) throws -> Void = {
+            try BackupExcludedFileWriter.write($0, to: $1)
+        }
+    ) {
         self.fileURL = fileURL
+        self.writeHistory = writeHistory
         excludeExistingArchiveFromBackup()
     }
 
@@ -52,7 +68,18 @@ final class StatsStore: StatsStoring {
     }
 
     func saveHistory(_ records: [MatchRecord]) {
-        queue.sync { _writeUnsafe(records) }
+        _ = queue.sync { _writeUnsafe(records) }
+    }
+
+    func completeStoredMatch(id: UUID, at date: Date) -> [MatchRecord]? {
+        queue.sync {
+            guard var records = _loadHistoryUnsafe(),
+                  let index = records.firstIndex(where: { $0.id == id }),
+                  records[index].isInProgress else { return nil }
+            records[index] = records[index].endingAtCurrentScore(at: date)
+            guard _writeUnsafe(records) else { return nil }
+            return records
+        }
     }
 
     func appendMatch(_ record: MatchRecord) {
@@ -112,16 +139,19 @@ final class StatsStore: StatsStoring {
         }
     }
 
-    private func _writeUnsafe(_ records: [MatchRecord]) {
+    @discardableResult
+    private func _writeUnsafe(_ records: [MatchRecord]) -> Bool {
         do {
             // Class B protection (until-first-unlock): background WatchConnectivity
             // deliveries can run this while the watch is locked/off-wrist, and the
             // archive must stay writable there — Class A would silently drop the
             // write. Health-bearing watch history is also excluded from device
             // backup after every atomic replacement.
-            try BackupExcludedFileWriter.write(records, to: fileURL)
+            try writeHistory(records, fileURL)
+            return true
         } catch {
             statsStoreLogger.error("Failed to write match history: \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 }

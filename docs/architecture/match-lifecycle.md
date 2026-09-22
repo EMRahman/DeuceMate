@@ -87,6 +87,12 @@ Both completed routes persist the same completed `MatchRecord` shape. “Complet
 Normally” and “Ended Early” describe how it got there; they are not separate
 long-term archive statuses.
 
+For a parked Watch record, completion reads, updates and saves the existing ID
+on the archive's serial queue. An unreadable archive, missing/completed record,
+or failed save reports failure: the detail sheet stays open with an error and
+no history is synced. Only the successfully saved history snapshot is sent to
+the phone. A stale sheet record is never used to recreate an absent match.
+
 ## Stage by stage
 
 **1 · Setup (watch).** The player picks singles or doubles, names, the match

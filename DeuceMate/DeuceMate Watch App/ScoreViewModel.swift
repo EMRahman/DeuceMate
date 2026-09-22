@@ -593,7 +593,7 @@ class ScoreViewModel: ObservableObject {
         return sets.contains { $0.gamesMe > 0 || $0.gamesOpponent > 0 || $0.tieBreakPointsMe > 0 || $0.tieBreakPointsOpponent > 0 }
     }
 
-    private let statsStore: StatsStoring
+    private let statsStore: WatchStatsStoring
 
     private let stateFileURL: URL
 
@@ -606,7 +606,7 @@ class ScoreViewModel: ObservableObject {
     /// other test suite Swift Testing happens to run concurrently.
     private let userDefaults: UserDefaults
 
-    init(statsStore: StatsStoring = StatsStore.shared, stateFileURL: URL? = nil, userDefaults: UserDefaults = .standard) {
+    init(statsStore: WatchStatsStoring = StatsStore.shared, stateFileURL: URL? = nil, userDefaults: UserDefaults = .standard) {
         self.statsStore = statsStore
         self.stateFileURL = stateFileURL
             ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -1410,14 +1410,15 @@ class ScoreViewModel: ObservableObject {
 
     /// Completes a parked history record without disturbing any other live
     /// match. A full-history push carries the update without changing the
-    /// phone's active-match pointer.
+    /// phone's active-match pointer. Only a successful storage transaction may
+    /// report completion or sync; a stale sheet must never recreate a missing ID.
     @discardableResult
     func endStoredMatchAtCurrentScore(_ record: MatchRecord) -> Bool {
         guard record.isInProgress, currentMatchID != record.id else { return false }
-        let latest = statsStore.loadHistory().first(where: { $0.id == record.id }) ?? record
-        guard latest.isInProgress else { return false }
-        statsStore.appendMatch(latest.endingAtCurrentScore())
-        syncService?.sendFullHistory(statsStore.loadHistory())
+        guard let savedHistory = statsStore.completeStoredMatch(id: record.id, at: Date()) else {
+            return false
+        }
+        syncService?.sendFullHistory(savedHistory)
         return true
     }
 

@@ -429,13 +429,19 @@ struct DeuceMate_Watch_AppTests {
 
     /// In-memory mock so tests don't write to the real Documents directory
     /// (and don't pollute one another).
-    private final class MockStatsStore: StatsStoring {
+    private final class MockStatsStore: WatchStatsStoring {
         private(set) var records: [MatchRecord] = []
         var appendCallCount = 0
         var removeCallCount = 0
 
         func loadHistory() -> [MatchRecord] { records }
         func saveHistory(_ records: [MatchRecord]) { self.records = records }
+        func completeStoredMatch(id: UUID, at date: Date) -> [MatchRecord]? {
+            guard let index = records.firstIndex(where: { $0.id == id }),
+                  records[index].isInProgress else { return nil }
+            records[index] = records[index].endingAtCurrentScore(at: date)
+            return records
+        }
         func appendMatch(_ record: MatchRecord) {
             appendCallCount += 1
             records.removeAll { $0.id == record.id }

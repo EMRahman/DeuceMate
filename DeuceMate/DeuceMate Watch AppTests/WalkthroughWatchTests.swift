@@ -146,10 +146,14 @@ struct WalkthroughWatchTests {
 }
 
 
-private final class PracticeStoreSpy: StatsStoring {
+private final class PracticeStoreSpy: WatchStatsStoring {
     var calls = 0
     func loadHistory() -> [MatchRecord] { calls += 1; return [] }
     func saveHistory(_ records: [MatchRecord]) { calls += 1 }
+    func completeStoredMatch(id: UUID, at date: Date) -> [MatchRecord]? {
+        calls += 1
+        return nil
+    }
     func appendMatch(_ record: MatchRecord) { calls += 1 }
     func removeMatch(id: UUID) { calls += 1 }
 }

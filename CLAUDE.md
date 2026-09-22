@@ -156,11 +156,19 @@ anything portable; no `.pbxproj` change needed — the package globs its sources
 | `HomeView.swift` | ~1010 | Match setup / start screen: a pre-match card states the remembered Singles/Doubles + format setup (hidden mid-match) and taps through to a combined Match Setup sheet, so Start Match skips straight to who-serves-first; the same card carries the Points/Health/Pulse tracking strip, and the Settings sheet opens with the always-three row form. ⚠️ No `MARK:` anchors yet. |
 | `TrackingStatusStrip.swift` | ~140 | Paints Core's `MatchTrackingStatus`: the pre-match strip (single-line icon+state chips, tap to Settings, Pulse collapsed out when Health is off) and the full-width Settings rows (always all three). |
 | `ContentView.swift` | ~953 | Live scoreboard + gesture handling. |
-| `MatchStatsView.swift` | ~285 | Production live/history stats wrapper, including resume, End at Current Score, and tracking controls; delegates its stat rows to value-based `Scoring/MatchStatsContent.swift`. |
+| `MatchStatsView.swift` | ~290 | Production live/history stats wrapper, including resume, End at Current Score, and tracking controls; failed completion keeps the sheet open with an error; delegates its stat rows to value-based `Scoring/MatchStatsContent.swift`. |
 | `Scoring/ScoringScoreRow.swift`, `Scoring/MatchStatsContent.swift` | ~50 / ~350 | Shared row/point feedback and stats body; values and callbacks only, no live view model. The existing court, sticky banner and changeover overlay in `ContentView` are reused too. |
 | `Walkthrough/WalkthroughView.swift`, `WalkthroughViewModel.swift`, `WalkthroughCoordinator.swift` | ~534 / ~21 / ~22 | Animated guide UI/adapter and two local flags. Guide entry and first-use offer live in `HomeView`; readiness follows successful state/history reads and completion of the launch authorization callback in `DeuceMateApp`. Adapter has no production dependencies. Navigation/dismissal cancels animation tasks; fixture generations and disposal reject stale beats. |
 | `Sync/WatchMatchSyncService.swift` | ~300 | Watch side of `WatchConnectivity`, including completion reconciliation sent from the phone. |
 | `PointCategorySheet.swift`, `WorkoutManager.swift`, `MatchHistoryView.swift`, `StatsStore.swift`, `BackupExcludedFileWriter.swift`, `AppTheme.swift` | | Categorisation UI, HealthKit workout (`WorkoutManager` also publishes `healthAccess`, refreshed on foreground and in `HomeView.onAppear`), backup-excluded history/live-state persistence, theming. |
+
+Watch history completion uses `WatchStatsStoring.completeStoredMatch` (declared in
+`StatsStore.swift`): read the latest existing checkpoint, complete it and save on
+the same serial queue. Only its successfully saved snapshot may be synced or
+reported as success to the sheet. Never fall back to the sheet's stale record,
+recreate a missing ID, or use the legacy `appendMatch` (which hides write failures)
+for this operation. `StatsStoreTests` covers unreadable/missing records, write
+failures, preserved bytes, and success-only sync through the real store.
 
 Watch tests: `DeuceMate Watch AppTests/` — includes `WalkthroughWatchTests`
 for launch/restore eligibility, local flags, production isolation and stale callbacks. `DeuceMate_Watch_AppTests.swift` (~1.3k lines, 45 tests) holds the
