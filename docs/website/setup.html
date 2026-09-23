@@ -58,14 +58,18 @@
           </h1>
           <p class="lede" style="max-width:52ch;margin:16px auto 0;">
             From downloading the app to seeing your score afterwards. Scroll down one small
-            step at a time — the bar at the top shows how far you've got and how much is left.
+            step at a time — the bar on the right shows how far you've got and how much is left.
           </p>
         </div>
 
-        <div class="guide-bar" role="navigation" aria-label="Guide progress">
-          <span class="guide-progress-text" data-progress-text>Step 1</span>
-          <span class="guide-progress-left" data-progress-left></span>
-          <span class="guide-progress" aria-hidden="true"><span data-progress-bar></span></span>
+        <div class="guide-rail" role="progressbar" aria-label="Progress through the guide"
+             aria-valuemin="1" data-rail>
+          <span class="guide-rail-fill" data-progress-bar></span>
+          <span class="guide-rail-label" data-rail-label>
+            <strong data-progress-text>Step 1</strong>
+            <span class="guide-rail-chapter" data-progress-chapter></span>
+            <span data-progress-left></span>
+          </span>
         </div>
 
         <!-- ============ 1. Before you start ============ -->
