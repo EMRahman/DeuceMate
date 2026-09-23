@@ -152,12 +152,12 @@
   margin: 0 16px 14px; padding: 10px 12px; border-radius: 12px; background: #e3e3e8; color: #333;
 }
 .mock .m-row {
-  margin: 0 16px; padding: 12px; border-radius: 16px; background: #fff;
-  display: flex; align-items: center; gap: 12px;
+  margin: 0 12px; padding: 10px; border-radius: 16px; background: #fff;
+  display: flex; align-items: center; gap: 8px;
 }
-.device .mock .m-row img { width: 58px; height: 58px; flex-shrink: 0; border-radius: 14px; }
+.device .mock .m-row img { width: 46px; height: 46px; flex-shrink: 0; border-radius: 11px; }
 .device .mock .m-sheet img { width: 54px; height: 54px; margin: 0 auto; border-radius: 12px; }
-.mock .m-row .m-name { flex: 1; font-weight: 700; font-size: 16px; }
+.mock .m-row .m-name { flex: 1; font-weight: 700; font-size: 15px; }
 .mock .m-row .m-name small { display: block; color: #777; font-weight: 500; font-size: 13px; }
 .mock .m-get {
   background: #e3e3e8; color: #0a66ff; font-weight: 800; border-radius: 99px; padding: 6px 16px;
@@ -179,7 +179,11 @@
 .mock .m-install { color: #0a66ff; font-weight: 800; }
 /* A tap ring nested in a drawn button centres on that button. */
 .mock .m-get, .mock .m-install { position: relative; }
-.mock .m-install { padding: 4px 8px; }
+.mock .m-install { padding: 4px 4px; font-size: 13px; }
+/* The button keeps its size and stays clear of the row's edge (room for the
+   ring); a long name gives way instead. */
+.mock .m-get, .mock .m-install { flex-shrink: 0; margin-right: 6px; }
+.mock .m-row .m-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .mock .m-grid {
   flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; place-items: center; padding: 34px 26px;
 }
