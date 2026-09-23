@@ -100,6 +100,13 @@
   animation: tap-pulse 1.4s ease-out infinite; pointer-events: none;
 }
 .tap.small { width: 48px; height: 48px; margin: -24px 0 0 -24px; }
+/* Nested in a drawn button: a pill outlining the whole button, not a dot. */
+.tap.around { left: -7px; right: -7px; top: -7px; bottom: -7px; width: auto; height: auto; margin: 0;
+  border-radius: 99px; border-width: 4px; animation-name: tap-glow; }
+@keyframes tap-glow {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(255,255,255,.85), 0 0 0 0 rgba(255,59,48,.6); }
+  50%      { box-shadow: 0 0 0 3px rgba(255,255,255,.85), 0 0 0 10px rgba(255,59,48,0); }
+}
 @keyframes tap-pulse {
   0%   { transform: scale(.75); opacity: 1; }
   70%  { transform: scale(1.15); opacity: .85; }
@@ -148,7 +155,7 @@
   margin: 0 16px; padding: 12px; border-radius: 16px; background: #fff;
   display: flex; align-items: center; gap: 12px;
 }
-.device .mock .m-row img { width: 58px; height: 58px; border-radius: 14px; }
+.device .mock .m-row img { width: 58px; height: 58px; flex-shrink: 0; border-radius: 14px; }
 .device .mock .m-sheet img { width: 54px; height: 54px; margin: 0 auto; border-radius: 12px; }
 .mock .m-row .m-name { flex: 1; font-weight: 700; font-size: 16px; }
 .mock .m-row .m-name small { display: block; color: #777; font-weight: 500; font-size: 13px; }
@@ -170,6 +177,9 @@
 }
 .mock .m-section { padding: 18px 16px 6px; color: #777; font-size: 13px; text-transform: uppercase; }
 .mock .m-install { color: #0a66ff; font-weight: 800; }
+/* A tap ring nested in a drawn button centres on that button. */
+.mock .m-get, .mock .m-install { position: relative; }
+.mock .m-install { padding: 4px 8px; }
 .mock .m-grid {
   flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; place-items: center; padding: 34px 26px;
 }
