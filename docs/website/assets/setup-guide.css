@@ -7,7 +7,6 @@
    ========================================================================== */
 
 .guide { max-width: 760px; margin: 0 auto; }
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .guide-intro { text-align: center; }
 .guide-intro .lede { font-size: 1.2rem; }
 
@@ -24,15 +23,6 @@
 .guide-progress-left { color: var(--muted); font-size: 1rem; flex: 1 1 auto; min-width: 0; }
 .guide-progress { flex: 1 0 100%; order: 3; height: 12px; border-radius: 99px; background: var(--glass-2); overflow: hidden; }
 .guide-progress span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--green), var(--blue)); border-radius: 99px; transition: width .15s linear; }
-.guide-bar select { flex: 0 1 230px; max-width: 230px; font-size: .95rem !important; padding: 6px 8px !important; }
-@media (max-width: 600px) {
-  .guide.js:not(.paged) .guide-bar select { display: none; }
-  .guide-bar select { flex: 1 1 100%; order: 4; }
-}
-.guide-bar select {
-  font: inherit; font-size: 1rem; color: var(--ink); background: var(--bg-2);
-  border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; max-width: 100%;
-}
 
 /* --- One step ------------------------------------------------------------ */
 .step {

@@ -2,9 +2,8 @@
    By default every step is on one long page, and a sticky bar tracks the
    reader's place as they scroll: "Step 8 of 28", the chapter, how many steps
    are left, and a bar that fills towards the end. A button switches to one
-   step at a time (Back / Next, ← →). The "jump to" menu works in both modes,
-   and a #step-N address lands on that step. With JS off the long page shows
-   without the bar. */
+   step at a time (Back / Next, ← →). A #step-N address lands on that step.
+   With JS off the long page shows without the bar. */
 (function () {
   "use strict";
 
@@ -18,21 +17,11 @@
   var text = guide.querySelector("[data-progress-text]");
   var left = guide.querySelector("[data-progress-left]");
   var bar = guide.querySelector("[data-progress-bar]");
-  var jump = guide.querySelector("[data-jump]");
   var modeBtn = guide.querySelector("[data-mode]");
   var print = guide.querySelector("[data-print]");
   var current = -1;
 
-  steps.forEach(function (step, i) {
-    step.id = "step-" + (i + 1);
-    var opt = document.createElement("option");
-    var chapter = step.querySelector(".step-chapter");
-    var title = step.querySelector("h2");
-    opt.value = String(i);
-    opt.textContent = (i + 1) + ". " + (title ? title.textContent : "") +
-      (chapter ? " (" + chapter.textContent + ")" : "");
-    jump.appendChild(opt);
-  });
+  steps.forEach(function (step, i) { step.id = "step-" + (i + 1); });
 
   function isPaged() { return guide.classList.contains("paged"); }
 
@@ -48,7 +37,6 @@
     text.textContent = "Step " + (i + 1) + " of " + steps.length;
     left.textContent = (chapter ? chapter.textContent + " · " : "") +
       (remaining === 0 ? "last step" : remaining === 1 ? "1 step left" : remaining + " steps left");
-    jump.value = String(i);
     if (history.replaceState) history.replaceState(null, "", "#step-" + (i + 1));
   }
 
@@ -89,16 +77,10 @@
     }
   }
 
-  function goTo(i) {
-    if (isPaged()) { showOne(i, true); return; }
-    steps[i].scrollIntoView({ block: "start", behavior: "smooth" });
-  }
-
   prev.addEventListener("click", function () { showOne(current - 1, true); });
   next.addEventListener("click", function () {
     showOne(current === steps.length - 1 ? 0 : current + 1, true);
   });
-  jump.addEventListener("change", function () { goTo(parseInt(jump.value, 10)); });
   modeBtn.addEventListener("click", function () {
     var at = current;
     var paged = guide.classList.toggle("paged");
@@ -110,7 +92,7 @@
   document.addEventListener("keydown", function (e) {
     if (!isPaged()) return;
     var tag = (e.target && e.target.tagName) || "";
-    if (tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA") return;
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
     if (e.target && e.target.closest && e.target.closest(".watch-demo")) return;
     if (e.key === "ArrowRight") { showOne(current + 1, true); e.preventDefault(); }
     if (e.key === "ArrowLeft") { showOne(current - 1, true); e.preventDefault(); }
