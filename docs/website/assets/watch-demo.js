@@ -587,7 +587,9 @@
   var toastTimer = null;
   // Point-outcome tracking (plan §A/§C). Default ON — the demo exists to show
   // this feature off, deliberately differing from the watch's off-default.
-  var trackingEnabled = true;
+  // data-tracking="off" gives a scoring-only instance (the setup guide's
+  // practice watch, which teaches scoring before point tracking).
+  var trackingEnabled = root.getAttribute("data-tracking") !== "off";
   var isOnSecondServe = false;
   var stats = [];     // PointStat-shaped records (see watch-demo-tracking.js)
   var lastCardTapAt = 0;

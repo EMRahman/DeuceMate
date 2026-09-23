@@ -200,3 +200,43 @@ one sitting, which is also the order they tell the story in:
 Note that `04` is *not* superseded by `18`: the sticky banner occupies the
 momentum strip's slot while it is showing, so `04` remains the shot for the
 ordinary scoreboard, with the strip and a richer mid-match score.
+
+## Setup guide shots (`docs/website/screenshots/setup/`)
+
+The step-by-step [setup guide](../website/setup.html) uses its own set of
+first-session screenshots: the watch's Health prompt, starting and scoring a
+match, ending it, Past Matches, and the iPhone list and detail for that match.
+Two opt-in UI tests capture them. Run both against the **real** paired
+simulators, not clones, so the watch match syncs to the phone:
+
+```bash
+W=<watch-udid>; P=<paired-phone-udid>   # xcrun simctl list pairs
+xcrun simctl boot $W; xcrun simctl boot $P
+# A fresh install with reset privacy makes the real Health prompt appear.
+xcrun simctl uninstall $W ehsan.DeuceMate.watchkitapp; xcrun simctl privacy $W reset all
+cd DeuceMate
+TEST_RUNNER_DEUCEMATE_CAPTURE_SCREENSHOTS=1 TEST_RUNNER_DEUCEMATE_SCREENSHOT_OUTPUT_DIR=/tmp/setup-shots \
+xcodebuild test -project DeuceMate.xcodeproj -scheme "DeuceMate Watch App" \
+  -destination "platform=watchOS Simulator,id=$W" -parallel-testing-enabled NO \
+  -only-testing:"DeuceMate Watch AppUITests/SetupGuideScreenshotTests"
+TEST_RUNNER_DEUCEMATE_CAPTURE_SCREENSHOTS=1 TEST_RUNNER_DEUCEMATE_SCREENSHOT_OUTPUT_DIR=/tmp/setup-shots \
+xcodebuild test -project DeuceMate.xcodeproj -scheme "DeuceMate" \
+  -destination "platform=iOS Simulator,id=$P" -parallel-testing-enabled NO \
+  -only-testing:DeuceMateUITests/SetupGuidePhoneScreenshotTests
+```
+
+Each test writes a `.png` and its element tree (`.txt`) per step. The
+committed files are renamed copies, with iPhone shots scaled to 603 px wide.
+Watch shots are 416×496 (Series 11, 46mm) — the guide shows them inside a
+drawn frame, so they don't need to match the App Store's 396×484 size.
+
+Limits:
+- The Health sheet is a system view XCUITest can't query, so the test taps it
+  by position. In the simulator only its first page (switch + Next) responds.
+  The guide describes the second, read-access page in words rather than
+  showing it.
+- The App Store, the Watch app's install list and the watch app grid can't be
+  captured in the simulator. The guide draws simplified versions of them in
+  HTML/CSS, each labelled "Drawing — your screen will look similar".
+- The tap rings' positions are percentages written into `setup.html`. Re-check
+  them if you recapture a screen whose layout has changed.

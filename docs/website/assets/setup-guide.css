@@ -1,0 +1,195 @@
+/* ==========================================================================
+   Step-by-step setup guide (setup.html). Built for first-time users:
+   large type, one action per step, a pulsing ring on the exact spot to tap.
+   Without JS every step is shown in one long list; setup-guide.js turns it
+   into one step at a time. Print always shows the long list.
+   ========================================================================== */
+
+.guide { max-width: 760px; margin: 0 auto; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.guide-intro { text-align: center; }
+.guide-intro .lede { font-size: 1.2rem; }
+
+/* --- Toolbar: progress + view switch ------------------------------------- */
+.guide-bar {
+  position: sticky; top: 68px; z-index: 5;
+  margin: 26px 0 18px; padding: 12px 16px;
+  background: rgba(12,17,16,.92); backdrop-filter: blur(10px);
+  border: 1px solid var(--line); border-radius: 16px;
+  display: none; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.guide.paged .guide-bar { display: flex; }
+.guide-progress-text { font-weight: 750; font-size: 1.05rem; white-space: nowrap; }
+.guide-progress { flex: 1 1 160px; height: 10px; border-radius: 99px; background: var(--glass-2); overflow: hidden; }
+.guide-progress span { display: block; height: 100%; width: 0; background: var(--green); border-radius: 99px; transition: width .3s; }
+.guide-bar select {
+  font: inherit; font-size: 1rem; color: var(--ink); background: var(--bg-2);
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; max-width: 100%;
+}
+
+/* --- One step ------------------------------------------------------------ */
+.step {
+  background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  padding: 26px 24px 28px; margin: 0 0 22px; scroll-margin-top: 140px;
+}
+.guide.paged .step { display: none; margin-bottom: 0; }
+.guide.paged .step.current { display: block; }
+.step-chapter {
+  display: block; color: var(--gold); font-weight: 750; font-size: .95rem;
+  letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px;
+}
+.step h2 { font-size: clamp(1.55rem, 4.6vw, 2rem); line-height: 1.25; margin: 0 0 18px; font-weight: 800; }
+.step p, .step li { font-size: 1.2rem; line-height: 1.6; }
+.step p { margin: 14px 0 0; }
+.step ul, .step ol { padding-left: 1.3em; margin: 10px 0 0; }
+.step li { margin: 8px 0; }
+.step strong { color: var(--ink); }
+.step a { color: var(--green); text-decoration: underline; }
+.step .do { font-size: 1.3rem; font-weight: 650; }
+.step .see { color: var(--muted); }
+.step .see::before { content: "You'll see: "; color: var(--green); font-weight: 750; }
+.step .calm {
+  margin-top: 16px; padding: 14px 16px; border-radius: 14px;
+  background: rgba(47,208,138,.1); border: 1px solid rgba(47,208,138,.35);
+}
+.step details.stuck {
+  margin-top: 16px; padding: 12px 16px; border-radius: 14px;
+  background: rgba(255,206,74,.08); border: 1px solid rgba(255,206,74,.35);
+}
+.step details.stuck summary { cursor: pointer; font-size: 1.15rem; font-weight: 700; color: var(--gold); }
+.step details.stuck p, .step details.stuck li { font-size: 1.1rem; color: var(--ink); }
+
+/* --- Pictures: watch + iPhone frames with a tap ring --------------------- */
+.shot { display: flex; justify-content: center; margin: 4px 0 8px; }
+.device { position: relative; line-height: 0; }
+.device img { display: block; width: 100%; height: auto; }
+.device.watch {
+  width: min(300px, 78vw); padding: 14px; border-radius: 64px;
+  background: #1b1f1e; border: 3px solid #3a403e; box-shadow: var(--shadow);
+}
+.device.watch img, .device.watch .mock { border-radius: 48px; overflow: hidden; }
+.device.iphone {
+  width: min(300px, 78vw); padding: 10px; border-radius: 46px;
+  background: #1b1f1e; border: 3px solid #3a403e; box-shadow: var(--shadow);
+}
+.device.iphone img, .device.iphone .mock { border-radius: 36px; overflow: hidden; }
+.screen { position: relative; }
+
+/* A pulsing ring centred on --x/--y (percent of the screen). */
+.tap {
+  position: absolute; left: var(--x); top: var(--y);
+  width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%;
+  border: 5px solid #ff3b30; box-shadow: 0 0 0 4px rgba(255,255,255,.85);
+  animation: tap-pulse 1.4s ease-out infinite; pointer-events: none;
+}
+.tap.small { width: 48px; height: 48px; margin: -24px 0 0 -24px; }
+@keyframes tap-pulse {
+  0%   { transform: scale(.75); opacity: 1; }
+  70%  { transform: scale(1.15); opacity: .85; }
+  100% { transform: scale(.75); opacity: 1; }
+}
+
+/* A swipe: a finger dot sliding along an arrow. */
+.swipe {
+  position: absolute; inset: 0; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+}
+.swipe .arrow {
+  font-size: 88px; line-height: 1; font-weight: 900; color: #fff;
+  text-shadow: 0 0 6px #000, 0 0 18px #000, 0 0 2px #000;
+}
+.swipe .finger {
+  position: absolute; width: 46px; height: 46px; border-radius: 50%;
+  background: rgba(255,59,48,.85); border: 4px solid #fff;
+}
+.swipe.up .finger   { animation: swipe-up 1.6s ease-in-out infinite; }
+.swipe.down .finger { animation: swipe-down 1.6s ease-in-out infinite; }
+.swipe.left .finger { animation: swipe-left 1.6s ease-in-out infinite; }
+@keyframes swipe-up   { 0% { transform: translateY(70px); opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translateY(-70px); opacity: 0; } }
+@keyframes swipe-down { 0% { transform: translateY(-70px); opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translateY(70px); opacity: 0; } }
+@keyframes swipe-left { 0% { transform: translateX(70px); opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translateX(-70px); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .tap, .swipe .finger { animation: none; }
+  .swipe .finger { display: none; }
+}
+
+.caption { text-align: center; color: var(--muted); font-size: 1rem; margin-top: 10px; line-height: 1.4; }
+
+/* --- Drawn stand-ins for Apple's own screens ----------------------------- */
+.mock {
+  position: relative; background: #f2f2f7; color: #111; font-size: 15px; line-height: 1.3;
+  aspect-ratio: 9 / 19.5; display: flex; flex-direction: column; font-weight: 500;
+}
+.mock.dark { background: #000; color: #fff; }
+.mock.watchface { aspect-ratio: 416 / 496; }
+.mock .m-title { font-size: 26px; font-weight: 800; padding: 46px 18px 10px; }
+.mock .m-search {
+  margin: 0 16px 14px; padding: 10px 12px; border-radius: 12px; background: #e3e3e8; color: #333;
+}
+.mock .m-row {
+  margin: 0 16px; padding: 12px; border-radius: 16px; background: #fff;
+  display: flex; align-items: center; gap: 12px;
+}
+.device .mock .m-row img { width: 58px; height: 58px; border-radius: 14px; }
+.device .mock .m-sheet img { width: 54px; height: 54px; margin: 0 auto; border-radius: 12px; }
+.mock .m-row .m-name { flex: 1; font-weight: 700; font-size: 16px; }
+.mock .m-row .m-name small { display: block; color: #777; font-weight: 500; font-size: 13px; }
+.mock .m-get {
+  background: #e3e3e8; color: #0a66ff; font-weight: 800; border-radius: 99px; padding: 6px 16px;
+}
+.mock .m-tabbar {
+  margin-top: auto; display: flex; justify-content: space-around; padding: 10px 0 22px;
+  background: #fafafa; border-top: 1px solid #ddd; font-size: 11px; color: #888;
+}
+.mock .m-tabbar .on { color: #0a66ff; font-weight: 800; }
+.mock .m-sheet {
+  margin-top: auto; background: #fff; border-radius: 22px 22px 0 0; padding: 18px 18px 30px;
+  box-shadow: 0 -8px 30px rgba(0,0,0,.25); text-align: center;
+}
+.mock .m-sheet .m-dbl { font-size: 18px; font-weight: 800; margin-top: 10px; }
+.mock .m-side {
+  position: absolute; right: -14px; top: 22%; width: 6px; height: 64px; border-radius: 4px; background: #ff3b30;
+}
+.mock .m-section { padding: 18px 16px 6px; color: #777; font-size: 13px; text-transform: uppercase; }
+.mock .m-install { color: #0a66ff; font-weight: 800; }
+.mock .m-grid {
+  flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; place-items: center; padding: 34px 26px;
+}
+.mock .m-grid span { width: 58px; height: 58px; border-radius: 50%; background: #333; }
+.device .mock .m-grid img { width: 70px; height: 70px; border-radius: 50%; }
+.mock-note { text-align: center; font-size: .95rem; color: var(--muted-2); margin-top: 8px; }
+
+/* --- Practice watch -------------------------------------------------------- */
+.practice { margin-top: 18px; }
+.practice .pt-btn { font-size: 1.15rem; }
+
+/* --- Back / Next --------------------------------------------------------- */
+.guide-nav { display: none; gap: 14px; margin: 18px 0 0; }
+.guide.paged .guide-nav { display: flex; }
+.guide-nav .btn { flex: 1; font-size: 1.25rem; padding: 18px 20px; border-radius: 16px; min-height: 64px; }
+.guide-nav .btn[disabled] { opacity: .35; pointer-events: none; }
+.guide-hint { display: none; text-align: center; color: var(--muted-2); font-size: .95rem; margin-top: 12px; }
+.guide.paged .guide-hint { display: block; }
+
+.guide-print { text-align: center; margin: 28px 0 0; }
+
+@media (max-width: 520px) {
+  .step { padding: 22px 16px 24px; }
+  .guide-bar { top: 62px; }
+}
+
+/* --- Print: every step, light background, two per page ------------------- */
+@media print {
+  body { background: #fff !important; color: #000 !important; font-size: 13pt; }
+  body::before, body::after, .mesh-grid, .nav, .footer, .guide-bar, .guide-nav, .guide-hint,
+  .guide-print, .practice, .no-print { display: none !important; }
+  .guide.paged .step, .step { display: block !important; break-inside: avoid; page-break-inside: avoid;
+    background: #fff; border: 1px solid #999; color: #000; }
+  .step h2, .step p, .step li, .step strong, .caption, .step .see { color: #000 !important; }
+  .step details.stuck { display: block; }
+  .step details.stuck > *:not(summary) { display: block; }
+  .device.watch, .device.iphone { width: 45mm; box-shadow: none; }
+  .tap { animation: none; }
+  .swipe .finger { display: none; }
+}
