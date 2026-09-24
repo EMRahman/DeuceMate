@@ -32,6 +32,12 @@
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
+/* Menu jumps land below the 66px sticky nav. Sections carry their own top
+   padding, so they only need the phone-width top-up (see the 560px query);
+   unpadded targets such as the Support cards need the full nav height. */
+[id] { scroll-margin-top: 86px; }
+section[id], main[id] { scroll-margin-top: 0; }
+
 body {
   margin: 0;
   font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -419,6 +425,8 @@ details.faq .body a { color: var(--green); }
 .reveal[data-d="3"] { transition-delay: .24s; }
 
 /* --- Responsive ---------------------------------------------------------- */
+/* The full menu plus the Support page's extra Home button only fit from ~1080px. */
+@media (max-width: 1080px) { .nav-cta .btn-ghost { display: none; } }
 @media (max-width: 940px) {
   .nav-links { display: none; }
   .nav-toggle { display: inline-flex; }
@@ -441,6 +449,7 @@ details.faq .body a { color: var(--green); }
 }
 @media (max-width: 560px) {
   section { padding: 64px 0; }
+  section[id] { scroll-margin-top: 24px; }
   .grid-mini { grid-template-columns: 1fr; }
   .shot-strip, .shot-strip.cols-2, .shot-strip.cols-3 { grid-template-columns: 1fr; }
   .hero-actions .btn { width: 100%; }
