@@ -435,6 +435,9 @@ details.faq .body a { color: var(--green); }
     position: absolute; top: 66px; left: 0; right: 0;
     background: rgba(8,11,10,.96); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
     border-bottom: 1px solid var(--line); padding: 14px 22px 20px;
+    /* Short screens (a phone in landscape) can't fit every item: scroll the menu itself. */
+    max-height: calc(100vh - 66px); max-height: calc(100dvh - 66px);
+    overflow-y: auto; overscroll-behavior: contain;
   }
   .nav.open .nav-links a { padding: 8px 0; width: 100%; font-size: 1.05rem; }
 
