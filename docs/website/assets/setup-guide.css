@@ -1,9 +1,8 @@
 /* ==========================================================================
    Step-by-step setup guide (setup.html). Built for first-time users:
    large type, one action per step, a pulsing ring on the exact spot to tap.
-   Every step is on one long page by default; setup-guide.js adds a progress
-   rail down the right edge and an optional one-step-at-a-time mode. Print always shows
-   the long list.
+   Every step is on one long page; setup-guide.js adds a progress rail down the
+   right edge. If the page is printed anyway, every step shows.
    ========================================================================== */
 
 .guide { max-width: 760px; margin: 0 auto; }
@@ -49,8 +48,6 @@
   background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius-lg);
   padding: 26px 24px 28px; margin: 0 0 22px; scroll-margin-top: 90px;
 }
-.guide.paged .step { display: none; margin-bottom: 0; }
-.guide.paged .step.current { display: block; }
 .step-chapter {
   display: block; color: var(--gold); font-weight: 750; font-size: .95rem;
   letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px;
@@ -195,16 +192,6 @@
 .practice { margin-top: 18px; }
 .practice .pt-btn { font-size: 1.15rem; }
 
-/* --- Back / Next --------------------------------------------------------- */
-.guide-nav { display: none; gap: 14px; margin: 18px 0 0; }
-.guide.paged .guide-nav { display: flex; }
-.guide-nav .btn { flex: 1; font-size: 1.25rem; padding: 18px 20px; border-radius: 16px; min-height: 64px; }
-.guide-nav .btn[disabled] { opacity: .35; pointer-events: none; }
-.guide-hint { display: none; text-align: center; color: var(--muted-2); font-size: .95rem; margin-top: 12px; }
-.guide.paged .guide-hint { display: block; }
-
-.guide-print { text-align: center; margin: 28px 0 0; }
-
 @media (max-width: 520px) {
   .step { padding: 22px 16px 24px; }
 }
@@ -212,9 +199,9 @@
 /* --- Print: every step, light background, two per page ------------------- */
 @media print {
   body { background: #fff !important; color: #000 !important; font-size: 13pt; }
-  body::before, body::after, .mesh-grid, .nav, .footer, .guide-rail, .guide-nav, .guide-hint,
-  .guide-print, .practice, .no-print { display: none !important; }
-  .guide.paged .step, .step { display: block !important; break-inside: avoid; page-break-inside: avoid;
+  body::before, body::after, .mesh-grid, .nav, .footer, .guide-rail,
+  .practice, .no-print { display: none !important; }
+  .step { display: block !important; break-inside: avoid; page-break-inside: avoid;
     background: #fff; border: 1px solid #999; color: #000; }
   .step h2, .step p, .step li, .step strong, .caption, .step .see { color: #000 !important; }
   .step details.stuck { display: block; }
