@@ -9,7 +9,8 @@
 // SwiftUI archive detail: momentum step lines, set bands, `PointsGraphView`-style
 // outcome/ending-shot scatter pills, recorder-only HR/steps overlays, point
 // selection, and `MatchDetailView`'s TV-style Me-vs-Opp split-bar comparison.
-// The page is recorder-framed throughout — no perspective toggle.
+// The page is reader-framed throughout — no perspective toggle: the view model
+// arrives already framed for the recorder or for their opponent (`perspective`).
 import Foundation
 
 public enum MatchWebTemplate {
@@ -191,6 +192,15 @@ public enum MatchWebTemplate {
     ul.bul { margin: 2px 0 0; padding-left: 18px; }
     ul.bul li { margin: 3px 0; }
     .foot { color: var(--muted); font-size: 12px; text-align: center; margin-top: 24px; }
+    .promo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px;
+      border-color: rgba(51,194,130,.45); background: linear-gradient(135deg, rgba(51,194,130,.18), var(--surface) 70%); }
+    .promo-text { flex: 1 1 260px; min-width: 0; }
+    .promo-t { font-size: 16px; font-weight: 700; }
+    .promo .sub { margin-top: 2px; }
+    .promo-links { display: flex; flex-wrap: wrap; gap: 8px; }
+    .promo-btn { display: inline-block; padding: 8px 14px; border-radius: 999px; font-size: 14px; font-weight: 600;
+      text-decoration: none; color: var(--text); border: 1px solid var(--line); background: var(--surface2); }
+    .promo-btn.primary { color: #fff; background: var(--accent); border-color: var(--accent); }
     """#
 
     static let js = #"""
@@ -259,6 +269,10 @@ public enum MatchWebTemplate {
       }
       const focalP = () => DATA.perspectives[state.focal];
       const isMe = () => state.focal === "me";
+      // Reader-framed: "me" is whoever the file is for. HR/steps are always the
+      // recorder's, so in the opponent's export they are labelled "Opp".
+      const OPP_READER = DATA.perspective === "opponent";
+      const health = label => OPP_READER ? "Opp " + label : label;
 
       // ---- header ----
       function header() {
@@ -272,6 +286,9 @@ public enum MatchWebTemplate {
             ]),
             el("span", { class: "badge " + p.result, text: resultLabel })
           ]),
+          DATA.meta.perspectiveNote
+            ? el("div", { class: "sub", style: "margin-top:6px", text: DATA.meta.perspectiveNote })
+            : null,
           el("div", { class: "spread", style: "margin-top:10px" }, [
             el("div", { class: "score", text: p.scoreDisplay }),
             el("div", { class: "sub", text: "Points " + p.pointsWon + "–" + p.pointsLost + " · " + DATA.meta.durationDisplay })
@@ -436,9 +453,9 @@ public enum MatchWebTemplate {
         const hasSteps = isMe() && !!DATA.steps;
         if (!hasHR && !hasSteps) return null;
         const wrap = el("div", { class: "chips", style: "margin:0" });
-        if (hasHR) wrap.appendChild(toggleChip("Heart Rate", P.hrLineHex, state.hr,
+        if (hasHR) wrap.appendChild(toggleChip(health("Heart Rate"), P.hrLineHex, state.hr,
           () => { state.hr = !state.hr; render(); }));
-        if (hasSteps) wrap.appendChild(toggleChip("Steps", P.stepsLineHex, state.steps,
+        if (hasSteps) wrap.appendChild(toggleChip(health("Steps"), P.stepsLineHex, state.steps,
           () => { state.steps = !state.steps; render(); }));
         // Steps mode picker (Cumulative / Per point) — mirrors the iOS StepsSeriesMode
         // sub-control shown beneath the Steps toggle. Only when Steps is on.
@@ -690,9 +707,10 @@ public enum MatchWebTemplate {
         wrap.appendChild(lineItem(P.meLineHex, "Me", false));
         wrap.appendChild(lineItem(P.opponentLineHex, "Opponent", false));
         if (isMe() && state.hr && DATA.points.some(p => p.heartRateBPM != null))
-          wrap.appendChild(lineItem(P.hrLineHex, "Heart Rate", false));
+          wrap.appendChild(lineItem(P.hrLineHex, health("Heart Rate"), false));
         if (isMe() && state.steps && DATA.steps)
-          wrap.appendChild(lineItem(P.stepsLineHex, state.stepsMode === "perPoint" ? "Steps (per point)" : "Steps", true));
+          wrap.appendChild(lineItem(P.stepsLineHex,
+            health(state.stepsMode === "perPoint" ? "Steps (per point)" : "Steps"), true));
         return wrap;
       }
       function lineItem(color, label, dashed) {
@@ -722,7 +740,8 @@ public enum MatchWebTemplate {
           ["Outcome", p.outcome === "uncategorized" ? "—" : p.outcomeLabel],
           ["Shot", p.endingShotLabel || "—"]
         );
-        if (isMe() && p.heartRateBPM != null) bits.push(["Heart rate", p.heartRateBPM + " bpm"]);
+        if (isMe() && p.heartRateBPM != null)
+          bits.push([OPP_READER ? "Opp heart rate" : "Heart rate", p.heartRateBPM + " bpm"]);
         bits.forEach(b => {
           const value = el("b");
           if (typeof b[1] === "string") value.textContent = b[1];
@@ -836,7 +855,7 @@ public enum MatchWebTemplate {
         const body = el("div", { class: "pt-body" }, bodyRows);
         const right = el("div", { class: "pt-right" });
         if (p.endingShotLabel) right.appendChild(el("span", { class: "pt-shot", text: p.endingShotLabel }));
-        if (p.heartRateBPM != null) right.appendChild(el("span", { class: "pt-hr", text: "My HR: " + p.heartRateBPM + " bpm" }));
+        if (p.heartRateBPM != null) right.appendChild(el("span", { class: "pt-hr", text: (OPP_READER ? "Opp HR: " : "My HR: ") + p.heartRateBPM + " bpm" }));
         return el("div", { class: "pt-row" }, [el("div", { class: "pt-num", text: String(number) }), body, right]);
       }
 
@@ -993,14 +1012,35 @@ public enum MatchWebTemplate {
         toastTimer = setTimeout(() => { if (toastEl) toastEl.style.opacity = "0"; }, 2000);
       }
 
+      // ---- promo (mirrors MatchWebStaticFallback.promoCard) ----
+      // App Store + website links; user-clicked navigations, nothing loads on open.
+      function promoCard() {
+        const p = DATA.promo;
+        if (!p) return null;
+        const link = (cls, href, label) =>
+          el("a", { class: cls, href: href, target: "_blank", rel: "noopener", text: label });
+        return el("div", { class: "card promo" }, [
+          el("div", { class: "promo-text" }, [
+            el("div", { class: "promo-t", text: p.title }),
+            el("div", { class: "sub", text: p.blurb })
+          ]),
+          el("div", { class: "promo-links" }, [
+            link("promo-btn primary", p.appStoreURL, p.appStoreLabel),
+            link("promo-btn", p.websiteURL, p.websiteLabel)
+          ])
+        ]);
+      }
+
       // ---- render ----
-      // Recorder-framed throughout (no perspective toggle), exactly like the iOS
-      // archive detail: header, Me/Opp momentum chart, a Stats/Points tab toggle,
-      // then either the set-filtered Me-vs-Opp comparison or the point-by-point
-      // list, and finally the AI Coach card.
+      // Reader-framed throughout (no perspective toggle — the recorder and the
+      // opponent each get their own file), laid out like the iOS archive detail
+      // under the "Tracked with DeuceMate" strip: header, Me/Opp momentum chart,
+      // a Stats/Points tab toggle, then either the set-filtered Me-vs-Opp
+      // comparison or the point-by-point list, and finally the AI Coach card.
       function render() {
         root.innerHTML = "";
         toastEl = null;
+        const promo = promoCard(); if (promo) root.appendChild(promo);   // leads the page
         root.appendChild(header());
         const hasPoints = DATA.points.length > 0;
         if (hasPoints) root.appendChild(chartCard());

@@ -1,6 +1,7 @@
 // MatchWebExportTests.swift — locks the self-contained interactive HTML export:
 // the view-model shape, both-perspective consistency, the recorder-only-HR rule,
-// and that the produced HTML is genuinely offline / self-contained.
+// the reader-framed opponent's export, and that the produced HTML is genuinely
+// offline / self-contained.
 import XCTest
 import Foundation
 @testable import DeuceMateCore
@@ -107,7 +108,8 @@ final class MatchWebExportTests: XCTestCase {
     func test_viewModel_hasRequiredTopLevelKeys() throws {
         let vm = MatchWebViewModel.make(from: makeRecord())
         let obj = try jsonObject(vm)
-        for key in ["schemaVersion", "generatedAt", "meta", "perspectives", "points", "setBands", "palette", "filters", "setLabels"] {
+        for key in ["schemaVersion", "generatedAt", "perspective", "meta", "perspectives", "points", "setBands",
+                    "palette", "filters", "setLabels", "promo"] {
             XCTAssertNotNil(obj[key], "missing top-level key: \(key)")
         }
         let persp = try XCTUnwrap(obj["perspectives"] as? [String: Any])
@@ -355,7 +357,7 @@ final class MatchWebExportTests: XCTestCase {
 
     func test_comparison_sectionsAndGating_fullMatch() throws {
         let vm = MatchWebViewModel.make(from: makeRecord())
-        XCTAssertEqual(vm.schemaVersion, 10)
+        XCTAssertEqual(vm.schemaVersion, 12)
         XCTAssertTrue(allComparison(vm).hasAnyOutcomeData)
         let titles = allComparison(vm).sections.map { $0.title }
         // Outcome Breakdown leads; Serve/Return present (every point categorised).
@@ -777,8 +779,9 @@ final class MatchWebExportTests: XCTestCase {
 
         // No external resource loads. The only permissible "http" is the SVG
         // namespace identifier (not a network fetch); assert every "http"
-        // occurrence is exactly that. Without AI prompts there are no links at all.
-        XCTAssertFalse(html.contains("https://"))
+        // occurrence is exactly that. Without AI prompts the only links are the
+        // two user-clicked "Tracked with DeuceMate" ones.
+        assertOnlyOptInLinks(in: html)
         XCTAssertFalse(html.contains("src="))
         XCTAssertFalse(html.contains("<link"))
         XCTAssertFalse(html.lowercased().contains("cdn"))
@@ -806,19 +809,35 @@ final class MatchWebExportTests: XCTestCase {
         let httpCount = occurrences(of: "http://", in: html)
         let nsCount = occurrences(of: "http://www.w3.org/2000/svg", in: html)
         XCTAssertEqual(httpCount, nsCount, "the only http:// reference may be the SVG namespace")
-        // Un-escape JSON slashes, then assert every https:// is a known AI host.
+        // Every https:// is a known AI host or one of the two promo links.
+        let targets = assertOnlyOptInLinks(in: html, aiHosts: Self.aiHosts)
+        XCTAssertTrue(targets.contains { tail in Self.aiHosts.contains { tail.hasPrefix($0) } },
+                      "AI app launch links should be present")
+    }
+
+    private static let aiHosts = ["chatgpt.com", "claude.ai", "gemini.google.com",
+                                  "www.perplexity.ai", "copilot.microsoft.com", "poe.com", "grok.com"]
+
+    /// Asserts every `https://` in `html` (JSON slashes un-escaped) is exactly
+    /// the App Store or website promo link, or — when `aiHosts` is given — an
+    /// AI-app host. Returns what followed each `https://`.
+    @discardableResult
+    private func assertOnlyOptInLinks(in html: String, aiHosts: [String] = [],
+                                      file: StaticString = #filePath, line: UInt = #line) -> [String] {
         let normalized = html.replacingOccurrences(of: "\\/", with: "/")
-        let allowedHosts = ["chatgpt.com", "claude.ai", "gemini.google.com",
-                            "www.perplexity.ai", "copilot.microsoft.com", "poe.com", "grok.com"]
+        let promoTargets = [MatchWebViewModel.appStoreURL, MatchWebViewModel.websiteURL]
+            .map { String($0.dropFirst("https://".count)) }
+        var targets: [String] = []
         var range = normalized.startIndex..<normalized.endIndex
-        var sawLink = false
         while let r = normalized.range(of: "https://", range: range) {
-            sawLink = true
-            let tail = normalized[r.upperBound...].prefix(40)
-            XCTAssertTrue(allowedHosts.contains { tail.hasPrefix($0) }, "unexpected https:// target: \(tail)")
+            let tail = String(normalized[r.upperBound...].prefix(60))
+            targets.append(tail)
+            let isPromo = promoTargets.contains { tail.hasPrefix($0 + "\"") }
+            let isAI = aiHosts.contains { tail.hasPrefix($0) }
+            XCTAssertTrue(isPromo || isAI, "unexpected https:// target: \(tail)", file: file, line: line)
             range = r.upperBound..<normalized.endIndex
         }
-        XCTAssertTrue(sawLink, "AI app launch links should be present")
+        return targets
     }
 
     /// Progressive enhancement: `#root` carries a real static summary so no-JS
@@ -833,9 +852,9 @@ final class MatchWebExportTests: XCTestCase {
         XCTAssertTrue(html.contains("class=\"score\""))
         XCTAssertTrue(html.contains("Points Won"))
         XCTAssertTrue(html.contains("Outcome Breakdown"))
-        // The fallback adds no external resources.
+        // The fallback adds no external resources (only the opt-in promo links).
         XCTAssertFalse(html.contains("src="))
-        XCTAssertFalse(html.contains("https://"))
+        assertOnlyOptInLinks(in: html)
         XCTAssertFalse(html.contains("<link"))
     }
 
@@ -867,7 +886,7 @@ final class MatchWebExportTests: XCTestCase {
         // The old plain Me/Opp table header is gone.
         XCTAssertFalse(html.contains("(Me / Opp)"))
         // Still self-contained — the bars add no external resources.
-        XCTAssertFalse(html.contains("https://"))
+        assertOnlyOptInLinks(in: html)
         XCTAssertFalse(html.contains("src="))
         XCTAssertFalse(html.contains("<link"))
     }
@@ -928,7 +947,7 @@ final class MatchWebExportTests: XCTestCase {
         // Scatter marks are drawn (e.g. winner circles + double-fault squares).
         XCTAssertTrue(html.contains("<circle"))
         // Still self-contained — the SVG adds no external resources.
-        XCTAssertFalse(html.contains("https://"))
+        assertOnlyOptInLinks(in: html)
         XCTAssertFalse(html.contains("src="))
         XCTAssertFalse(html.contains("<link"))
     }
@@ -1023,7 +1042,7 @@ final class MatchWebExportTests: XCTestCase {
         let html = MatchHTMLExporter.html(for: makeScoreOnlyRecord())
         XCTAssertTrue(html.contains("\"schemaVersion\""))
         XCTAssertTrue(html.contains("const DATA ="))
-        XCTAssertFalse(html.contains("https://"))
+        assertOnlyOptInLinks(in: html)
         XCTAssertFalse(html.contains("src="))
         let httpCount = occurrences(of: "http://", in: html)
         let nsCount = occurrences(of: "http://www.w3.org/2000/svg", in: html)
@@ -1104,6 +1123,246 @@ final class MatchWebExportTests: XCTestCase {
     func test_esc_escapesQuotesAndMarkup() {
         let escaped = MatchHTMLExporter.esc("<b>a & \"b\" 'c'</b>")
         XCTAssertEqual(escaped, "&lt;b&gt;a &amp; &quot;b&quot; &#39;c&#39;&lt;/b&gt;")
+    }
+
+    // MARK: - 6. Opponent's export (reader-framed)
+
+    /// `makeRecord` from the other side of the net: the recorder lost 4–6 5–7.
+    private func makeLostRecord() -> MatchRecord {
+        var record = makeRecord()
+        record.iWon = false
+        record.setScores = [SetScore(gamesMe: 4, gamesOpponent: 6), SetScore(gamesMe: 5, gamesOpponent: 7)]
+        return record
+    }
+
+    private func opponentVM(_ record: MatchRecord, aiPromptMe: String? = nil,
+                            aiPromptOpponent: String? = nil) -> MatchWebViewModel {
+        MatchWebViewModel.make(from: record, perspective: .opponent,
+                               aiPromptMe: aiPromptMe, aiPromptOpponent: aiPromptOpponent)
+    }
+
+    func test_perspective_defaultsToTheRecordersUnchangedExport() throws {
+        let record = makeRecord()
+        var implicit = try jsonObject(MatchWebViewModel.make(from: record, aiPromptMe: "M", aiPromptOpponent: "O"))
+        var explicit = try jsonObject(MatchWebViewModel.make(from: record, perspective: .me,
+                                                             aiPromptMe: "M", aiPromptOpponent: "O"))
+        implicit["generatedAt"] = nil
+        explicit["generatedAt"] = nil
+        XCTAssertEqual(NSDictionary(dictionary: implicit), NSDictionary(dictionary: explicit))
+        XCTAssertEqual(implicit["perspective"] as? String, "me")
+        XCTAssertNil(MatchWebViewModel.make(from: record).meta.perspectiveNote)
+    }
+
+    func test_opponentExport_saysTheOpponentWonWhenTheRecorderLost() {
+        let vm = opponentVM(makeLostRecord())
+        XCTAssertEqual(vm.perspective, "opponent")
+        XCTAssertEqual(vm.perspectives.me.result, "won")
+        XCTAssertEqual(vm.perspectives.opponent.result, "lost")
+        XCTAssertEqual(vm.perspectives.me.scoreDisplay, "6–4  7–5")
+        XCTAssertEqual(vm.meta.sets.map(\.scoreMe), ["6–4", "7–5"])
+        XCTAssertEqual(vm.meta.sets.map(\.scoreOpponent), ["4–6", "5–7"])
+        XCTAssertNotNil(vm.meta.perspectiveNote)
+    }
+
+    func test_opponentExport_drawAndInProgressDoNotFlip() {
+        var draw = makeRecord()
+        draw.iWon = nil
+        XCTAssertEqual(opponentVM(draw).perspectives.me.result, "draw")
+        var live = makeRecord()
+        live.iWon = nil
+        live.endTime = nil
+        XCTAssertEqual(opponentVM(live).perspectives.me.result, "inProgress")
+    }
+
+    func test_opponentExport_perspectivesAreTheRecordersSwapped() {
+        let rec = MatchWebViewModel.make(from: makeRecord())
+        let opp = opponentVM(makeRecord())
+        for (reader, source) in [(opp.perspectives.me, rec.perspectives.opponent),
+                                 (opp.perspectives.opponent, rec.perspectives.me)] {
+            XCTAssertEqual(reader.result, source.result)
+            XCTAssertEqual(reader.scoreDisplay, source.scoreDisplay)
+            XCTAssertEqual(reader.pointsWon, source.pointsWon)
+            XCTAssertEqual(reader.pointsLost, source.pointsLost)
+            XCTAssertEqual(reader.outcomeCounts, source.outcomeCounts)
+            XCTAssertEqual(reader.outcomeCountsOpponent, source.outcomeCountsOpponent)
+            XCTAssertEqual(reader.servingCounts, source.servingCounts)
+            XCTAssertEqual(reader.servingCountsOpponent, source.servingCountsOpponent)
+            XCTAssertEqual(reader.endingWonByPhase, source.endingWonByPhase)
+            XCTAssertEqual(reader.endingLostByPhase, source.endingLostByPhase)
+            XCTAssertEqual(reader.presentEndingPhases, source.presentEndingPhases)
+        }
+        // The reader's own sections take the "My …" wording.
+        XCTAssertTrue(opp.perspectives.me.sections.contains { $0.title == "Error Analysis (My Points Lost)" })
+        XCTAssertTrue(opp.perspectives.opponent.sections.contains { $0.title == "Error Analysis (Points Lost)" })
+    }
+
+    func test_opponentExport_comparisonIsTheRecordersWithSidesSwapped() {
+        for type in [MatchType.singles, .doubles] {
+            var record = makeRecord()
+            record.matchType = type
+            let rec = MatchWebViewModel.make(from: record)
+            let opp = opponentVM(record)
+            XCTAssertEqual(opp.filters.map(\.key), rec.filters.map(\.key))
+            for (o, r) in zip(opp.filters, rec.filters) {
+                XCTAssertEqual(o.pointsWon.meWon, r.pointsWon.oppWon)
+                XCTAssertEqual(o.pointsWon.oppWon, r.pointsWon.meWon)
+                XCTAssertEqual(o.pointsWon.mePct, r.pointsWon.oppPct)
+                XCTAssertEqual(o.comparison.sections.map(\.title), r.comparison.sections.map(\.title))
+                XCTAssertEqual(o.comparison.note, r.comparison.note)
+                for (os, rs) in zip(o.comparison.sections, r.comparison.sections) {
+                    XCTAssertEqual(os.rows.map(\.label), rs.rows.map(\.label), os.title)
+                    for (orow, rrow) in zip(os.rows, rs.rows) {
+                        XCTAssertEqual(orow.meValue, rrow.oppValue, "\(os.title) / \(orow.label)")
+                        XCTAssertEqual(orow.oppValue, rrow.meValue, "\(os.title) / \(orow.label)")
+                        XCTAssertEqual(orow.meFraction, rrow.oppFraction)
+                        XCTAssertEqual(orow.oppFraction, rrow.meFraction)
+                        XCTAssertEqual(orow.meBarLabel, rrow.oppBarLabel)
+                        XCTAssertEqual(orow.oppBarLabel, rrow.meBarLabel)
+                    }
+                }
+            }
+        }
+    }
+
+    func test_opponentExport_pointsAreReaderFramed() {
+        let rec = MatchWebViewModel.make(from: makeRecord()).points
+        let opp = opponentVM(makeRecord()).points
+        XCTAssertEqual(opp.count, rec.count)
+        for (o, r) in zip(opp, rec) {
+            XCTAssertEqual(o.winner, r.winner == "me" ? "opp" : "me")
+            XCTAssertEqual(o.server, r.server == "me" ? "opp" : "me")
+            XCTAssertEqual(o.cumulativeMe, r.cumulativeOpp)
+            XCTAssertEqual(o.cumulativeOpp, r.cumulativeMe)
+            XCTAssertEqual(o.outcome, r.outcome)
+            XCTAssertEqual(o.heartRateBPM, r.heartRateBPM, "HR stays the recorder's")
+            XCTAssertEqual(o.stepsCumulative, r.stepsCumulative)
+        }
+        // Point 0: the recorder's winner is the reader's opponent's.
+        XCTAssertEqual(opp[0].chipText, "Opp W")
+        XCTAssertEqual(opp[0].chipColorHex, WebExportColors.opponentLineHex)
+        XCTAssertEqual(opp[0].outcomeText, "Winner — Opp")
+        // Point 1: the recorder's double fault.
+        XCTAssertEqual(opp[1].outcomeText, "Double Fault — Opp")
+        XCTAssertEqual(opp[1].chipColorHex, WebExportColors.opponentLineHex)
+        // Point 2: the recorder served at 30–15 and made the unforced error.
+        XCTAssertEqual(rec[2].pointScoreLabel, "30–15")
+        XCTAssertEqual(opp[2].pointScoreLabel, "15–30")
+        XCTAssertEqual(opp[2].gameScoreLabel, "15–30")
+        XCTAssertEqual(opp[2].outcomeText, "Unforced Err — Opp")
+        XCTAssertEqual(opp[4].pointScoreLabel, "Deuce")
+        // Set 2 opens after the recorder's 6–4, which the reader lost 4–6.
+        XCTAssertEqual(rec[5].matchScoreLabel?.hasPrefix("6–4"), true)
+        XCTAssertEqual(opp[5].matchScoreLabel?.hasPrefix("4–6"), true)
+    }
+
+    func test_opponentExport_keepsTheRecordersHealthLabelledAsOpp() throws {
+        let rec = MatchWebViewModel.make(from: makeRecord(withHR: true))
+        let opp = opponentVM(makeRecord(withHR: true))
+        let recHR = try XCTUnwrap(rec.hr)
+        let oppHR = try XCTUnwrap(opp.hr)
+        // The per-point heart rate and steps stay (useful to the opponent's AI).
+        XCTAssertEqual(oppHR.timeline.map(\.bpm), recHR.timeline.map(\.bpm))
+        XCTAssertEqual(oppHR.timeline.map(\.wonByMe), recHR.timeline.map { !$0.wonByMe })
+        XCTAssertNotNil(opp.steps)
+        XCTAssertNotNil(opp.meta.totals)
+        // Zone win rates and PulseCoach pair the recorder's HR with the
+        // recorder's results, so only the recorder's own export carries them.
+        XCTAssertFalse(recHR.zones.isEmpty)
+        XCTAssertTrue(oppHR.zones.isEmpty)
+        XCTAssertNil(opp.perspectives.me.pulseInsights)
+        XCTAssertNil(opp.perspectives.opponent.pulseInsights)
+        // Activity rows name whose they are.
+        let rows = try XCTUnwrap(opp.filters.first).durationRows.map(\.label)
+        XCTAssertTrue(rows.contains("Opp Steps"))
+        XCTAssertTrue(rows.contains("Opp Calories"))
+        XCTAssertFalse(rows.contains("Steps"))
+    }
+
+    func test_opponentExport_offersOnlyTheOpponentsAIPrompt() throws {
+        let ai = try XCTUnwrap(opponentVM(makeRecord(), aiPromptMe: "MY PROMPT",
+                                          aiPromptOpponent: "OPP PROMPT").aiCoach)
+        XCTAssertEqual(ai.mePrompt, "OPP PROMPT")
+        XCTAssertNil(ai.opponentPrompt, "no toggle to the recorder's prompt")
+        XCTAssertNil(opponentVM(makeRecord(), aiPromptMe: "MY PROMPT").aiCoach)
+    }
+
+    func test_opponentExport_staticAndInteractivePagesBothSayTheOpponentWon() {
+        let record = makeLostRecord()
+        let mine = MatchHTMLExporter.html(for: record)
+        let theirs = MatchHTMLExporter.html(for: record, perspective: .opponent)
+        // Static (no-JS preview) header.
+        XCTAssertTrue(mine.contains("<span class=\"badge lost\">Lost</span>"))
+        XCTAssertTrue(theirs.contains("<span class=\"badge won\">Won</span>"))
+        XCTAssertTrue(theirs.contains(MatchHTMLExporter.esc(MatchWebViewModel.opponentPerspectiveNote)))
+        XCTAssertFalse(mine.contains(MatchHTMLExporter.esc(MatchWebViewModel.opponentPerspectiveNote)))
+        // The interactive rebuild reads the same reader-framed data.
+        XCTAssertTrue(theirs.contains("\"perspective\":\"opponent\""))
+        XCTAssertTrue(theirs.contains("\"result\":\"won\""))
+        XCTAssertTrue(theirs.contains("OPP_READER ? \"Opp HR: \""))
+        // All four static charts stay, framed from the opponent's side.
+        for title in ["Points Won", "Points Lost", "Ending Shots: All Won", "Ending Shots: All Lost"] {
+            XCTAssertTrue(theirs.contains("Points Momentum — \(title)"), title)
+        }
+    }
+
+    func test_opponentExport_staticChartsAreTheRecordersFromTheOtherSide() {
+        let rec = MatchWebViewModel.make(from: makeRecord())
+        let opp = opponentVM(makeRecord())
+        // Scatter marks follow the two step paths; the opponent's "won" marks
+        // are exactly the recorder's "lost" marks, at the same coordinates.
+        func marks(_ vm: MatchWebViewModel, _ scatter: StaticChartScatter) -> String {
+            MatchHTMLExporter.staticChartSVG(vm, scatter: scatter)
+                .components(separatedBy: "stroke-linejoin=\"round\"/>").last ?? ""
+        }
+        XCTAssertEqual(marks(opp, .pointsWon), marks(rec, .pointsLost))
+        XCTAssertEqual(marks(opp, .pointsLost), marks(rec, .pointsWon))
+        XCTAssertEqual(marks(opp, .allWon), marks(rec, .allLost))
+        XCTAssertEqual(marks(opp, .allLost), marks(rec, .allWon))
+        XCTAssertNotEqual(marks(opp, .pointsWon), "</svg>", "the chart actually has marks")
+    }
+
+    // MARK: - 7. "Tracked with DeuceMate" links
+
+    func test_promo_carriesTheAppStoreAndWebsiteLinksInBothPerspectives() {
+        for perspective in [Player.me, .opponent] {
+            let promo = MatchWebViewModel.make(from: makeRecord(), perspective: perspective).promo
+            XCTAssertEqual(promo.appStoreURL, "https://apps.apple.com/app/id6757105622")
+            XCTAssertEqual(promo.websiteURL, "https://emrahman.github.io/DeuceMate/")
+        }
+    }
+
+    func test_promo_staticAndInteractivePagesBothLinkOut() {
+        for perspective in [Player.me, .opponent] {
+            let html = MatchHTMLExporter.html(for: makeScoreOnlyRecord(), perspective: perspective)
+            let root = html.components(separatedBy: "<script>").first ?? ""
+            // Static fallback: real tap-only links, opened in a new tab.
+            for url in [MatchWebViewModel.appStoreURL, MatchWebViewModel.websiteURL] {
+                XCTAssertTrue(root.contains("href=\"\(url)\" target=\"_blank\" rel=\"noopener\""), url)
+            }
+            XCTAssertTrue(root.contains("Tracked with DeuceMate"))
+            // Interactive rebuild paints the same block from DATA.promo.
+            XCTAssertTrue(html.contains("\"promo\":{"))
+            XCTAssertTrue(html.contains("function promoCard()"))
+            XCTAssertTrue(html.contains("p.appStoreURL"))
+            // Still nothing auto-loaded.
+            XCTAssertFalse(html.contains("src="))
+            XCTAssertFalse(html.contains("<link"))
+        }
+    }
+
+    func test_promo_leadsBothTheStaticAndInteractivePage() throws {
+        let html = MatchHTMLExporter.html(for: makeRecord(), perspective: .opponent)
+        // Static fallback: the strip is the first thing inside #root, ahead of
+        // the open-in-a-browser banner and the match header.
+        let rootStart = try XCTUnwrap(html.range(of: "<div id=\"root\">"))
+        XCTAssertTrue(html[rootStart.upperBound...].hasPrefix("<div class=\"card promo\">"))
+        // Interactive rebuild: render() appends the strip before the header.
+        let render = try XCTUnwrap(html.range(of: "function render()"))
+        let body = html[render.upperBound...]
+        let promo = try XCTUnwrap(body.range(of: "root.appendChild(promo)"))
+        let header = try XCTUnwrap(body.range(of: "root.appendChild(header())"))
+        XCTAssertLessThan(promo.lowerBound, header.lowerBound)
+        XCTAssertEqual(occurrences(of: "root.appendChild(promo)", in: html), 1, "shown once, at the top")
     }
 
     // MARK: - Helpers

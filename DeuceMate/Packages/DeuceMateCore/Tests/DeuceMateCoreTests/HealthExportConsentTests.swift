@@ -247,7 +247,7 @@ final class HealthExportConsentTests: XCTestCase {
         XCTAssertTrue(message([.steps, .calories, .distance]).contains("steps, calories, and distance."))
     }
 
-    // MARK: - disclosure ↔ export agreement (Core, recorder-framed HTML)
+    // MARK: - disclosure ↔ export agreement (Core, reader-framed HTML)
 
     func test_presentFieldsForRecorderAgreesWithHtmlExport() {
         let record = richRecord()
@@ -265,6 +265,24 @@ final class HealthExportConsentTests: XCTestCase {
         XCTAssertEqual(fields.contains(.distance), vm.meta.totals?.distanceDisplay != nil)
         // A fully-populated record exposes all five.
         XCTAssertEqual(fields, Set(HealthExportField.allCases))
+    }
+
+    /// The opponent's HTML export keeps the recorder's per-point HR/steps and
+    /// totals but drops the zone win rates — exactly what `.opponent` with raw
+    /// points discloses (no `.heartRateZones`).
+    func test_presentFieldsForOpponentAgreesWithOpponentHtmlExport() {
+        let record = richRecord()
+        let fields = Set(HealthExportConsent.presentFields(in: record, focal: .opponent, includesRawPoints: true))
+        let vm = MatchWebViewModel.make(from: record, perspective: .opponent)
+
+        let htmlHasHeartRate = vm.hr != nil || vm.points.contains { $0.heartRateBPM != nil }
+        XCTAssertEqual(fields.contains(.heartRate), htmlHasHeartRate)
+        XCTAssertFalse(fields.contains(.heartRateZones))
+        XCTAssertEqual(vm.hr?.zones.isEmpty, true)
+        let htmlHasSteps = vm.steps != nil || vm.meta.totals?.stepsDisplay != nil
+        XCTAssertEqual(fields.contains(.steps), htmlHasSteps)
+        XCTAssertEqual(fields.contains(.calories), vm.meta.totals?.caloriesDisplay != nil)
+        XCTAssertEqual(fields.contains(.distance), vm.meta.totals?.distanceDisplay != nil)
     }
 
     func test_healthFreeRecordDisclosesNothingAndHtmlEmitsNoHealth() {

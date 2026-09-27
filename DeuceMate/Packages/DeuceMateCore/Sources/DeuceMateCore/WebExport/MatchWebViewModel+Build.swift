@@ -8,9 +8,14 @@ extension MatchWebViewModel {
 
     // MARK: - Perspective
 
+    /// One player's stat perspective. `focal` is whose stats these are;
+    /// `reader` is who the file is for, so the reader's own perspective takes
+    /// the "My …" wording and only the recorder reading their own export gets
+    /// the HR-derived PulseCoach insights.
     static func perspective(
         record: MatchRecord,
         focal: Player,
+        reader: Player,
         full: MatchStatsSummary,
         categorized: MatchStatsSummary,
         hasStats: Bool,
@@ -49,8 +54,8 @@ extension MatchWebViewModel {
             sections.append(serveSection(categorized))
             sections.append(returnSection(categorized))
             sections.append(breakPointSection(categorized))
-            sections.append(errorAnalysis(categorized, focal: focal))
-            sections.append(opponentErrors(categorized, focal: focal))
+            sections.append(errorAnalysis(categorized, isReader: focal == reader))
+            sections.append(opponentErrors(categorized, isReader: focal == reader))
             if !categorized.recCoachInsights.isEmpty {
                 sections.append(StatSection(title: "Coaching Insights", rows: [],
                                             note: nil, bullets: categorized.recCoachInsights))
@@ -75,8 +80,10 @@ extension MatchWebViewModel {
             ))
         }
 
-        // PulseCoach (HR-derived) insights are recorder-only.
-        let pulse: [String]? = (focal == .me && !full.autoInsights.isEmpty) ? full.autoInsights : nil
+        // PulseCoach (HR-derived) insights are recorder-only, and are dropped from
+        // the opponent's export entirely: they coach the recorder's heart rate.
+        let pulse: [String]? = (focal == .me && reader == .me && !full.autoInsights.isEmpty)
+            ? full.autoInsights : nil
 
         // Per-outcome counts attributed to this perspective's player. The `my…`
         // fields are already focal-attributed (winner = focal struck it; UE/FE =
@@ -187,8 +194,8 @@ extension MatchWebViewModel {
         ], note: nil, bullets: nil)
     }
 
-    private static func errorAnalysis(_ s: MatchStatsSummary, focal: Player) -> StatSection {
-        let title = focal == .me ? "Error Analysis (My Points Lost)" : "Error Analysis (Points Lost)"
+    private static func errorAnalysis(_ s: MatchStatsSummary, isReader: Bool) -> StatSection {
+        let title = isReader ? "Error Analysis (My Points Lost)" : "Error Analysis (Points Lost)"
         return StatSection(title: title, rows: [
             StatRow(label: "Winners", value: "\(s.myWinners)", hint: nil),
             StatRow(label: "Unforced Errors", value: "\(s.myUnforcedErrors)", hint: nil),
@@ -202,8 +209,8 @@ extension MatchWebViewModel {
         ], note: nil, bullets: nil)
     }
 
-    private static func opponentErrors(_ s: MatchStatsSummary, focal: Player) -> StatSection {
-        let title = focal == .me ? "Opponent Errors (Points I Won)" : "Opponent Errors (Points Won)"
+    private static func opponentErrors(_ s: MatchStatsSummary, isReader: Bool) -> StatSection {
+        let title = isReader ? "Opponent Errors (Points I Won)" : "Opponent Errors (Points Won)"
         return StatSection(title: title, rows: [
             StatRow(label: "Unforced Errors", value: "\(s.opponentUnforcedErrors)", hint: nil),
             StatRow(label: "Forced Errors", value: "\(s.opponentForcedErrors)", hint: nil),
@@ -240,30 +247,32 @@ extension MatchWebViewModel {
 
     // MARK: - Points / set bands / HR / steps
 
-    static func pointRows(_ record: MatchRecord) -> [PointVM] {
+    /// The point list, framed for `reader`: "me" / `cumulativeMe` / chips /
+    /// score labels are the reader's side. HR and steps stay the recorder's.
+    static func pointRows(_ record: MatchRecord, reader: Player) -> [PointVM] {
         let stats = record.stats
         var cumMe = 0
         var cumOpp = 0
-        let matchScores = PointMatchScore.atStart(of: stats, record: record)
-        let afterScores = PointMatchScore.afterEachPoint(of: stats, record: record)
+        let matchScores = PointMatchScore.atStart(of: stats, record: record, focal: reader)
+        let afterScores = PointMatchScore.afterEachPoint(of: stats, record: record, focal: reader)
         return stats.enumerated().map { idx, pt in
-            if pt.winner == .me { cumMe += 1 } else { cumOpp += 1 }
+            if pt.winner == reader { cumMe += 1 } else { cumOpp += 1 }
             let shot = pt.endingShot
-            let chip = pointChip(pt)
+            let chip = pointChip(pt, reader: reader)
             let matchScore = matchScores[pt.id]?.label
             return PointVM(
                 index: idx,
                 setIndex: pt.setIndex,
-                server: pt.server == .me ? "me" : "opp",
-                winner: pt.winner == .me ? "me" : "opp",
+                server: pt.server == reader ? "me" : "opp",
+                winner: pt.winner == reader ? "me" : "opp",
                 outcome: pt.outcome.rawValue,
                 outcomeLabel: pt.outcome.displayLabel,
                 outcomeColorHex: WebExportColors.outcomeColorHex(pt.outcome),
                 outcomeSymbol: WebExportColors.outcomeSymbol(pt.outcome),
                 chipText: chip.text,
                 chipColorHex: chip.colorHex,
-                outcomeText: pointOutcomeText(pt),
-                pointScoreLabel: pointScoreLabel(pt),
+                outcomeText: pointOutcomeText(pt, reader: reader),
+                pointScoreLabel: pointScoreLabel(pt, reader: reader),
                 endingShot: shot?.rawValue,
                 endingShotLabel: shot?.displayLabel,
                 endingShotColorHex: shot.map { WebExportColors.endingShotColorHex($0) },
@@ -271,7 +280,7 @@ extension MatchWebViewModel {
                 isSecondServe: pt.isSecondServe,
                 isBreakPoint: pt.isBreakPoint,
                 isTiebreak: pt.gameScoreAtStart?.isTiebreak ?? false,
-                gameScoreLabel: gameScoreLabel(pt),
+                gameScoreLabel: gameScoreLabel(pt, reader: reader),
                 gameScoreAfterPointLabel: afterScores[pt.id]?.gameScoreLabel,
                 matchScoreAfterPointLabel: afterScores[pt.id]?.matchScoreLabel,
                 matchScoreLabel: matchScore?.isEmpty == false ? matchScore : nil,
@@ -315,10 +324,19 @@ extension MatchWebViewModel {
         return bands
     }
 
-    static func hrBlock(_ meFull: MatchStatsSummary) -> HRBlock? {
+    /// The recorder's heart rate. `meFull` is the recorder's summary; the
+    /// timeline's `wonByMe` is flipped to the reader's side, and the zone win
+    /// rates (recorder HR vs recorder results) exist only in the recorder's
+    /// own export — mirroring `MatchExporter`, which drops them from the
+    /// opponent's text export.
+    static func hrBlock(_ meFull: MatchStatsSummary, reader: Player) -> HRBlock? {
         guard !meFull.hrTimeline.isEmpty else { return nil }
         let timeline = meFull.hrTimeline.map {
-            HRBlock.Sample(pointIndex: $0.pointIndex, bpm: $0.bpm, setIndex: $0.setIndex, wonByMe: $0.wonByFocal)
+            HRBlock.Sample(pointIndex: $0.pointIndex, bpm: $0.bpm, setIndex: $0.setIndex,
+                           wonByMe: reader == .me ? $0.wonByFocal : !$0.wonByFocal)
+        }
+        guard reader == .me else {
+            return HRBlock(timeline: timeline, zones: [], resolvedMaxHR: meFull.resolvedMaxHR)
         }
         let zones = meFull.zoneWinRates.map {
             HRBlock.Zone(
@@ -346,8 +364,9 @@ extension MatchWebViewModel {
 
     // MARK: - Meta helpers
 
-    static func setRows(_ record: MatchRecord) -> [SetVM] {
-        record.setScores.enumerated().map { i, _ in
+    static func setRows(_ record: MatchRecord, reader: Player) -> [SetVM] {
+        let other: Player = reader == .me ? .opponent : .me
+        return record.setScores.enumerated().map { i, _ in
             let secs = record.setElapsedSeconds[i] ?? 0
             return SetVM(
                 setNumber: i + 1,
@@ -355,19 +374,25 @@ extension MatchWebViewModel {
                     for: record.setScores[i],
                     setIndex: i,
                     matchFormat: record.matchFormat,
-                    focal: .me
+                    focal: reader
                 ),
                 scoreOpponent: SetScoreLabel.string(
                     for: record.setScores[i],
                     setIndex: i,
                     matchFormat: record.matchFormat,
-                    focal: .opponent
+                    focal: other
                 ),
                 durationSeconds: Int(secs),
                 durationDisplay: secs > 0 ? minutesString(secs) : nil
             )
         }
     }
+
+    /// Shown under the header of the opponent's export, where "Me" is the
+    /// reader rather than the person who recorded the match.
+    static let opponentPerspectiveNote =
+        "Your perspective: “Me” is you. Recorded by your opponent with DeuceMate; "
+        + "heart rate and steps are theirs."
 
     static func totals(_ record: MatchRecord) -> Totals? {
         let steps = (record.totalSteps ?? 0) > 0 ? record.totalSteps : nil
@@ -471,9 +496,9 @@ extension MatchWebViewModel {
     }
 
     /// Tennis score notation for a point's starting game snapshot (Me–Opponent).
-    static func gameScoreLabel(_ pt: PointStat) -> String {
+    static func gameScoreLabel(_ pt: PointStat, reader: Player) -> String {
         guard let g = pt.gameScoreAtStart else { return "—" }
-        return GameScoreLabel.string(for: g, server: pt.server)
+        return GameScoreLabel.string(for: g, server: pt.server, focal: reader)
     }
 
     // MARK: - Points-tab display (mirror MatchDetailView.pointRow)
@@ -481,12 +506,12 @@ extension MatchWebViewModel {
     /// Short outcome chip text + its colour, attributed exactly like
     /// `MatchDetailView.outcomeChip` (DF coloured by the server who served it,
     /// UE/FE by the player who erred, W by the striker).
-    static func pointChip(_ pt: PointStat) -> (text: String, colorHex: String) {
-        let isWin = pt.winner == .me
+    static func pointChip(_ pt: PointStat, reader: Player) -> (text: String, colorHex: String) {
+        let isWin = pt.winner == reader
         let me = WebExportColors.meLineHex, opp = WebExportColors.opponentLineHex
         switch pt.outcome {
         case .winner:        return (isWin ? "W" : "Opp W", isWin ? me : opp)
-        case .doubleFault:   return ("DF", pt.server == .me ? me : opp)
+        case .doubleFault:   return ("DF", pt.server == reader ? me : opp)
         case .unforcedError: return ("UE", isWin ? opp : me)
         case .forcedError:   return ("FE", isWin ? opp : me)
         case .uncategorized: return (isWin ? "+" : "−", isWin ? me : opp)
@@ -494,21 +519,21 @@ extension MatchWebViewModel {
     }
 
     /// The longer outcome line ("Winner — Me", "Unforced Err — Opp").
-    static func pointOutcomeText(_ pt: PointStat) -> String {
-        let winnerName = pt.winner == .me ? "Me" : "Opp"
+    static func pointOutcomeText(_ pt: PointStat, reader: Player) -> String {
+        let winnerName = pt.winner == reader ? "Me" : "Opp"
         switch pt.outcome {
         case .winner:        return "Winner — \(winnerName)"
-        case .doubleFault:   return "Double Fault — \(pt.server == .me ? "Me" : "Opp")"
-        case .unforcedError: return "Unforced Err — \(pt.winner == .me ? "Opp" : "Me")"
-        case .forcedError:   return "Forced Err — \(pt.winner == .me ? "Opp" : "Me")"
+        case .doubleFault:   return "Double Fault — \(pt.server == reader ? "Me" : "Opp")"
+        case .unforcedError: return "Unforced Err — \(pt.winner == reader ? "Opp" : "Me")"
+        case .forcedError:   return "Forced Err — \(pt.winner == reader ? "Opp" : "Me")"
         case .uncategorized: return "Point — \(winnerName)"
         }
     }
 
-    /// Recorder-oriented game score ("0–15", "Deuce", "Ad Me").
-    static func pointScoreLabel(_ pt: PointStat) -> String {
+    /// Reader-oriented game score ("0–15", "Deuce", "Ad Me").
+    static func pointScoreLabel(_ pt: PointStat, reader: Player) -> String {
         guard let snap = pt.gameScoreAtStart else { return "" }
-        return GameScoreLabel.string(for: snap, server: pt.server)
+        return GameScoreLabel.string(for: snap, server: pt.server, focal: reader)
     }
 
     static func hrZoneColorHex(_ zone: HRZone) -> String {
