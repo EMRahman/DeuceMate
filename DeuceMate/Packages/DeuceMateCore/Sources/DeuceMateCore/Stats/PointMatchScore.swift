@@ -11,10 +11,11 @@ public enum PointMatchScore {
 
     /// Derives display-only scores after each recorded rally using the live
     /// reducer. Never changes saved snapshots or guesses a missing games offset.
+    /// Labels read from `focal`'s side (the recorder's by default).
     public static func afterEachPoint(
-        of points: [PointStat], record: MatchRecord
+        of points: [PointStat], record: MatchRecord, focal: Player = .me
     ) -> [PointStat.ID: PostPointSnapshot] {
-        let startingScores = atStart(of: points, record: record)
+        let startingScores = atStart(of: points, record: record, focal: focal)
         var scores: [PointStat.ID: PostPointSnapshot] = [:]
         for point in points {
             guard record.setScores.indices.contains(point.setIndex),
@@ -56,13 +57,14 @@ public enum PointMatchScore {
             if start?.games != nil || !record.matchFormat.config.playRegularSets
                 || record.matchFormat.config.isDecidingSuperTiebreak(setIndex: point.setIndex) {
                 matchLabel = after.sets.enumerated().map { index, set in
-                    SetScoreLabel.string(for: set, setIndex: index, matchFormat: record.matchFormat)
+                    SetScoreLabel.string(for: set, setIndex: index, matchFormat: record.matchFormat,
+                                         focal: focal)
                 }.joined(separator: "  ")
             } else {
                 matchLabel = start?.completedSets.joined(separator: "  ") ?? ""
             }
             scores[point.id] = PostPointSnapshot(
-                gameScoreLabel: GameScoreLabel.string(for: displayedGame, server: .me),
+                gameScoreLabel: GameScoreLabel.string(for: displayedGame, server: .me, focal: focal),
                 matchScoreLabel: matchLabel.isEmpty ? nil : matchLabel
             )
         }
@@ -83,12 +85,15 @@ public enum PointMatchScore {
         }
     }
 
-    /// Full recorder-perspective match score immediately before each point,
-    /// keyed by point id. `points` must be the match's chronological point
-    /// history. Points without a pre-point game snapshot are omitted.
+    /// Full match score immediately before each point, keyed by point id, with
+    /// labels read from `focal`'s side (the recorder's by default). `games`
+    /// stays recorder-oriented whatever `focal` is. `points` must be the
+    /// match's chronological point history. Points without a pre-point game
+    /// snapshot are omitted.
     public static func atStart(
         of points: [PointStat],
-        record: MatchRecord
+        record: MatchRecord,
+        focal: Player = .me
     ) -> [PointStat.ID: Snapshot] {
         let config = record.matchFormat.config
         let pointsBySet = Dictionary(grouping: points, by: \.setIndex)
@@ -121,7 +126,8 @@ public enum PointMatchScore {
                         SetScoreLabel.string(
                             for: record.setScores[index],
                             setIndex: index,
-                            matchFormat: record.matchFormat
+                            matchFormat: record.matchFormat,
+                            focal: focal
                         )
                     }
                 priorLabelsBySet[point.setIndex] = completedSets
@@ -137,7 +143,8 @@ public enum PointMatchScore {
                         tieBreakPointsOpponent: rawPoints.opponent
                     ),
                     setIndex: point.setIndex,
-                    matchFormat: record.matchFormat
+                    matchFormat: record.matchFormat,
+                    focal: focal
                 )
                 result[point.id] = Snapshot(
                     completedSets: completedSets,
@@ -166,7 +173,8 @@ public enum PointMatchScore {
                     tieBreakPointsOpponent: rawPoints.opponent
                 ),
                 setIndex: point.setIndex,
-                matchFormat: record.matchFormat
+                matchFormat: record.matchFormat,
+                focal: focal
             )
             result[point.id] = Snapshot(
                 completedSets: completedSets,

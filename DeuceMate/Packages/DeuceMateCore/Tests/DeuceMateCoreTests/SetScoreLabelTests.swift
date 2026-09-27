@@ -89,6 +89,24 @@ final class SetScoreLabelTests: XCTestCase {
         )
     }
 
+    func test_gameScoreLabel_opponentFocalReadsFromTheOpponentsSide() {
+        func label(_ sv: Int, _ rt: Int, tb: Bool = false, server: Player) -> String {
+            GameScoreLabel.string(
+                for: GameScoreSnapshot(server: sv, returner: rt, isTiebreak: tb),
+                server: server,
+                focal: .opponent
+            )
+        }
+        // Recorder serving at 15–30 reads 30–15 for the opponent.
+        XCTAssertEqual(label(1, 2, server: .me), "30–15")
+        // The opponent's advantage is "Ad Opp" to the recorder, "Ad Me" to them.
+        XCTAssertEqual(label(4, 3, server: .opponent), "Ad Me")
+        XCTAssertEqual(label(3, 4, server: .opponent), "Ad Opp")
+        XCTAssertEqual(label(3, 3, server: .me), "Deuce")
+        // Tiebreak points swap sides too (the recorder reads 6–4).
+        XCTAssertEqual(label(4, 6, tb: true, server: .opponent), "4–6")
+    }
+
     private func label(
         _ set: SetScore,
         index: Int,
