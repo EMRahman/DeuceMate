@@ -170,7 +170,9 @@ Copilot, Poe, Grok) or the share sheet. They can also share a self-contained
 interactive HTML page of the match — built off-thread and shared as a `.html` file —
 with the momentum chart and set bands, a Stats/Points tab toggle, All/Set N filters, a
 TV-style Me-vs-Opp comparison, a point-by-point list, and an optional AI Coach card.
-The page loads zero external resources and is recorder-framed; progressive enhancement
+The share menu offers it from **My Perspective** or **Opponent's Perspective**; each
+file is framed for its reader, so the opponent's says they won when they did.
+The page loads zero external resources; progressive enhancement
 ships a static, no-JS report so even iOS Quick Look shows a readable preview.
 Whenever an export would carry HealthKit data (heart rate, steps, calories,
 distance), a per-export **"Share health data?"** disclosure names exactly what is

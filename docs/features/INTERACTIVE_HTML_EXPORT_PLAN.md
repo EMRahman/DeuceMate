@@ -12,10 +12,12 @@ explores the full match **offline**: the momentum chart with set bands and
 `PointsGraphView`-style counted outcome/Serving/ending-shot scatter pills, a
 **Stats/Points tab toggle** and **All/Set N set filter**, the set-filtered TV-style Me-vs-Opp stat
 comparison (with points-won bar + duration), a point-by-point list with
-recorder-relative 🎾 Serving / racquet Receiving status, recorder-only
+reader-relative 🎾 Serving / racquet Receiving status, the recorder's
 HR/steps overlays, and an **AI Coach card** (copy the coaching prompt + opt-in
-launch links to ChatGPT/Claude/Gemini/…). The page is recorder-framed throughout
-(no perspective toggle), mirroring the iOS archive detail. *(Schema history: v2
+launch links to ChatGPT/Claude/Gemini/…). The page is **reader-framed**
+throughout (no perspective toggle), mirroring the iOS archive detail: the share
+menu offers **My Perspective** and **Opponent's Perspective**, and each file's
+"Me" is whoever it is for — see *Two perspectives* below. *(Schema history: v2
 replaced the per-perspective stat cards with the fixed Me-vs-Opp comparison and
 dropped the me⇄opponent toggle; v3 added the Stats/Points tabs and the per-set
 `filters`; v4 added the optional `aiCoach` block.)* The page still loads **zero
@@ -23,7 +25,10 @@ external resources** on open — the AI-app links are user-clicked navigations, 
 fetches. *(Later schema history: v5 added per-point step deltas; v6 added in-set
 game scores; v7 replaced them with full pre-point match scores; v8 added each
 point's tiebreak state for iOS-parity chart bands; v9 added per-player Serving
-counts and palette metadata; v10 adds after-point game/match labels for graph inspection while preserving before-point history scores.)*
+counts and palette metadata; v10 adds after-point game/match labels for graph inspection while preserving before-point history scores; v11 adds the top-level
+`perspective` + `meta.perspectiveNote` and makes every "me" field reader-framed; v12
+adds the `promo` block — a "Tracked with DeuceMate" strip at the top of the page linking
+to the App Store and the marketing site, since the recipient usually doesn't have the app.)*
 
 Chosen over a hosted "share a link" approach because it needs **no server, no
 hosting, no database, no link expiry**, and adds **no networking** to an app that
@@ -36,20 +41,22 @@ third-party dependencies" rule.
 ## Shape
 
 ```
-MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
-                  │  flattens: meta + both me/opponent stat perspectives
-                  │           + perspective-neutral point list + set bands
-                  │           + recorder-only HR/steps blocks
+MatchRecord ──► MatchWebViewModel.make(from:maxHR:perspective:)  (pure, Core, tested)
+                  │  flattens, framed for the reader (.me or .opponent):
+                  │           meta + reader/other stat perspectives
+                  │           + reader-framed point list + set bands
+                  │           + the recorder's HR/steps blocks
                   ▼
-            JSON (sortedKeys) ──► MatchHTMLExporter.html(for:)  (pure, Core, tested)
+            JSON (sortedKeys) ──► MatchHTMLExporter.html(for:perspective:)  (pure, Core, tested)
                   │  script-safe inject into ▼
             MatchWebTemplate.page(jsonLiteral:)   (HTML skeleton + CSS + SVG/JS,
                   │                                 Swift raw-string constants)
                   ▼
        one self-contained .html String
                   ▼
-   MatchDetailView: built off-thread in `.task`, written to a temp file,
-   shared via `ShareLink(item: fileURL)` ("Share Interactive Web Page").
+   MatchDetailView: both files (mine + `_opponent`) built off-thread in `.task`,
+   written to temp files, shared via the system share sheet from the
+   "Interactive Web Page" submenu (My Perspective / Opponent's Perspective).
 ```
 
 ## Key decisions
@@ -78,13 +85,35 @@ MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
   points are excluded from serve counts and scatter marks in mixed matches; their
   default second-serve flag must not imply a tracked first serve.
 
+- **Two perspectives, one reader-framed shape.** The recorder's page says
+  "Lost" when they lost, which is wrong on the page they send the opponent. So
+  `make(from:maxHR:perspective:)` builds the page for a *reader*: every "me"
+  field — the result badge, score and set lines, `PointVM.server`/`winner`,
+  `cumulativeMe`, chips and outcome text, game/match score labels (via the
+  `focal:` parameter on `GameScoreLabel` and `PointMatchScore`), the per-set
+  comparison and points-won bar — is the reader's side. `perspective: .me` (the
+  default) is unchanged from the recorder-only page; `.opponent` swaps every
+  side, so the opponent's page says they won. The static fallback and the JS
+  paint "Me" as before and need no perspective logic of their own, which is
+  what keeps the no-JS preview and the interactive rebuild in agreement; the
+  opponent's page adds one `meta.perspectiveNote` line under the header. All
+  four static momentum charts stay in both files, drawn from the reader's side.
+  Rejected: mirroring the `MatchRecord` itself (a fake persisted model every
+  future field would have to remember to flip, with no clean mirror for
+  `DoublesServer.partner`).
+
 - **Recorder-only HR.** Heart rate / steps / distance / calories are the
-  *recorder's* physiology. They populate only the `me` perspective and the
-  top-level `hr` / `steps` / `meta.totals` blocks; the `opponent` perspective is
-  HR-free. Since the page is recorder-framed, HR/steps/PulseCoach always show
-  (when present). This mirrors `MatchExporter`'s rule exactly. (Both perspectives
-  are still flattened into the JSON — the `opponent` side feeds the Me-vs-Opp
-  comparison even though the viewer never renders it as a standalone view.)
+  *recorder's* physiology, carried in the top-level `hr` / `steps` /
+  `meta.totals` blocks and on each point in **both** files — the opponent's AI
+  prompt finds them useful. In the opponent's file the viewer labels them "Opp"
+  (`Opp Heart Rate`, `Opp HR:`, `Opp Steps`, and the `durationRows`), keyed off
+  `perspective`. The HR-zone win rates and PulseCoach insights pair the
+  recorder's HR with the reader's results, so only the recorder's own page
+  carries them (`hr.zones` is empty and `pulseInsights` `nil` in the opponent's)
+  — the same line `MatchExporter` draws for the opponent's text export. The
+  opponent share discloses as `.opponent` + raw points, which is exactly this
+  set (no zones). (Both perspectives are still flattened into the JSON — the
+  other side feeds the Me-vs-Opp comparison.)
 
 - **SVG, not Canvas.** A transparent pointer surface uses pointer capture,
   nearest-point hit testing, and an in-place selection rule so click/touch
@@ -107,9 +136,10 @@ MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
   seamlessly. (This is why the page is never empty: a 100%-JS-rendered body looked
   blank on iPhone previews.)
 
-- **Share a file, not a link.** `ShareLink(item: fileURL)` shares the generated
-  `.html` as a real file (type inferred from the extension). A single recorder-
-  framed page; the Me-vs-Opp comparison shows both sides at once.
+- **Share a file, not a link.** The system share sheet shares the generated
+  `.html` as a real file (type inferred from the extension). One page per
+  reader; the Me-vs-Opp comparison shows both sides at once. The opponent's page
+  offers only the opponent AI prompt (no My/Opponent toggle).
 
 - **Colour parity.** `WebExportColors` is the single source of the export's
   palette/symbols (outcome, serving and ending-shot scatter, set bands, me/opponent
@@ -125,12 +155,13 @@ MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
 | `…/WebExport/MatchWebViewModel+Build.swift` | Pure derivation (per-perspective sections, counted outcome/Serving/ending-shot pills, points, set bands, HR/steps, formatting). |
 | `…/WebExport/MatchWebViewModel+Comparison.swift` | Pure builder for the per-set `filters` + TV-style Me-vs-Opp `comparison` block (mirrors `MatchDetailView`'s split bars). |
 | `…/WebExport/MatchWebViewModel+AICoach.swift` | Pure builder for the optional `aiCoach` block (intro copy + AI-app launch list) wrapped around the injected prompt(s). |
+| `…/WebExport/MatchWebViewModel+Promo.swift` | The `promo` block: "Tracked with DeuceMate" copy + the App Store and marketing-site URLs, rendered as the first thing on the page — above the header — in both the static fallback and the viewer, so a recipient without the app sees where to get it before anything else. |
 | `…/WebExport/MatchWebStaticFallback.swift` | The no-JS `#root` fallback: header + server-rendered SVG momentum charts (`staticChartSVG`) + the TV-style Me/Opp split-bar comparison (`pointsWonBar`/`comparisonCard`/`splitBar`) for the whole match plus a per-set breakdown, so file previews that can't run scripts still show the match. |
 | `…/WebExport/WebExportColors.swift` | Palette/symbol single source of truth. |
 | `…/WebExport/MatchWebTemplate.swift` | The viewer (HTML/CSS/SVG-JS) as raw-string constants. |
 | `…/WebExport/MatchHTMLExporter.swift` | Assembles + script-safely injects the JSON; pure entry point. |
-| `DeuceMate/Views/MatchDetailView.swift` | Builds the HTML off-thread, temp-file write, share action. |
-| `Tests/DeuceMateCoreTests/MatchWebExportTests.swift` | View-model shape, mirrored Serving counts/rules/palette, both-perspective consistency, recorder-only-HR, self-contained HTML and script safety. |
+| `DeuceMate/Views/MatchDetailView.swift` | Builds both HTML files off-thread, temp-file writes, the My/Opponent's Perspective share submenu. |
+| `Tests/DeuceMateCoreTests/MatchWebExportTests.swift` | View-model shape, mirrored Serving counts/rules/palette, both-perspective consistency, recorder-only-HR, the opponent's reader-framed export (result, scores, points, comparison, static charts, health labels), self-contained HTML and script safety. |
 
 ## Verifying
 
@@ -143,15 +174,20 @@ MatchRecord ──► MatchWebViewModel.make(from:maxHR:)  (pure, Core, tested)
   popups, HR/steps overlay toggles, the Stats/Points tabs,
   the All/Set N set filter (the comparison + points-won + duration must update),
   the Me-vs-Opp comparison split bars, the point-by-point list, and the AI Coach
-  card (Copy Prompt, Show/Hide prompt, My/Opponent toggle). The AI-app links are
-  the only external URLs and must open on click only — nothing loads on open.
+  card (Copy Prompt, Show/Hide prompt, My/Opponent toggle). Repeat with the
+  opponent's file: it should read Won when the recorder lost, label the health
+  overlays "Opp", and offer no zone card or AI toggle. The AI-app links and
+  the two promo links (App Store, website) are the only external URLs and must
+  open on click only — nothing loads on open.
 - `MatchExporter` is iOS-target but pure (`Foundation` + `DeuceMateCore`); the
   AI prompt is generated there and **injected** via
   `MatchHTMLExporter.html(for:aiPromptMe:aiPromptOpponent:)`. The offline test
   (`test_html_withAICoach_addsOnlyOptInLinks`) asserts every `https://` is a
-  known AI host and that no resource is auto-loaded.
+  known AI host or exactly one of the two promo URLs, and that no resource is
+  auto-loaded.
 - The "self-contained" test asserts no external resource loads (`src=`, `<link`,
-  `https://`, `cdn`); the only permissible `http://` is the SVG namespace
+  `cdn`) and that every `https://` is exactly a promo URL
+  (`assertOnlyOptInLinks`); the only permissible `http://` is the SVG namespace
   identifier `http://www.w3.org/2000/svg`, which is not a network fetch.
 
 ## Future ideas (not built)

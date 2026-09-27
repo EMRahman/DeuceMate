@@ -832,7 +832,8 @@ and existing point-category controls where accessible focus needs adjustment.
 **Verified 18 September 2026:** The detached HTML-generation task in
 `MatchDetailView` catches a temporary-file write failure and returns `nil`.
 The export menu includes **Interactive Web Page** only when `htmlExportURL`
-exists, so a failure silently removes the feature. This is separate from
+or `htmlExportURLOpp` exists (and each perspective item only when its own URL
+does), so a failure silently removes the feature. This is separate from
 #4a-write: the failed file here is a share artifact, not the canonical archive.
 
 **Proposed scope:** Represent export preparation as loading/ready/failed;

@@ -285,7 +285,17 @@ phone, tablet, or computer — and needs **no app, no account, no link, and no
 server**. The file works **fully offline**: it makes no network requests when
 opened, so it's ideal for sending to an opponent who doesn't use DeuceMate.
 
-The page mirrors the iPhone match detail, recorder-framed (you vs. your opponent):
+Choose whose page it is:
+
+- **My Perspective** — "Me" is you, exactly like the app.
+- **Opponent's Perspective** — the page to send your opponent. "Me" is them, so
+  it says they won when they did, and every score, chart and stat reads from
+  their side. Your heart rate and steps are still included (useful when they ask
+  an AI about the match) but labelled as yours ("Opp"); the heart-rate zone card
+  and PulseCoach insights, which are about your own effort, are left out.
+
+The page mirrors the iPhone match detail (you vs. your opponent, from the
+reader's side):
 
 - **Points Momentum chart** — cumulative points for both players with set-boundary
   bands and tap-to-inspect. Toggle scatter pills to overlay markers, each showing
@@ -294,21 +304,25 @@ The page mirrors the iPhone match detail, recorder-framed (you vs. your opponent
     opponent, with one-tap **Points Won** / **Points Lost** presets.
   - **Ending Shots** — Serve / Return / S+1 / Rally, with **All Won** / **All Lost**
     presets.
-  - **Heart Rate** and **Steps** overlays when you recorded them (yours only).
+  - **Heart Rate** and **Steps** overlays when you recorded them (always yours —
+    shown as "Opp Heart Rate" / "Opp Steps" on your opponent's page).
 - **Stats / Points tabs**
   - **Stats** — the same Me-vs-opponent split-bar comparison as the app (serve,
     return, break points, outcome breakdown, pressure, rally depth, score states),
     filterable by **All / Set 1 / Set 2 …**, with a points-won bar and per-set
     durations and activity.
   - **Points** — the full point-by-point list, grouped by set.
-- **AI Coach card** — copy the coaching prompt (My Stats or Opponent's perspective)
-  and one-tap launch links to ChatGPT, Claude, Gemini, Perplexity, Copilot, Poe,
+- **AI Coach card** — copy the coaching prompt (My Stats or Opponent's perspective;
+  your opponent's page offers only theirs) and one-tap launch links to ChatGPT, Claude, Gemini, Perplexity, Copilot, Poe,
   and Grok (see [AI Coaching Prompts](#ai-coaching-prompts--further-analysis) below
   for what the prompt contains).
 
+**Get DeuceMate.** The page opens with a "Tracked with DeuceMate" strip linking to the
+App Store and the DeuceMate website, for opponents who'd like the app.
+
 **Privacy.** The page loads nothing from the network when opened. The only external
-links are the AI-app launch buttons, and they open only if the viewer taps one —
-nothing is uploaded automatically.
+links are the AI-app launch buttons and the App Store / website links, and they open
+only if the viewer taps one — nothing is uploaded automatically.
 
 **Previews.** Some file previews can't run scripts (for example, the iPhone's
 Quick Look when you tap the file). In that case the page still shows a full static
