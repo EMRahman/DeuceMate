@@ -252,6 +252,32 @@ final class PointMatchScoreTests: XCTestCase {
                        "6–0  6–0", "No empty set is invented after match completion")
     }
 
+    func test_opponentFocal_swapsEveryLabelButKeepsRecorderGames() throws {
+        // Six games to Me, followed by Opp winning the next set's first rally.
+        let record = playedRecord(Array(repeating: .me, count: 24) + [.opponent])
+        let start = PointMatchScore.atStart(of: record.stats, record: record, focal: .opponent)
+        let after = PointMatchScore.afterEachPoint(of: record.stats, record: record, focal: .opponent)
+
+        // Second game: the recorder leads 1–0, so the opponent reads 0–1…
+        let second = try XCTUnwrap(start[record.stats[4].id])
+        XCTAssertEqual(second.label, "0–1")
+        // …while the raw games stay recorder-oriented for every caller.
+        XCTAssertEqual(second.games, GamesScoreSnapshot(me: 1, opponent: 0))
+
+        XCTAssertEqual(start[record.stats[24].id]?.label, "0–6  0–0")
+        XCTAssertEqual(after[record.stats[23].id]?.matchScoreLabel, "0–6  0–0")
+        XCTAssertEqual(after[record.stats[24].id]?.gameScoreLabel, "15–0", "the opponent won the rally")
+    }
+
+    func test_opponentFocal_mirrorsDeuceAndAdvantage() {
+        let record = playedRecord([.me, .me, .me, .opponent, .opponent, .opponent,
+                                   .me, .opponent, .opponent, .me, .me, .me])
+        let after = PointMatchScore.afterEachPoint(of: record.stats, record: record, focal: .opponent)
+        let labels = record.stats.map { after[$0.id]?.gameScoreLabel }
+        XCTAssertEqual(Array(labels.suffix(7)), ["Deuce", "Ad Opp", "Deuce", "Ad Me", "Deuce", "Ad Opp", "0–0"])
+        XCTAssertEqual(after[record.stats[11].id]?.matchScoreLabel, "0–1")
+    }
+
     func test_afterPoint_handlesTiebreakStartFinishAndSuddenDeath() {
         var games: [Player] = []
         for _ in 0..<6 { games += Array(repeating: .me, count: 4) + Array(repeating: .opponent, count: 4) }

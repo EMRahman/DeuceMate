@@ -20,14 +20,19 @@ enum StaticChartScatter { case pointsWon, pointsLost, allWon, allLost }
 
 extension MatchHTMLExporter {
 
-    /// A real, styled HTML summary placed inside `#root`: banner, header, the
+    /// A real, styled HTML summary placed inside `#root`: the "Tracked with
+    /// DeuceMate" strip, the open-in-a-browser banner, header, the
     /// momentum charts (one per preset selection), and the TV-style Me/Opp
-    /// split-bar comparison — whole match, plus a per-set breakdown.
+    /// split-bar comparison — whole match, plus a per-set breakdown. Reader-
+    /// framed like the view model: in the opponent's export every "Me" (badge,
+    /// score, lines, pills, bars) is the opponent.
     static func staticFallback(_ vm: MatchWebViewModel) -> String {
         let me = vm.perspectives.me
         let resultLabel = ["won": "Won", "lost": "Lost", "draw": "Draw", "inProgress": "In Progress"][me.result] ?? ""
 
-        var html = """
+        // The "Tracked with DeuceMate" strip leads the page, above everything.
+        var html = promoCard(vm.promo)
+        html += """
         <div class="card" style="border-color:var(--accent)">\
         <strong>Open in a web browser for the full interactive report</strong>\
         <div class="sub" style="margin-top:4px">This is a static summary, shown when a file preview can't run scripts. \
@@ -42,11 +47,15 @@ extension MatchHTMLExporter {
             }.joined(separator: "   ·   ")
             sets = "<div class=\"setline\">\(lines)</div>"
         }
+        // Opponent's export only: says whose "Me" this is.
+        let perspectiveNote = vm.meta.perspectiveNote
+            .map { "<div class=\"sub\" style=\"margin-top:6px\">\(esc($0))</div>" } ?? ""
         html += """
         <div class="card">\
         <div class="spread"><div><h1>DeuceMate Match</h1>\
         <div class="sub">\(esc(vm.meta.dateDisplay)) · \(esc(vm.meta.formatLabel))</div></div>\
         <span class="badge \(me.result)">\(esc(resultLabel))</span></div>\
+        \(perspectiveNote)\
         <div class="spread" style="margin-top:10px"><div class="score">\(esc(me.scoreDisplay))</div>\
         <div class="sub">Points \(me.pointsWon)–\(me.pointsLost) · \(esc(vm.meta.durationDisplay))</div></div>\
         \(sets)</div>
@@ -101,6 +110,19 @@ extension MatchHTMLExporter {
             }
         }
         return html
+    }
+
+    // MARK: - Promo strip (mirrors the viewer's `promoCard`)
+
+    /// "Tracked with DeuceMate" + App Store / website links. User-clicked
+    /// navigations only — nothing loads until the reader taps one.
+    static func promoCard(_ p: MatchWebViewModel.Promo) -> String {
+        "<div class=\"card promo\"><div class=\"promo-text\"><div class=\"promo-t\">\(esc(p.title))</div>"
+            + "<div class=\"sub\">\(esc(p.blurb))</div></div><div class=\"promo-links\">"
+            + "<a class=\"promo-btn primary\" href=\"\(esc(p.appStoreURL))\" target=\"_blank\" rel=\"noopener\">"
+            + "\(esc(p.appStoreLabel))</a>"
+            + "<a class=\"promo-btn\" href=\"\(esc(p.websiteURL))\" target=\"_blank\" rel=\"noopener\">"
+            + "\(esc(p.websiteLabel))</a></div></div>"
     }
 
     // MARK: - Momentum chart cards
@@ -271,7 +293,7 @@ extension MatchHTMLExporter {
     // MARK: - Static momentum chart (mirrors MatchWebTemplate's JS buildSVG)
 
     /// An inline `<svg>` momentum chart: set bands, gridlines + Y labels, the two
-    /// cumulative step lines, and (optionally) a preset scatter overlay. Recorder-
+    /// cumulative step lines, and (optionally) a preset scatter overlay. Reader-
     /// framed; empty string when there are no points. Geometry matches the JS.
     static func staticChartSVG(_ vm: MatchWebViewModel, scatter: StaticChartScatter? = nil) -> String {
         let pts = vm.points

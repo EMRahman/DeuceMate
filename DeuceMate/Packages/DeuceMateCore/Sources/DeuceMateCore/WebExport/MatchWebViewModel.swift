@@ -4,10 +4,20 @@
 // self-contained HTML viewer renders from.
 //
 // ALL derivation lives here in tested Swift — the embedded browser JS only
-// paints what this produces. Heart-rate / steps / distance / calories are the
-// RECORDER's physiology and appear only in the `me` perspective + the
-// recorder-only `hr`/`steps`/`meta.totals` blocks; the `opponent` perspective is
-// HR-free (mirrors `MatchExporter`'s rule).
+// paints what this produces.
+//
+// READER-FRAMED: every "me" field means the person the file is for. The
+// recorder's own export (`perspective: .me`) is framed exactly as the iOS
+// archive; the opponent's export (`perspective: .opponent`) swaps every side so
+// its "Me" is the recorder's opponent — the result badge, scores, momentum
+// lines, points list and comparison all read from their side.
+//
+// Heart-rate / steps / distance / calories are always the RECORDER's
+// physiology, carried in the `hr`/`steps`/`meta.totals` blocks and on each
+// point. In the opponent's export they stay (labelled as the opponent's by the
+// viewer via `perspective`), but the HR-zone win rates and PulseCoach insights
+// are dropped: they pair the recorder's heart rate with the reader's results
+// (mirrors `MatchExporter`'s rule).
 import Foundation
 
 public struct MatchWebViewModel: Encodable, Sendable {
@@ -23,11 +33,18 @@ public struct MatchWebViewModel: Encodable, Sendable {
     /// replaces it with `matchScoreLabel` (completed sets + live set score).
     /// v8 adds each point's `isTiebreak` flag so regular and tiebreak chart
     /// bands can use the same distinct backgrounds as the iOS graph. v9 adds
-    /// server-attributed scatter counts and serving legend metadata.
-    public static let currentSchemaVersion = 10
+    /// server-attributed scatter counts and serving legend metadata. v11 adds
+    /// the top-level `perspective` + `meta.perspectiveNote` and makes every
+    /// "me" field reader-framed (the opponent's export swaps sides). v12 adds
+    /// the `promo` block (App Store + website links).
+    public static let currentSchemaVersion = 12
 
     public let schemaVersion: Int
     public let generatedAt: String
+    /// Whose file this is: `"me"` (the recorder) or `"opponent"`. Every "me"
+    /// field below is that reader's side; the viewer uses this only to label
+    /// the recorder's health data as "Opp" in the opponent's export.
+    public let perspective: String
     public let meta: Meta
     public let perspectives: Perspectives
     public let points: [PointVM]
@@ -49,6 +66,9 @@ public struct MatchWebViewModel: Encodable, Sendable {
     /// Present only when the caller supplies a prompt (the iOS share path does);
     /// `nil` for a bare `MatchHTMLExporter.html(for:)` with no prompt injected.
     public let aiCoach: AICoach?
+    /// "Tracked with DeuceMate" strip at the top of the page: App Store +
+    /// website links. Always present.
+    public let promo: Promo
 
     // MARK: - Nested types
 
@@ -61,14 +81,18 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public let durationSeconds: Int
         public let durationDisplay: String
         public let sets: [SetVM]
-        /// Recorder-only HealthKit totals; shown by the viewer only in `me` view.
+        /// The recorder's HealthKit totals (whichever perspective the file is).
         public let totals: Totals?
+        /// One line explaining the framing, shown under the header in the
+        /// opponent's export ("Me" is the reader there, not the recorder).
+        /// `nil` in the recorder's own export.
+        public let perspectiveNote: String?
     }
 
     public struct SetVM: Encodable, Sendable {
         public let setNumber: Int
-        public let scoreMe: String       // recorder-perspective score, e.g. "6–4" or "7–5 (7–3)"
-        public let scoreOpponent: String // opponent-perspective score (swapped)
+        public let scoreMe: String       // reader-perspective score, e.g. "6–4" or "7–5 (7–3)"
+        public let scoreOpponent: String // the other side's score (swapped)
         public let durationSeconds: Int
         public let durationDisplay: String?
     }
@@ -150,8 +174,8 @@ public struct MatchWebViewModel: Encodable, Sendable {
     public struct PointVM: Encodable, Sendable {
         public let index: Int            // 0-based match order
         public let setIndex: Int
-        public let server: String        // "me" | "opp" (recorder perspective)
-        public let winner: String        // "me" | "opp"
+        public let server: String        // "me" | "opp" (reader perspective)
+        public let winner: String        // "me" | "opp" (reader perspective)
         public let outcome: String       // PointOutcome raw value
         public let outcomeLabel: String
         public let outcomeColorHex: String
@@ -176,13 +200,13 @@ public struct MatchWebViewModel: Encodable, Sendable {
         /// Graph inspection includes the rally; Points history uses the start score.
         public let gameScoreAfterPointLabel: String?
         public let matchScoreAfterPointLabel: String?
-        /// Full recorder-perspective match score at the start of this point:
+        /// Full reader-perspective match score at the start of this point:
         /// completed prior sets plus the live score of this point's set.
         /// `nil` for legacy snapshots or when no segment is knowable.
         public let matchScoreLabel: String?
         public let cumulativeMe: Int
         public let cumulativeOpp: Int
-        public let heartRateBPM: Int?    // recorder's HR
+        public let heartRateBPM: Int?    // recorder's HR (whichever perspective)
         public let stepsCumulative: Int?
     }
 
@@ -201,7 +225,7 @@ public struct MatchWebViewModel: Encodable, Sendable {
             public let pointIndex: Int
             public let bpm: Int
             public let setIndex: Int
-            public let wonByMe: Bool
+            public let wonByMe: Bool     // won by the reader
         }
         public struct Zone: Encodable, Sendable {
             public let label: String
@@ -212,6 +236,7 @@ public struct MatchWebViewModel: Encodable, Sendable {
             public let colorHex: String
         }
         public let timeline: [Sample]
+        /// Recorder's HR-zone win rates; empty in the opponent's export.
         public let zones: [Zone]
         public let resolvedMaxHR: Int
     }
@@ -285,6 +310,17 @@ public struct MatchWebViewModel: Encodable, Sendable {
         }
     }
 
+    // MARK: - Promo (where to get DeuceMate)
+
+    public struct Promo: Encodable, Sendable {
+        public let title: String
+        public let blurb: String
+        public let appStoreLabel: String
+        public let appStoreURL: String
+        public let websiteLabel: String
+        public let websiteURL: String
+    }
+
     // MARK: - TV-style comparison (mirrors MatchDetailView's split-bar stats)
 
     public struct Comparison: Encodable, Sendable {
@@ -320,12 +356,18 @@ public struct MatchWebViewModel: Encodable, Sendable {
     // MARK: - Builder
 
     /// Build the view model for one match. `maxHR` is used for HR-zone bucketing
-    /// (recorder-only). Both `me` and `opponent` perspectives are computed.
-    /// `aiPromptMe` / `aiPromptOpponent` are the pre-generated AI coaching prompts
-    /// (from `MatchExporter`); supply them to surface the AI Coach card.
+    /// (recorder-only). `perspective` is who the file is for: `.me` (the
+    /// recorder, the default) or `.opponent`, whose export swaps every side.
+    /// `aiPromptMe` / `aiPromptOpponent` are the pre-generated recorder- and
+    /// opponent-perspective AI coaching prompts (from `MatchExporter`); supply
+    /// them to surface the AI Coach card. The opponent's export offers only
+    /// `aiPromptOpponent`.
     public nonisolated static func make(from record: MatchRecord, maxHR: Int = 190,
+                                        perspective: Player = .me,
                                         aiPromptMe: String? = nil,
                                         aiPromptOpponent: String? = nil) -> MatchWebViewModel {
+        let reader = perspective
+        let other: Player = reader == .me ? .opponent : .me
         let allStats = record.stats
         let hasStats = !allStats.isEmpty
         let categorized = allStats.filter { $0.outcome != .uncategorized }
@@ -353,28 +395,35 @@ public struct MatchWebViewModel: Encodable, Sendable {
             isDoubles: record.matchType == .doubles,
             durationSeconds: Int(durationSecs),
             durationDisplay: durationSecs > 0 ? Self.minutesString(durationSecs) : "—",
-            sets: Self.setRows(record),
-            totals: Self.totals(record)
+            sets: Self.setRows(record, reader: reader),
+            totals: Self.totals(record),
+            perspectiveNote: reader == .opponent ? Self.opponentPerspectiveNote : nil
         )
 
-        // Perspectives
+        // Perspectives — `me` is the reader, `opponent` the other side.
+        func summaries(_ p: Player) -> (full: MatchStatsSummary, categorized: MatchStatsSummary) {
+            p == .me ? (fullMe, catMe) : (fullOpp, catOpp)
+        }
         let me = Self.perspective(
-            record: record, focal: .me, full: fullMe, categorized: catMe,
+            record: record, focal: reader, reader: reader,
+            full: summaries(reader).full, categorized: summaries(reader).categorized,
             hasStats: hasStats, hasOutcomes: hasOutcomes, mixed: mixed,
             categorizedCount: categorized.count, totalCount: allStats.count
         )
         let opponent = Self.perspective(
-            record: record, focal: .opponent, full: fullOpp, categorized: catOpp,
+            record: record, focal: other, reader: reader,
+            full: summaries(other).full, categorized: summaries(other).categorized,
             hasStats: hasStats, hasOutcomes: hasOutcomes, mixed: mixed,
             categorizedCount: categorized.count, totalCount: allStats.count
         )
 
         // Points + set bands
-        let points = Self.pointRows(record)
+        let points = Self.pointRows(record, reader: reader)
         let setBands = Self.setBands(points)
 
-        // Recorder-only HR / steps blocks (from the `me` full summary).
-        let hrBlock = Self.hrBlock(fullMe)
+        // The recorder's HR / steps blocks (HR from the recorder's full
+        // summary; zone win rates only in the recorder's own export).
+        let hrBlock = Self.hrBlock(fullMe, reader: reader)
         let stepsBlock = Self.stepsBlock(stats: allStats, totalSteps: record.totalSteps)
 
         let palette = Palette(
@@ -406,13 +455,17 @@ public struct MatchWebViewModel: Encodable, Sendable {
         // TV-style comparison, points-won header, and duration/activity rows —
         // matches MatchDetailView's set picker recomputing meSummary/oppSummary
         // over the filtered stats.
-        let filters = Self.buildFilters(record, maxHR: maxHR)
+        let filters = Self.buildFilters(record, maxHR: maxHR, reader: reader)
         let setLabels = record.setScores.indices.map { Self.setLabel(record, $0) }
-        let aiCoach = Self.buildAICoach(mePrompt: aiPromptMe, opponentPrompt: aiPromptOpponent)
+        // The opponent's export offers only their own prompt (no toggle).
+        let aiCoach = reader == .me
+            ? Self.buildAICoach(mePrompt: aiPromptMe, opponentPrompt: aiPromptOpponent)
+            : Self.buildAICoach(mePrompt: aiPromptOpponent, opponentPrompt: nil)
 
         return MatchWebViewModel(
             schemaVersion: currentSchemaVersion,
             generatedAt: Self.isoFormatter.string(from: Date()),
+            perspective: reader == .me ? "me" : "opponent",
             meta: meta,
             perspectives: Perspectives(me: me, opponent: opponent),
             points: points,
@@ -422,7 +475,8 @@ public struct MatchWebViewModel: Encodable, Sendable {
             palette: palette,
             filters: filters,
             setLabels: setLabels,
-            aiCoach: aiCoach
+            aiCoach: aiCoach,
+            promo: Self.promo
         )
     }
 }

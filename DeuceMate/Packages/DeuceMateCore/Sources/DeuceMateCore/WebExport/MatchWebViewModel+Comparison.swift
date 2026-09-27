@@ -2,7 +2,8 @@
 // comparison the self-contained HTML viewer renders as split bars. A faithful,
 // pure mirror of `MatchDetailView`'s comparison sections (same titles, order,
 // gating, and percent/count/ratio rows), so the web export and the iOS archive
-// detail read the same. Recorder-framed: "Me" is always the recorder.
+// detail read the same. Reader-framed: "Me" is whoever the file is for — the
+// recorder in their own export, the recorder's opponent in the opponent's.
 //
 // Both summaries are computed over the *full* (unfiltered) match — exactly like
 // MatchDetailView's `meSummary`/`oppSummary` (setFilter == .all). Outcome tallies
@@ -18,10 +19,12 @@ extension MatchWebViewModel {
     /// `All` plus one filter per set, each with the comparison / points-won /
     /// duration for that scope — mirrors `availableSetFilters` recomputing
     /// `meSummary`/`oppSummary` over `filteredStats`.
-    static func buildFilters(_ record: MatchRecord, maxHR: Int) -> [FilterVM] {
-        var out: [FilterVM] = [filterView(record, key: "all", label: "All", setIndex: nil, maxHR: maxHR)]
+    static func buildFilters(_ record: MatchRecord, maxHR: Int, reader: Player) -> [FilterVM] {
+        var out: [FilterVM] = [filterView(record, key: "all", label: "All", setIndex: nil,
+                                          maxHR: maxHR, reader: reader)]
         for i in record.setScores.indices {
-            out.append(filterView(record, key: "set-\(i)", label: setLabel(record, i), setIndex: i, maxHR: maxHR))
+            out.append(filterView(record, key: "set-\(i)", label: setLabel(record, i), setIndex: i,
+                                  maxHR: maxHR, reader: reader))
         }
         return out
     }
@@ -31,16 +34,17 @@ extension MatchWebViewModel {
     }
 
     private static func filterView(_ record: MatchRecord, key: String, label: String,
-                                   setIndex: Int?, maxHR: Int) -> FilterVM {
+                                   setIndex: Int?, maxHR: Int, reader: Player) -> FilterVM {
         let stats = setIndex.map { idx in record.stats.filter { $0.setIndex == idx } } ?? record.stats
-        let meFull  = MatchStatsSummary(stats: stats, focal: .me,
+        let other: Player = reader == .me ? .opponent : .me
+        let meFull  = MatchStatsSummary(stats: stats, focal: reader,
                                         setElapsedSeconds: record.setElapsedSeconds, maxHR: maxHR)
-        let oppFull = MatchStatsSummary(stats: stats, focal: .opponent,
+        let oppFull = MatchStatsSummary(stats: stats, focal: other,
                                         setElapsedSeconds: record.setElapsedSeconds, maxHR: maxHR)
         return FilterVM(
             key: key, label: label,
             pointsWon: pointsWonVM(meFull),
-            durationRows: durationRows(record, setIndex: setIndex),
+            durationRows: durationRows(record, setIndex: setIndex, reader: reader),
             comparison: buildComparison(meFull: meFull, oppFull: oppFull)
         )
     }
@@ -56,7 +60,8 @@ extension MatchWebViewModel {
     /// Duration row(s) + Steps/Calories for a filter (mirrors `setDurationRows`
     /// plus the Stats-tab Steps/Calories). Steps/Calories are prorated per set by
     /// `SetActivitySplit` when a single set is selected; whole-match totals for `All`.
-    private static func durationRows(_ record: MatchRecord, setIndex: Int?) -> [LabeledValue] {
+    private static func durationRows(_ record: MatchRecord, setIndex: Int?,
+                                     reader: Player) -> [LabeledValue] {
         var rows: [LabeledValue] = []
         let indices: [Int] = setIndex.map { [$0] } ?? Array(record.setScores.indices)
         for i in indices {
@@ -70,8 +75,12 @@ extension MatchWebViewModel {
                                      totalSteps: record.totalSteps, totalCaloriesKcal: record.totalCaloriesKcal)
         let steps = setIndex.map { split.steps[$0] } ?? record.totalSteps
         let kcal  = setIndex.map { split.calories[$0] } ?? record.totalCaloriesKcal
-        if let s = steps, s > 0 { rows.append(LabeledValue(label: "Steps", value: s.formatted())) }
-        if let k = kcal, k > 0 { rows.append(LabeledValue(label: "Calories", value: MatchRecord.formattedCalories(k))) }
+        // Steps/Calories are the recorder's — the opponent's reader sees "Opp".
+        let owner = reader == .me ? "" : "Opp "
+        if let s = steps, s > 0 { rows.append(LabeledValue(label: owner + "Steps", value: s.formatted())) }
+        if let k = kcal, k > 0 {
+            rows.append(LabeledValue(label: owner + "Calories", value: MatchRecord.formattedCalories(k)))
+        }
         return rows
     }
 

@@ -45,11 +45,16 @@ public enum SetScoreLabel {
 }
 
 public enum GameScoreLabel {
-    /// Formats a point's pre-point game score in the recorder's Me–Opponent
-    /// frame. `GameScoreSnapshot` is stored Server–Returner, so every caller
-    /// must supply the side that served the point.
-    public static func string(for snapshot: GameScoreSnapshot, server: Player) -> String {
-        let points = snapshot.recorderOriented(server: server)
+    /// Formats a point's pre-point game score in `focal`'s Me–Opponent frame
+    /// (the recorder's by default). `GameScoreSnapshot` is stored
+    /// Server–Returner, so every caller must supply the side that served the
+    /// point. With `focal: .opponent`, "Me" is the recorder's opponent.
+    public static func string(for snapshot: GameScoreSnapshot, server: Player,
+                              focal: Player = .me) -> String {
+        let recorder = snapshot.recorderOriented(server: server)
+        let points = focal == .me
+            ? recorder
+            : (me: recorder.opponent, opponent: recorder.me)
         if snapshot.isTiebreak {
             return "\(points.me)–\(points.opponent)"
         }

@@ -9,13 +9,17 @@ import Foundation
 
 public enum MatchHTMLExporter {
 
-    /// The complete self-contained HTML page for `record`. Pass the pre-generated
-    /// AI coaching prompts (`MatchExporter.aiPromptExport`) to surface the AI
-    /// Coach card; omit them for a prompt-free page.
+    /// The complete self-contained HTML page for `record`, framed for
+    /// `perspective`: `.me` is the recorder's own page, `.opponent` the page to
+    /// send the opponent (every side swapped, so it says they won when they
+    /// did). Pass the pre-generated AI coaching prompts
+    /// (`MatchExporter.aiPromptExport`) to surface the AI Coach card; omit them
+    /// for a prompt-free page.
     public nonisolated static func html(for record: MatchRecord, maxHR: Int = 190,
+                                        perspective: Player = .me,
                                         aiPromptMe: String? = nil,
                                         aiPromptOpponent: String? = nil) -> String {
-        let vm = MatchWebViewModel.make(from: record, maxHR: maxHR,
+        let vm = MatchWebViewModel.make(from: record, maxHR: maxHR, perspective: perspective,
                                         aiPromptMe: aiPromptMe, aiPromptOpponent: aiPromptOpponent)
         let json = encode(vm)
         return MatchWebTemplate.page(jsonLiteral: json, fallbackHTML: staticFallback(vm))

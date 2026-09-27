@@ -214,7 +214,7 @@ The four gated surfaces:
 |---|---|---|
 | **Manual archive** (Settings → Backup & Transfer) | `SettingsView` `.alert` → `.fileExporter` → `ManualMatchArchiveBackup` | Raw records; carries HR/steps/distance/calories but never derived zones |
 | **Text summary / full report** | `MatchDetailView.beginShare` → "Share health data?" `.alert` → `ShareSheet` | HR / zones / PulseCoach / movement are `focal == .me` only; step/calorie/distance totals appear for both perspectives when > 0; per-point HR/steps only via the raw-point table |
-| **Interactive HTML page** | `MatchDetailView.beginShare` (same gate) | HR/steps blocks built from the recorder summary only |
+| **Interactive HTML page** | `MatchDetailView.beginShare` (same gate; `.me` for My Perspective, `.opponent` + raw points for Opponent's Perspective) | HR/steps blocks built from the recorder summary only; the opponent's page keeps per-point HR/steps and totals (labelled "Opp") but drops zones and PulseCoach |
 | **AI Coach hand-off** | `MatchDetailView.beginAICoach` — gated **at sheet entry**, so every launch/copy/share inside `AICoachSheet` sits behind one affirmative step | Recorder HR; opponent prompt tells the AI the HR/steps belong to the recorder |
 
 **Recorder-only rule (why it matters):** heart rate belongs to the person wearing
@@ -250,8 +250,8 @@ export output agrees with what `presentFields` promises.
   five fields and flags `includesHealthData` for the disclosure preview.
 - `HealthExportConsentTests` (Core) — `presentFields` per perspective (zones
   recorder-only; zero totals excluded; empty ⇒ skip); disclosure copy fidelity and
-  recipient clauses; agreement between `presentFields(.me)` and the recorder-framed
-  **HTML** export.
+  recipient clauses; agreement between `presentFields(.me)` / `presentFields(.opponent)`
+  and the recorder's / opponent's **HTML** export.
 - `MatchExporterTests` (iOS target) — the plain-text / AI-prompt exporter's health
   content: recorder-only HR/zones/movement, both-perspective totals only when > 0,
   per-point HR/steps only via the raw table, the opponent-prompt disclaimer, and
