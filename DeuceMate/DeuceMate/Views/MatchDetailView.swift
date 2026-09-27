@@ -30,10 +30,11 @@ struct MatchDetailView: View {
     @State private var exportSummaryOpp: String = ""
     @State private var exportFullOpp: String = ""
     @State private var exportAIOpp: String = ""
-    /// Temp-file URL of the self-contained interactive HTML export, shared as a
-    /// file (both perspectives live inside it behind a toggle, so it is a single
-    /// entry rather than per-perspective). Built once in `.task`.
+    /// Temp-file URLs of the self-contained interactive HTML exports, shared as
+    /// files: one framed for me, one framed for the opponent (their "Me", so it
+    /// says they won when they did). Built once in `.task`.
     @State private var htmlExportURL: URL?
+    @State private var htmlExportURLOpp: URL?
     @State private var showAICoachSheet: Bool = false
     /// A user action (a share, or the AI Coach hand-off) whose payload carries
     /// HealthKit-derived data, awaiting the per-export disclosure. Non-nil ⇒ the
@@ -359,14 +360,35 @@ struct MatchDetailView: View {
         return "deuce_mate_\(f.string(from: record.startTime))\(suffix).txt"
     }
 
-    /// Filename for the interactive HTML export (single file, both perspectives).
+    /// Filename for the interactive HTML export framed for `perspective`.
     /// Includes the match start time so same-day matches don't collide in the
     /// temporary directory. POSIX locale keeps the format deterministic.
-    private var htmlExportFilename: String {
+    private func htmlExportFilename(for perspective: Player) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd_HHmm"
-        return "deuce_mate_\(f.string(from: record.startTime)).html"
+        let suffix = perspective == .opponent ? "_opponent" : ""
+        return "deuce_mate_\(f.string(from: record.startTime))\(suffix).html"
+    }
+
+    /// Generate the interactive HTML framed for `perspective` and stage it in
+    /// the temporary directory. The page carries the full match record,
+    /// including HealthKit-derived values, so the staged file gets the same
+    /// data-at-rest class as the canonical archive. `nil` if the write fails.
+    nonisolated private static func stageHTMLExport(
+        record: MatchRecord, maxHR: Int, perspective: Player,
+        aiPromptMe: String, aiPromptOpponent: String?, filename: String
+    ) -> URL? {
+        let html = MatchHTMLExporter.html(for: record, maxHR: maxHR, perspective: perspective,
+                                          aiPromptMe: aiPromptMe, aiPromptOpponent: aiPromptOpponent)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        do {
+            try Data(html.utf8).write(
+                to: url,
+                options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+            )
+            return url
+        } catch { return nil }
     }
 
     var body: some View {
@@ -618,37 +640,32 @@ struct MatchDetailView: View {
             guard exportSummary.isEmpty else { return }
             let record = record
             let maxHR = resolvedMaxHR
-            let filename = htmlExportFilename
+            let filename = htmlExportFilename(for: .me)
+            let filenameOpp = htmlExportFilename(for: .opponent)
             let ntrp = playerNTRP
             async let summary    = Task.detached { MatchExporter.summaryExport(for: record, maxHR: maxHR, focal: .me)       }.value
             async let full       = Task.detached { MatchExporter.fullExport(for: record,    maxHR: maxHR, focal: .me)       }.value
             async let summaryOpp = Task.detached { MatchExporter.summaryExport(for: record, maxHR: maxHR, focal: .opponent) }.value
             async let fullOpp    = Task.detached { MatchExporter.fullExport(for: record,    maxHR: maxHR, focal: .opponent) }.value
-            // Generate AND write the interactive HTML off the main thread so the
-            // ~30–80 KB file write never stutters the UI. The AI coaching prompts
-            // (same builder as the AI Coach sheet) are embedded so the shared page
-            // offers the same one-tap coaching launch.
-            async let htmlURL    = Task.detached { () -> URL? in
+            // Generate AND write both interactive HTML files (mine + the
+            // opponent's) off the main thread so the ~30–80 KB file writes never
+            // stutter the UI. The AI coaching prompts (same builder as the AI
+            // Coach sheet) are embedded so the shared page offers the same
+            // one-tap coaching launch; the opponent's page offers only theirs.
+            async let htmlURLs   = Task.detached { () -> (URL?, URL?) in
                 let aiMe  = MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .me, playerNTRP: ntrp)
                 let aiOpp = record.stats.isEmpty
                     ? nil
                     : MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .opponent, playerNTRP: ntrp)
-                let h = MatchHTMLExporter.html(for: record, maxHR: maxHR, aiPromptMe: aiMe, aiPromptOpponent: aiOpp)
-                let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-                // The shared page carries the full match record, including
-                // HealthKit-derived values, so the staged file gets the same
-                // data-at-rest class as the canonical archive.
-                do {
-                    try Data(h.utf8).write(
-                        to: url,
-                        options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
-                    )
-                    return url
-                } catch { return nil }
+                let mine = Self.stageHTMLExport(record: record, maxHR: maxHR, perspective: .me,
+                                                aiPromptMe: aiMe, aiPromptOpponent: aiOpp, filename: filename)
+                let theirs = Self.stageHTMLExport(record: record, maxHR: maxHR, perspective: .opponent,
+                                                  aiPromptMe: aiMe, aiPromptOpponent: aiOpp, filename: filenameOpp)
+                return (mine, theirs)
             }.value
-            let (s, f, so, fo, url) = await (summary, full, summaryOpp, fullOpp, htmlURL)
+            let (s, f, so, fo, urls) = await (summary, full, summaryOpp, fullOpp, htmlURLs)
             exportSummary = s; exportFull = f; exportSummaryOpp = so; exportFullOpp = fo
-            htmlExportURL = url
+            (htmlExportURL, htmlExportURLOpp) = urls
         }
         .task(id: "\(playerNTRP)-\(resolvedMaxHR)") {
             let record = record
@@ -678,17 +695,27 @@ struct MatchDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if !exportSummary.isEmpty {
                     Menu {
-                        if let htmlExportURL {
+                        if htmlExportURL != nil || htmlExportURLOpp != nil {
                             Section {
-                                Button {
-                                    // Recorder-framed export (HR/steps are the
-                                    // recorder's), so disclose as `.me` + full.
-                                    beginShare(items: [htmlExportURL], focal: .me, includesRawPoints: true)
+                                Menu {
+                                    // Each page carries the per-point HR/steps, so
+                                    // disclose as that perspective + raw points.
+                                    if let htmlExportURL {
+                                        Button("My Perspective") {
+                                            beginShare(items: [htmlExportURL], focal: .me, includesRawPoints: true)
+                                        }
+                                    }
+                                    if let htmlExportURLOpp {
+                                        Button("Opponent's Perspective") {
+                                            beginShare(items: [htmlExportURLOpp], focal: .opponent,
+                                                       includesRawPoints: true)
+                                        }
+                                    }
                                 } label: {
                                     Label("Interactive Web Page", systemImage: "safari")
                                 }
                             } header: {
-                                Text("Interactive (both perspectives)")
+                                Text("Interactive")
                             }
                         }
                         Section {
