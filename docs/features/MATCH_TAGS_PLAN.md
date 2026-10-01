@@ -10,8 +10,8 @@ hard_findings:
   - "MatchMergePolicy.resolve case 4 (both completed) keeps `incomingEnd >= existingEnd ? incoming : existing` (MatchMergePolicy.swift:42). The watch's copy of a finished match has the SAME endTime as the phone's, so the next full-history push (Sync Now, requestFullHistory, ping) replaces the phone's tagged record with the watch's untagged one. `fillingMissingHealthData` backfills only health. Tags MUST merge separately — PR 1 lands before any UI can write a tag."
   - "Three other merge sites have the same shape: ArchiveBackupPolicy.resolveBackup (initial iCloud restore), ManualMatchArchiveBackup.importSnapshot(.merge) (via resolve) and the watch's `.singleMatch` handler (via resolve). WatchMirror.merged replaces by id but is a display mirror of the watch's own copy."
   - "Mixed versions are routine (watch and phone update separately). MatchRecord's custom init(from:) ignores unknown keys, so an old build decodes a tagged record — but re-encodes it WITHOUT tags. So `tags == nil` must mean 'no information', never 'cleared'. Clearing is an empty MatchTags with a newer updatedAt."
-  - "`MatchType` already exists and means singles/doubles (ScoreTypes.swift:11, rendered as `matchTypeLabel` in the HTML export). Friendly/League/Tournament needs a different name: `MatchCompetition`."
-  - "A new persisted enum is additive-only forever (CLAUDE.md §4, TECHNICAL_DEBT #18) and a value an older build doesn't know fails the WHOLE [MatchRecord] decode (#19). MatchCompetition is stored as a raw string and exposed as an optional typed value, so a future case degrades to 'unknown' instead of blanking an archive."
+  - "`MatchType` already exists and means singles/doubles (ScoreTypes.swift:11, rendered as `matchTypeLabel` in the HTML export). Friendly/League/Tournament needs a different name: `CompetitionType`."
+  - "A new persisted enum is additive-only forever (CLAUDE.md §4, TECHNICAL_DEBT #18) and a value an older build doesn't know fails the WHOLE [MatchRecord] decode (#19). CompetitionType is stored as a raw string and exposed as an optional typed value, so a future case degrades to 'unknown' instead of blanking an archive."
   - "Sending a full record to the watch to update tags would go through the `.singleMatch` handler, which calls `onCompletedMatchReceived` → `completeCurrentMatchIfMatching` (DeuceMateApp.swift:60). A dedicated `matchTagsUpdate` wire key avoids that side effect, is tiny, and older watch builds already ignore unknown keys."
 scope:
   in_scope:
@@ -48,7 +48,7 @@ decisions: [OQ-1 UI label is 'Competition Type', OQ-2 names in shared reports ON
 | Where you edit | **iOS** match detail, completed matches only. Watch is read-only in v1. | Typing names on a 45 mm screen is slow; the phone is where the archive is reviewed. |
 | "Selectable later" | A **roster derived from the archive** — every distinct tagged player, most recent first. | Nothing extra to persist or sync; deleting a player's last match removes them naturally; rename/forget are bulk edits over records. |
 | Identity | Each player is `{id: UUID, name}`; the id is minted once and reused when picked from the roster. | Two different "Alex"es stay separate; a rename updates every match. |
-| Competition Type | `MatchCompetition`: `friendly`, `league`, `tournament`, `practice`; shown in the UI as **"Competition Type"** | Not `MatchType` — that name is taken by singles/doubles. |
+| Competition Type | `CompetitionType`: `friendly`, `league`, `tournament`, `practice`; shown in the UI as **"Competition Type"** | Not `MatchType` — that name is taken by singles/doubles. |
 | Sync | Tags merge by their own `updatedAt` clock, independent of the record body; edits go to the watch on a new `matchTagsUpdate` key. | Today's merge would silently delete tags (§3). |
 | AI prompt | Competition + head-to-head record **always**; real names **only if the user opts in**, default off. | Names add nothing to coaching quality and are third-party personal data going to an AI service. |
 | Shared reports | Names + competition in the header; filenames never contain names. | The recipient is often the opponent — the name is the point. |
@@ -118,7 +118,7 @@ public struct TaggedPlayer: Codable, Equatable, Hashable, Sendable {
     public var name: String            // sanitized display snapshot
 }
 
-public enum MatchCompetition: String, CaseIterable, Sendable {
+public enum CompetitionType: String, CaseIterable, Sendable {
     case friendly, league, tournament, practice
     public var displayLabel: String { … }
 }
@@ -128,10 +128,10 @@ public struct MatchTags: Codable, Equatable, Sendable {
     public var partner: TaggedPlayer?      // doubles only
     /// Raw storage so an unknown future case round-trips instead of failing
     /// the whole archive decode on an older build (TECHNICAL_DEBT #18/#19).
-    public var competitionRaw: String?
-    public var competition: MatchCompetition? {
-        get { competitionRaw.flatMap(MatchCompetition.init(rawValue:)) }
-        set { competitionRaw = newValue?.rawValue }
+    public var competitionTypeRaw: String?
+    public var competitionType: CompetitionType? {
+        get { competitionTypeRaw.flatMap(CompetitionType.init(rawValue:)) }
+        set { competitionTypeRaw = newValue?.rawValue }
     }
     public var updatedAt: Date             // tag-only last-write-wins clock
     public var isEmpty: Bool { … }
@@ -140,7 +140,7 @@ public struct MatchTags: Codable, Equatable, Sendable {
 }
 ```
 
-`MatchCompetition` deliberately is **not** `Codable` itself: nothing persists
+`CompetitionType` deliberately is **not** `Codable` itself: nothing persists
 the enum, only its raw string. That makes it the first persisted value in the
 repo that is forward-compatible by construction rather than by review.
 
@@ -154,8 +154,8 @@ defaults for every field from day one, so later additions follow §4 of
 2. memberwise `init(…, tags: MatchTags? = nil)`
 3. `tags = try c.decodeIfPresent(MatchTags.self, forKey: .tags)`
 4. `MatchRecordCodingTests`: round-trip, old JSON without `tags`, a record
-   whose `competitionRaw` is `"practice"` (unknown) decoding with
-   `competition == nil` and re-encoding the raw value unchanged.
+   whose `competitionTypeRaw` is `"ladder"` (unknown) decoding with
+   `competitionType == nil` and re-encoding the raw value unchanged.
 
 `strippingHealthData()` leaves tags alone (not HealthKit-derived), so they are
 in the iCloud backup copy; `HealthSidecarPolicy` is unaffected.
@@ -299,7 +299,7 @@ Mixed-version behaviour, checked:
 |---|---|---|
 | AI Coach prompt (`MatchExporter.aiPromptExport`) | `## Match Context`: competition, singles/doubles, head-to-head ("vs this opponent: 3–2 in 5 matches; last 3: W W L") | **Off by default.** "Include player names" toggle on `AICoachSheet`; off ⇒ "Opponent", "Partner". |
 | Text summary / full export | Overview lines: Competition, Opponent(s), Partner | On by default (OQ-2, decided). |
-| Interactive HTML | `Meta.competitionLabel`, `Meta.readerSideNames`, `Meta.otherSideNames` — **reader-framed in Swift** like every other field, so the JS only paints; schema 12 → 13; same lines in `MatchWebStaticFallback` | On by default (OQ-2, decided). |
+| Interactive HTML | `Meta.competitionTypeLabel`, `Meta.readerSideNames`, `Meta.otherSideNames` — **reader-framed in Swift** like every other field, so the JS only paints; schema 12 → 13; same lines in `MatchWebStaticFallback` | On by default (OQ-2, decided). |
 | Filenames (`deuce_mate_<date>[_opponent].html`) | unchanged | **Never.** |
 | Spoken announcements | unchanged | **Never** (v1). |
 
@@ -398,14 +398,14 @@ head-to-head card per player.
 ## 11. Decisions (owner, 2026-10-01)
 
 - **OQ-1 — UI label: "Competition Type"** (Friendly / League / Tournament /
-  Practice). "Match Type" stays singles/doubles. The Core type remains
-  `MatchCompetition`; the HTML field is `Meta.competitionLabel`, rendered under a
-  "Competition Type" heading.
+  Practice). "Match Type" stays singles/doubles. Code uses the same name: the Core
+  type is `CompetitionType` (property `MatchTags.competitionType`, raw storage
+  `competitionTypeRaw`), and the HTML field is `Meta.competitionTypeLabel`.
 - **OQ-2 — names in shared reports: on by default**, with an "Include player
   names" toggle in the share menu. The AI prompt stays off by default regardless.
 - **OQ-3 — iPhone-only editing in v1.** The watch shows tags read-only; watch
   quick-tag stays v2 (§9).
-- **OQ-4 — "Practice" is in v1** as the fourth `MatchCompetition` case. It goes
+- **OQ-4 — "Practice" is in v1** as the fourth `CompetitionType` case. It goes
   into the raw-value pin test from day one like the other three.
 
 ### 11.1 Defaults confirmed as proposed
