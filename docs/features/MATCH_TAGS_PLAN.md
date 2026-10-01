@@ -16,7 +16,7 @@ hard_findings:
 scope:
   in_scope:
     - "Core: Models/MatchTags.swift (new), MatchRecord.tags, MatchMergePolicy + ArchiveBackupPolicy tag merge, Stats/PlayerRoster.swift + HeadToHead (new, derived), MatchSyncKey.matchTagsUpdate + payload builder + SyncIncomingPayload event"
-    - "iOS: tag editor + player picker on MatchDetailView, archive-row subtitle, ManualMatchEntryView fields, PhoneStatsStore.updateTags, rename/forget player, push tags to the watch"
+    - "iOS: tag editor + player picker on MatchDetailView, archive-row subtitle, PhoneStatsStore.updateTags, rename/forget player, push tags to the watch with manifest/history reconciliation (§6.1)"
     - "Watch: persist incoming tags (StatsStore, same serial queue), show them in MatchHistoryView / MatchStatsView"
     - "Exports: AI prompt 'Match Context' section + head-to-head, text export overview lines, HTML meta (schema 13) + static fallback"
     - "docs/website/privacy.html, docs/release/APP_STORE_METADATA.md, docs/architecture/* — in the PRs that ship the behaviour, not in this plan PR"
@@ -26,6 +26,7 @@ scope:
     - "Free-text event / club / venue names — not asked for, adds location-like data"
     - "Contacts framework integration — a permission and a privacy surface for no real gain"
     - "Tagging in-progress matches — v1 tags completed records only (the merge rule copes either way)"
+    - "Tag fields in ManualMatchEntryView — it only ever builds an in-progress record (endTime: nil, iWon: nil), so tags there would contradict the completed-only rule. A manually entered match is tagged from MatchDetailView once it is completed (on the watch, or via End at Current Score)."
 open_questions: [OQ-1 UI label for competition, OQ-2 names in shared reports default, OQ-3 watch editing in v1 or v2, OQ-4 'Practice' as a fourth competition]
 -->
 
@@ -44,7 +45,7 @@ open_questions: [OQ-1 UI label for competition, OQ-2 names in shared reports def
 | Decision | Choice | Why |
 |---|---|---|
 | Where tags live | One optional `tags: MatchTags?` on `MatchRecord` | Travels with the match through every existing path (sync, iCloud backup, manual archive) with no new store to back up, tombstone or restore. |
-| Where you edit | **iOS** (match detail + manual entry). Watch is read-only in v1. | Typing names on a 45 mm screen is slow; the phone is where the archive is reviewed. |
+| Where you edit | **iOS** match detail, completed matches only. Watch is read-only in v1. | Typing names on a 45 mm screen is slow; the phone is where the archive is reviewed. |
 | "Selectable later" | A **roster derived from the archive** — every distinct tagged player, most recent first. | Nothing extra to persist or sync; deleting a player's last match removes them naturally; rename/forget are bulk edits over records. |
 | Identity | Each player is `{id: UUID, name}`; the id is minted once and reused when picked from the roster. | Two different "Alex"es stay separate; a rename updates every match. |
 | Competition | `MatchCompetition`: `friendly`, `league`, `tournament` | Not `MatchType` — that name is taken by singles/doubles. |
@@ -205,7 +206,7 @@ match and opponent in another — one id, one roster row.
 record carrying that id, bumping each `updatedAt`), merge two duplicates
 (rewrite id B → A), and **Forget player** (remove from every record). Each is
 a single `PhoneStatsStore` mutation through `adoptOnQueue`, followed by tag
-pushes for the ids the watch manifest says it holds.
+pushes for every affected id the watch holds (§6.1).
 
 ## 6. Sync
 
@@ -222,8 +223,11 @@ public static let matchTagsUpdate = "matchTagsUpdate"
   `MatchSyncRoundTripTests`.
 - Sent with `queueOnFailure: true` (`transferUserInfo`) — it is small and
   must survive the watch being away.
-- Phone sends it only when the watch manifest contains the id. "Sync to
-  Watch" of a tagged record needs nothing new: the record carries its tags.
+- Phone sends it at edit time when `PhoneMatchSyncService.onWatchIDs`
+  contains the id (that set includes optimistic ids from records just
+  received, not only the last manifest, which can lag). An edit-time send is
+  best-effort; §6.1 is what guarantees delivery. "Sync to Watch" of a tagged
+  record needs nothing new: the record carries its tags.
 - **Watch:** new `StatsStore.updateTags(id:tags:) -> Bool` that reads, merges
   and writes on the store's serial queue and bails when history is unreadable
   (the CLAUDE.md "read failure ≠ empty archive" rule). Do **not** route it
@@ -234,11 +238,36 @@ public static let matchTagsUpdate = "matchTagsUpdate"
 - It is not a setting: no `UserDefaults`, so the §0 settings-key grep is
   unaffected.
 
+### 6.1 Reconciliation — eventual delivery to the watch
+
+An edit-time send alone can be skipped for good: the edit can land while the
+manifest still lags a record the watch already holds, or the watch can be an
+older build that ignores `matchTagsUpdate` and is upgraded later. Nothing would
+ever resend. So the phone also reconciles, triggered by the two signals that
+say what the watch actually holds:
+
+1. **Watch record bodies** (`.history`, `.singleMatch`). Each carries the
+   watch's own copy of the tags. After the merge, any id whose archive tags
+   are newer than the incoming copy's (`nil` counts as oldest) gets a
+   `matchTagsUpdate`. This is the precise "watch is behind" signal, and it is
+   what heals an upgraded watch: its first history push after the upgrade
+   still has no tags.
+2. **Manifest arrival.** For ids that are in the new manifest but were not in
+   the previous one, send the archive's tags if they are non-empty. This
+   covers an edit made during the manifest lag.
+
+Both checks are a pure Core function,
+`MatchTags.pendingWatchUpdates(archive:watchCopies:newlyHeld:) -> [MatchTagsUpdate]`,
+tested in `MatchTagsTests`. Resends are idempotent (the watch merges by
+`updatedAt`). Diffing the manifest rather than re-sending on every arrival
+matters: the watch sends a manifest with every live checkpoint, so a naive
+"resend all held tags" would add up to 25 payloads per point during play.
+
 Mixed-version behaviour, checked:
 
 | Phone | Watch | Result |
 |---|---|---|
-| new | old | watch ignores the unknown key; its history pushes carry no `tags` → merge keeps the phone's. |
+| new | old | watch ignores the unknown key; its history pushes carry no `tags` → merge keeps the phone's. After the watch upgrades, its next history push still has no tags → §6.1 rule 1 resends them. |
 | old | new | phone never sends tags; nothing to show. |
 | new | new | full behaviour. |
 
@@ -253,8 +282,9 @@ Mixed-version behaviour, checked:
 - **PastMatchesView:** the same one-line subtitle in each row (cheap, already a
   `MatchRecord`-driven row; respects the TECHNICAL_DEBT #13 note — put the
   subtitle helper in Core or a small view file, not in `PastMatchesView`).
-- **ManualMatchEntryView:** the same two fields, so a hand-entered league match
-  is tagged at birth.
+- **ManualMatchEntryView:** no tag fields — it only creates in-progress
+  records. A manually entered match is tagged from its detail view once it is
+  completed.
 - **Settings → Players:** roster management (§5).
 
 ### 7.2 Watch (read-only in v1)
@@ -329,11 +359,14 @@ otherwise the first watch sync deletes it (§3).
 - `Models/MatchTags.swift`, `MatchRecord.tags`, sanitizer.
 - Tag merge inside `MatchMergePolicy.resolve` and `ArchiveBackupPolicy.resolveBackup`.
 - `Stats/PlayerRoster.swift` (`PlayerRoster`, `HeadToHead`).
+- `MatchTags.pendingWatchUpdates` (§6.1).
 - `MatchSyncKey.matchTagsUpdate`, payload builder, `SyncIncomingPayload` event
   (+ `==` case, which keeps every exhaustive switch compiling).
 - Tests: `MatchTagsTests` (merge table incl. nil/empty/tie, sanitizer,
   unknown competition), `MatchRecordCodingTests`, `MatchMergePolicyTests`
   (equal-endTime untagged incoming keeps tags — the §3 regression),
+  reconciliation cases (watch copy older/nil, id newly in manifest, no resend
+  for an unchanged manifest),
   `ArchiveBackupPolicyTests`, `PlayerRosterTests`, `MatchSyncRoundTripTests`.
 
 ### PR 2 — `[Watch] Persist and show match tags`
@@ -344,8 +377,9 @@ otherwise the first watch sync deletes it (§3).
   starts writing them (not required for safety — PR 1 covers that).
 
 ### PR 3 — `[iOS] Tag matches with opponents and competition`
-- `PhoneStatsStore.updateTags(id:tags:)`, push to watch when held.
-- Editor sheet + picker, detail row, archive subtitle, manual entry,
+- `PhoneStatsStore.updateTags(id:tags:)`; edit-time push via `onWatchIDs`
+  plus §6.1 reconciliation on history and manifest arrival.
+- Editor sheet + picker, detail row, archive subtitle,
   Settings → Players (rename / merge / forget).
 - `docs/architecture/file-inventory.md` for new source files.
 
