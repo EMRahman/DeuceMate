@@ -1,10 +1,10 @@
 <!--
 machine-readable summary (parse this block first)
 
-status: proposed
+status: approved (owner decisions recorded in §11, 2026-10-01)
 author: Claude, design session with the owner
 date: 2026-10-01
-feature: "Tag a finished match with who was played (selectable roster) and its competition (Friendly / League / Tournament); show the tags on the watch; feed them into the AI Coach prompt and the shared reports."
+feature: "Tag a finished match with who was played (selectable roster) and its competition type (Friendly / League / Tournament / Practice); show the tags on the watch; feed them into the AI Coach prompt and the shared reports."
 recommendation: "One optional `tags: MatchTags?` field on MatchRecord, edited on iOS, read-only on the watch in v1. The roster of players is DERIVED from the archive (no second persisted store). Tags merge independently of the record body by their own last-write-wins clock, because today's merge rules would silently wipe them. Names are withheld from the AI prompt by default and never put in filenames or spoken announcements."
 hard_findings:
   - "MatchMergePolicy.resolve case 4 (both completed) keeps `incomingEnd >= existingEnd ? incoming : existing` (MatchMergePolicy.swift:42). The watch's copy of a finished match has the SAME endTime as the phone's, so the next full-history push (Sync Now, requestFullHistory, ping) replaces the phone's tagged record with the watch's untagged one. `fillingMissingHealthData` backfills only health. Tags MUST merge separately — PR 1 lands before any UI can write a tag."
@@ -27,7 +27,7 @@ scope:
     - "Contacts framework integration — a permission and a privacy surface for no real gain"
     - "Tagging in-progress matches — v1 tags completed records only (the merge rule copes either way)"
     - "Tag fields in ManualMatchEntryView — it only ever builds an in-progress record (endTime: nil, iWon: nil), so tags there would contradict the completed-only rule. A manually entered match is tagged from MatchDetailView once it is completed (on the watch, or via End at Current Score)."
-open_questions: [OQ-1 UI label for competition, OQ-2 names in shared reports default, OQ-3 watch editing in v1 or v2, OQ-4 'Practice' as a fourth competition]
+decisions: [OQ-1 UI label is 'Competition Type', OQ-2 names in shared reports ON by default with a toggle, OQ-3 iPhone-only editing in v1 (watch read-only), OQ-4 'Practice' included as a fourth case; the six defaults in §11.1 confirmed]
 -->
 
 # Plan: Match Tags — Opponent / Partner Names and Competition
@@ -48,7 +48,7 @@ open_questions: [OQ-1 UI label for competition, OQ-2 names in shared reports def
 | Where you edit | **iOS** match detail, completed matches only. Watch is read-only in v1. | Typing names on a 45 mm screen is slow; the phone is where the archive is reviewed. |
 | "Selectable later" | A **roster derived from the archive** — every distinct tagged player, most recent first. | Nothing extra to persist or sync; deleting a player's last match removes them naturally; rename/forget are bulk edits over records. |
 | Identity | Each player is `{id: UUID, name}`; the id is minted once and reused when picked from the roster. | Two different "Alex"es stay separate; a rename updates every match. |
-| Competition | `MatchCompetition`: `friendly`, `league`, `tournament` | Not `MatchType` — that name is taken by singles/doubles. |
+| Competition Type | `MatchCompetition`: `friendly`, `league`, `tournament`, `practice`; shown in the UI as **"Competition Type"** | Not `MatchType` — that name is taken by singles/doubles. |
 | Sync | Tags merge by their own `updatedAt` clock, independent of the record body; edits go to the watch on a new `matchTagsUpdate` key. | Today's merge would silently delete tags (§3). |
 | AI prompt | Competition + head-to-head record **always**; real names **only if the user opts in**, default off. | Names add nothing to coaching quality and are third-party personal data going to an AI service. |
 | Shared reports | Names + competition in the header; filenames never contain names. | The recipient is often the opponent — the name is the point. |
@@ -119,7 +119,7 @@ public struct TaggedPlayer: Codable, Equatable, Hashable, Sendable {
 }
 
 public enum MatchCompetition: String, CaseIterable, Sendable {
-    case friendly, league, tournament
+    case friendly, league, tournament, practice
     public var displayLabel: String { … }
 }
 
@@ -277,7 +277,7 @@ Mixed-version behaviour, checked:
 
 - **MatchDetailView:** a "Match Info" row under the header —
   `vs Alex · League` or `With Sam vs Alex & Jo · Tournament`, "Add opponent &
-  type" when empty. Tapping opens a sheet: Competition segmented control, then
+  type" when empty. Tapping opens a sheet: Competition Type segmented control (Friendly / League / Tournament / Practice), then
   Opponent(s) (+ Partner for doubles) using the picker. Completed records only.
 - **PastMatchesView:** the same one-line subtitle in each row (cheap, already a
   `MatchRecord`-driven row; respects the TECHNICAL_DEBT #13 note — put the
@@ -298,8 +298,8 @@ Mixed-version behaviour, checked:
 | Export | Adds | Names |
 |---|---|---|
 | AI Coach prompt (`MatchExporter.aiPromptExport`) | `## Match Context`: competition, singles/doubles, head-to-head ("vs this opponent: 3–2 in 5 matches; last 3: W W L") | **Off by default.** "Include player names" toggle on `AICoachSheet`; off ⇒ "Opponent", "Partner". |
-| Text summary / full export | Overview lines: Competition, Opponent(s), Partner | On by default (OQ-2). |
-| Interactive HTML | `Meta.competitionLabel`, `Meta.readerSideNames`, `Meta.otherSideNames` — **reader-framed in Swift** like every other field, so the JS only paints; schema 12 → 13; same lines in `MatchWebStaticFallback` | On by default (OQ-2). |
+| Text summary / full export | Overview lines: Competition, Opponent(s), Partner | On by default (OQ-2, decided). |
+| Interactive HTML | `Meta.competitionLabel`, `Meta.readerSideNames`, `Meta.otherSideNames` — **reader-framed in Swift** like every other field, so the JS only paints; schema 12 → 13; same lines in `MatchWebStaticFallback` | On by default (OQ-2, decided). |
 | Filenames (`deuce_mate_<date>[_opponent].html`) | unchanged | **Never.** |
 | Spoken announcements | unchanged | **Never** (v1). |
 
@@ -323,7 +323,7 @@ developer, but every place a name can travel needs a deliberate answer.
 |---|---|---|---|
 | S1 | **Names of other people stored on device and in the user's iCloud backup** | Low. Personal/household use; the user's own iCloud container. | Allowed. Disclose in the privacy policy (S9). Tags are *not* health data, so they stay in the iCloud copy. |
 | S2 | **Names sent to third-party AI services** via the AI Coach hand-off | Medium. Another person's name plus their performance data goes to a service under its own terms; adds nothing to coaching. | **Withheld by default**; per-export opt-in toggle; the existing disclosure line names "player names" when included. |
-| S3 | **Names in shared reports** (text, HTML, manual archive) | Low–medium. Shared on purpose, often *with* that opponent — but a report can be forwarded. | Included by default for reports (OQ-2), behind a visible "Include player names" toggle in the share menu. Manual archive (a personal backup) always full-fidelity, and its disclosure mentions names. |
+| S3 | **Names in shared reports** (text, HTML, manual archive) | Low–medium. Shared on purpose, often *with* that opponent — but a report can be forwarded. | Included by default for reports (OQ-2, decided), behind a visible "Include player names" toggle in the share menu. Manual archive (a personal backup) always full-fidelity, and its disclosure mentions names. |
 | S4 | **Names in filenames** | Medium, easy to miss. Filenames show in Files, AirDrop previews, iCloud Drive listings, email attachments — outside the report's own context. | Never. Filenames stay date-based. |
 | S5 | **HTML / script injection** through a typed name in the exported page | Medium if unescaped — CSP allows inline script. | Route through existing `scriptSafe` / HTML escaping; hostile-name tests (§7.3). |
 | S6 | **Prompt injection** through a name ("ignore previous instructions…") | Low (names off by default; user typed it themselves). | 40-char cap, no newlines/control chars, names quoted in the prompt. |
@@ -340,13 +340,13 @@ Health interaction: tags do not change what `HealthExportConsent` reports; a
 health-free export with names still needs no health dialog — the names toggle
 is its own control, not a second consent dialog.
 
-## 9. Watch tagging (v2, OQ-3)
+## 9. Watch tagging (v2 — OQ-3 decided: iPhone-only editing in v1)
 
 The natural moment to tag is right after match point, on the wrist. Sketch for
 later: after a completed match, an optional "Who did you play?" list showing
 the 5 most recent roster names (derived from the watch's own 25 records, plus
 a small roster snapshot the phone sends in its application context), a
-Friendly / League / Tournament row, and Skip. The wire key is already
+Competition Type row, and Skip. The wire key is already
 bidirectional (§6), so v2 is UI plus one roster payload. Dictation for a new
 name is possible but slow — new names stay a phone job.
 
@@ -363,7 +363,8 @@ otherwise the first watch sync deletes it (§3).
 - `MatchSyncKey.matchTagsUpdate`, payload builder, `SyncIncomingPayload` event
   (+ `==` case, which keeps every exhaustive switch compiling).
 - Tests: `MatchTagsTests` (merge table incl. nil/empty/tie, sanitizer,
-  unknown competition), `MatchRecordCodingTests`, `MatchMergePolicyTests`
+  unknown competition, raw values `friendly`/`league`/`tournament`/`practice`
+  pinned), `MatchRecordCodingTests`, `MatchMergePolicyTests`
   (equal-endTime untagged incoming keeps tags — the §3 regression),
   reconciliation cases (watch copy older/nil, id newly in manifest, no resend
   for an unchanged manifest),
@@ -394,17 +395,30 @@ Watch quick-tag (§9); Trends filters by competition and by opponent (new
 phone-local `@AppStorage` keys go on the CLAUDE.md §0 exception list); an iOS
 head-to-head card per player.
 
-## 11. Open questions
+## 11. Decisions (owner, 2026-10-01)
 
-- **OQ-1 — label for competition.** "Match Type" is already singles/doubles in
-  the UI and HTML. Proposed: **"Competition"** (Friendly / League /
-  Tournament). Alternatives: "Event", "Occasion".
-- **OQ-2 — names in shared reports by default?** Proposed on (the recipient is
-  usually the opponent); AI prompt stays off regardless.
-- **OQ-3 — watch editing in v1?** Proposed v2: phone-first gets the feature
-  out with one editing surface; the wire format already allows it.
-- **OQ-4 — a fourth competition, "Practice"?** Cheap to add now (it's just a
-  raw string) and common for rec players; additive later too.
+- **OQ-1 — UI label: "Competition Type"** (Friendly / League / Tournament /
+  Practice). "Match Type" stays singles/doubles. The Core type remains
+  `MatchCompetition`; the HTML field is `Meta.competitionLabel`, rendered under a
+  "Competition Type" heading.
+- **OQ-2 — names in shared reports: on by default**, with an "Include player
+  names" toggle in the share menu. The AI prompt stays off by default regardless.
+- **OQ-3 — iPhone-only editing in v1.** The watch shows tags read-only; watch
+  quick-tag stays v2 (§9).
+- **OQ-4 — "Practice" is in v1** as the fourth `MatchCompetition` case. It goes
+  into the raw-value pin test from day one like the other three.
+
+### 11.1 Defaults confirmed as proposed
+
+1. Player names are withheld from the AI prompt by default (opt-in toggle);
+   competition type and head-to-head are always included.
+2. The roster is derived from the archive — a player is remembered while at
+   least one match carries them.
+3. Tags apply to completed matches only (not live, not manual entry).
+4. Doubles tags partner plus both opponents.
+5. Settings → Players ships with Rename, Merge duplicates and Forget player.
+6. Names are capped at 40 characters; the input hint suggests first names or
+   nicknames.
 
 ## 12. Verification
 
