@@ -191,6 +191,8 @@ All need `import DeuceMateCore` (see §0).
 | `Sync/PhoneMatchSyncService.swift` | ~650 | Phone side of `WatchConnectivity`; a Watch manifest (including empty) acknowledges Sync Now, live install state refreshes through `sessionWatchStateDidChange`, and explicit record pushes made during activation are flushed once the session activates. |
 | `Persistence/PhoneStatsStore.swift`, `Audio/LiveAnnouncementService.swift`, `HealthKitHRFetcher.swift` | | Health-stripped archive plus backup-excluded sidecar, manual export/import, TTS announcements, HR backfill. |
 
+**Browser replica of the watch app (`docs/website/try.html`).** `docs/website/assets/watch-demo.js` (live match, a JS port of `ScoringEngine`), `watch-demo-app.js` (home / setup / settings / guide / warm-up shell), `watch-demo-history.js` (Past Matches) and `watch-demo-guide.js` (animated guide) mirror the watch views one-to-one with copy lifted verbatim from Swift; sensors (heart rate, kcal, steps, compass) are invented. A change to `HomeView`, `ContentView`, `MatchHistoryView`, `MatchStatsView`, the Walkthrough, `SettingsCopy` or `MatchTrackingStatus` should be mirrored there — see `docs/features/INTERACTIVE_DEMO_PARITY_PLAN.md` (Phase 7). No JS test harness exists by design; verify in a browser.
+
 Feature design docs live in `docs/features/*.md` — read the relevant plan before
 extending sync, changeover, or the companion app. The prioritised improvement
 backlog is `docs/features/TECHNICAL_DEBT.md` — **open items and their detail

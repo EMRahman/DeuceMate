@@ -41,6 +41,14 @@
   border-radius: 4px; background: linear-gradient(#3a4044, #15191a);
 }
 .watch-screen {
+  /* Classic theme (AppTheme.swift) — watch-demo-app.js swaps these per theme. */
+  --t-surface: 31,33,41; --t-me-row: 33,71,46; --t-opp-row: 36,46,71;
+  --t-me: 51,194,130; --t-opp: 66,138,237; --t-server: 245,212,61;
+  --t-me-court: 41,112,71; --t-opp-court: 51,82,143; --t-neu-court: 43,97,59;
+  --t-me-court-s: 66,163,107; --t-opp-court-s: 87,138,209; --t-neu-court-s: 77,158,92;
+  --t-btn-primary: linear-gradient(135deg, rgb(64,204,181), rgb(20,133,235));
+  --t-btn-me: linear-gradient(135deg, rgb(92,199,94), rgb(51,153,61));
+  --t-btn-opp: linear-gradient(135deg, rgb(56,102,209), rgb(36,66,153));
   position: relative; width: 100%; height: 100%;
   background: #000; border-radius: 50px / 44px; overflow: hidden;
   display: flex; flex-direction: column; justify-content: center; cursor: pointer;
@@ -58,19 +66,19 @@
 /* ---- Scoreboard — mirrors the watchOS ContentView layout ----------------- */
 /* Per-player tinted cards: server ball + "Me"/"Op" + score cells + a compact
    point badge (not the big iPhone-style number). Colours are the app's
-   Classic theme — me #33c282 (green), opponent #428aed (blue),
+   Classic theme — me rgb(var(--t-me)) (green), opponent rgb(var(--t-opp)) (blue),
    meRow #21472e, opponentRow #242e47, surface #1f2129. */
 .w-card {
   display: flex; flex-direction: column; gap: 6px;
-  background: #1f2129; border: 1px solid rgba(255,255,255,.12);
+  background: rgb(var(--t-surface)); border: 1px solid rgba(255,255,255,.12);
   border-radius: 12px; padding: 5px 7px;
 }
 .w-row {
   display: flex; align-items: center; gap: 5px;
   padding: 4px 7px; border-radius: 10px; border: 1px solid rgba(255,255,255,.12);
 }
-.w-row.me  { background: rgba(33,71,46,.55); }   /* meRow @ 0.55 */
-.w-row.opp { background: rgba(36,46,71,.55); }   /* opponentRow @ 0.55 */
+.w-row.me  { background: rgba(var(--t-me-row),.55); }   /* meRow @ 0.55 */
+.w-row.opp { background: rgba(var(--t-opp-row),.55); }   /* opponentRow @ 0.55 */
 /* Live-preview tint while a touch/pointer drag is past the swipe threshold
    (plan §G, mirrors ContentView's livePreviewTarget: row-identity colour --
    Me always green, Opp always red -- 22% fill + 3px stroke, not win/loss). */
@@ -112,16 +120,16 @@
   background: rgba(255,255,255,.14);            /* completed / inactive set */
 }
 .w-cell sup { font-size: .56em; font-weight: 700; opacity: .85; margin-left: 1px; }
-.w-row.me  .w-cell.active { background: #33c282; }   /* current set games, me */
-.w-row.opp .w-cell.active { background: #428aed; }   /* current set games, opponent */
+.w-row.me  .w-cell.active { background: rgba(var(--t-me),.8); }   /* current set games, me */
+.w-row.opp .w-cell.active { background: rgba(var(--t-opp),.85); }   /* current set games, opponent */
 .w-pts {
   min-width: 30px; padding: 3px 6px; border-radius: 8px; text-align: center;
   font-weight: 800; font-size: .95rem; line-height: 1; color: #fff; transition: background .25s ease;
 }
-.w-row.me  .w-pts { background: rgba(51,194,130,.30); }   /* current game points, me */
-.w-row.opp .w-pts { background: rgba(66,138,237,.30); }   /* current game points, opponent */
-.w-row.me  .w-pts.flash { background: rgba(51,194,130,.85); }
-.w-row.opp .w-pts.flash { background: rgba(66,138,237,.85); }
+.w-row.me  .w-pts { background: rgba(var(--t-me),.35); }   /* current game points, me */
+.w-row.opp .w-pts { background: rgba(var(--t-opp),.35); }   /* current game points, opponent */
+.w-row.me  .w-pts.flash { background: rgba(var(--t-me),.85); }
+.w-row.opp .w-pts.flash { background: rgba(var(--t-opp),.85); }
 .w-pts[hidden] { display: none; }
 
 .w-momentum {
@@ -129,8 +137,8 @@
   background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); border-radius: 8px;
 }
 .w-pip { flex: 1; height: 5px; border-radius: 2px; background: rgba(255,255,255,.15); }
-.w-pip.me  { background: #33c282; }
-.w-pip.opp { background: #428aed; }
+.w-pip.me  { background: rgb(var(--t-me)); }
+.w-pip.opp { background: rgb(var(--t-opp)); }
 /* See .banner[hidden] note below: .w-momentum sets display:flex, so [hidden]
    needs the same reassertion once it's hidden at match end (plan §G). */
 .w-momentum[hidden] { display: none; }
@@ -158,7 +166,7 @@
    face during play. Re-assert it with higher specificity so the JS toggle works. */
 .banner[hidden] { display: none; }
 .banner-title { font-size: 1.25rem; font-weight: 850; }
-.banner-title.win { color: #33c282; }
+.banner-title.win { color: rgb(var(--t-me)); }
 .banner-title.loss { color: rgba(255,255,255,.85); }
 .banner-sub { font-size: .72rem; color: rgba(255,255,255,.5); margin-top: -6px; }
 .banner .btn { padding: 9px 16px; font-size: .9rem; }
@@ -240,8 +248,8 @@
 .changeover-symbol { font-size: 1.1rem; font-weight: 800; color: #fff; }
 .changeover-reason { font-size: .74rem; color: rgba(255,255,255,.6); }
 .changeover-ok {
-  width: 100%; cursor: pointer; font: inherit; font-weight: 700; font-size: .85rem; color: #33c282;
-  background: rgba(51,194,130,.12); border: 1px solid rgba(51,194,130,.5);
+  width: 100%; cursor: pointer; font: inherit; font-weight: 700; font-size: .85rem; color: #30d158;
+  background: rgba(48,209,88,.14); border: 1px solid rgba(48,209,88,.5);
   border-radius: 10px; padding: 9px;
 }
 /* "Who serves next?" (plan §Phase 6) reuses .changeover/.changeover-card/
@@ -271,13 +279,18 @@
   background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); border-radius: 999px;
   padding: 4px 11px;
 }
-.stats-setbtn[aria-pressed="true"] { background: #33c282; border-color: #33c282; color: #052015; }
+.stats-setbtn[aria-pressed="true"] { background: #0a84ff; border-color: #0a84ff; color: #fff; }
 .stats-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 0 14px; }
 .stats-section { padding: 10px 14px 4px; }
 .stats-section-title {
-  font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
-  color: rgba(255,255,255,.55); margin-bottom: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: .62rem; font-weight: 700; color: rgba(255,255,255,.55); margin-bottom: 4px;
 }
+.stats-section-title .me { color: rgb(var(--t-me)); }
+.stats-section-title .opp { color: rgb(var(--t-opp)); }
+.stats-subhead { font-size: .62rem; font-weight: 700; color: rgba(255,255,255,.55); margin-top: 2px; }
+.stats-kv { display: flex; justify-content: space-between; align-items: baseline; padding: 2px 14px; font-size: .68rem; color: rgba(255,255,255,.55); }
+.stats-kv .v { font-size: .72rem; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
 .stats-divider { height: 1px; background: rgba(255,255,255,.1); margin: 4px 14px; }
 .stats-empty {
   flex: 1; display: flex; align-items: center; justify-content: center; text-align: center;
@@ -287,8 +300,8 @@
 
 .stats-ratio { display: flex; align-items: center; gap: 8px; padding: 6px 0 10px; }
 .stats-ratio .val { font-size: .92rem; font-weight: 800; min-width: 42px; }
-.stats-ratio .val.me { color: #33c282; text-align: right; }
-.stats-ratio .val.opp { color: #428aed; text-align: left; }
+.stats-ratio .val.me { color: rgb(var(--t-me)); text-align: right; }
+.stats-ratio .val.opp { color: rgb(var(--t-opp)); text-align: left; }
 .stats-ratio .mid { flex: 1; text-align: center; }
 .stats-ratio .cap-title { font-size: .68rem; color: rgba(255,255,255,.75); font-weight: 700; }
 .stats-ratio .cap { font-size: .6rem; color: rgba(255,255,255,.45); margin-top: 1px; }
@@ -303,26 +316,33 @@
   display: flex; height: 9px; border-radius: 5px; overflow: hidden;
   background: rgba(255,255,255,.08); margin: 4px 0;
 }
-.pw-seg.me { background: #33c282; }
-.pw-seg.opp { background: #428aed; }
+.pw-seg.me { background: rgb(var(--t-me)); }
+.pw-seg.opp { background: rgb(var(--t-opp)); }
 .pw-foot { margin-top: 2px; }
 
 /* Every other row — centre-split bar, shared by percent and raw-count rows. */
 .cmp-row { margin: 7px 0; }
-.cmp-label { font-size: .68rem; color: rgba(255,255,255,.55); margin-bottom: 3px; }
+.cmp-label { font-size: .6rem; color: rgba(255,255,255,.55); margin-bottom: 2px; text-align: center; }
+.cmp-subtitle { font-size: .54rem; color: rgba(255,255,255,.35); margin-bottom: 2px; text-align: center; }
 .cmp-body { display: flex; align-items: center; gap: 6px; }
 .cmp-val { font-weight: 800; font-size: .76rem; min-width: 28px; }
-.cmp-val.mev { color: #33c282; text-align: right; }
-.cmp-val.oppv { color: #428aed; text-align: left; }
+.cmp-val.mev { color: rgb(var(--t-me)); text-align: right; }
+.cmp-val.oppv { color: rgb(var(--t-opp)); text-align: left; }
 .splitbar {
-  flex: 1; display: flex; height: 8px; border-radius: 4px; overflow: hidden;
-  background: rgba(255,255,255,.08);
+  flex: 1; display: flex; height: 14px; border-radius: 3px; overflow: hidden;
 }
 .cmp-half { flex: 1; position: relative; }
+.cmp-half.me { background: rgba(var(--t-me),.15); }
+.cmp-half.opp { background: rgba(var(--t-opp),.15); }
+.cmp-half .cmp-lab {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: .5rem; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap;
+  text-shadow: 0 0 2px rgba(0,0,0,.6);
+}
 .cmp-half .fill { position: absolute; top: 0; bottom: 0; }
-.cmp-half.me .fill { right: 0; background: #33c282; }
-.cmp-half.opp .fill { left: 0; background: #428aed; }
-.cmp-sep { width: 1px; background: rgba(255,255,255,.2); }
+.cmp-half.me .fill { right: 0; background: rgb(var(--t-me)); }
+.cmp-half.opp .fill { left: 0; background: rgb(var(--t-opp)); }
+.cmp-sep { width: 1px; background: rgba(150,150,150,.3); }
 .cmp-subrow {
   display: flex; justify-content: space-between; font-size: .6rem;
   color: rgba(255,255,255,.4); margin-top: 2px;
@@ -365,3 +385,266 @@
 @media (prefers-reduced-motion: reduce) {
   .pt-btn, .opt, .util-btn { transition: none; }
 }
+
+/* ==========================================================================
+   Watch-app mode (try.html, `data-app`) — the rest of ContentView's layout:
+   ends-switch reminder, CourtSideView, heart-rate + compass badges, the
+   match-complete panel. Sizes are watch points ×~1.3 to suit the 300px frame.
+   ========================================================================== */
+.watch-screen.app-mode {
+  justify-content: flex-start; padding-top: 40px;
+}
+.watch-screen.app-mode.playing { touch-action: none; cursor: grab; }
+.watch-screen.app-mode.playing:active { cursor: grabbing; }
+.app-mode .w-card { gap: 8px; padding: 4px 8px; }
+.app-mode .w-momentum { margin-top: 6px; }
+.app-mode .w-foot { font-size: .72rem; color: rgba(255,255,255,.55); margin-top: 8px; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.app-mode .w-foot[hidden] { display: none; }
+
+.w-reminder {
+  display: flex; justify-content: center; align-items: center; margin-top: 6px; padding: 3px 6px;
+  border-radius: 8px; font-size: .72rem; font-weight: 600; white-space: pre; border: 1px solid;
+}
+.w-reminder[hidden] { display: none; }
+.w-reminder.players { color: #ff9f0a; background: rgba(255,159,10,.16); border-color: rgba(255,159,10,.55); }
+.w-reminder.balls { color: #ffd60a; background: rgba(255,214,10,.16); border-color: rgba(255,214,10,.55); }
+
+.w-info { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 8px; }
+.w-info[hidden] { display: none; }
+
+.w-court {
+  width: 66px; box-sizing: border-box; padding: 5px 7px; border-radius: 9px;
+  display: flex; flex-direction: column; gap: 7px;
+  background: rgb(var(--t-neu-court)); border: 1px solid rgb(var(--t-neu-court-s));
+  transition: background .3s ease, border-color .3s ease;
+}
+.w-court[data-server="me"] { background: rgb(var(--t-me-court)); border-color: rgb(var(--t-me-court-s)); }
+.w-court[data-server="opponent"] { background: rgb(var(--t-opp-court)); border-color: rgb(var(--t-opp-court-s)); }
+.cs-row { position: relative; width: 52px; height: 15px; margin: 0 auto; }
+.cs-line { height: 1px; background: rgba(255,255,255,.55); }
+.cs-dot {
+  position: absolute; top: 1.5px; width: 12px; height: 12px; border-radius: 50%;
+  background: rgba(255,255,255,.6); border: .5px solid rgba(0,0,0,.4);
+  transition: left .5s ease-in-out;
+}
+.cs-dot.receiver { background: rgb(179,212,255); }
+.cs-dot.server { background: rgb(var(--t-server)); box-shadow: 0 0 4px rgba(var(--t-server),.6); }
+
+.w-hr, .w-compass {
+  width: 46px; box-sizing: border-box; padding: 5px 0; border-radius: 9px; text-align: center;
+  background: rgba(255,255,255,.08); border: 1px solid; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  line-height: 1.15; transition: border-color .3s ease, color .3s ease;
+}
+.w-compass[hidden] { display: none; }
+.w-hr .hr-heart, .w-compass .cp-icon { font-size: 11px; line-height: 1; }
+.w-hr .hr-val { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.w-hr .hr-unit { font-size: 9px; font-weight: 600; color: rgba(255,255,255,.65); }
+.w-hr.band-low { border-color: rgba(48,209,88,.7); } .w-hr.band-low .hr-val { color: #30d158; }
+.w-hr.band-mod { border-color: rgba(255,214,10,.7); } .w-hr.band-mod .hr-val { color: #ffd60a; }
+.w-hr.band-high { border-color: rgba(255,159,10,.7); } .w-hr.band-high .hr-val { color: #ff9f0a; }
+.w-hr.band-max { border-color: rgba(255,69,58,.7); } .w-hr.band-max .hr-val { color: #ff453a; }
+.w-compass { color: rgba(255,255,255,.5); border-color: rgba(255,255,255,.35); }
+.w-compass.ok { color: #30d158; border-color: rgba(48,209,88,.7); }
+.w-compass.mid { color: #ff9f0a; border-color: rgba(255,159,10,.7); }
+.w-compass.bad { color: #ff453a; border-color: rgba(255,69,58,.7); }
+.w-compass .cp-arrow { font-size: 16px; font-weight: 700; line-height: 1; display: inline-block; transition: transform .4s ease-in-out; }
+.w-compass .cp-label { font-size: 9px; font-weight: 600; }
+
+.w-complete { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin-top: 10px; }
+.w-complete[hidden] { display: none; }
+.w-complete-card {
+  text-align: center; padding: 9px 12px; border-radius: 11px; border: 1px solid rgba(255,255,255,.12);
+  background: rgba(var(--t-opp-row),.6);
+}
+.w-complete-card.win { background: rgba(var(--t-me-row),.6); }
+.w-complete-title { font-size: 1.05rem; font-weight: 800; color: rgba(255,255,255,.85); }
+.w-complete-title.win { color: rgb(var(--t-me)); }
+.w-complete-sub { font-size: .66rem; color: rgba(255,255,255,.55); margin-top: 1px; }
+.w-complete-hint { font-size: .6rem; color: rgba(255,255,255,.55); margin-top: 3px; }
+.w-complete-hint[hidden] { display: none; }
+.w-endbtn {
+  cursor: pointer; font: inherit; font-weight: 700; font-size: .8rem; color: #fff;
+  background: #ff453a; border: 0; border-radius: 999px; padding: 8px 14px;
+}
+.w-endbtn:active { opacity: .8; }
+
+/* ---- Sheets as presented by watchOS (PointCategorySheet / MatchStatsView):
+   system status bar on top, a rounded tinted banner, buttons filling the
+   height, a grey bordered "Undo point" last. ---- */
+.app-mode .sheet { padding: 42px 10px 12px; background: #000; }
+.app-mode .sheet-header { border-radius: 8px; padding: 5px 30px; min-height: 0; }
+.app-mode .sheet-title { font-size: .72rem; }
+.app-mode .sheet-title .sub { font-weight: 400; font-size: .66rem; color: rgba(255,255,255,.6); }
+.app-mode .sheet-back { left: 4px; font-size: 16px; }
+.app-mode .sheet-buttons { padding: 0; margin-top: 7px; flex: 1; align-content: stretch; grid-auto-rows: 1fr; gap: 6px; }
+.app-mode .sheet-btn { border-radius: 10px; font-size: .8rem; }
+.app-mode .sheet-undo { margin: 6px 0 0; border: 0; background: rgba(142,142,147,.24); color: #fff; border-radius: 10px; font-size: .68rem; padding: 7px; }
+.app-mode .stats-overlay { background: #000; }
+.app-mode .stats-head { padding-top: 40px; }
+.app-mode .stats-close { display: none; }
+.app-mode .stats-head { text-align: left; padding: 40px 17px 4px; }
+.app-mode .stats-title { font-size: .72rem; font-weight: 600; color: rgba(235,235,245,.6); }
+.app-mode .stats-format { font-size: .62rem; color: rgba(235,235,245,.6); margin-top: 1px; }
+.app-mode .stats-setfilter { padding: 4px 17px; }
+.app-mode .stats-setfilter .stats-setbtn { flex: 1; padding: 5px 0; font-size: .66rem; }
+
+.w-hr.band-none { border-color: rgba(255,255,255,.42); } .w-hr.band-none .hr-val { color: rgba(255,255,255,.6); }
+
+/* ==========================================================================
+   Exact point scale for the watch replica: 1 watch point = --pt px
+   (a 45 mm screen is 198 pt wide; the frame's screen is ~268 px).
+   ========================================================================== */
+.watch-screen.app-mode { --pt: 1.456px; padding-left: calc(8 * var(--pt)); padding-right: calc(8 * var(--pt)); padding-top: calc(31 * var(--pt)); }
+.app-mode .w-card { gap: calc(6 * var(--pt)); padding: calc(2 * var(--pt)) calc(8 * var(--pt)); border-radius: calc(12 * var(--pt)); }
+.app-mode .w-row { gap: calc(4 * var(--pt)); padding: calc(4 * var(--pt)) calc(8 * var(--pt)); border-radius: calc(10 * var(--pt)); }
+.app-mode .w-server { width: calc(20 * var(--pt)); height: calc(22 * var(--pt)); font-size: calc(16 * var(--pt)); }
+.app-mode .w-doubles .w-server, .app-mode .w-server:has(.w-doubles-name) { width: calc(34 * var(--pt)); }
+.app-mode .w-server.idle::after { width: calc(18 * var(--pt)); height: calc(18 * var(--pt)); opacity: .35; }
+.app-mode .w-2nd-badge { width: calc(10 * var(--pt)); height: calc(10 * var(--pt)); font-size: calc(8 * var(--pt)); top: calc(-4 * var(--pt)); right: calc(-4 * var(--pt)); }
+.app-mode .w-doubles-name { font-size: calc(7 * var(--pt)); }
+.app-mode .w-name { width: calc(30 * var(--pt)); margin-right: auto; font-size: calc(17 * var(--pt)); font-weight: 600; }
+.app-mode .w-cells { gap: calc(4 * var(--pt)); }
+.app-mode .w-cell { min-width: calc(24 * var(--pt)); padding: calc(2 * var(--pt)) 0; border-radius: calc(7 * var(--pt)); font-size: calc(17 * var(--pt)); font-weight: 600; }
+.app-mode .w-cell sup { font-size: calc(8 * var(--pt)); }
+.app-mode .w-pts { min-width: calc(32 * var(--pt)); padding: calc(4 * var(--pt)); border-radius: calc(8 * var(--pt)); font-size: calc(17 * var(--pt)); font-weight: 600; text-align: right; box-sizing: content-box; }
+.app-mode .w-momentum { margin-top: calc(4 * var(--pt)); padding: calc(5 * var(--pt)) calc(10 * var(--pt)); gap: calc(4 * var(--pt)); border-radius: calc(8 * var(--pt)); }
+.app-mode .w-pip { height: calc(5 * var(--pt)); border-radius: calc(2 * var(--pt)); }
+.app-mode .w-reminder { margin-top: calc(4 * var(--pt)); padding: calc(1 * var(--pt)) calc(8 * var(--pt)); font-size: calc(11 * var(--pt)); border-radius: calc(8 * var(--pt)); }
+.app-mode .w-info { gap: calc(6 * var(--pt)); margin-top: calc(6 * var(--pt)); }
+.app-mode .w-court { width: calc(64 * var(--pt)); padding: calc(4 * var(--pt)) calc(6 * var(--pt)); gap: calc(6 * var(--pt)); border-radius: calc(8 * var(--pt)); }
+.app-mode .cs-row { width: calc(52 * var(--pt)); height: calc(14 * var(--pt)); }
+.app-mode .cs-dot { width: calc(12 * var(--pt)); height: calc(12 * var(--pt)); top: calc(1 * var(--pt)); }
+.app-mode .w-hr, .app-mode .w-compass { width: calc(38 * var(--pt)); padding: calc(4 * var(--pt)) 0; border-radius: calc(8 * var(--pt)); gap: calc(1 * var(--pt)); }
+.app-mode .w-compass { padding: calc(5 * var(--pt)) 0; gap: calc(2 * var(--pt)); }
+.app-mode .w-hr .hr-heart, .app-mode .w-compass .cp-icon { font-size: calc(9 * var(--pt)); }
+.app-mode .w-hr .hr-val { font-size: calc(13 * var(--pt)); }
+.app-mode .w-hr .hr-unit, .app-mode .w-compass .cp-label { font-size: calc(8 * var(--pt)); }
+.app-mode .w-compass .cp-arrow { font-size: calc(13 * var(--pt)); }
+.app-mode .w-foot { font-size: calc(10 * var(--pt)); margin-top: calc(6 * var(--pt)); }
+.app-mode .first-game-hint { font-size: calc(9 * var(--pt)); top: calc(6 * var(--pt)); }
+.app-mode .w-complete { gap: calc(6 * var(--pt)); margin-top: calc(8 * var(--pt)); }
+.app-mode .w-complete-card { padding: calc(8 * var(--pt)) calc(12 * var(--pt)); border-radius: calc(10 * var(--pt)); }
+.app-mode .w-complete-title { font-size: calc(17 * var(--pt)); }
+.app-mode .w-complete-sub { font-size: calc(11 * var(--pt)); }
+.app-mode .w-complete-hint { font-size: calc(9 * var(--pt)); }
+.app-mode .w-endbtn { font-size: calc(13 * var(--pt)); padding: calc(7 * var(--pt)) calc(14 * var(--pt)); }
+/* post-point sheet */
+.app-mode .sheet { padding: calc(32 * var(--pt)) calc(4 * var(--pt)) calc(6 * var(--pt)); }
+.app-mode .sheet-header { border-radius: calc(8 * var(--pt)); padding: calc(3 * var(--pt)) calc(24 * var(--pt)); }
+.app-mode .sheet-title { font-size: calc(11 * var(--pt)); }
+.app-mode .sheet-title .sub { font-size: calc(10 * var(--pt)); }
+.app-mode .sheet-2nd { font-size: calc(10 * var(--pt)); padding: calc(1 * var(--pt)) calc(4 * var(--pt)); }
+.app-mode .sheet-buttons { margin-top: calc(4 * var(--pt)); gap: calc(4 * var(--pt)); }
+.app-mode .sheet-btn { font-size: calc(13 * var(--pt)); border-radius: calc(10 * var(--pt)); }
+.app-mode .sheet-undo { font-size: calc(11 * var(--pt)); margin-top: calc(6 * var(--pt)); padding: calc(7 * var(--pt)); }
+/* stats screen */
+.app-mode .stats-head { padding: calc(30 * var(--pt)) calc(10 * var(--pt)) calc(2 * var(--pt)); }
+.app-mode .stats-title { font-size: calc(12 * var(--pt)); }
+.app-mode .stats-format { font-size: calc(10 * var(--pt)); }
+.app-mode .stats-setfilter { padding: calc(2 * var(--pt)) calc(10 * var(--pt)); gap: calc(4 * var(--pt)); }
+.app-mode .stats-setbtn { font-size: calc(11 * var(--pt)); padding: calc(3 * var(--pt)) 0; }
+.app-mode .stats-section { padding: calc(4 * var(--pt)) calc(10 * var(--pt)) 0; }
+.app-mode .stats-section-title, .app-mode .stats-subhead { font-size: calc(9 * var(--pt)); }
+.app-mode .cmp-label, .app-mode .pw-heads, .app-mode .pw-foot, .app-mode .stats-ratio .cap-title { font-size: calc(9 * var(--pt)); }
+.app-mode .cmp-subtitle, .app-mode .stats-ratio .cap { font-size: calc(8 * var(--pt)); }
+.app-mode .cmp-val, .app-mode .stats-ratio .val { font-size: calc(10 * var(--pt)); }
+.app-mode .cmp-val { min-width: calc(26 * var(--pt)); }
+.app-mode .splitbar { height: calc(14 * var(--pt)); border-radius: calc(3 * var(--pt)); }
+.app-mode .cmp-half .cmp-lab { font-size: calc(8 * var(--pt)); }
+.app-mode .pw-bar { height: calc(8 * var(--pt)); }
+.app-mode .stats-kv { font-size: calc(11 * var(--pt)); padding: calc(1 * var(--pt)) calc(10 * var(--pt)); }
+.app-mode .stats-kv .v { font-size: calc(12 * var(--pt)); }
+.app-mode .stats-empty { font-size: calc(13 * var(--pt)); }
+.app-mode .changeover-card { padding: calc(14 * var(--pt)) calc(16 * var(--pt)); }
+.app-mode .changeover-symbol { font-size: calc(17 * var(--pt)); }
+.app-mode .changeover-reason { font-size: calc(13 * var(--pt)); }
+.app-mode .changeover-ok { font-size: calc(17 * var(--pt)); min-height: calc(40 * var(--pt)); }
+.app-mode .w-row { min-height: calc(30 * var(--pt)); }
+.watch-screen.app-mode { padding-top: calc(36 * var(--pt)); }
+.app-mode .sheet { padding-top: calc(40 * var(--pt)); }
+.app-mode .stats-head { padding-top: calc(38 * var(--pt)); }
+/* geometry measured from the running watch app (44 mm, 184 x 224 pt) */
+.watch-screen.app-mode { padding-top: calc(56 * var(--pt)); }
+.app-mode .w-row { min-height: calc(36.5 * var(--pt)); }
+.app-mode .w-name { margin-right: 0; }
+.app-mode .first-game-hint { top: calc(26 * var(--pt) * 1.0); }
+.app-mode .w-row { box-sizing: border-box; min-height: calc(36.5 * var(--pt)); }
+
+/* the screen has the real 44 mm proportions (184 x 224 pt); --pt is set from its width by JS */
+.watch-frame:has(.watch-screen.app-mode) { aspect-ratio: auto; }
+.watch-screen.app-mode { height: auto; aspect-ratio: 184 / 224; width: 100%; box-sizing: border-box; }
+.watch-screen.app-mode { padding-top: calc(51 * var(--pt)); }
+.app-mode .w-info { margin-top: calc(2 * var(--pt)); }
+.app-mode .w-foot { margin-top: calc(2 * var(--pt)); }
+.app-mode .w-name { line-height: 1.15; }
+.app-mode .w-complete { margin-top: calc(4 * var(--pt)); gap: calc(4 * var(--pt)); }
+.app-mode .w-complete-card { padding: calc(4 * var(--pt)) calc(10 * var(--pt)); }
+.app-mode .w-complete-title { font-size: calc(15 * var(--pt)); }
+.app-mode .w-complete-sub { font-size: calc(10 * var(--pt)); margin-top: 0; }
+.app-mode .w-endbtn { padding: calc(5 * var(--pt)) calc(12 * var(--pt)); font-size: calc(12 * var(--pt)); }
+/* post-point sheet as rendered by the running watch: capsule buttons, larger caption2 text */
+.app-mode .sheet-btn { border-radius: calc(22 * var(--pt)); }
+.app-mode .sheet-undo { border-radius: calc(22 * var(--pt)); font-size: calc(14.5 * var(--pt)); }
+.app-mode .sheet-header { border-radius: calc(12 * var(--pt)); }
+.app-mode .sheet-title { font-size: calc(14.5 * var(--pt)); }
+.app-mode .sheet-title .sub { font-size: calc(12 * var(--pt)); }
+/* live/past stats screen geometry from the running app (title y=59, filter pills 82x51 pt at y=106.5, empty text at y=177) */
+.app-mode .stats-head { padding: calc(57 * var(--pt)) calc(8 * var(--pt)) 0; }
+.app-mode .stats-title { font-size: calc(16 * var(--pt)); line-height: 1.2; }
+.app-mode .stats-format { font-size: calc(10 * var(--pt)); margin-top: calc(6 * var(--pt)); }
+.app-mode .stats-setfilter { padding: calc(10 * var(--pt)) calc(8 * var(--pt)) 0; gap: calc(4 * var(--pt)); overflow: visible; }
+.app-mode .stats-setbtn { flex: 1; height: calc(51 * var(--pt)); border-radius: calc(25 * var(--pt)); font-size: calc(13 * var(--pt)); font-weight: 700; padding: 0; background: #8e8e93; border: 0; color: #fff; }
+.app-mode .stats-setbtn[aria-pressed="true"] { background: #0a84ff; }
+.app-mode .stats-empty { justify-content: flex-start; text-align: left; padding: calc(20 * var(--pt)) calc(8 * var(--pt)); font-size: calc(14.5 * var(--pt)); }
+.app-mode .stats-body { padding-top: calc(6 * var(--pt)); }
+.app-mode .stats-setbtn { font-size: calc(15 * var(--pt)); }
+/* percent columns are 26 pt wide on the watch, so "100%" wraps to two lines there too */
+.app-mode .cmp-val { width: calc(26 * var(--pt)); min-width: 0; flex: none; overflow-wrap: anywhere; line-height: 1.15; }
+.app-mode .cmp-val.mev { text-align: right; } .app-mode .cmp-val.oppv { text-align: left; }
+.app-mode .cmp-row { margin: calc(3 * var(--pt)) 0; }
+/* from the pixel diff against the running app */
+.app-mode .first-game-hint { gap: 0; line-height: 1.1; top: calc(24 * var(--pt)); }
+.watch-screen.app-mode { padding-top: calc(53 * var(--pt)); }
+.app-mode .w-foot { margin-top: calc(-4 * var(--pt)); }
+.watch-screen.app-mode { padding-top: calc(50 * var(--pt)); }
+/* post-point sheet, overlaid on the running app: banner is one 22 pt line starting at ~37 pt; buttons are 12.5 pt text, ~17 pt radius */
+.app-mode .sheet { padding: calc(37 * var(--pt)) calc(4 * var(--pt)) calc(4 * var(--pt)); }
+.app-mode .sheet-header { padding: calc(2 * var(--pt)) calc(24 * var(--pt)); border-radius: calc(10 * var(--pt)); }
+.app-mode .sheet-title { font-size: calc(12.5 * var(--pt)); white-space: nowrap; }
+.app-mode .sheet-title .sub { font-size: calc(10 * var(--pt)); }
+.app-mode .sheet-btn { font-size: calc(14.5 * var(--pt)); border-radius: calc(17 * var(--pt)); } /* footnote.semibold measured on the SE 3 simulator: wraps "Double / Fault" */
+.app-mode .sheet-undo { font-size: calc(12 * var(--pt)); border-radius: calc(17 * var(--pt)); margin-top: calc(4 * var(--pt)); }
+.app-mode .sheet-buttons { margin-top: calc(4 * var(--pt)); gap: calc(4 * var(--pt)); }
+.app-mode .sheet { padding-top: calc(31 * var(--pt)); }
+.app-mode .sheet-shot { background: #0a93ff; }
+.app-mode .sheet-btn { border-radius: calc(21 * var(--pt)); }
+.app-mode .sheet-undo { border-radius: calc(21 * var(--pt)); font-size: calc(14.5 * var(--pt)); background: rgba(120,120,128,.3); }
+.app-mode .sheet-header:not(:has(.sheet-back)) { margin-top: calc(6 * var(--pt)); }
+.app-mode .sheet-undo { color: rgba(235,235,245,.6); background: rgba(120,120,128,.24); }
+/* post-point sheet rows are 51 pt tall and not stretched; Undo follows at its natural height and may run past the bottom edge */
+.app-mode .sheet-buttons { flex: none; grid-auto-rows: calc(51 * var(--pt)); align-content: start; }
+.app-mode .sheet-undo { flex: none; margin-top: calc(7 * var(--pt)); padding: calc(10 * var(--pt)); font-size: calc(14.5 * var(--pt)); }
+
+/* Belt and braces for touch panning in the live stats overlay (the nested scroller already pans natively). */
+.watch-screen.app-mode.playing:has(.stats-overlay:not([hidden])) { touch-action: pan-y; cursor: default; }
+.stats-overlay .stats-body { touch-action: pan-y; overscroll-behavior: contain; min-height: 0; }
+/* The watch's MatchStatsView is a single ScrollView: title, set pills and stats scroll as one page. */
+.app-mode .stats-overlay:not([hidden]) { display: block; }
+.app-mode .stats-overlay { overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: none; }
+.app-mode .stats-overlay::-webkit-scrollbar { display: none; }
+.app-mode .stats-overlay .stats-body { overflow: visible; flex: none; }
+/* Footer: measured against the watchOS simulator (SE 3 44mm) the real line is ~0.84x the nominal 10 pt text,
+   with emoji ~0.82x of that. */
+.app-mode .w-foot { font-size: calc(8.4 * var(--pt)); margin-top: calc(-2 * var(--pt)); }
+.app-mode .w-foot .ft-ic { font-size: .73em; margin-right: .12em; }
+.app-mode .w-foot .ft-dot { margin: 0 .2em; }
+
+/* Post-point sheet geometry measured on the SE 3 simulator (pt): header text y 40, buttons 84x51 at x 6/94, y 65/120,
+   Undo 163x51 at x 10.5, y 177 (runs past the bottom edge, as on the watch). */
+.app-mode .sheet { padding-left: calc(6 * var(--pt)); padding-right: calc(6 * var(--pt)); }
+.app-mode .sheet-buttons { margin-top: calc(7 * var(--pt)); flex: none; grid-auto-rows: calc(51 * var(--pt)); }
+.app-mode .sheet-btn { padding: 0 calc(2 * var(--pt)); line-height: 1.15; }
+.app-mode .sheet-undo { margin: calc(6 * var(--pt)) calc(4.5 * var(--pt)) 0; height: calc(51 * var(--pt)); padding: 0; }
+/* Full-width pill (3rd of 3) is inset 10.5 pt like Undo; step-2 pills start at y 71.5 (measured on the SE 3 sim). */
+.app-mode .sheet-btn.full { margin: 0 calc(4.5 * var(--pt)); }
+.app-mode .sheet-header:has(.sheet-back) + .sheet-buttons { margin-top: calc(4.8 * var(--pt)); }
