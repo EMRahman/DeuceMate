@@ -512,6 +512,8 @@
       regularPointStrings: regularPointStrings, lastSet: lastSet,
       isDecidingSuperTiebreak: isDecidingSuperTiebreak,
       applyDoublesSetup: applyDoublesSetup, resolveDoublesTeamServer: resolveDoublesTeamServer,
+      leaderWhenStopped: leaderWhenStopped, nextSetRequiresEndsSwitch: nextSetRequiresEndsSwitch,
+      cfgFor: cfgFor, setsWon: setsWon, FORMAT_LABELS: FORMAT_LABELS, clone: clone, changeoverReasonText: changeoverReasonText,
       DOUBLES_TEAM: DOUBLES_TEAM, DOUBLES_DISPLAY_NAME: DOUBLES_DISPLAY_NAME
     };
   }
@@ -519,6 +521,350 @@
   /* ====================================================================
      Controller / view  (supports multiple instances + compact/hero mode)
      ==================================================================== */
+  /* ---- Mirrors ScoringEngine.leaderWhenStopped: who leads if play stops early
+     (match score, then set score, then current game/tiebreak, then points);
+     null = level = a draw. ---- */
+  function leaderWhenStopped(state) {
+    var w = matchWinner(state);
+    if (w) return w;
+    var cfg = state.cfg, done = completedSets(state), cur = lastSet(state);
+    if (cfg.playRegularSets) {
+      var wm = done.filter(function (s) { return s.gamesMe > s.gamesOpponent; }).length;
+      var wo = done.filter(function (s) { return s.gamesOpponent > s.gamesMe; }).length;
+      if (wm !== wo) return wm > wo ? "me" : "opponent";
+      if (cur) {
+        if (cur.gamesMe !== cur.gamesOpponent) return cur.gamesMe > cur.gamesOpponent ? "me" : "opponent";
+        if (cur.isTieBreak && cur.tieBreakPointsMe !== cur.tieBreakPointsOpponent) return cur.tieBreakPointsMe > cur.tieBreakPointsOpponent ? "me" : "opponent";
+      }
+    } else {
+      var tm = done.filter(function (s) { return s.tieBreakPointsMe > s.tieBreakPointsOpponent; }).length;
+      var to = done.filter(function (s) { return s.tieBreakPointsOpponent > s.tieBreakPointsMe; }).length;
+      if (tm !== to) return tm > to ? "me" : "opponent";
+      if (cur && cur.tieBreakPointsMe !== cur.tieBreakPointsOpponent) return cur.tieBreakPointsMe > cur.tieBreakPointsOpponent ? "me" : "opponent";
+    }
+    if (state.currentPointsMe !== state.currentPointsOpponent) return state.currentPointsMe > state.currentPointsOpponent ? "me" : "opponent";
+    return null;
+  }
+
+  /* ---- Mirrors ScoringEngine.nextSetRequiresEndsSwitch: the sticky reminder
+     shown between sets. null = n/a, true = players switch, false = balls only. ---- */
+  function nextSetRequiresEndsSwitch(state) {
+    if (state.sets.length < 2) return null;
+    var upcoming = state.sets[state.sets.length - 1];
+    if (upcoming.isTieBreak || upcoming.gamesMe !== 0 || upcoming.gamesOpponent !== 0 ||
+        state.currentPointsMe !== 0 || state.currentPointsOpponent !== 0) return null;
+    var fin = state.sets[state.sets.length - 2];
+    return (fin.gamesMe + fin.gamesOpponent) % 2 === 1;
+  }
+
+  /* ---- Stats body builders (shared by the live overlay and the history detail) ---- */
+  function statsDivider() {
+    var d = document.createElement("div");
+    d.className = "stats-divider";
+    return d;
+  }
+  var statsFocalLabel = "Me";
+  function statsSectionEl(title) {
+    var sec = document.createElement("div");
+    sec.className = "stats-section";
+    if (title) {
+      var h = document.createElement("div");
+      h.className = "stats-section-title";
+      var l = document.createElement("span"); l.className = "me"; l.textContent = statsFocalLabel;
+      var m = document.createElement("span"); m.className = "mid"; m.textContent = title;
+      var r = document.createElement("span"); r.className = "opp"; r.textContent = "Opp";
+      h.appendChild(l); h.appendChild(m); h.appendChild(r);
+      sec.appendChild(h);
+    }
+    return sec;
+  }
+  function statsEmptyEl(text) {
+    var div = document.createElement("div");
+    div.className = "stats-empty";
+    div.textContent = text;
+    return div;
+  }
+  function statsSmallNote(text) {
+    var p = document.createElement("div");
+    p.className = "stats-note";
+    p.textContent = text;
+    return p;
+  }
+
+  // Percent rows (Serve/Return/Break Points/Pressure/Rally/Score States/
+  // Aggression Index/Own Errors %) and raw-count rows (Winners/UE/FE/DF)
+  // share the same centre-split-bar DOM shape; only the value text and the
+  // fill fractions differ.
+  function comparisonRowEl(label, meText, meSub, meFrac, oppText, oppSub, oppFrac, subtitle) {
+    var row = document.createElement("div");
+    row.className = "cmp-row";
+    var lab = document.createElement("div");
+    lab.className = "cmp-label";
+    lab.textContent = label;
+    row.appendChild(lab);
+    if (subtitle) {
+      var subt = document.createElement("div");
+      subt.className = "cmp-subtitle";
+      subt.textContent = subtitle;
+      row.appendChild(subt);
+    }
+
+    var body = document.createElement("div");
+    body.className = "cmp-body";
+    var mev = document.createElement("span");
+    mev.className = "cmp-val mev";
+    mev.textContent = meText;
+    var bar = document.createElement("div");
+    bar.className = "splitbar";
+    function half(cls, frac, sub) {
+      var h = document.createElement("div");
+      h.className = "cmp-half " + cls;
+      var f = document.createElement("div");
+      f.className = "fill";
+      f.style.width = Math.round(frac * 100) + "%";
+      h.appendChild(f);
+      if (sub) {
+        var l = document.createElement("span");
+        l.className = "cmp-lab";
+        l.textContent = sub;
+        h.appendChild(l);
+      }
+      return h;
+    }
+    var sep = document.createElement("div");
+    sep.className = "cmp-sep";
+    bar.appendChild(half("me", meFrac, meSub)); bar.appendChild(sep); bar.appendChild(half("opp", oppFrac, oppSub));
+    var oppv = document.createElement("span");
+    oppv.className = "cmp-val oppv";
+    oppv.textContent = oppText;
+    body.appendChild(mev); body.appendChild(bar); body.appendChild(oppv);
+    row.appendChild(body);
+    return row;
+  }
+
+  function comparisonRow(label, meNum, meDen, oppNum, oppDen, subtitle) {
+    var T = window.DeuceMateTracking;
+    var m = T.formatPercentRow(meNum, meDen), o = T.formatPercentRow(oppNum, oppDen);
+    return comparisonRowEl(label, m.text, m.sub, m.frac, o.text, o.sub, o.frac, subtitle);
+  }
+  function countComparisonRow(label, meCount, oppCount) {
+    var fr = window.DeuceMateTracking.countComparisonFracs(meCount, oppCount);
+    return comparisonRowEl(label, String(meCount), null, fr.meFrac, String(oppCount), null, fr.oppFrac);
+  }
+  // Three-column layout (mirrors MatchStatsView's ratio row: me.wueRatio /
+  // centered title+caption / opp.wueRatio) -- not a comparisonRow, since
+  // there's no meaningful bar for a ratio, but both sides still need to be
+  // shown side by side per the Me-vs-Opp contract the rest of this view holds.
+  function ratioRowEl(title, caption, meWinners, meUnforcedErrors, oppWinners, oppUnforcedErrors) {
+    var T = window.DeuceMateTracking;
+    var div = document.createElement("div");
+    div.className = "stats-ratio";
+    var meVal = document.createElement("span");
+    meVal.className = "val me";
+    meVal.textContent = T.winToUnforcedRatioText(meWinners, meUnforcedErrors);
+    var mid = document.createElement("div");
+    mid.className = "mid";
+    var capTitle = document.createElement("div");
+    capTitle.className = "cap-title";
+    capTitle.textContent = title;
+    var cap = document.createElement("div");
+    cap.className = "cap";
+    cap.textContent = caption;
+    mid.appendChild(capTitle); mid.appendChild(cap);
+    var oppVal = document.createElement("span");
+    oppVal.className = "val opp";
+    oppVal.textContent = T.winToUnforcedRatioText(oppWinners, oppUnforcedErrors);
+    div.appendChild(meVal); div.appendChild(mid); div.appendChild(oppVal);
+    return div;
+  }
+
+  function pointsWonSection(me, matchType) {
+    var sec = statsSectionEl(null);
+    var total = me.totalPoints, meWon = me.pointsWon, oppWon = total - meWon;
+    var meFrac = total > 0 ? meWon / total : 0;
+
+    var heads = document.createElement("div");
+    heads.className = "pw-heads";
+    var meSide = document.createElement("span"); meSide.className = "pw-side"; meSide.textContent = matchType === "doubles" ? "Our" : "Me";
+    var title = document.createElement("span"); title.className = "pw-title"; title.textContent = "Points Won";
+    var oppSide = document.createElement("span"); oppSide.className = "pw-side"; oppSide.textContent = "Opp";
+    heads.appendChild(meSide); heads.appendChild(title); heads.appendChild(oppSide);
+
+    var bar = document.createElement("div");
+    bar.className = "pw-bar";
+    var meSeg = document.createElement("div"); meSeg.className = "pw-seg me"; meSeg.style.width = (meFrac * 100) + "%";
+    var oppSeg = document.createElement("div"); oppSeg.className = "pw-seg opp"; oppSeg.style.width = ((1 - meFrac) * 100) + "%";
+    bar.appendChild(meSeg); bar.appendChild(oppSeg);
+
+    var foot = document.createElement("div");
+    foot.className = "pw-foot";
+    var meFoot = document.createElement("span"); meFoot.className = "pw-side"; meFoot.textContent = meWon + " pts";
+    var totalFoot = document.createElement("span"); totalFoot.className = "pw-total"; totalFoot.textContent = total + " total";
+    var oppFoot = document.createElement("span"); oppFoot.className = "pw-side"; oppFoot.textContent = oppWon + " pts";
+    foot.appendChild(meFoot); foot.appendChild(totalFoot); foot.appendChild(oppFoot);
+
+    sec.appendChild(heads); sec.appendChild(bar); sec.appendChild(foot);
+    return sec;
+  }
+
+  function outcomeBreakdownSection(me) {
+    var sec = statsSectionEl("Outcome Breakdown");
+    if (me.totalPoints <= me.uncategorizedCount) {
+      sec.appendChild(statsEmptyEl("Outcome tracking not collected for this match."));
+      return sec;
+    }
+    sec.appendChild(ratioRowEl("Win:Unforced Err", "aim for > 1.0",
+      me.myWinners, me.myUnforcedErrors, me.opponentWinners, me.opponentUnforcedErrors));
+    sec.appendChild(countComparisonRow("Winners", me.myWinners, me.opponentWinners));
+    var errHead = document.createElement("div");
+    errHead.className = "stats-subhead";
+    errHead.textContent = "Errors";
+    sec.appendChild(errHead);
+    sec.appendChild(countComparisonRow("Unforced Errors", me.myUnforcedErrors, me.opponentUnforcedErrors));
+    sec.appendChild(countComparisonRow("Forced Errors", me.myForcedErrors, me.opponentForcedErrors));
+    sec.appendChild(countComparisonRow("Double Faults", me.myDoubleFaults, me.opponentDoubleFaults));
+    sec.appendChild(comparisonRow("Aggression Index",
+      me.myWinners, me.myWinners + me.myUnforcedErrors,
+      me.opponentWinners, me.opponentWinners + me.opponentUnforcedErrors, "W ÷ (W + UE)"));
+    sec.appendChild(comparisonRow("Own Errors %",
+      me.myDoubleFaults + me.myUnforcedErrors, me.lostPoints,
+      me.opponentDoubleFaults + me.opponentUnforcedErrors, me.pointsWon));
+    if (me.uncategorizedCount > 0) sec.appendChild(statsSmallNote("(" + me.uncategorizedCount + " uncategorized)"));
+    return sec;
+  }
+
+  function percentSection(title, rows) {
+    var sec = statsSectionEl(title);
+    rows.forEach(function (r) { sec.appendChild(comparisonRow(r[0], r[1], r[2], r[3], r[4])); });
+    return sec;
+  }
+
+  function buildStatsContent(container, filtered, matchType) {
+  statsFocalLabel = matchType === "doubles" ? "Our" : "Me";
+
+    var T = window.DeuceMateTracking;
+    var me = T.matchStatsSummary(filtered, "me");
+    var opp = T.matchStatsSummary(filtered, "opponent");
+
+    if (me.totalPoints > 0) container.appendChild(pointsWonSection(me, matchType));
+    container.appendChild(outcomeBreakdownSection(me));
+
+    container.appendChild(statsDivider());
+    container.appendChild(percentSection("Serve", [
+      ["1st Serve In", me.firstServeIn, me.firstServeTotal, opp.firstServeIn, opp.firstServeTotal],
+      ["2nd Serve In", me.secondServeIn, me.secondServeTotal, opp.secondServeIn, opp.secondServeTotal],
+      ["1st Serve Win", me.firstServeWins, me.firstServeIn, opp.firstServeWins, opp.firstServeIn],
+      ["2nd Serve Win", me.secondServeWins, me.secondServeIn, opp.secondServeWins, opp.secondServeIn],
+      ["DF Rate (2nd)", me.doubleFaults, me.secondServeTotal, opp.doubleFaults, opp.secondServeTotal]
+    ]));
+
+    container.appendChild(statsDivider());
+    container.appendChild(percentSection("Return", [
+      ["vs 1st Serve", me.returnWinsOnFirst, me.returnOppsOnFirst, opp.returnWinsOnFirst, opp.returnOppsOnFirst],
+      ["vs 2nd Serve", me.returnWinsOnSecond, me.returnOppsOnSecond, opp.returnWinsOnSecond, opp.returnOppsOnSecond]
+    ]));
+
+    container.appendChild(statsDivider());
+    container.appendChild(percentSection("Break Points", [
+      ["BPs Won (Returner)", me.breakPointWins, me.breakPointOpps, opp.breakPointWins, opp.breakPointOpps],
+      ["BPs Saved (Server)", me.breakPointsFaced - me.breakPointsLost, me.breakPointsFaced,
+                              opp.breakPointsFaced - opp.breakPointsLost, opp.breakPointsFaced]
+    ]));
+
+    if (me.bigPointTotal > 0 && me.normalPointTotal > 0) {
+      container.appendChild(statsDivider());
+      container.appendChild(percentSection("Pressure vs Normal", [
+        ["Big Points", me.bigPointWins, me.bigPointTotal, opp.bigPointWins, opp.bigPointTotal],
+        ["Normal Points", me.normalPointWins, me.normalPointTotal, opp.normalPointWins, opp.normalPointTotal]
+      ]));
+    }
+
+    if (me.rallyDepth.length) {
+      container.appendChild(statsDivider());
+      container.appendChild(percentSection("Rally Depth Won", me.rallyDepth.map(function (m, i) {
+        var o = opp.rallyDepth[i];
+        return ["@ " + T.ENDING_SHOT_LABELS[m.shot], m.wins, m.total, o.wins, o.total];
+      })));
+    }
+
+    if (me.scoreStates.length) {
+      container.appendChild(statsDivider());
+      container.appendChild(percentSection("Score States", me.scoreStates.map(function (m, i) {
+        var o = opp.scoreStates[i];
+        return [m.label, m.wins, m.total, o.wins, o.total];
+      })));
+    }
+  }
+
+
+  function setServerIcon(node, isServer, showSecondBadge, doublesName) {
+    if (!node) return;
+    node.innerHTML = "";
+    if (isServer) {
+      node.appendChild(document.createTextNode("🎾"));
+      node.setAttribute("aria-label", (doublesName ? "Serving: " + doublesName : "Serving") + (showSecondBadge ? ", second serve" : ""));
+      node.removeAttribute("aria-hidden");
+      node.classList.remove("idle");
+      if (showSecondBadge) {
+        var badge = document.createElement("span");
+        badge.className = "w-2nd-badge";
+        badge.textContent = "2";
+        badge.setAttribute("aria-hidden", "true");
+        node.appendChild(badge);
+      }
+      // Doubles server-name capsule (plan §Phase 6, mirrors serverIndicator's
+      // DoublesServer.displayName capsule) -- positioned below the ball,
+      // distinct from the 2nd-serve badge's top-trailing position, so the
+      // two never collide.
+      if (doublesName) {
+        var capsule = document.createElement("span");
+        capsule.className = "w-doubles-name";
+        capsule.textContent = doublesName;
+        capsule.setAttribute("aria-hidden", "true");
+        node.appendChild(capsule);
+      }
+    } else {
+      node.setAttribute("aria-hidden", "true");
+      node.removeAttribute("aria-label");
+      node.classList.add("idle");
+    }
+  }
+
+  function buildCells(container, st, player) {
+    if (!container) return;
+    container.innerHTML = "";
+    var cfg = st.cfg, tbOnly = !cfg.playRegularSets, n = st.sets.length;
+    visibleSetIndices(st).forEach(function (i) {
+      var set = st.sets[i];
+      var isActive = i === n - 1;
+      var games = player === "me" ? set.gamesMe : set.gamesOpponent;
+      var tbPts = player === "me" ? set.tieBreakPointsMe : set.tieBreakPointsOpponent;
+      // Standard's deciding super-tiebreak shows its POINTS (e.g. 10), not games.
+      var isSuperTB = !tbOnly && set.isTieBreak && n === 3 && i === 2;
+      var cell = document.createElement("span");
+      cell.className = "w-cell" + (isActive ? " active" : "");
+      if (tbOnly || isSuperTB) {
+        cell.textContent = String(tbPts);
+      } else {
+        cell.textContent = String(games);
+        // A finished regular tiebreak set shows its points as a superscript (e.g. 7⁴).
+        if (set.isTieBreak && tbPts > 0 && !isActive) {
+          var sup = document.createElement("sup");
+          sup.textContent = String(tbPts);
+          cell.appendChild(sup);
+        }
+      }
+      container.appendChild(cell);
+    });
+  }
+
+
+  window.DeuceMateWatchUI = { buildCells: buildCells, setServerIcon: setServerIcon, watchPointLabel: watchPointLabel, DOUBLES_DISPLAY_NAME: DOUBLES_DISPLAY_NAME };
+
+  window.DeuceMateStatsUI = {
+    content: buildStatsContent, empty: statsEmptyEl, divider: statsDivider
+  };
+
   function initWatchDemo(root) {
   var compact = root.hasAttribute("data-compact");
   var useKeyboard = root.hasAttribute("data-keyboard");
@@ -571,8 +917,24 @@
     statsTitle: root.querySelector("[data-stats-title]"),
     statsFormat: root.querySelector("[data-stats-format]"),
     statsSetFilter: root.querySelector("[data-stats-setfilter]"),
-    statsBody: root.querySelector("[data-stats-body]")
+    statsBody: root.querySelector("[data-stats-body]"),
+    // Watch-app mode only (try.html): the rest of ContentView's layout.
+    info: root.querySelector("[data-info]"),
+    court: root.querySelector("[data-court]"),
+    hr: root.querySelector("[data-hr]"),
+    compass: root.querySelector("[data-compass]"),
+    reminder: root.querySelector("[data-reminder]"),
+    complete: root.querySelector("[data-complete]"),
+    completeTitle: root.querySelector("[data-complete-title]"),
+    completeStats: root.querySelector("[data-complete-stats]"),
+    completeEnd: root.querySelector("[data-complete-end]")
   };
+  // appMode: the demo is the whole watch app (home, setup, settings, history,
+  // guide...) driven by watch-demo-app.js through root.__deuceMateApi, instead
+  // of a bare scorer with a setup card.
+  var appMode = root.hasAttribute("data-app");
+  var appSettings = { compass: false, health: !root.hasAttribute("data-app") };
+  function shellOpen() { return root.hasAttribute("data-shell-open"); }
 
   var chosenFormat = root.getAttribute("data-format") || "standard";
   var chosenServer = root.getAttribute("data-server") || "me";
@@ -698,6 +1060,7 @@
     el.card.addEventListener("click", function (e) {
       e.stopPropagation();
       var now = Date.now();
+      if (now - lastSwipeAt < 400) { lastCardTapAt = 0; return; }
       if (now - lastCardTapAt < 350) { lastCardTapAt = 0; toggleSecondServe(); }
       else { lastCardTapAt = now; }
     });
@@ -718,6 +1081,11 @@
      before the click bubbles to el.screen. */
   if (el.changeover) el.changeover.addEventListener("click", function (e) { e.stopPropagation(); });
   if (el.changeoverOk) el.changeoverOk.addEventListener("click", ackChangeover);
+  if (el.completeEnd) el.completeEnd.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (api.hooks.endMatch) api.hooks.endMatch();
+  });
+  if (el.complete) el.complete.addEventListener("click", function (e) { e.stopPropagation(); });
   if (el.viewStats) el.viewStats.addEventListener("click", function (e) {
     e.stopPropagation();
     if (el.banner) el.banner.hidden = true;
@@ -753,13 +1121,14 @@
   // live-preview gating below (plan §UI state machine, extended with §F's
   // changeover overlay and §Phase 6's doubles decision).
   function scoringBlocked() {
-    return !state || isMatchComplete(state) || !!sheetStep || statsOpen || !!changeoverInfo || doublesDecisionPending();
+    return !state || shellOpen() || isMatchComplete(state) || !!sheetStep || statsOpen || !!changeoverInfo || doublesDecisionPending();
   }
 
   if (el.screen) {
     /* Tap zones on the watch face: top half = you, bottom half = opponent.
        Taps inside the scoreboard card are handled above and never score. */
     el.screen.addEventListener("click", function (e) {
+      if (appMode) return; // the watch scores by swipe only (see pointer handlers below)
       if ((el.banner && !el.banner.hidden) || scoringBlocked()) return;
       var rect = el.screen.getBoundingClientRect();
       award((e.clientY - rect.top) < rect.height / 2 ? "me" : "opponent");
@@ -782,14 +1151,16 @@
     /* Swipe support (up = you, down = opponent, left = undo, right = stats). */
     var touch = null;
     el.screen.addEventListener("touchstart", function (e) {
+      if (appMode) return;
       touch = scoringBlocked() ? null : e.changedTouches[0];
     }, { passive: true });
     el.screen.addEventListener("touchmove", function (e) {
-      if (!touch) return;
+      if (appMode || !touch) return;
       var t = e.changedTouches[0];
       previewFromDrag(t.clientX - touch.clientX, t.clientY - touch.clientY);
     }, { passive: true });
     el.screen.addEventListener("touchend", function (e) {
+      if (appMode) return;
       setLivePreview(null);
       if (!touch) return;
       var t = e.changedTouches[0], dx = t.clientX - touch.clientX, dy = t.clientY - touch.clientY;
@@ -805,11 +1176,11 @@
     // award()/undo() from the drag itself would double-count the point).
     var mouseDrag = null;
     el.screen.addEventListener("mousedown", function (e) {
-      if (e.button !== 0 || scoringBlocked()) return;
+      if (appMode || e.button !== 0 || scoringBlocked()) return;
       mouseDrag = { x: e.clientX, y: e.clientY };
     });
     window.addEventListener("mousemove", function (e) {
-      if (!mouseDrag) return;
+      if (appMode || !mouseDrag) return;
       previewFromDrag(e.clientX - mouseDrag.x, e.clientY - mouseDrag.y);
     });
     window.addEventListener("mouseup", function () {
@@ -819,13 +1190,69 @@
     });
   }
 
+  /* appMode: one pointer-driven swipe for touch AND mouse, using the watch's
+     own thresholds (ScoreInputAction.drag: >20 up/down scores, >20 left
+     undoes, >40 and >2:1 right opens stats). A tap on the scoreboard never
+     scores — only the double-tap second-serve gesture lives there. */
+  var lastSwipeAt = 0;
+  if (appMode && el.screen) {
+    el.screen.classList.add("app-mode");
+    var previewing = null;
+    var setPreview = function (target) {
+      if (previewing === target) return;
+      previewing = target;
+      if (el.meRow) el.meRow.classList.toggle("live-preview", target === "me");
+      if (el.oppRow) el.oppRow.classList.toggle("live-preview", target === "opponent");
+    };
+    var swipe = null;
+    var swipeAction = function (dx, dy) {
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx < -20) return "undo";
+        if (dx > 40 && Math.abs(dx) > 2 * Math.abs(dy)) return "stats";
+      } else {
+        if (dy < -20) return "win";
+        if (dy > 20) return "lose";
+      }
+      return null;
+    };
+    var swipeScale = function () { var r = el.screen.getBoundingClientRect(); return 268 / Math.max(r.width, 1); };
+    el.screen.addEventListener("pointerdown", function (e) {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (scoringBlocked()) { swipe = null; return; }
+      swipe = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      try { el.screen.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    el.screen.addEventListener("pointermove", function (e) {
+      if (!swipe || e.pointerId !== swipe.id) return;
+      var k = swipeScale();
+      var a = swipeAction((e.clientX - swipe.x) * k, (e.clientY - swipe.y) * k);
+      setPreview(a === "win" ? "me" : a === "lose" ? "opponent" : null);
+    });
+    var endSwipe = function (e, cancelled) {
+      if (!swipe || e.pointerId !== swipe.id) return;
+      var k = swipeScale(), dx = (e.clientX - swipe.x) * k, dy = (e.clientY - swipe.y) * k;
+      swipe = null;
+      setPreview(null);
+      if (cancelled || scoringBlocked()) return;
+      var a = swipeAction(dx, dy);
+      if (!a) return;
+      lastSwipeAt = Date.now();
+      if (a === "win") award("me");
+      else if (a === "lose") award("opponent");
+      else if (a === "undo") undo();
+      else toggleStatsGesture();
+    };
+    el.screen.addEventListener("pointerup", function (e) { endSwipe(e, false); });
+    el.screen.addEventListener("pointercancel", function (e) { endSwipe(e, true); });
+  }
+
   /* Keyboard shortcuts (only on instances that opt in via data-keyboard).
      "R" (new match) is the sheet's one bypass — plan's Undo model: "'New
      match' / R likewise clears sheet + pending + stats." Everything else is
      blocked while a sheet is open (plan §UI state machine). */
   if (useKeyboard) document.addEventListener("keydown", function (e) {
-    if (!el.play || el.play.hidden) return;
-    if (e.key.toLowerCase() === "r") { startMatch(); e.preventDefault(); return; }
+    if (!el.play || el.play.hidden || shellOpen()) return;
+    if (e.key.toLowerCase() === "r" && !appMode) { startMatch(); e.preventDefault(); return; }
     if (doublesDecisionPending()) return; // real <button>s handle their own Enter/Space once focused
     if (changeoverInfo) {
       if (e.key === "Enter" || e.key === " ") { ackChangeover(); e.preventDefault(); }
@@ -848,7 +1275,7 @@
      categorisation sheet, stats overlay, changeover overlay, or doubles
      decision is open, or once the match is complete. */
   function canToggleSecondServe() {
-    return !!state && !isMatchComplete(state) && trackingEnabled && !state.cfg.disablesPointTracking && !sheetStep && !statsOpen && !changeoverInfo && !doublesDecisionPending();
+    return !!state && !shellOpen() && !isMatchComplete(state) && trackingEnabled && !state.cfg.disablesPointTracking && !sheetStep && !statsOpen && !changeoverInfo && !doublesDecisionPending();
   }
   function toggleSecondServe() {
     if (!canToggleSecondServe()) return;
@@ -891,15 +1318,77 @@
     showToast(null);
 
     matchStartTime = Date.now();
+    recordStart = matchStartTime;
+    resetClocks();
     if (footerTimer) clearInterval(footerTimer);
     footerTimer = setInterval(tickFooter, 1000);
 
     render();
   }
 
+  /* ---- Match clock bookkeeping (appMode): per-set elapsed seconds feed the
+     stats screens' "Duration" rows and the saved history record; the fake
+     heart-rate/calorie readouts stand in for HealthKit, which a browser
+     doesn't have. ---- */
+  var recordStart = 0;   // a resumed match keeps its original start date
+  var endedAt = null, curSetIdx = -1, curSetStartedAt = 0, setSeconds = {};
+  var fakeHR = 118, fakeCompassWobble = 0;
+  function resetClocks() {
+    endedAt = null; curSetIdx = -1; curSetStartedAt = 0; setSeconds = {};
+    fakeHR = 112 + Math.round(Math.random() * 10);
+    setClockSync();
+  }
+  function clockNow() { return endedAt || Date.now(); }
+  function setClockSync() {
+    if (!state) return;
+    var idx = state.sets.length - 1, now = clockNow();
+    if (isMatchComplete(state) && !endedAt) {
+      endedAt = Date.now(); now = endedAt;
+      if (curSetIdx >= 0) setSeconds[curSetIdx] = (setSeconds[curSetIdx] || 0) + (now - curSetStartedAt) / 1000;
+      curSetStartedAt = now;
+      return;
+    }
+    if (curSetIdx === idx) return;
+    if (curSetIdx >= 0 && idx > curSetIdx) setSeconds[curSetIdx] = (setSeconds[curSetIdx] || 0) + (now - curSetStartedAt) / 1000;
+    curSetIdx = idx; curSetStartedAt = now;
+  }
+  function setElapsed(i) {
+    var base = setSeconds[i] || 0;
+    if (i === curSetIdx && !endedAt) base += (Date.now() - curSetStartedAt) / 1000;
+    return base;
+  }
+  function matchElapsedSeconds() {
+    return matchStartTime ? Math.max(0, Math.floor((clockNow() - matchStartTime) / 1000)) : 0;
+  }
+  function durationText(secs) {
+    var m = Math.floor(secs / 60), sc = secs % 60, h = Math.floor(m / 60), rm = m % 60;
+    return h > 0 ? h + " h " + rm + " m " + sc + " s" : m + " m " + sc + " s";
+  }
+  function calorieText() {
+    var secs = matchElapsedSeconds();
+    return (secs < 4 || !appSettings.health) ? "--" : String(Math.round(2 + secs * 0.13)) + "";
+  }
+  function footerText() {
+    if (appMode) return "\uD83D\uDD25 " + calorieText() + " kcal \u00B7 \uD83D\uDD50 " + durationText(matchElapsedSeconds());
+    return FORMAT_LABELS[state.format] + matchTypeSuffix(state) + (isMatchComplete(state) ? "" : elapsedTimerText());
+  }
+
   function tickFooter() {
-    if (!el.foot || !state || isMatchComplete(state)) return;
-    el.foot.textContent = FORMAT_LABELS[state.format] + matchTypeSuffix(state) + elapsedTimerText();
+    if (!state || isMatchComplete(state)) return;
+    if (appMode) {
+      // Heart rate drifts like a real wrist reading; points bump it (award()).
+      fakeHR = Math.max(96, Math.min(172, fakeHR + (Math.random() * 4 - 2.1)));
+      renderInfo();
+      if (statsOpen && el.statsBody) {
+        var live = el.statsBody.querySelector("[data-live-dur]");
+        if (live) {
+          var sc = setElapsed(Number(live.getAttribute("data-live-dur")));
+          live.lastChild.textContent = Math.floor(sc / 60) + " m " + Math.floor(sc % 60) + " s";
+        }
+      }
+    }
+    if (!el.foot) return;
+    el.foot.textContent = footerText();
   }
 
   // Plan §G: "🕐 mm:ss" -- deliberately simpler than the watch's "N m N s"/
@@ -938,6 +1427,7 @@
     var res = pointWon(prevState, player);
     state = res.state;
     isOnSecondServe = false;
+    fakeHR = Math.min(172, fakeHR + 1 + Math.random() * 4);
     momentum.push(player);
     if (momentum.length > 8) momentum.shift();
     flashPoint(player);
@@ -1231,7 +1721,7 @@
     return !!state && trackingEnabled && !state.cfg.disablesPointTracking;
   }
   function canOpenStats() {
-    return !!state && !sheetStep && !changeoverInfo && !doublesDecisionPending();
+    return !!state && !shellOpen() && !sheetStep && !changeoverInfo && !doublesDecisionPending();
   }
   function openStats() {
     if (!canOpenStats()) return;
@@ -1267,8 +1757,9 @@
     if (!el.statsSetFilter) return;
     el.statsSetFilter.innerHTML = "";
     var count = state.sets.length;
-    el.statsSetFilter.hidden = count <= 1;
-    if (count <= 1) return;
+    // MatchStatsView: filters = [.all] + one per set, so even a single set shows "All | S1" while tracking is on.
+    el.statsSetFilter.hidden = appMode ? !statsTrackingEnabled() : count <= 1;
+    if (el.statsSetFilter.hidden) return;
     // Defensive clamp: statsSetFilter can only reference an out-of-range set
     // if state.sets shrank while the overlay was open, which can't currently
     // happen (scoring/undo are blocked while statsOpen) — kept for safety.
@@ -1287,185 +1778,39 @@
     });
   }
 
-  function statsDivider() {
-    var d = document.createElement("div");
-    d.className = "stats-divider";
-    return d;
+  function statsRowEl(label, value) {
+    var r = document.createElement("div");
+    r.className = "stats-kv";
+    var a = document.createElement("span"); a.textContent = label;
+    var b = document.createElement("span"); b.className = "v"; b.textContent = value;
+    r.appendChild(a); r.appendChild(b);
+    return r;
   }
-  function statsSectionEl(title) {
-    var sec = document.createElement("div");
-    sec.className = "stats-section";
-    if (title) {
-      var h = document.createElement("div");
-      h.className = "stats-section-title";
-      h.textContent = title;
-      sec.appendChild(h);
-    }
-    return sec;
-  }
-  function statsEmptyEl(text) {
-    var div = document.createElement("div");
-    div.className = "stats-empty";
-    div.textContent = text;
-    return div;
-  }
-  function statsSmallNote(text) {
-    var p = document.createElement("div");
-    p.className = "stats-note";
-    p.textContent = text;
-    return p;
-  }
-
-  // Percent rows (Serve/Return/Break Points/Pressure/Rally/Score States/
-  // Aggression Index/Own Errors %) and raw-count rows (Winners/UE/FE/DF)
-  // share the same centre-split-bar DOM shape; only the value text and the
-  // fill fractions differ.
-  function comparisonRowEl(label, meText, meSub, meFrac, oppText, oppSub, oppFrac) {
-    var row = document.createElement("div");
-    row.className = "cmp-row";
-    var lab = document.createElement("div");
-    lab.className = "cmp-label";
-    lab.textContent = label;
-    row.appendChild(lab);
-
-    var body = document.createElement("div");
-    body.className = "cmp-body";
-    var mev = document.createElement("span");
-    mev.className = "cmp-val mev";
-    mev.textContent = meText;
-    var bar = document.createElement("div");
-    bar.className = "splitbar";
-    var meHalf = document.createElement("div");
-    meHalf.className = "cmp-half me";
-    var meFill = document.createElement("div");
-    meFill.className = "fill";
-    meFill.style.width = Math.round(meFrac * 100) + "%";
-    meHalf.appendChild(meFill);
-    var sep = document.createElement("div");
-    sep.className = "cmp-sep";
-    var oppHalf = document.createElement("div");
-    oppHalf.className = "cmp-half opp";
-    var oppFill = document.createElement("div");
-    oppFill.className = "fill";
-    oppFill.style.width = Math.round(oppFrac * 100) + "%";
-    oppHalf.appendChild(oppFill);
-    bar.appendChild(meHalf); bar.appendChild(sep); bar.appendChild(oppHalf);
-    var oppv = document.createElement("span");
-    oppv.className = "cmp-val oppv";
-    oppv.textContent = oppText;
-    body.appendChild(mev); body.appendChild(bar); body.appendChild(oppv);
-    row.appendChild(body);
-
-    if (meSub || oppSub) {
-      var sub = document.createElement("div");
-      sub.className = "cmp-subrow";
-      var meSubEl = document.createElement("span");
-      meSubEl.textContent = meSub || "";
-      var oppSubEl = document.createElement("span");
-      oppSubEl.textContent = oppSub || "";
-      sub.appendChild(meSubEl); sub.appendChild(oppSubEl);
-      row.appendChild(sub);
-    }
-    return row;
-  }
-
-  function comparisonRow(label, meNum, meDen, oppNum, oppDen) {
-    var T = window.DeuceMateTracking;
-    var m = T.formatPercentRow(meNum, meDen), o = T.formatPercentRow(oppNum, oppDen);
-    return comparisonRowEl(label, m.text, m.sub, m.frac, o.text, o.sub, o.frac);
-  }
-  function countComparisonRow(label, meCount, oppCount) {
-    var fr = window.DeuceMateTracking.countComparisonFracs(meCount, oppCount);
-    return comparisonRowEl(label, String(meCount), null, fr.meFrac, String(oppCount), null, fr.oppFrac);
-  }
-  // Three-column layout (mirrors MatchStatsView's ratio row: me.wueRatio /
-  // centered title+caption / opp.wueRatio) -- not a comparisonRow, since
-  // there's no meaningful bar for a ratio, but both sides still need to be
-  // shown side by side per the Me-vs-Opp contract the rest of this view holds.
-  function ratioRowEl(title, caption, meWinners, meUnforcedErrors, oppWinners, oppUnforcedErrors) {
-    var T = window.DeuceMateTracking;
-    var div = document.createElement("div");
-    div.className = "stats-ratio";
-    var meVal = document.createElement("span");
-    meVal.className = "val me";
-    meVal.textContent = T.winToUnforcedRatioText(meWinners, meUnforcedErrors);
-    var mid = document.createElement("div");
-    mid.className = "mid";
-    var capTitle = document.createElement("div");
-    capTitle.className = "cap-title";
-    capTitle.textContent = title;
-    var cap = document.createElement("div");
-    cap.className = "cap";
-    cap.textContent = caption;
-    mid.appendChild(capTitle); mid.appendChild(cap);
-    var oppVal = document.createElement("span");
-    oppVal.className = "val opp";
-    oppVal.textContent = T.winToUnforcedRatioText(oppWinners, oppUnforcedErrors);
-    div.appendChild(meVal); div.appendChild(mid); div.appendChild(oppVal);
-    return div;
-  }
-
-  function pointsWonSection(me) {
-    var sec = statsSectionEl(null);
-    var total = me.totalPoints, meWon = me.pointsWon, oppWon = total - meWon;
-    var meFrac = total > 0 ? meWon / total : 0;
-
-    var heads = document.createElement("div");
-    heads.className = "pw-heads";
-    var meSide = document.createElement("span"); meSide.className = "pw-side"; meSide.textContent = state.matchType === "doubles" ? "Our" : "Me";
-    var title = document.createElement("span"); title.className = "pw-title"; title.textContent = "Points Won";
-    var oppSide = document.createElement("span"); oppSide.className = "pw-side"; oppSide.textContent = "Opp";
-    heads.appendChild(meSide); heads.appendChild(title); heads.appendChild(oppSide);
-
-    var bar = document.createElement("div");
-    bar.className = "pw-bar";
-    var meSeg = document.createElement("div"); meSeg.className = "pw-seg me"; meSeg.style.width = (meFrac * 100) + "%";
-    var oppSeg = document.createElement("div"); oppSeg.className = "pw-seg opp"; oppSeg.style.width = ((1 - meFrac) * 100) + "%";
-    bar.appendChild(meSeg); bar.appendChild(oppSeg);
-
-    var foot = document.createElement("div");
-    foot.className = "pw-foot";
-    var meFoot = document.createElement("span"); meFoot.className = "pw-side"; meFoot.textContent = meWon + " pts";
-    var totalFoot = document.createElement("span"); totalFoot.className = "pw-total"; totalFoot.textContent = total + " total";
-    var oppFoot = document.createElement("span"); oppFoot.className = "pw-side"; oppFoot.textContent = oppWon + " pts";
-    foot.appendChild(meFoot); foot.appendChild(totalFoot); foot.appendChild(oppFoot);
-
-    sec.appendChild(heads); sec.appendChild(bar); sec.appendChild(foot);
-    return sec;
-  }
-
-  function outcomeBreakdownSection(me) {
-    var sec = statsSectionEl("Outcome Breakdown");
-    if (me.totalPoints <= me.uncategorizedCount) {
-      sec.appendChild(statsEmptyEl("Outcome tracking not collected for this match."));
-      return sec;
-    }
-    sec.appendChild(ratioRowEl("Win:Unforced Err", "aim for > 1.0",
-      me.myWinners, me.myUnforcedErrors, me.opponentWinners, me.opponentUnforcedErrors));
-    sec.appendChild(countComparisonRow("Winners", me.myWinners, me.opponentWinners));
-    sec.appendChild(countComparisonRow("Unforced Errors", me.myUnforcedErrors, me.opponentUnforcedErrors));
-    sec.appendChild(countComparisonRow("Forced Errors", me.myForcedErrors, me.opponentForcedErrors));
-    sec.appendChild(countComparisonRow("Double Faults", me.myDoubleFaults, me.opponentDoubleFaults));
-    sec.appendChild(comparisonRow("Aggression Index (W ÷ (W + UE))",
-      me.myWinners, me.myWinners + me.myUnforcedErrors,
-      me.opponentWinners, me.opponentWinners + me.opponentUnforcedErrors));
-    sec.appendChild(comparisonRow("Own Errors %",
-      me.myDoubleFaults + me.myUnforcedErrors, me.lostPoints,
-      me.opponentDoubleFaults + me.opponentUnforcedErrors, me.pointsWon));
-    if (me.uncategorizedCount > 0) sec.appendChild(statsSmallNote("(" + me.uncategorizedCount + " uncategorized)"));
-    return sec;
-  }
-
-  function percentSection(title, rows) {
-    var sec = statsSectionEl(title);
-    rows.forEach(function (r) { sec.appendChild(comparisonRow(r[0], r[1], r[2], r[3], r[4])); });
-    return sec;
+  function buildLiveDurations() {
+    var idxs = statsSetFilter === null ? state.sets.map(function (_, i) { return i; }) : [statsSetFilter];
+    var wrap = document.createElement("div");
+    wrap.className = "stats-durations";
+    // setDurationSection: only when the chosen sets have tracked points or a recorded (finished) duration
+    var hasData = idxs.some(function (i) {
+      return stats.some(function (p) { return p.setIndex === i; }) || i < state.sets.length - 1 || isMatchComplete(state);
+    });
+    if (!hasData) return wrap;
+    idxs.forEach(function (i) {
+      var label = (idxs.length > 1 ? (isDecidingSuperTiebreak(state.cfg, i) ? "TB" : "S" + (i + 1)) + " " : "") + "Duration";
+      var secs = setElapsed(i);
+      var finished = i < state.sets.length - 1 || isMatchComplete(state);
+      var row = statsRowEl(label, finished ? Math.floor(secs / 60) + " m" : Math.floor(secs / 60) + " m " + Math.floor(secs % 60) + " s");
+      if (!finished) row.setAttribute("data-live-dur", String(i));
+      wrap.appendChild(row);
+    });
+    wrap.appendChild(statsDivider());
+    return wrap;
   }
 
   function buildStatsBody() {
     if (!el.statsBody) return;
     el.statsBody.innerHTML = "";
-
+    if (appMode) el.statsBody.appendChild(buildLiveDurations());
     if (!statsTrackingEnabled()) {
       el.statsBody.appendChild(statsEmptyEl("Point outcome tracking was off for this match."));
       return;
@@ -1475,59 +1820,7 @@
       el.statsBody.appendChild(statsEmptyEl("No tracked points yet."));
       return;
     }
-
-    var T = window.DeuceMateTracking;
-    var me = T.matchStatsSummary(filtered, "me");
-    var opp = T.matchStatsSummary(filtered, "opponent");
-
-    if (me.totalPoints > 0) el.statsBody.appendChild(pointsWonSection(me));
-    el.statsBody.appendChild(outcomeBreakdownSection(me));
-
-    el.statsBody.appendChild(statsDivider());
-    el.statsBody.appendChild(percentSection("Serve", [
-      ["1st Serve In", me.firstServeIn, me.firstServeTotal, opp.firstServeIn, opp.firstServeTotal],
-      ["2nd Serve In", me.secondServeIn, me.secondServeTotal, opp.secondServeIn, opp.secondServeTotal],
-      ["1st Serve Win", me.firstServeWins, me.firstServeIn, opp.firstServeWins, opp.firstServeIn],
-      ["2nd Serve Win", me.secondServeWins, me.secondServeIn, opp.secondServeWins, opp.secondServeIn],
-      ["DF Rate (2nd)", me.doubleFaults, me.secondServeTotal, opp.doubleFaults, opp.secondServeTotal]
-    ]));
-
-    el.statsBody.appendChild(statsDivider());
-    el.statsBody.appendChild(percentSection("Return", [
-      ["vs 1st Serve", me.returnWinsOnFirst, me.returnOppsOnFirst, opp.returnWinsOnFirst, opp.returnOppsOnFirst],
-      ["vs 2nd Serve", me.returnWinsOnSecond, me.returnOppsOnSecond, opp.returnWinsOnSecond, opp.returnOppsOnSecond]
-    ]));
-
-    el.statsBody.appendChild(statsDivider());
-    el.statsBody.appendChild(percentSection("Break Points", [
-      ["BPs Won (Returner)", me.breakPointWins, me.breakPointOpps, opp.breakPointWins, opp.breakPointOpps],
-      ["BPs Saved (Server)", me.breakPointsFaced - me.breakPointsLost, me.breakPointsFaced,
-                              opp.breakPointsFaced - opp.breakPointsLost, opp.breakPointsFaced]
-    ]));
-
-    if (me.bigPointTotal > 0 && me.normalPointTotal > 0) {
-      el.statsBody.appendChild(statsDivider());
-      el.statsBody.appendChild(percentSection("Pressure vs Normal", [
-        ["Big Points", me.bigPointWins, me.bigPointTotal, opp.bigPointWins, opp.bigPointTotal],
-        ["Normal Points", me.normalPointWins, me.normalPointTotal, opp.normalPointWins, opp.normalPointTotal]
-      ]));
-    }
-
-    if (me.rallyDepth.length) {
-      el.statsBody.appendChild(statsDivider());
-      el.statsBody.appendChild(percentSection("Rally Depth Won", me.rallyDepth.map(function (m, i) {
-        var o = opp.rallyDepth[i];
-        return ["@ " + T.ENDING_SHOT_LABELS[m.shot], m.wins, m.total, o.wins, o.total];
-      })));
-    }
-
-    if (me.scoreStates.length) {
-      el.statsBody.appendChild(statsDivider());
-      el.statsBody.appendChild(percentSection("Score States", me.scoreStates.map(function (m, i) {
-        var o = opp.scoreStates[i];
-        return [m.label, m.wins, m.total, o.wins, o.total];
-      })));
-    }
+    buildStatsContent(el.statsBody, filtered, state.matchType);
   }
 
   function renderStats() {
@@ -1560,7 +1853,8 @@
       }
       var hasStats = statsTrackingEnabled() && stats.length > 0;
       if (el.viewStats) el.viewStats.hidden = !hasStats;
-      if (el.banner) el.banner.hidden = false; else showToast(iWon ? "You win! 🎾" : "Opponent wins");
+      if (el.banner) el.banner.hidden = false; else if (!appMode) showToast(iWon ? "You win! 🎾" : "Opponent wins");
+      render();
       return;
     }
     var setEvt = events.filter(function (e) { return e.t === "setWon"; })[0];
@@ -1589,6 +1883,7 @@
   }
 
   function showToast(text) {
+    if (appMode) return; // the real watch has no game/set/undo toasts
     if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
     if (!el.toast) return;
     if (!text) { el.toast.hidden = true; el.toast.textContent = ""; return; }
@@ -1662,9 +1957,12 @@
       }
     }
 
+    if (appMode) setClockSync();
     if (el.foot) {
-      el.foot.textContent = FORMAT_LABELS[state.format] + matchTypeSuffix(state) + (isMatchComplete(state) ? "" : elapsedTimerText());
+      el.foot.textContent = footerText();
+      el.foot.hidden = appMode && isMatchComplete(state);
     }
+    if (appMode) renderApp();
 
     // First-game gesture hint (plan §G, mirrors ContentView's
     // hasCompletedFirstGame): visible until the first game completes or the
@@ -1684,7 +1982,7 @@
     // The stats toggle itself stays enabled while open so it can still close
     // the overlay.
     var over = isMatchComplete(state);
-    var blocked = !!sheetStep || statsOpen || !!changeoverInfo || doublesDecisionPending();
+    var blocked = shellOpen() || !!sheetStep || statsOpen || !!changeoverInfo || doublesDecisionPending();
     if (el.undo) el.undo.disabled = !history.length || blocked;
     if (el.ptMe) el.ptMe.disabled = over || blocked;
     if (el.ptOpp) el.ptOpp.disabled = over || blocked;
@@ -1693,68 +1991,207 @@
       el.secondServe.classList.toggle("active", isOnSecondServe);
     }
     if (el.statsToggle) el.statsToggle.disabled = !canOpenStats();
+    if (api.hooks.change) api.hooks.change();
   }
 
-  function setServerIcon(node, isServer, showSecondBadge, doublesName) {
-    if (!node) return;
-    node.innerHTML = "";
-    if (isServer) {
-      node.appendChild(document.createTextNode("🎾"));
-      node.setAttribute("aria-label", (doublesName ? "Serving: " + doublesName : "Serving") + (showSecondBadge ? ", second serve" : ""));
-      node.removeAttribute("aria-hidden");
-      node.classList.remove("idle");
-      if (showSecondBadge) {
-        var badge = document.createElement("span");
-        badge.className = "w-2nd-badge";
-        badge.textContent = "2";
-        badge.setAttribute("aria-hidden", "true");
-        node.appendChild(badge);
+  /* ---- ContentView's lower half (appMode): momentum / ends-switch reminder,
+     CourtSideView + Heart-rate + Compass badges, and the match-complete
+     panel. Heart rate and calories are invented — a browser has no HealthKit. */
+  var courtBuilt = false, courtDots = null;
+  var courtInitialHeading = 205, fakeHeading = 205;
+  function isDeuceSide() {
+    if (state.cfg.fixedDeuceSide) return true;
+    var last = lastSet(state);
+    if (last && last.isTieBreak) return state.pointCountInTiebreak % 2 === 0;
+    return (state.currentPointsMe + state.currentPointsOpponent) % 2 === 0;
+  }
+  function isAtGameStart() {
+    if (isMatchComplete(state)) return false;
+    var last = lastSet(state);
+    if (last && last.isTieBreak) return state.pointCountInTiebreak % 6 === 0;
+    return state.currentPointsMe === 0 && state.currentPointsOpponent === 0;
+  }
+  function currentCourtBearing() {
+    if (state.cfg.fixedDeuceSide) return courtInitialHeading;
+    var last = lastSet(state), tb = last && last.isTieBreak;
+    var changeovers = Math.floor((state.gameCount + 1) / 2) + (tb ? Math.floor(state.pointCountInTiebreak / 6) : 0);
+    return (courtInitialHeading + (changeovers % 2 === 1 ? 180 : 0)) % 360;
+  }
+  function renderCourt() {
+    if (!el.court) return;
+    if (!courtBuilt) {
+      el.court.innerHTML = "";
+      courtDots = [];
+      for (var r = 0; r < 2; r++) {
+        if (r === 1) { var line = document.createElement("div"); line.className = "cs-line"; el.court.appendChild(line); }
+        var row = document.createElement("div"); row.className = "cs-row";
+        var dot = document.createElement("span"); dot.className = "cs-dot";
+        row.appendChild(dot); el.court.appendChild(row); courtDots.push(dot);
       }
-      // Doubles server-name capsule (plan §Phase 6, mirrors serverIndicator's
-      // DoublesServer.displayName capsule) -- positioned below the ball,
-      // distinct from the 2nd-serve badge's top-trailing position, so the
-      // two never collide.
-      if (doublesName) {
-        var capsule = document.createElement("span");
-        capsule.className = "w-doubles-name";
-        capsule.textContent = doublesName;
-        capsule.setAttribute("aria-hidden", "true");
-        node.appendChild(capsule);
+      courtBuilt = true;
+    }
+    var server = state.currentServer, deuce = isDeuceSide();
+    var serverOnLeft = !server ? false : (server === "me" ? !deuce : deuce);
+    el.court.setAttribute("data-server", server || "none");
+    // top = opponent, bottom = me (CourtSideView draws the opponent on top)
+    [["opponent", courtDots[0]], ["me", courtDots[1]]].forEach(function (p) {
+      var isServer = server === p[0], isReceiver = !isServer && !!server;
+      var left = isServer ? serverOnLeft : !serverOnLeft;
+      p[1].style.left = state.cfg.fixedDeuceSide ? "calc(20 * var(--pt))" : (left ? "calc(7 * var(--pt))" : "calc(33 * var(--pt))");
+      p[1].className = "cs-dot" + (isServer ? " server" : isReceiver ? " receiver" : "");
+    });
+  }
+  function renderHR() {
+    if (!el.hr) return;
+    if (!appSettings.health) {
+      el.hr.className = "w-hr band-none";
+      var nv = el.hr.querySelector("[data-hr-val]"); if (nv) nv.textContent = "--";
+      return;
+    }
+    var bpm = Math.round(fakeHR);
+    var band = bpm >= 170 ? "max" : bpm >= 150 ? "high" : bpm >= 120 ? "mod" : "low";
+    el.hr.className = "w-hr band-" + band;
+    var v = el.hr.querySelector("[data-hr-val]");
+    if (v) v.textContent = String(bpm);
+  }
+  var CARDINALS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  function renderCompass() {
+    if (!el.compass) return;
+    var show = appSettings.compass && !state.cfg.fixedDeuceSide && isAtGameStart();
+    el.compass.hidden = !show;
+    if (!show) return;
+    var bearing = currentCourtBearing();
+    // The wrist turns to the new end over a few seconds after a changeover.
+    var diffToTarget = ((bearing - fakeHeading + 540) % 360) - 180;
+    fakeHeading = (fakeHeading + Math.max(-70, Math.min(70, diffToTarget)) + 360) % 360;
+    var live = (fakeHeading + Math.sin(Date.now() / 900) * 4 + 360) % 360;
+    var delta = ((bearing - live + 540) % 360) - 180;
+    var dist = Math.min(Math.abs(live - bearing), 360 - Math.abs(live - bearing));
+    el.compass.className = "w-compass " + (dist <= 45 ? "ok" : dist >= 135 ? "bad" : "mid");
+    var arrow = el.compass.querySelector("[data-compass-arrow]");
+    if (arrow) arrow.style.transform = "rotate(" + delta.toFixed(0) + "deg)";
+    var lab = el.compass.querySelector("[data-compass-label]");
+    if (lab) lab.textContent = CARDINALS[Math.floor((bearing + 22.5) / 45) % 8];
+  }
+  function renderInfo() {
+    if (!appMode || !state || !el.info) return;
+    renderCourt(); renderHR(); renderCompass();
+  }
+  function renderApp() {
+    var over = isMatchComplete(state);
+    var rem = state.cfg.fixedDeuceSide ? null : nextSetRequiresEndsSwitch(state);
+    if (el.reminder) {
+      el.reminder.hidden = over || rem === null;
+      if (rem !== null) {
+        el.reminder.className = "w-reminder " + (rem ? "players" : "balls");
+        el.reminder.textContent = (rem ? "\uD83D\uDD01 \uD83D\uDC65  Players change ends" : "\uD83D\uDD01 \uD83C\uDFBE  Balls change ends");
       }
-    } else {
-      node.setAttribute("aria-hidden", "true");
-      node.removeAttribute("aria-label");
-      node.classList.add("idle");
+    }
+    if (el.momentum) el.momentum.hidden = over || rem !== null;
+    if (el.info) el.info.hidden = over;
+    renderInfo();
+    if (el.complete) {
+      el.complete.hidden = !over;
+      if (over) {
+        var iWon = matchWinner(state) === "me";
+        if (el.completeTitle) {
+          el.completeTitle.textContent = iWon ? "You Won! \uD83C\uDFC6" : "Opponent Won";
+          el.completeTitle.className = "w-complete-title " + (iWon ? "win" : "loss");
+        }
+        var cc = el.complete.querySelector(".w-complete-card");
+        if (cc) cc.className = "w-complete-card" + (iWon ? " win" : "");
+        if (el.completeStats) el.completeStats.hidden = !(statsTrackingEnabled() && stats.length > 0);
+      }
     }
   }
 
-  function buildCells(container, st, player) {
-    if (!container) return;
-    container.innerHTML = "";
-    var cfg = st.cfg, tbOnly = !cfg.playRegularSets, n = st.sets.length;
-    visibleSetIndices(st).forEach(function (i) {
-      var set = st.sets[i];
-      var isActive = i === n - 1;
-      var games = player === "me" ? set.gamesMe : set.gamesOpponent;
-      var tbPts = player === "me" ? set.tieBreakPointsMe : set.tieBreakPointsOpponent;
-      // Standard's deciding super-tiebreak shows its POINTS (e.g. 10), not games.
-      var isSuperTB = !tbOnly && set.isTieBreak && n === 3 && i === 2;
-      var cell = document.createElement("span");
-      cell.className = "w-cell" + (isActive ? " active" : "");
-      if (tbOnly || isSuperTB) {
-        cell.textContent = String(tbPts);
-      } else {
-        cell.textContent = String(games);
-        // A finished regular tiebreak set shows its points as a superscript (e.g. 7⁴).
-        if (set.isTieBreak && tbPts > 0 && !isActive) {
-          var sup = document.createElement("sup");
-          sup.textContent = String(tbPts);
-          cell.appendChild(sup);
-        }
-      }
-      container.appendChild(cell);
-    });
+  /* ---- Driver API for the app shell (watch-demo-app.js) ------------------
+     The shell owns every screen around the scoreboard (home, setup, settings,
+     history, guide, warm-up, server pick); this closure stays the one live
+     match, exactly like ScoreViewModel behind the watch's views. ---- */
+  var api = root.__deuceMateApi = { hooks: {} };
+  function resetOverlays() {
+    statsOpen = false; statsSetFilter = null; pendingStat = null; sheetStep = null; sheetOutcome = null;
+    sheetBusy = false; deferredEvents = null; changeoverInfo = null;
+    if (sheetCommitTimer) { clearTimeout(sheetCommitTimer); sheetCommitTimer = null; }
+    if (deferredToastTimer) { clearTimeout(deferredToastTimer); deferredToastTimer = null; }
+    deferredToastEvents = null;
   }
+  api.configure = function (o) {
+    if (o.tracking != null) trackingEnabled = !!o.tracking;
+    if (o.compass != null) { appSettings.compass = !!o.compass; if (state) renderInfo(); }
+    if (o.health != null) { appSettings.health = !!o.health; if (state) renderInfo(); }
+  };
+  api.start = function (cfg) {
+    chosenMatchType = cfg.matchType === "doubles" ? "doubles" : "singles";
+    chosenFormat = cfg.format;
+    chosenServer = cfg.server || "me";
+    chosenDoublesServer = cfg.doublesServer || "me";
+    api.configure(cfg);
+    courtInitialHeading = fakeHeading = 205;
+    startMatch();
+  };
+  api.active = function () { return !!state; };
+  api.complete = function () { return !!state && isMatchComplete(state); };
+  api.hasProgress = function () {
+    if (!state) return false;
+    return stats.length > 0 || history.length > 0 || state.currentPointsMe > 0 || state.currentPointsOpponent > 0 ||
+      state.sets.some(function (x) { return x.gamesMe > 0 || x.gamesOpponent > 0 || x.tieBreakPointsMe > 0 || x.tieBreakPointsOpponent > 0; });
+  };
+  api.modalKind = function () { return statsOpen ? "stats" : api.modalOpen() ? "other" : null; };
+  api.closeStats = function () { if (statsOpen) closeStats(); };
+  api.modalOpen = function () { return !!sheetStep || statsOpen || !!changeoverInfo || (!!state && doublesDecisionPending()); };
+  api.refresh = function () { if (state) render(); };
+  api.clear = function () {
+    state = null; history = []; momentum = []; stats = []; isOnSecondServe = false;
+    resetOverlays();
+    if (footerTimer) { clearInterval(footerTimer); footerTimer = null; }
+    matchStartTime = null; hasCompletedFirstGame = false;
+  };
+  // A MatchRecord-shaped snapshot. Durations are floored at ~24 s a point so a
+  // hurried demo still saves a believable match; steps/calories are invented.
+  api.snapshot = function (endAtCurrentScore) {
+    if (!state) return null;
+    var complete = isMatchComplete(state) || !!endAtCurrentScore;
+    var winner = complete ? leaderWhenStopped(state) : null;
+    var played = Math.max(history.length, stats.length);
+    var elapsed = Math.max(matchElapsedSeconds(), played * 24);
+    var perSet = {}, tot = 0;
+    state.sets.forEach(function (_, i) { perSet[i] = Math.round(setElapsed(i)); tot += perSet[i]; });
+    var scale = tot > 0 ? elapsed / tot : 1;
+    Object.keys(perSet).forEach(function (k) { perSet[k] = Math.max(60, Math.round(perSet[k] * scale)); });
+    var mins = elapsed / 60;
+    return {
+      id: "m" + Date.now() + Math.floor(Math.random() * 1000),
+      startTime: recordStart || matchStartTime || Date.now(), endTime: complete ? Date.now() : null,
+      iWon: complete ? (winner ? winner === "me" : null) : null,
+      format: state.format, matchType: state.matchType,
+      sets: clone(state).sets, currentPointsMe: state.currentPointsMe, currentPointsOpponent: state.currentPointsOpponent,
+      stats: stats.map(function (p) { return Object.assign({}, p); }),
+      trackingOn: trackingEnabled && !state.cfg.disablesPointTracking,
+      elapsed: Math.round(elapsed), setElapsed: perSet,
+      steps: appSettings.health ? Math.round(mins * 36 + played * 4) : 0, kcal: appSettings.health ? Math.round(mins * 7.6 + played * 0.4) : 0,
+      pointsPlayed: played,
+      resume: { state: clone(state), momentum: momentum.slice(), secondServe: isOnSecondServe, trackingEnabled: trackingEnabled }
+    };
+  };
+  api.restore = function (rec) {
+    state = clone(rec.resume.state);
+    state.cfg = cfgFor(rec.format);
+    history = []; momentum = rec.resume.momentum.slice(); isOnSecondServe = !!rec.resume.secondServe;
+    stats = rec.stats.map(function (p) { return Object.assign({}, p); });
+    trackingEnabled = rec.resume.trackingEnabled;
+    resetOverlays();
+    hasCompletedFirstGame = state.gameCount > 0;
+    matchStartTime = Date.now() - rec.elapsed * 1000;
+    recordStart = rec.startTime;
+    resetClocks();
+    Object.keys(rec.setElapsed || {}).forEach(function (k) { setSeconds[k] = rec.setElapsed[k]; });
+    if (footerTimer) clearInterval(footerTimer);
+    footerTimer = setInterval(tickFooter, 1000);
+    render();
+  };
+  api.stateRef = function () { return state; };
 
   // Debug handle for console spot-checks (plan's Owner Verification
   // Playbook): neither DeuceMateScoring nor DeuceMateTracking expose a live
@@ -1762,6 +2199,7 @@
   root.__deuceMateDebug = { state: function () { return state; }, stats: function () { return stats; } };
 
   if (compact) { if (el.setup) el.setup.hidden = true; startMatch(); }
+  if (appMode) { trackingEnabled = false; }
   } /* end initWatchDemo */
 
   var demos = document.querySelectorAll("#watch-demo, .watch-demo");
