@@ -1216,16 +1216,25 @@
       return null;
     };
     var swipeScale = function () { var r = el.screen.getBoundingClientRect(); return 268 / Math.max(r.width, 1); };
+    // After the match ends scoring is blocked, but the "Swipe for Stats" gesture must still work.
+    var statsOnlyAfterMatch = function () {
+      return !!state && !shellOpen() && isMatchComplete(state) && !sheetStep && !statsOpen && !changeoverInfo;
+    };
     el.screen.addEventListener("pointerdown", function (e) {
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      if (scoringBlocked()) { swipe = null; return; }
-      swipe = { x: e.clientX, y: e.clientY, id: e.pointerId };
-      try { el.screen.setPointerCapture(e.pointerId); } catch (err) {}
+      if (scoringBlocked() && !statsOnlyAfterMatch()) { swipe = null; return; }
+      // Capture is deferred to pointermove: capturing here would redirect the pointer-up/click away
+      // from the scoreboard card and break its double-tap (2nd serve) detector.
+      swipe = { x: e.clientX, y: e.clientY, id: e.pointerId, captured: false };
     });
     el.screen.addEventListener("pointermove", function (e) {
       if (!swipe || e.pointerId !== swipe.id) return;
+      if (!swipe.captured && Math.hypot(e.clientX - swipe.x, e.clientY - swipe.y) > 8) {
+        swipe.captured = true;
+        try { el.screen.setPointerCapture(e.pointerId); } catch (err) {}
+      }
       var k = swipeScale();
-      var a = swipeAction((e.clientX - swipe.x) * k, (e.clientY - swipe.y) * k);
+      var a = statsOnlyAfterMatch() ? null : swipeAction((e.clientX - swipe.x) * k, (e.clientY - swipe.y) * k);
       setPreview(a === "win" ? "me" : a === "lose" ? "opponent" : null);
     });
     var endSwipe = function (e, cancelled) {
@@ -1233,9 +1242,10 @@
       var k = swipeScale(), dx = (e.clientX - swipe.x) * k, dy = (e.clientY - swipe.y) * k;
       swipe = null;
       setPreview(null);
-      if (cancelled || scoringBlocked()) return;
+      var afterMatch = statsOnlyAfterMatch();
+      if (cancelled || (scoringBlocked() && !afterMatch)) return;
       var a = swipeAction(dx, dy);
-      if (!a) return;
+      if (!a || (afterMatch && a !== "stats")) return;
       lastSwipeAt = Date.now();
       if (a === "win") award("me");
       else if (a === "lose") award("opponent");
