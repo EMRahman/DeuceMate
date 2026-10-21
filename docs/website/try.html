@@ -5,17 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="index,follow">
 <meta name="theme-color" content="#080b0a">
-<title>Try DeuceMate — the Apple Watch app in your browser</title>
-<meta name="description" content="A free, interactive replica of the DeuceMate Apple Watch app: home screen, match setup, settings, past matches, the animated guide and the live scorer across all six match formats — no install required.">
+<title>Try DeuceMate — a simulated Apple Watch demo</title>
+<meta name="description" content="A simulated browser demo that mirrors the DeuceMate Apple Watch app: match setup, scoring with or without point tracking, live stats, past matches and the animated guide. Health sensors and iPhone features are skipped.">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="Try DeuceMate in your browser">
-<meta property="og:description" content="Try the whole DeuceMate Apple Watch app right in your browser — home, setup, settings, history, the guide and the live scorer.">
+<meta property="og:description" content="A simulated browser demo that mirrors the DeuceMate Apple Watch app — score a match, with or without point tracking, or watch the guide.">
 <meta property="og:image" content="assets/deucemate-icon.png">
 <meta property="og:url" content="https://emrahman.github.io/DeuceMate/try.html">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Try DeuceMate in your browser">
-<meta name="twitter:description" content="Try the whole DeuceMate Apple Watch app in your browser — home, setup, settings, match history, the guide and the live scorer.">
+<meta name="twitter:description" content="A simulated browser demo that mirrors the DeuceMate Apple Watch app — score a match, with or without point tracking, or watch the guide.">
 <meta name="twitter:image" content="assets/deucemate-icon.png">
 
 <link rel="icon" type="image/png" href="assets/deucemate-logo.png">
@@ -58,27 +58,30 @@
 <main>
   <section style="padding-top:56px;padding-bottom:24px;">
     <div class="wrap" style="text-align:center;">
-      <span class="eyebrow">🎾 Interactive demo · no install</span>
+      <span class="eyebrow">🎾 Simulated browser demo</span>
       <h1 class="title" style="font-size:clamp(2rem,5vw,3rem);font-weight:850;max-width:18ch;margin:14px auto 0;">
         Try the watch app <span class="grad-text">right here</span>
       </h1>
       <p class="lede" style="max-width:56ch;margin:16px auto 0;">
-        A replica of the Apple&nbsp;Watch app, start to finish: the home screen, match setup,
-        Settings, Past Matches and the animated Guide — plus the same scoring logic as the
-        watch, with full server rotation, point-by-point categorisation and live stats.
-        Heart rate, calories and steps are made up; everything else works.
+        A browser simulation that mirrors the Apple&nbsp;Watch app: same scoring rules,
+        match setup, Settings, Past Matches and Guide.
       </p>
-      <p class="sim-note">
-        ⚠️ This is a <strong>simulated browser demo</strong> to give you a feel for how scoring works —
-        it is <strong>not the actual product</strong>. The real DeuceMate is a native Apple&nbsp;Watch
-        &amp; iPhone app with live watch&nbsp;↔&nbsp;phone sync, full match stats, heart-rate insights
-        and one-tap AI coaching.
-      </p>
+      <div class="real-skipped">
+        <div><strong>Works like the app</strong>All six formats, server rotation, changeovers, point categories, live stats, Past Matches, the Guide.</div>
+        <div class="skipped"><strong>Skipped here</strong>Health: heart rate, calories, steps and compass are invented. Also the first-launch guide offer, and the iPhone side (sync, archive, announcements, AI&nbsp;Coach).</div>
+      </div>
     </div>
   </section>
 
   <section style="padding-top:8px;">
     <div class="wrap">
+      <div class="mode-tabs" role="group" aria-label="Demo mode">
+        <button type="button" class="util-btn" data-mode="score" aria-pressed="true">Score only</button>
+        <button type="button" class="util-btn" data-mode="stats" aria-pressed="false">Score + stats</button>
+        <button type="button" class="util-btn" data-mode="guide" aria-pressed="false">Watch the guide</button>
+      </div>
+      <p class="mode-caption" data-mode-caption aria-live="polite"></p>
+
       <div id="watch-demo" data-keyboard data-app>
         <div class="demo-wrap">
           <div data-play>
@@ -189,28 +192,18 @@
         </div>
       </div>
 
-      <p class="demo-hint">
-        This is the whole watch app, not just the scoreboard: the <strong>home screen</strong>
-        (Start Match, match setup, tracking strip), <strong>Settings</strong>,
-        <strong>Past Matches</strong> and the <strong>Guide</strong> with its animated walkthrough.
-        Click or tap the buttons on the watch face. Heart rate, calories and steps are
-        invented — a browser has no sensors.<br>
-        <strong>In a match, swipe the watch face</strong> (drag with the mouse or your finger):
-        <strong>up</strong> wins a point, <strong>down</strong> loses one, <strong>left</strong> undoes,
-        <strong>right</strong> opens Live Stats. <strong>Double-tap the scoreboard</strong> to flag a
-        2nd serve.<br>
-        As on the real watch, <strong>Track point outcome is off until you turn it on in Settings</strong>
-        — then each point ends with the Double&nbsp;Fault / Winner / Forced / Unforced tap-through and
-        live stats build as you play (Perpetual Points never tracks).<br>
-        Keyboard in a match: <span class="kbd">↑</span> win · <span class="kbd">↓</span> lose ·
-        <span class="kbd">U</span> undo · <span class="kbd">S</span> stats · <span class="kbd">2</span> 2nd serve.
-      </p>
+      <div class="demo-legend">
+        Swipe the watch face: <strong>↑</strong> win · <strong>↓</strong> lose · <strong>←</strong> undo · <strong>→</strong> stats · double-tap for 2nd serve
+        <details>
+          <summary>Keyboard shortcuts</summary>
+          <span class="kbd">↑</span> win · <span class="kbd">↓</span> lose · <span class="kbd">U</span> undo · <span class="kbd">S</span> stats · <span class="kbd">2</span> 2nd serve
+        </details>
+      </div>
 
       <div class="cta-final" style="margin-top:44px;">
         <span class="eyebrow">✅ Available now on the App Store</span>
         <h2>Like it? Take it to the court.</h2>
-        <p>This demo is only the scorer. The real app adds live iPhone mirroring, spoken
-           announcements, 20+ match stats, heart-rate insights and one-tap AI&nbsp;coaching.</p>
+        <p>The real app adds live iPhone mirroring, 20+ match stats, heart-rate insights and one-tap AI&nbsp;coaching.</p>
         <div class="hero-actions" style="margin-top:26px;">
           <a class="btn btn-primary btn-lg" href="https://apps.apple.com/app/id6757105622" target="_blank" rel="noopener">
             <span aria-hidden="true">↓</span> Download on the App&nbsp;Store
@@ -242,7 +235,7 @@
       <a href="mailto:mail@ehsanrahman.com">Contact</a>
       <a href="https://ehsanrahman.com" target="_blank" rel="noopener">ehsanrahman.com</a>
     </nav>
-    <p class="fine">© 2026 Ehsan Rahman · This browser demo is for fun — the Apple Watch app is the real scorer. DeuceMate is not affiliated with Apple Inc.</p>
+    <p class="fine">© 2026 Ehsan Rahman · This browser demo is a simulation — the Apple Watch app is the real scorer. DeuceMate is not affiliated with Apple Inc.</p>
   </div>
 </footer>
 

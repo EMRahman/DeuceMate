@@ -550,3 +550,7 @@ are consistent. Nothing is persisted: a reload resets the watch.
 **When you change a watch view, mirror it here.** The Swift ↔ JS pairs above
 are the map; the strings are copied verbatim from `HomeView.swift`,
 `MatchTrackingStatus.swift`, `SettingsCopy.swift` and `WalkthroughFixtures.swift`.
+
+## Page modes (try.html)
+
+`try.html` is one watch with a three-way mode switch (`S.setMode` in `watch-demo-app.js`): **Score only** (Track point outcome off), **Score + stats** (on) and **Watch the guide** (opens the animated walkthrough). Intentionally skipped: Health (permission prompt and real sensors — HR, kcal, steps and compass are invented), the first-launch guide offer, and the iPhone side.
