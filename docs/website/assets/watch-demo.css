@@ -612,7 +612,7 @@
 .app-mode .sheet-header { padding: calc(2 * var(--pt)) calc(24 * var(--pt)); border-radius: calc(10 * var(--pt)); }
 .app-mode .sheet-title { font-size: calc(12.5 * var(--pt)); white-space: nowrap; }
 .app-mode .sheet-title .sub { font-size: calc(10 * var(--pt)); }
-.app-mode .sheet-btn { font-size: calc(12.5 * var(--pt)); border-radius: calc(17 * var(--pt)); }
+.app-mode .sheet-btn { font-size: calc(14.5 * var(--pt)); border-radius: calc(17 * var(--pt)); } /* footnote.semibold measured on the SE 3 simulator: wraps "Double / Fault" */
 .app-mode .sheet-undo { font-size: calc(12 * var(--pt)); border-radius: calc(17 * var(--pt)); margin-top: calc(4 * var(--pt)); }
 .app-mode .sheet-buttons { margin-top: calc(4 * var(--pt)); gap: calc(4 * var(--pt)); }
 .app-mode .sheet { padding-top: calc(31 * var(--pt)); }
@@ -624,3 +624,27 @@
 /* post-point sheet rows are 51 pt tall and not stretched; Undo follows at its natural height and may run past the bottom edge */
 .app-mode .sheet-buttons { flex: none; grid-auto-rows: calc(51 * var(--pt)); align-content: start; }
 .app-mode .sheet-undo { flex: none; margin-top: calc(7 * var(--pt)); padding: calc(10 * var(--pt)); font-size: calc(14.5 * var(--pt)); }
+
+/* Belt and braces for touch panning in the live stats overlay (the nested scroller already pans natively). */
+.watch-screen.app-mode.playing:has(.stats-overlay:not([hidden])) { touch-action: pan-y; cursor: default; }
+.stats-overlay .stats-body { touch-action: pan-y; overscroll-behavior: contain; min-height: 0; }
+/* The watch's MatchStatsView is a single ScrollView: title, set pills and stats scroll as one page. */
+.app-mode .stats-overlay:not([hidden]) { display: block; }
+.app-mode .stats-overlay { overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: none; }
+.app-mode .stats-overlay::-webkit-scrollbar { display: none; }
+.app-mode .stats-overlay .stats-body { overflow: visible; flex: none; }
+/* Footer: measured against the watchOS simulator (SE 3 44mm) the real line is ~0.84x the nominal 10 pt text,
+   with emoji ~0.82x of that. */
+.app-mode .w-foot { font-size: calc(8.4 * var(--pt)); margin-top: calc(-2 * var(--pt)); }
+.app-mode .w-foot .ft-ic { font-size: .73em; margin-right: .12em; }
+.app-mode .w-foot .ft-dot { margin: 0 .2em; }
+
+/* Post-point sheet geometry measured on the SE 3 simulator (pt): header text y 40, buttons 84x51 at x 6/94, y 65/120,
+   Undo 163x51 at x 10.5, y 177 (runs past the bottom edge, as on the watch). */
+.app-mode .sheet { padding-left: calc(6 * var(--pt)); padding-right: calc(6 * var(--pt)); }
+.app-mode .sheet-buttons { margin-top: calc(7 * var(--pt)); flex: none; grid-auto-rows: calc(51 * var(--pt)); }
+.app-mode .sheet-btn { padding: 0 calc(2 * var(--pt)); line-height: 1.15; }
+.app-mode .sheet-undo { margin: calc(6 * var(--pt)) calc(4.5 * var(--pt)) 0; height: calc(51 * var(--pt)); padding: 0; }
+/* Full-width pill (3rd of 3) is inset 10.5 pt like Undo; step-2 pills start at y 71.5 (measured on the SE 3 sim). */
+.app-mode .sheet-btn.full { margin: 0 calc(4.5 * var(--pt)); }
+.app-mode .sheet-header:has(.sheet-back) + .sheet-buttons { margin-top: calc(4.8 * var(--pt)); }

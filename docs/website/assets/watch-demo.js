@@ -1061,7 +1061,7 @@
       e.stopPropagation();
       var now = Date.now();
       if (now - lastSwipeAt < 400) { lastCardTapAt = 0; return; }
-      if (now - lastCardTapAt < 350) { lastCardTapAt = 0; toggleSecondServe(); }
+      if (now - lastCardTapAt < 450) { lastCardTapAt = 0; toggleSecondServe(); } // a slower mouse double-click (OS default ~500 ms) must still count
       else { lastCardTapAt = now; }
     });
   }
@@ -1076,6 +1076,28 @@
      synchronously before the click bubbles to el.screen's tap-to-score
      listener, which would otherwise misfire on the same click. */
   if (el.stats) el.stats.addEventListener("click", function (e) { e.stopPropagation(); });
+
+  /* Click-drag scrolling for the stats body: the watch scrolls it with the Digital Crown or a finger,
+     and a desktop pointer has neither (wheel/touch already scroll natively). */
+  var statsScroller = appMode ? el.stats : el.statsBody; // the watch sheet is one ScrollView: header, set pills and rows scroll together
+  if (statsScroller) {
+    var statsDrag = null;
+    statsScroller.addEventListener("pointerdown", function (e) {
+      if (e.pointerType !== "mouse" || e.button !== 0) return;
+      statsDrag = { y: e.clientY, top: statsScroller.scrollTop, id: e.pointerId, moved: false };
+    });
+    statsScroller.addEventListener("pointermove", function (e) {
+      if (!statsDrag || e.pointerId !== statsDrag.id) return;
+      if (!(e.buttons & 1)) { statsDrag = null; return; } // button released elsewhere: never scroll on a plain hover
+      var dy = e.clientY - statsDrag.y;
+      if (!statsDrag.moved && Math.abs(dy) < 4) return;
+      if (!statsDrag.moved) { statsDrag.moved = true; try { statsScroller.setPointerCapture(e.pointerId); } catch (err) {} }
+      statsScroller.scrollTop = statsDrag.top - dy;
+    });
+    var endStatsDrag = function (e) { if (statsDrag && e.pointerId === statsDrag.id) statsDrag = null; };
+    statsScroller.addEventListener("pointerup", endStatsDrag);
+    statsScroller.addEventListener("pointercancel", endStatsDrag);
+  }
 
   /* Same reasoning again: the "OK" button clears changeoverInfo synchronously
      before the click bubbles to el.screen. */
@@ -1270,6 +1292,11 @@
     }
     if (statsOpen) {
       if (e.key === "Escape" || e.key.toLowerCase() === "s") { closeStats(); e.preventDefault(); }
+      else if (statsScroller && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "PageDown" || e.key === "PageUp")) {
+        var step = e.key.indexOf("Page") === 0 ? statsScroller.clientHeight * .8 : 40;
+        statsScroller.scrollTop += (e.key === "ArrowDown" || e.key === "PageDown") ? step : -step;
+        e.preventDefault();
+      }
       return;
     }
     if (sheetStep) return;
@@ -1379,7 +1406,7 @@
     return (secs < 4 || !appSettings.health) ? "--" : String(Math.round(2 + secs * 0.13)) + "";
   }
   function footerText() {
-    if (appMode) return "\uD83D\uDD25 " + calorieText() + " kcal \u00B7 \uD83D\uDD50 " + durationText(matchElapsedSeconds());
+    if (appMode) return '<span class="ft-ic">\uD83D\uDD25</span> ' + calorieText() + ' kcal <span class="ft-dot">\u00B7</span> <span class="ft-ic">\uD83D\uDD50</span> ' + durationText(matchElapsedSeconds());
     return FORMAT_LABELS[state.format] + matchTypeSuffix(state) + (isMatchComplete(state) ? "" : elapsedTimerText());
   }
 
@@ -1398,7 +1425,7 @@
       }
     }
     if (!el.foot) return;
-    el.foot.textContent = footerText();
+    el.foot[appMode ? "innerHTML" : "textContent"] = footerText();
   }
 
   // Plan §G: "🕐 mm:ss" -- deliberately simpler than the watch's "N m N s"/
@@ -1969,7 +1996,7 @@
 
     if (appMode) setClockSync();
     if (el.foot) {
-      el.foot.textContent = footerText();
+      el.foot[appMode ? "innerHTML" : "textContent"] = footerText();
       el.foot.hidden = appMode && isMatchComplete(state);
     }
     if (appMode) renderApp();

@@ -66,7 +66,7 @@
     stop: "M6 6h12v12H6z",
     history: "M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6a7 7 0 1 1 2.05 4.95l-1.42 1.42A9 9 0 1 0 13 3zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8z",
     gear: "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z",
-    book: "M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM6 4h5v8l-2.5-1.5L6 12V4z",
+    book: "M11.5 6.6C10.1 5.4 7.9 4.8 5.4 4.8 4.2 4.8 3.1 4.9 2 5.2v13.6c1.1-.3 2.2-.4 3.4-.4 2.5 0 4.7.6 6.1 1.8zM12.5 6.6c1.4-1.2 3.6-1.8 6.1-1.8 1.2 0 2.3.1 3.4.4v13.6c-1.1-.3-2.2-.4-3.4-.4-2.5 0-4.7.6-6.1 1.8z",
     down: "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z",
     up: "M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z",
     right: "M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6z",
@@ -158,12 +158,13 @@
     headingLocked: false,
     liveId: null,
     announceResult: null,
-    health: "notDetermined",   // HealthAccess: notDetermined | denied | authorized
+    health: "authorized",      // HealthAccess: notDetermined | denied | authorized — the demo starts authorised (owner call: skip the simulated permission prompt)
     healthPick: { write: true, read: true },
     guideOpen: { tennis: false, padel: false },
     screens: {},            // other files register their sheets here
     HISTORY_CAP: 25
   };
+  api.configure({ health: true }); // keep the live match's HR/kcal/steps in step with the authorised state
   S.h = h; S.append = append; S.md = md; S.icon = icon; S.api = api; S.root = root; S.FORMATS = FORMATS;
   S.formatInfo = formatInfo; S.THEMES = THEMES; S.GUIDE_GRAD = GUIDE_GRAD; S.END_GRAD = END_GRAD; S.SUPPORT_GRAD = SUPPORT_GRAD;
   S.grad = grad;
@@ -699,6 +700,6 @@
     applyTheme();
     if (S.seedHistory) S.seedHistory();
     render();
-    requestHealth(false);       // launch: workoutManager.requestAuthorization
+    // The demo starts with Health authorised, so the launch-time workoutManager.requestAuthorization sheet is skipped.
   };
 })();
