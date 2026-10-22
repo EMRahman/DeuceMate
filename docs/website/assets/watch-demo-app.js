@@ -657,6 +657,7 @@
     shellEl.classList.toggle("is-playing", playing);
     syncChrome();
     api.refresh();
+    if (S.onRender) S.onRender();
     if (!S.stack.length && !S.alert && S.afterRender) setTimeout(S.afterRender, 0);
   }
   function isNavTitle(top) { return !!top && top.id === "birthyear"; }
@@ -694,6 +695,45 @@
   }
   window.addEventListener("resize", setPt);
   if (window.ResizeObserver) new ResizeObserver(setPt).observe(screenEl);
+
+  /* ---- Page-level mode switch (try.html): Score only / Score + stats / Guide.
+     One watch, so a switch parks nothing — it returns to a fresh Home. ---- */
+  var modeBtns = root.parentNode ? document.querySelectorAll("[data-mode]") : [];
+  function currentMode() {
+    var top = S.top();
+    if (top && top.id === "walkthrough") return "guide";
+    return S.settings.track ? "stats" : "score";
+  }
+  S.onRender = function () {
+    var m = currentMode();
+    Array.prototype.forEach.call(modeBtns, function (b) {
+      var on = b.getAttribute("data-mode") === m;
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      b.classList.toggle("active", on);
+    });
+    var cap = document.querySelector("[data-mode-caption]");
+    if (cap) cap.textContent = MODE_CAPTIONS[m];
+  };
+  var MODE_CAPTIONS = {
+    score: "Just the score. Tracking is off, as it is by default on the real watch.",
+    stats: "Each point ends with a quick tap: Double Fault, Winner, Forced or Unforced. Live stats build as you play.",
+    guide: "The animated Guide, running itself. Use Previous and Next to move through it."
+  };
+  S.setMode = function (mode) {
+    api.clear();
+    S.stack.length = 0; S.alert = null;
+    S.matchPhase = "warmup"; S.liveId = null; S.headingLocked = false;
+    if (mode !== "guide") {
+      S.settings.track = mode === "stats";
+      api.configure({ tracking: S.settings.track });
+      render();
+    } else {
+      push({ id: "walkthrough", offer: false });
+    }
+  };
+  Array.prototype.forEach.call(modeBtns, function (b) {
+    b.addEventListener("click", function () { S.setMode(b.getAttribute("data-mode")); });
+  });
 
   S.boot = function () {
     setPt();
