@@ -168,6 +168,7 @@
   S.h = h; S.append = append; S.md = md; S.icon = icon; S.api = api; S.root = root; S.FORMATS = FORMATS;
   S.formatInfo = formatInfo; S.THEMES = THEMES; S.GUIDE_GRAD = GUIDE_GRAD; S.END_GRAD = END_GRAD; S.SUPPORT_GRAD = SUPPORT_GRAD;
   S.grad = grad;
+  S.applyTheme = applyTheme;
 
   function uid() { return "r" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36); }
   S.uid = uid;

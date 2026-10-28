@@ -93,9 +93,11 @@
   /* Plays a whole match through the real scoring engine. */
   function simulate(o) {
     var rnd = mulberry32(o.seed), state = Scoring.freshState(o.format, o.firstServer || "me");
+    if (o.matchType === "doubles") Scoring.applyDoublesSetup(state, o.firstDoublesServer || "me");
     var stats = [], momentum = [], played = 0, noTrack = o.format === "perpetualPoints";
     var perSet = {};
     while (!Scoring.isMatchComplete(state) && played < 700) {
+      if (state.needsDoublesTeamServerDecision) Scoring.resolveDoublesTeamServer(state, "partner");
       if (o.stopAfter != null && played >= o.stopAfter) break;
       var prev = Scoring.clone(state), server = state.currentServer;
       var pMe = o.bias + (server === "me" ? 0.07 : -0.07);
@@ -120,15 +122,18 @@
       stats.push(T.buildPointStat(pending, outcome, shot));
     }
     var complete = Scoring.isMatchComplete(state);
-    var winnerSide = complete ? Scoring.leaderWhenStopped(state) : null;
+    // A match stopped early (completeAtStop) is still decided by who leads, as in
+    // ScoringEngine.leaderWhenStopped; only a level score is a draw.
+    var finished = complete || !!o.completeAtStop;
+    var winnerSide = finished ? Scoring.leaderWhenStopped(state) : null;
     var setElapsed = {}, total = 0;
     Object.keys(perSet).forEach(function (k) { setElapsed[k] = Math.round(perSet[k] * (22 + rnd() * 10)); total += setElapsed[k]; });
     var mins = total / 60;
     var start = Date.now() - o.daysAgo * 86400000 - (o.hourOffset || 0) * 3600000;
     return {
       id: "seed" + o.seed, startTime: start, endTime: complete || o.completeAtStop ? start + total * 1000 : null,
-      iWon: complete ? (winnerSide ? winnerSide === "me" : null) : null,
-      format: o.format, matchType: "singles", sets: state.sets, currentPointsMe: state.currentPointsMe, currentPointsOpponent: state.currentPointsOpponent,
+      iWon: finished ? (winnerSide ? winnerSide === "me" : null) : null,
+      format: o.format, matchType: state.matchType, sets: state.sets, currentPointsMe: state.currentPointsMe, currentPointsOpponent: state.currentPointsOpponent,
       stats: stats, trackingOn: !!o.track && !noTrack, elapsed: total, setElapsed: setElapsed,
       steps: noTrack ? 0 : Math.round(mins * 36 + played * 4), kcal: noTrack ? 0 : Math.round(mins * 7.6 + played * 0.4), pointsPlayed: played,
       resume: { state: state, momentum: momentum, secondServe: false, trackingEnabled: !!o.track }
@@ -141,7 +146,11 @@
       { seed: 1177, format: "standard", track: true, bias: 0.58, daysAgo: 2, hourOffset: 1 },
       { seed: 4410, format: "quick4Games", track: false, bias: 0.46, daysAgo: 3, hourOffset: 5 },
       { seed: 9031, format: "superTiebreak", track: true, bias: 0.6, daysAgo: 4, hourOffset: 2 },
-      { seed: 5522, format: "perpetualPoints", track: false, bias: 0.5, daysAgo: 6, hourOffset: 4, stopAfter: 27, completeAtStop: true }
+      { seed: 5522, format: "perpetualPoints", track: false, bias: 0.5, daysAgo: 6, hourOffset: 4, stopAfter: 27, completeAtStop: true },
+      { seed: 6041, format: "standard", matchType: "doubles", track: true, bias: 0.51, daysAgo: 8 },
+      { seed: 7152, format: "bestOf3FullFinalSet", track: true, bias: 0.46, daysAgo: 11 },
+      { seed: 8263, format: "standard", track: true, bias: 0.56, daysAgo: 14 },
+      { seed: 9374, format: "standard", matchType: "doubles", track: true, bias: 0.49, daysAgo: 17 }
     ];
     S.history = seeds.map(simulate);
   };

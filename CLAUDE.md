@@ -191,7 +191,106 @@ All need `import DeuceMateCore` (see §0).
 | `Sync/PhoneMatchSyncService.swift` | ~650 | Phone side of `WatchConnectivity`; a Watch manifest (including empty) acknowledges Sync Now, live install state refreshes through `sessionWatchStateDidChange`, and explicit record pushes made during activation are flushed once the session activates. |
 | `Persistence/PhoneStatsStore.swift`, `Audio/LiveAnnouncementService.swift`, `HealthKitHRFetcher.swift` | | Health-stripped archive plus backup-excluded sidecar, manual export/import, TTS announcements, HR backfill. |
 
-**Browser replica of the watch app (`docs/website/try.html`).** `docs/website/assets/watch-demo.js` (live match, a JS port of `ScoringEngine`), `watch-demo-app.js` (home / setup / settings / guide / warm-up shell), `watch-demo-history.js` (Past Matches) and `watch-demo-guide.js` (animated guide) mirror the watch views one-to-one with copy lifted verbatim from Swift; sensors (heart rate, kcal, steps, compass) are invented. A change to `HomeView`, `ContentView`, `MatchHistoryView`, `MatchStatsView`, the Walkthrough, `SettingsCopy` or `MatchTrackingStatus` should be mirrored there — see `docs/features/INTERACTIVE_DEMO_PARITY_PLAN.md` (Phase 7). No JS test harness exists by design; verify in a browser.
+**Browser replicas (`docs/website/try.html`).** `docs/website/assets/watch-demo.js` (live match, a JS port of `ScoringEngine`), `watch-demo-app.js` (home / setup / settings / guide / warm-up shell), `watch-demo-history.js` (Past Matches) and `watch-demo-guide.js` (animated guide) mirror the watch views; sensors (heart rate, kcal, steps, compass) are invented. A change to `HomeView`, `ContentView`, `MatchHistoryView`, `MatchStatsView`, the Walkthrough, `SettingsCopy` or `MatchTrackingStatus` should be mirrored there — see `docs/features/INTERACTIVE_DEMO_PARITY_PLAN.md` (Phase 7).
+
+The companion replica uses `phone-demo.js` (archive, shared live scorer, browser
+persistence and simulated device services), `phone-demo-settings.js` (settings,
+manual entry and demo archive transfer), `phone-demo-reports.js` (details, graphs,
+coaching and report data), `phone-demo-export.js` (native report data adapter and
+complete text/AI prompt builders), `phone-demo-native-export.js` (generated native
+viewer, stylesheet and coaching instructions),
+`phone-demo-trends.js` (native metric catalogue, coverage, pooling and UI),
+and `phone-demo-coaching.js` (pure Rec Coach and Pulse Coach rule ports).
+Phone score commands go through the **existing watch instance**, gated by input,
+reachability and match identity. Do not introduce a second live scoring engine.
+The standalone report embeds the actual `MatchWebTemplate` viewer and CSS. Run
+`node scripts/sync-iphone-demo-exports.cjs` after changing that template or the
+native coaching instructions; `--check` detects drift. All AI copy/download/web
+paths use the same full prompt builder, including every saved raw-point row.
+Demo JSON archives are deliberately identified separately
+from native match backups. Browser storage and sensor data are simulations;
+AI launch buttons never contact external services. See
+`docs/features/IPHONE_DEMO_PARITY_PLAN.md` for implementation and verification
+status. Run `node scripts/iphone-demo-model-qa.cjs` and
+`node scripts/iphone-demo-coaching-qa.cjs` for dependency-free model checks.
+Run `scripts/iphone-demo-qa.cjs`, `scripts/iphone-demo-extended-qa.cjs`,
+`scripts/iphone-demo-state-qa.cjs`, `scripts/iphone-demo-visual-qa.cjs` and
+`scripts/iphone-demo-popup-qa.cjs` and `scripts/iphone-demo-export-qa.cjs` with an externally installed Playwright
+package (`PLAYWRIGHT_MODULE=/path/to/playwright`). Set `PLAYWRIGHT_BROWSER=webkit`
+for Safari-engine checks; the default is Chromium. Extended QA saves screenshots
+under `/tmp/deucemate-iphone-qa`. Browser launch may need sandbox escalation on
+macOS. Syntax and model tests do **not** prove visual or interaction parity.
+The inline phone graph stays clean; filters and overlays belong in its expanded
+dialog. Static export SVGs must set essential appearance attributes themselves
+because offline exports do not load the website stylesheet. Handled phone keys
+must stop propagation: a render can detach the event target before the Watch's
+document listener checks its ancestry, otherwise one key can score twice.
+Gesture release listeners must also survive court replacement during a Watch
+echo, and must reject a changed match identity or a closed scoreboard.
+
+For visual parity use the current SwiftUI views and the saved iPhone captures
+in `docs/website/screenshots/setup/`. The archive uses primary-color scores with
+separate result pills, top-aligned date/status/storage badges, and native grouped
+sections; detail uses a gray sheet surface, an in-header end action, and a clean
+inline graph. Settings themes are a two-column card picker, not a select menu.
+Trends and the report below the graph also have native capture references in
+`docs/app-store-screenshots/iphone-6.9/03`–`07`. Trends uses segmented controls,
+right-side chart axes and two-column legends; report comparisons use split bars
+in separate grouped sections. The expanded graph is an in-phone full-screen
+cover with a fixed chart and separately scrolling controls. Every phone popup
+uses the shared `showSheet` presenter (sheet / menu / actions / popover / alert / cover),
+bounded by the frame AND the visible viewport, with phone-local dimming. Never
+use browser `alert`/`confirm` or viewport-centred modal sizing. Popups must follow
+the frame on resize/scroll, including `visualViewport`, and release observers on
+dismissal. A queued close event must not clear a newly opened presentation.
+AI Coach mirrors `AICoachSheet`'s grouped app rows/perspective/Other sections;
+its prompt hand-offs remain simulated. Archive replacement uses an in-phone
+alert with the same destructive confirmation, never `window.confirm`.
+The report share menu mirrors `MatchDetailView`: Interactive → Interactive Web
+Page → My/Opponent's Perspective, then My Stats / Opponent's Stats with Share
+Summary and (only with saved points) Share Summary + Raw Points. Its compact
+material menu is undimmed and anchored to the toolbar. Extra formats and previews
+live under Demo controls → Browser export tools. Sharing disclosure follows
+`HealthExportConsent.presentFields`, including the opponent summary/raw-point
+distinction, and uses the native Cancel / Share buttons.
+Manual Entry mirrors the native grouped form: plus/minus steppers, date/time
+pills, footer text outside cards, and a single Cancel in the leading toolbar.
+Manual entry is the Matches toolbar pencil only; native Settings has no such row.
+Rotation mirrors the native app, which is portrait-locked except the live
+scoreboard: the external Rotate iPhone control is disabled on every other screen,
+`setOrientation` refuses landscape off `live`, and leaving it returns to portrait.
+On touch devices the real device orientation drives it (landscape enters on the
+live screen, portrait leaves) and the portrait Rotate button is hidden; the frame
+also has an in-frame Exit landscape pill and a click-away backdrop. The live
+scoreboard mirrors `LiveScoreboardView` (LIVE badge, close, white ME/OPP names,
+set/game columns, 8-slot momentum badge, format label, hint only with iPhone
+Input); the non-native command buttons and status notes live in a visually
+hidden, keyboard-reachable `.phone-live-extras`. Landscape must remain wider than
+tall even in a portrait browser, fit both player rows, and retain Watch-owned
+swipe/keyboard scoring. Navigation clears old transient notices so they cannot
+obscure the live court. Popups follow the rotated device through the presenter.
+Gesture capture belongs to the stable chart stage, not its replaceable SVG.
+Only meaningful scorer/settings/history changes should redraw the phone — a
+Watch timer refresh must not replace the court during a swipe. Report activity
+scoping mirrors `SetActivitySplit`; keep the model QA cases in step.
+Graph category symbols and filter-aware inspector badges mirror the native
+scatter mappings. Inspectors show set-local point numbers, cumulative totals
+including the selected rally, and after-point scores; sparse sampled steps use
+the same `graphSteps` helper as the chart. Keep serialized offline helpers in
+step. Archive swipes reveal confirmed Delete for every storage type; only the
+recoverable Remove from Watch action may execute on a full swipe. Settings and
+archive Sync Now share one handler so pending/failing sync cannot report success.
+The phone follows system light/dark appearance, including open popups; dispose
+the appearance listener with the presentation's other observers. End-at-score
+uses the observed native undimmed material popover, cancelled outside or with
+Escape. Permanent deletion uses the selected row's midpoint as its popover
+anchor, with an explicit Cancel and destructive confirmation. Opt-in native
+parity fixtures/tests and repeat commands are documented
+in `docs/features/IPHONE_DEMO_PARITY_PLAN.md`; they seed only a disposable iOS
+simulator through the normal importer and never add production launch hooks.
+Scope every new demo section: the marketing site's global `section` padding is
+64–88px and otherwise silently leaks into the phone layout. CSS-generated icon
+text affects accessible names; prefer aria-hidden SVGs or explicit button labels.
 
 Feature design docs live in `docs/features/*.md` — read the relevant plan before
 extending sync, changeover, or the companion app. The prioritised improvement

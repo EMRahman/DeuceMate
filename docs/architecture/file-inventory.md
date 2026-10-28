@@ -148,7 +148,44 @@ iOS/watchOS app targets). See `docs/screenshots/README.md` for usage.
 | `DeuceMateArchiveTool/main.swift` | ~120 | CLI over `ManualMatchArchiveBackup`/`MatchHTMLExporter`: `list` inspects an archive JSON file (index, UUID, date, format, duration, set scores, stat count), `webexport` renders one match's interactive HTML export to disk, `seed` writes a decoded archive into a simulator app container's canonical `MatchArchive/` files (via `HealthSidecarPolicy`) for visual QA of the import feature without driving the file-picker UI. | Manual archive backup, Web export, tooling |
 | `DeuceMateWebSnapshot/main.swift` | ~150 | macOS-only headless renderer: loads a local HTML file (or wraps a plain `.txt` file in a simple styled dark page) into an off-screen `WKWebView`, runs a sequence of steps — click a button by label (e.g. the web export's Stats/Points tab toggle) or `scroll:<0-100>` to a percentage of the page height — capturing a PNG via `WKWebView.takeSnapshot` after each step. No macOS Screen Recording permission needed since it's an in-process view snapshot, not a display capture. Generic; not DeuceMate-specific. | Web export, AI-coach prompt, tooling |
 
-## 4. Tests (63 files)
+### Browser companion demo — `docs/website/`
+
+The static Try page simulates both devices locally; it has no native device,
+HealthKit, iCloud or AI-service connection. The Watch browser scorer owns live
+scores and the phone module retains a separate archive. These browser ports are
+presentation/demo code; Swift remains the native behavior source.
+
+| File | What it does |
+|---|---|
+| `try.html`, `index.html` | Public Try entry, side-by-side Watch/iPhone hosts, script order and marketing navigation. |
+| `assets/watch-demo.js` | Existing scoring reducer and Watch UI, plus the gated phone command adapter and history snapshots. |
+| `assets/watch-demo-app.js` | Watch app shell, shared demo settings/themes and screens. |
+| `assets/watch-demo-history.js` | Deterministic sample matches, record formatting, Watch history and resume. |
+| `assets/watch-demo-tracking.js`, `assets/watch-demo-guide.js` | Point categorization/ending shots and isolated automatic Watch guide. |
+| `assets/watch-demo.css`, `assets/watch-app.css` | Watch simulator layout and native-style screens. |
+| `assets/phone-demo.js` | Phone navigation/archive/live input and persistence; external portrait/landscape device control and responsive Watch-owned live scoring; storage-aware recoverable/confirmed-delete swipes, shared Settings/archive sync handler, medium-height iCloud guidance; shared device-bounded sheet/menu/popover/alert/action/cover presenter, local dimming, system appearance, focus/dismissal and frame/visible-viewport tracking; external demo controls. |
+| `assets/phone-demo-settings.js` | Theme cards, settings, native grouped Manual Entry with steppers, date/time pills, conditional set/tiebreak/server controls and validation; confirmed archive import/export. |
+| `assets/phone-demo-reports.js` | Match sheet and native titles, score header, clean inline graph and in-phone expanded cover with pinch/pan/reset; native scatter shapes, filter-aware after-point inspector and shared sparse/legacy step series; native grouped Stats, set activity, Pulse/Rec Coach charts, Me/Opp split bars and set-grouped Points; native three-section share menu with layered web perspectives, data-dependent raw-point choices and per-export health disclosure; separate browser export tools/previews and native-style AI Coach app/perspective/copy/share sheets. |
+| `assets/phone-demo-export.js` | Browser-to-native report view-model adapter, static SVG/split-bar fallback, and complete summary/full/AI text builders including all raw points; packages the actual native viewer with local AI hand-offs. |
+| `assets/phone-demo-native-export.js` | Generated snapshot of `MatchWebTemplate` HTML/CSS/JS and `MatchExporter` coaching instructions; refreshed and checked by `scripts/sync-iphone-demo-exports.cjs`. |
+| `assets/phone-demo-trends.js` | Native trend catalogue and coverage/pooling rules, archive sparklines, segmented Trends filters, metric-colour monotone charts, native legends, selected-match readouts and system appearance. |
+| `assets/phone-demo-coaching.js` | Pure local ports of Rec Coach and Pulse Coach insight rules. |
+| `assets/phone-demo.css`, `assets/phone-demo-reports.css` | Scoped iPhone frame, toolbar, grouped surfaces, badges, controls and responsive report/scoreboard styles. |
+
+Browser QA lives in `scripts/iphone-demo-qa.cjs`,
+`scripts/iphone-demo-extended-qa.cjs`, `scripts/iphone-demo-state-qa.cjs`,
+`scripts/iphone-demo-model-qa.cjs`, `scripts/iphone-demo-coaching-qa.cjs` and
+`scripts/iphone-demo-visual-qa.cjs`, `scripts/iphone-demo-popup-qa.cjs` and
+`scripts/iphone-demo-export-qa.cjs`;
+see `docs/features/IPHONE_DEMO_PARITY_PLAN.md` for exact commands and scope.
+`scripts/iphone-demo-native-fixtures.cjs` generates matching fictional native
+archives; `scripts/iphone-demo-native-config.py` enables the opt-in simulator
+test runners in a separate `.xctestrun` file without changing the scheme.
+`scripts/iphone-demo-native-export-qa.cjs` compares the browser output with
+references generated by the actual iOS exporters, including every raw table cell
+and native point/score/comparison fields for both perspectives of all fixtures.
+
+## 4. Tests (67 files)
 
 Tests are the correctness record. The interesting ones all live against the shared
 package (no simulator needed). Red flags in any PR: tests deleted, skipped, or
@@ -193,7 +230,7 @@ expected values rewritten to make a failure pass — that requires explicit appr
 
 **Walkthrough app tests:** `DeuceMate Watch AppTests/WalkthroughWatchTests.swift` covers eligibility, successful restoration/history reads, flags, production isolation and stale callbacks. `DeuceMate Watch AppUITests/WalkthroughUITests.swift` checks nine automatic situations, visible error stats, score bounds, Previous/Next interruption, Reduce Motion, completion/reopening, absence of lesson menus and sticky reminders on small/large Watch simulators.
 
-**App-target tests (17 files):** `DeuceMate Watch AppTests/DeuceMate_Watch_AppTests.swift`
+**App-target tests (21 files):** `DeuceMate Watch AppTests/DeuceMate_Watch_AppTests.swift`
 (~1,300 lines — watch-specific behaviour: tiebreak serve rotation, changeover events,
 compass bearings, resumable parking and completion at the current score), `DeuceMate Watch AppTests/StatsStoreTests.swift` (exercises the real
 watch `StatsStore` against a temp file: absent-file vs. corrupt-file semantics, the
@@ -235,9 +272,17 @@ negative skip-when-empty and the seed-gated positive "Share health data?" consen
 gates, and the archive's swipe/long-press permanent-delete confirmations: placement
 beside the selected row before and after scrolling, cancellation followed by opening
 the match and repeating the swipe, full-swipe safety, and persistence after confirmed
-deletion. Screenshots are retained in the test results for visual inspection), two remaining
+deletion. Screenshots are retained in the test results for visual inspection),
+`DeuceMateUITests/NativeDemoParityTests.swift` (opt-in user-flow audit against
+the browser's deterministic fixtures: tracked report/expanded graph/Points,
+Trends filters, Settings max-HR override, iCloud help, score-only records and
+confirmed/cancelled completion; preserves captures and accessibility trees),
+`DeuceMateTests/NativeDemoParitySeedTests.swift` (simulator-only opt-in import of
+the same fictional browser fixtures through the app's real archive importer;
+verifies all identities without a production launch hook), three remaining
 UI-test placeholders (`DeuceMate Watch AppUITests/DeuceMate_Watch_AppUITests.swift`,
-`DeuceMateUITests/DeuceMateUITestsLaunchTests.swift`), plus three screenshot-capture
+`DeuceMate Watch AppUITests/DeuceMate_Watch_AppUITestsLaunchTests.swift`,
+`DeuceMateUITests/DeuceMateUITestsLaunchTests.swift`), plus five screenshot-capture
 suites (not regression tests — see `docs/screenshots/README.md`):
 `DeuceMateTests/AIPromptExportCaptureTests.swift` (calls `MatchExporter.aiPromptExport`
 directly against a real imported archive record and writes the real prompt text to a
@@ -247,7 +292,10 @@ expanded Points Graph with HR/Steps overlays and Points Won/Lost filters, Pulse 
 Outcome Breakdown — capturing via `XCUIScreen.main.screenshot()`), and
 `DeuceMate Watch AppUITests/LiveMatchScreenshotTests.swift` (drives a live match via
 real swipe gestures, handling the first-launch HealthKit sheet, a leftover
-in-progress match, and odd-game changeover prompts, for the watch scoreboard shot).
+in-progress match, and odd-game changeover prompts, for the watch scoreboard shot),
+`DeuceMate Watch AppUITests/SetupGuideScreenshotTests.swift` and
+`DeuceMateUITests/SetupGuidePhoneScreenshotTests.swift` (paired-device first-match
+setup-guide captures).
 
 ---
 

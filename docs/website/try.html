@@ -5,17 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="index,follow">
 <meta name="theme-color" content="#080b0a">
-<title>Try DeuceMate — a simulated Apple Watch demo</title>
-<meta name="description" content="A simulated browser demo that mirrors the DeuceMate Apple Watch app: match setup, scoring with or without point tracking, live stats, past matches and the animated guide. Health sensors and iPhone features are skipped.">
+<title>Try DeuceMate — Apple Watch and iPhone demo</title>
+<meta name="description" content="Try the DeuceMate Apple Watch and iPhone apps in your browser: live scoring, match archive, interactive reports, trends and AI coaching previews.">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="Try DeuceMate in your browser">
-<meta property="og:description" content="A simulated browser demo that mirrors the DeuceMate Apple Watch app — score a match, with or without point tracking, or watch the guide.">
+<meta property="og:description" content="Try the DeuceMate Watch and iPhone together — score a live match, explore your archive and share interactive match reports.">
 <meta property="og:image" content="assets/deucemate-icon.png">
 <meta property="og:url" content="https://emrahman.github.io/DeuceMate/try.html">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Try DeuceMate in your browser">
-<meta name="twitter:description" content="A simulated browser demo that mirrors the DeuceMate Apple Watch app — score a match, with or without point tracking, or watch the guide.">
+<meta name="twitter:description" content="Try the DeuceMate Watch and iPhone together — score a live match, explore your archive and share interactive match reports.">
 <meta name="twitter:image" content="assets/deucemate-icon.png">
 
 <link rel="icon" type="image/png" href="assets/deucemate-logo.png">
@@ -24,6 +24,8 @@
 <link rel="stylesheet" href="assets/site.css">
 <link rel="stylesheet" href="assets/watch-demo.css">
 <link rel="stylesheet" href="assets/watch-app.css">
+<link rel="stylesheet" href="assets/phone-demo.css">
+<link rel="stylesheet" href="assets/phone-demo-reports.css">
 <noscript><style>.nav-links{display:flex!important}</style></noscript>
 </head>
 <body>
@@ -60,28 +62,34 @@
     <div class="wrap" style="text-align:center;">
       <span class="eyebrow">🎾 Simulated browser demo</span>
       <h1 class="title" style="font-size:clamp(2rem,5vw,3rem);font-weight:850;max-width:18ch;margin:14px auto 0;">
-        Try the watch app <span class="grad-text">right here</span>
+        Try both apps <span class="grad-text">right here</span>
       </h1>
       <p class="lede" style="max-width:56ch;margin:16px auto 0;">
-        A browser simulation that mirrors the Apple&nbsp;Watch app: same scoring rules,
-        match setup, Settings, Past Matches and Guide.
+        Score on the Watch. Follow the match on iPhone. Explore your stats,
+        try the settings and share an interactive match report — right in your browser.
       </p>
-      <div class="real-skipped">
-        <div><strong>Works like the app</strong>All six formats, server rotation, changeovers, point categories, live stats, Past Matches, the Guide.</div>
-        <div class="skipped"><strong>Skipped here</strong>Health: heart rate, calories, steps and compass are invented. Also the first-launch guide offer, and the iPhone side (sync, archive, announcements, AI&nbsp;Coach).</div>
-      </div>
     </div>
   </section>
 
   <section style="padding-top:8px;">
     <div class="wrap">
+      <nav class="device-jump" aria-label="Jump to a device">
+        <a href="#panel-watch"><span aria-hidden="true">⌚</span> Apple Watch</a>
+        <a href="#panel-iphone"><span aria-hidden="true">📱</span> iPhone</a>
+      </nav>
+
+      <div class="companion-demo">
+      <section class="device-panel watch-device" id="panel-watch" aria-labelledby="panel-watch-title">
+      <header class="panel-head">
+        <span class="panel-step" aria-hidden="true">1</span>
+        <div><h2 class="device-label" id="panel-watch-title">Apple Watch</h2><p>Start and score the match here</p></div>
+      </header>
       <div class="mode-tabs" role="group" aria-label="Demo mode">
         <button type="button" class="util-btn" data-mode="score" aria-pressed="true">Score only</button>
         <button type="button" class="util-btn" data-mode="stats" aria-pressed="false">Score + stats</button>
         <button type="button" class="util-btn" data-mode="guide" aria-pressed="false">Watch the guide</button>
       </div>
       <p class="mode-caption" data-mode-caption aria-live="polite"></p>
-
       <div id="watch-demo" data-keyboard data-app>
         <div class="demo-wrap">
           <div data-play>
@@ -183,9 +191,9 @@
                 <button type="button" class="pt-btn opp" data-pt-opp>▼ Lose point</button>
               </div>
               <div class="util-buttons">
-                <button type="button" class="util-btn" data-undo>◀ Undo</button>
+                <button type="button" class="util-btn" data-undo>← Undo</button>
                 <button type="button" class="util-btn" data-secondserve>Double-tap: 2nd serve</button>
-                <button type="button" class="util-btn" data-stats-toggle>▶ Stats</button>
+                <button type="button" class="util-btn" data-stats-toggle>→ Stats</button>
               </div>
             </div>
           </div>
@@ -196,14 +204,35 @@
         Swipe the watch face: <strong>↑</strong> win · <strong>↓</strong> lose · <strong>←</strong> undo · <strong>→</strong> stats · double-tap for 2nd serve
         <details>
           <summary>Keyboard shortcuts</summary>
-          <span class="kbd">↑</span> win · <span class="kbd">↓</span> lose · <span class="kbd">U</span> undo · <span class="kbd">S</span> stats · <span class="kbd">2</span> 2nd serve
+          <span class="kbd">↑</span> win · <span class="kbd">↓</span> lose · <span class="kbd">←</span> undo · <span class="kbd">→</span> stats · <span class="kbd">2</span> 2nd serve
         </details>
       </div>
+      </section>
+      <section class="device-panel phone-device" id="panel-iphone" aria-labelledby="panel-iphone-title">
+        <header class="panel-head">
+          <span class="panel-step" aria-hidden="true">2</span>
+          <div><h2 class="device-label" id="panel-iphone-title">iPhone</h2><p>Follow it live, then explore your matches</p></div>
+        </header>
+        <div id="iphone-demo" aria-label="DeuceMate iPhone simulator"></div>
+        <p class="phone-note" style="text-align:center;margin-top:18px">Start on the Watch to follow live, or open a sample match.</p>
+      </section>
+      </div>
+
+      <noscript><p>This interactive demo needs JavaScript. You can still explore the <a href="index.html">app overview</a>.</p></noscript>
+
+      <aside class="about-demo" aria-labelledby="about-demo-title">
+        <h2 id="about-demo-title">About this demo</h2>
+        <p><strong>A best-effort replica.</strong> This page recreates the Apple Watch and iPhone apps as faithfully as we can, but it is not the real thing &mdash; small differences in layout, behaviour and timing are expected. The native apps are the source of truth.</p>
+        <dl>
+          <div><dt>Real here</dt><dd>All six formats, live scoring on Watch and iPhone, archive, match reports, trends, manual entry and the Watch Guide.</dd></div>
+          <div><dt>Simulated</dt><dd>Sample matches and health data are fictional; sync and backup stay in this browser; AI app buttons show a preview. Downloads are real demo files.</dd></div>
+        </dl>
+      </aside>
 
       <div class="cta-final" style="margin-top:44px;">
         <span class="eyebrow">✅ Available now on the App Store</span>
         <h2>Like it? Take it to the court.</h2>
-        <p>The real app adds live iPhone mirroring, 20+ match stats, heart-rate insights and one-tap AI&nbsp;coaching.</p>
+        <p>Take live scoring, match stats, heart-rate insights and AI&nbsp;coaching to the court with the native apps.</p>
         <div class="hero-actions" style="margin-top:26px;">
           <a class="btn btn-primary btn-lg" href="https://apps.apple.com/app/id6757105622" target="_blank" rel="noopener">
             <span aria-hidden="true">↓</span> Download on the App&nbsp;Store
@@ -235,7 +264,7 @@
       <a href="mailto:mail@ehsanrahman.com">Contact</a>
       <a href="https://ehsanrahman.com" target="_blank" rel="noopener">ehsanrahman.com</a>
     </nav>
-    <p class="fine">© 2026 Ehsan Rahman · This browser demo is a simulation — the Apple Watch app is the real scorer. DeuceMate is not affiliated with Apple Inc.</p>
+    <p class="fine">© 2026 Ehsan Rahman · This browser demo is a best-effort replica and simulation — the native apps are the real thing, and the Apple Watch app is the real scorer. DeuceMate is not affiliated with Apple Inc.</p>
   </div>
 </footer>
 
@@ -245,5 +274,12 @@
 <script src="assets/watch-demo-app.js" defer></script>
 <script src="assets/watch-demo-history.js" defer></script>
 <script src="assets/watch-demo-guide.js" defer></script>
+<script src="assets/phone-demo-settings.js" defer></script>
+<script src="assets/phone-demo-trends.js" defer></script>
+<script src="assets/phone-demo-native-export.js" defer></script>
+<script src="assets/phone-demo-export.js" defer></script>
+<script src="assets/phone-demo-coaching.js" defer></script>
+<script src="assets/phone-demo-reports.js" defer></script>
+<script src="assets/phone-demo.js" defer></script>
 </body>
 </html>
