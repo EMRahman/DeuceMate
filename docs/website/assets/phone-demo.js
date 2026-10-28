@@ -368,7 +368,11 @@
   function addRecord(rec) {
     tombstones.delete(rec.id); watchOnlyIDs.delete(rec.id); upsert(rec); if (connection.paired) S.upsertRecord(copy(rec)); persist(); S.render(); render();
   }
-  function replaceRecords(records) { archive = sortRecords(copy(records)); persist(); render(); }
+  function replaceRecords(records) {
+    // An explicitly imported match is wanted back, so it must not stay deleted (as addRecord does).
+    records.forEach(function (r) { tombstones.delete(r.id); });
+    archive = sortRecords(copy(records)); persist(); render();
+  }
   function storedOnWatch(id) { return S.history.some(function (r) { return r.id === id; }); }
   function storageLabel(rec) {
     var onPhone = archive.some(function (r) { return r.id === rec.id; });

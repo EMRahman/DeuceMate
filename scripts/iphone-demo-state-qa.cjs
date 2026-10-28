@@ -17,6 +17,42 @@ const DEMO_URL = process.env.PLAYWRIGHT_URL || pathToFileURL(path.resolve(__dirn
 const TIMEOUT = Number(process.env.PLAYWRIGHT_TIMEOUT || 4000);
 
 function check(value, message) { assert.ok(value, message); }
+async function testRemoteSecondServeWhileWatchShowsStats(browser) {
+  const c = await fresh(browser);
+  try {
+    await c.page.evaluate(() => {
+      const shell = window.DeuceMateShell, phone = window.DeuceMatePhone;
+      phone.setSetting('track', true); phone.setSetting('iPhoneInput', true);
+      shell.liveId = 'state-qa-remote-second-serve'; shell.matchPhase = 'play';
+      shell.api.start({format: 'standard', server: 'me', tracking: true});
+      shell.push({id: 'match'}); phone.navigate('live');
+    });
+    await c.page.keyboard.press('ArrowRight');
+    check(await c.page.evaluate(() => window.DeuceMateShell.api.modalKind()) === 'stats', 'Watch stats must be open for this scenario');
+    await c.page.evaluate(() => window.DeuceMateShell.api.phoneCommand('secondServe', null, 'state-qa-remote-second-serve'));
+    check(await c.page.evaluate(() => window.DeuceMateShell.api.snapshot(false).resume.secondServe) === true,
+      'an iPhone second-serve command must apply while the Watch shows its stats screen');
+    pass('iPhone second-serve command is not blocked by the Watch stats screen');
+  } finally { await close(c); }
+}
+
+async function testImportedMatchClearsDeletionTombstone(browser) {
+  const c = await fresh(browser);
+  try {
+    const id = await c.root.locator('.phone-swipe-action').first().evaluate(el => el.closest('.phone-match-wrap').dataset.matchId);
+    const saved = await c.page.evaluate(matchID => window.DeuceMatePhone.records().find(r => r.id === matchID), id);
+    const row = c.root.locator(`.phone-match-wrap[data-match-id="${id}"]`), dialog = c.root.locator('.phone-dialog');
+    await swipeLeft(row, 85);
+    await click(row, 'Delete match; confirmation required');
+    await click(dialog, 'Delete Permanently');
+    const tombstones = () => c.page.evaluate(() => JSON.parse(localStorage.getItem('deucemate-browser-companion-v1')).tombstones || []);
+    check((await tombstones()).includes(id), 'permanent deletion must tombstone the match');
+    await c.page.evaluate(records => window.DeuceMatePhone.replaceRecords(records), [saved]);
+    check(!(await tombstones()).includes(id), 'an explicitly imported match must clear its deletion tombstone');
+    pass('importing a previously deleted match clears its tombstone');
+  } finally { await close(c); }
+}
+
 function pass(message) { process.stdout.write(`[state QA] ${message}\n`); }
 
 async function fresh(browser, options = {}) {
@@ -714,6 +750,8 @@ async function main() {
     await testManualCancelDrawAndRestoreDecline(browser);
     await testAnnouncementSettings(browser);
     await testWatchToPhoneJourney(browser);
+    await testRemoteSecondServeWhileWatchShowsStats(browser);
+    await testImportedMatchClearsDeletionTombstone(browser);
     pass("all state scenarios passed");
   } finally { await browser.close(); }
 }

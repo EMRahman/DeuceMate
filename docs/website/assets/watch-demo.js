@@ -1312,11 +1312,12 @@
      off, in Perpetual Points (disablesPointTracking), while the
      categorisation sheet, stats overlay, changeover overlay, or doubles
      decision is open, or once the match is complete. */
-  function canToggleSecondServe() {
-    return !!state && !shellOpen() && !isMatchComplete(state) && trackingEnabled && !state.cfg.disablesPointTracking && !sheetStep && !statsOpen && !changeoverInfo && !doublesDecisionPending();
+  function canToggleSecondServe(remote) {
+    // A command from the iPhone is not blocked by what the Watch screen is showing (as in scoringBlocked).
+    return !!state && (remote || (!shellOpen() && !statsOpen)) && !isMatchComplete(state) && trackingEnabled && !state.cfg.disablesPointTracking && !sheetStep && !changeoverInfo && !doublesDecisionPending();
   }
-  function toggleSecondServe() {
-    if (!canToggleSecondServe()) return;
+  function toggleSecondServe(remote) {
+    if (!canToggleSecondServe(remote)) return;
     isOnSecondServe = !isOnSecondServe;
     render();
   }
@@ -2258,7 +2259,7 @@
     if (!matchID || !api.hooks.phoneMatchID || matchID !== api.hooks.phoneMatchID()) return;
     if (command === "point" && (value === "me" || value === "opponent")) award(value, true);
     else if (command === "undo") { if (pendingStat) undoPoint(); else undo(true); }
-    else if (command === "secondServe") toggleSecondServe();
+    else if (command === "secondServe") toggleSecondServe(true);
     else if (command === "back" && pendingStat && sheetStep === 2) sheetBack();
     else if (command === "outcome" && pendingStat && sheetStep === 1 && !sheetBusy) {
       var T = window.DeuceMateTracking;
