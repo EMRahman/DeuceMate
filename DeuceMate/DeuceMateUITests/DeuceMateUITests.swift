@@ -36,9 +36,10 @@ final class DeuceMateUITests: XCTestCase {
         newestMatch.tap()
 
         XCTAssertTrue(
-            app.staticTexts["In Progress — view only on iPhone"]
+            app.staticTexts["In Progress"]
                 .waitForExistence(timeout: 5)
         )
+        XCTAssertTrue(app.buttons["End at Current Score"].isEnabled)
 
         let emptyGraph = app.staticTexts["No Points to Graph"]
         for _ in 0..<4 where !emptyGraph.isHittable {

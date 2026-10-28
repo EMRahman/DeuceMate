@@ -1142,8 +1142,8 @@
   // blocked -- reused by the tap/swipe/keyboard handlers and by the
   // live-preview gating below (plan §UI state machine, extended with §F's
   // changeover overlay and §Phase 6's doubles decision).
-  function scoringBlocked() {
-    return !state || shellOpen() || isMatchComplete(state) || !!sheetStep || statsOpen || !!changeoverInfo || doublesDecisionPending();
+  function scoringBlocked(remote) {
+    return !state || (!remote && (shellOpen() || statsOpen)) || isMatchComplete(state) || !!sheetStep || !!changeoverInfo || doublesDecisionPending();
   }
 
   if (el.screen) {
@@ -1283,6 +1283,7 @@
      match' / R likewise clears sheet + pending + stats." Everything else is
      blocked while a sheet is open (plan §UI state machine). */
   if (useKeyboard) document.addEventListener("keydown", function (e) {
+    if (e.target.closest && e.target.closest("#iphone-demo, input, textarea, select, dialog")) return;
     if (!el.play || el.play.hidden || shellOpen()) return;
     if (e.key.toLowerCase() === "r" && !appMode) { startMatch(); e.preventDefault(); return; }
     if (doublesDecisionPending()) return; // real <button>s handle their own Enter/Space once focused
@@ -1291,7 +1292,7 @@
       return;
     }
     if (statsOpen) {
-      if (e.key === "Escape" || e.key.toLowerCase() === "s") { closeStats(); e.preventDefault(); }
+      if (e.key === "Escape" || e.key === "ArrowLeft" || e.key.toLowerCase() === "s") { closeStats(); e.preventDefault(); }
       else if (statsScroller && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "PageDown" || e.key === "PageUp")) {
         var step = e.key.indexOf("Page") === 0 ? statsScroller.clientHeight * .8 : 40;
         statsScroller.scrollTop += (e.key === "ArrowDown" || e.key === "PageDown") ? step : -step;
@@ -1302,9 +1303,9 @@
     if (sheetStep) return;
     if (e.key === "ArrowUp") { award("me"); e.preventDefault(); }
     else if (e.key === "ArrowDown") { award("opponent"); e.preventDefault(); }
-    else if (e.key === "Backspace" || e.key.toLowerCase() === "u") { undo(); e.preventDefault(); }
+    else if (e.key === "ArrowLeft" || e.key === "Backspace" || e.key.toLowerCase() === "u") { undo(); e.preventDefault(); }
     else if (e.key === "2") { toggleSecondServe(); e.preventDefault(); }
-    else if (e.key.toLowerCase() === "s") { toggleStatsGesture(); e.preventDefault(); }
+    else if (e.key === "ArrowRight" || e.key.toLowerCase() === "s") { toggleStatsGesture(); e.preventDefault(); }
   });
 
   /* Guards mirror ScoreViewModel.toggleSecondServe: no-op when tracking is
@@ -1438,8 +1439,8 @@
     return " · 🕐 " + (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
   }
 
-  function award(player) {
-    if (scoringBlocked()) return;
+  function award(player, remote) {
+    if (scoringBlocked(remote)) return;
 
     // Resolve any still-pending deferred toast from the previous point's
     // sheet commit before this point's sheet can open — otherwise it could
@@ -1508,13 +1509,14 @@
     return true;
   }
 
-  function undo() {
+  function undo(remote) {
+    remote = remote === true;
     // Blocked while a sheet is open (plan §UI state machine) — use the
     // sheet's own "Undo point" button instead. Also blocked while the stats
     // or changeover overlay is open (a left-swipe there should do nothing,
     // not undo a point the viewer can't currently see change / while
     // scoring input is meant to be fully blocked).
-    if (!history.length || sheetStep || statsOpen || changeoverInfo || doublesDecisionPending()) return;
+    if (!history.length || sheetStep || (!remote && statsOpen) || changeoverInfo || doublesDecisionPending()) return;
     rollbackLastPoint();
     if (deferredToastTimer) { clearTimeout(deferredToastTimer); deferredToastTimer = null; }
     deferredToastEvents = null;
@@ -2209,7 +2211,10 @@
       elapsed: Math.round(elapsed), setElapsed: perSet,
       steps: appSettings.health ? Math.round(mins * 36 + played * 4) : 0, kcal: appSettings.health ? Math.round(mins * 7.6 + played * 0.4) : 0,
       pointsPlayed: played,
-      resume: { state: clone(state), momentum: momentum.slice(), secondServe: isOnSecondServe, trackingEnabled: trackingEnabled }
+      resume: { state: clone(state), momentum: momentum.slice(), secondServe: isOnSecondServe, trackingEnabled: trackingEnabled,
+        pending: pendingStat ? Object.assign({}, pendingStat) : null, pendingOutcome: sheetOutcome,
+        pendingEvents: deferredEvents ? deferredEvents.slice() : null,
+        pendingUndo: pendingStat && history.length ? JSON.parse(JSON.stringify(history[history.length - 1])) : null }
     };
   };
   api.restore = function (rec) {
@@ -2219,6 +2224,13 @@
     stats = rec.stats.map(function (p) { return Object.assign({}, p); });
     trackingEnabled = rec.resume.trackingEnabled;
     resetOverlays();
+    if (rec.resume.pending) {
+      pendingStat = Object.assign({}, rec.resume.pending);
+      sheetOutcome = rec.resume.pendingOutcome || null;
+      sheetStep = sheetOutcome ? 2 : 1;
+      deferredEvents = rec.resume.pendingEvents || [];
+      if (rec.resume.pendingUndo) history.push(JSON.parse(JSON.stringify(rec.resume.pendingUndo)));
+    }
     hasCompletedFirstGame = state.gameCount > 0;
     matchStartTime = Date.now() - rec.elapsed * 1000;
     recordStart = rec.startTime;
@@ -2229,6 +2241,35 @@
     render();
   };
   api.stateRef = function () { return state; };
+
+  // The browser iPhone sends commands to this same scorer, just like
+  // PhoneMatchSyncService. Never create a second scoring state on the phone.
+  api.phoneState = function () {
+    return {
+      pending: pendingStat ? Object.assign({}, pendingStat) : null,
+      outcome: sheetOutcome, busy: sheetBusy,
+      changeover: changeoverInfo, doublesDecision: !!state && doublesDecisionPending(),
+      canScore: !scoringBlocked(true), canUndo: history.length > 0 && !sheetStep && !changeoverInfo && !doublesDecisionPending(),
+      canSecondServe: canToggleSecondServe()
+    };
+  };
+  api.phoneCommand = function (command, value, matchID) {
+    if (!api.hooks.phoneInputEnabled || !api.hooks.phoneInputEnabled() || !state) return;
+    if (!matchID || !api.hooks.phoneMatchID || matchID !== api.hooks.phoneMatchID()) return;
+    if (command === "point" && (value === "me" || value === "opponent")) award(value, true);
+    else if (command === "undo") { if (pendingStat) undoPoint(); else undo(true); }
+    else if (command === "secondServe") toggleSecondServe();
+    else if (command === "back" && pendingStat && sheetStep === 2) sheetBack();
+    else if (command === "outcome" && pendingStat && sheetStep === 1 && !sheetBusy) {
+      var T = window.DeuceMateTracking;
+      if (T.USER_SELECTABLE_OUTCOMES.indexOf(value) < 0 ||
+          (value === "doubleFault" && !T.doubleFaultAvailable(pendingStat))) return;
+      chooseOutcome(value, [], -1);
+    } else if (command === "shot" && pendingStat && sheetStep === 2 && !sheetBusy &&
+               window.DeuceMateTracking.endingShotOptions(sheetOutcome, pendingStat).indexOf(value) >= 0) {
+      chooseEndingShot(value, [], -1);
+    }
+  };
 
   // Debug handle for console spot-checks (plan's Owner Verification
   // Playbook): neither DeuceMateScoring nor DeuceMateTracking expose a live

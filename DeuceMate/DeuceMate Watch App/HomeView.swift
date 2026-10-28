@@ -1000,7 +1000,10 @@ struct HomeButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
             .frame(minHeight: 44)
-            .background(background.opacity(configuration.isPressed ? 0.85 : 1))
+            .background {
+                Rectangle().fill(background)
+                    .opacity(configuration.isPressed ? 0.85 : 1)
+            }
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .foregroundColor(.white)
             .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 3)
