@@ -475,3 +475,6 @@ html.phone-landscape-lock { overflow:hidden; }
 .watch-device > .mode-tabs { margin:0 auto 6px; }
 .watch-device > .mode-caption { margin:0 auto; min-height:2.6em; }
 .watch-device > #watch-demo { margin-top:auto; }
+
+/* Same soft brand halo as .watch-frame so the two devices read as a pair (decorative; neither real device glows). */
+.phone-frame { box-shadow:0 0 0 2px #707479,0 24px 70px #0008,0 0 70px -16px rgba(47,208,138,.4); }
