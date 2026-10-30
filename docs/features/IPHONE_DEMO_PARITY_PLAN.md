@@ -219,6 +219,8 @@ independent scrolling, browser focus trapping, Escape/Done/Cancel, appropriate
 outside-tap/header-swipe dismissal and focus restoration. Resize/scroll and
 visual-viewport observers are disposed when the presentation closes. Queued
 close events cannot tear down the next presentation.
+Size observers reposition the popup without scrolling the phone into view again;
+otherwise a page scroll changes the popup height and triggers a scroll back.
 
 AI Coach follows `AICoachSheet.swift`: grouped introduction, perspective Picker
 and explanation, one app row per supported demo hand-off, and the Other
@@ -237,6 +239,9 @@ archive export/import/replacement, cloud restore, iCloud guidance, reset and exp
 It checks containment in the phone and visible viewport, long-menu scrolling,
 perspective/prompt correctness, clipboard fallback, local feedback, focus,
 dismissal, downloads, cancellation retention and absence of browser alerts.
+Wheel gestures also check that webpage scrolling retains its requested position
+while the graph moves with the phone at a constant size, and filter scrolling
+leaves the chart and page in place, at mobile and desktop widths.
 Screenshots are saved as `*-popup-*.png` in `/tmp/deucemate-iphone-qa`.
 
 The detailed UI comparison uses `TrendsView.swift`, `TrendChart.swift`,
@@ -258,8 +263,11 @@ and the native captures `docs/app-store-screenshots/iphone-6.9/03-match-stats.pn
   and AI actions are in the toolbar; exports no longer fill the report body.
   Per-set activity mirrors Core `SetActivitySplit`, covered by model regressions.
 - The expanded graph is positioned inside the iPhone frame, including after a
-  viewport change. Its chart stays fixed above independently scrolling native
-  filter/overlay controls. Pointer gestures implement centred two-finger pinch,
+  viewport change. Its inner surface keeps the full phone height while the outer
+  dialog clips to the visible viewport, so page scrolling moves the graph with
+  the phone without squeezing its chart. The chart stays fixed above independently
+  scrolling native filter/overlay controls. Pointer gestures implement centred
+  two-finger pinch,
   drag-to-pan, tap inspection and double-tap reset. Native Points Won/Lost and
   All Won/Lost quick selections are mutually exclusive; filter/overlay choices
   survive reopening while zoom resets. Keyboard zoom/pan and disclosed Graph
