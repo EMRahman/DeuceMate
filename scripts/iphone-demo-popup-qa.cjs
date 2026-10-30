@@ -256,7 +256,42 @@ async function main() {
     await click(experiments, "Reset demo"); await fits("Reset this demo?", "alert"); await click(dialog, "Cancel");
     assert.equal(await root.locator(".phone-modal-dimmer").isVisible(), false, "dismissal must clear device dimming");
     await click(nav, "Back to Matches"); await root.locator(".phone-match-row").first().click(); await click(root, "Expand graph");
-    await fits("Points Graph", "cover"); await capture("expanded-graph"); await click(dialog, "Done");
+    await fits("Points Graph", "cover"); await capture("expanded-graph");
+    const panel = dialog.locator(".pr-expanded-graph"), stage = panel.locator(".pr-expanded-stage");
+    // Use this desktop browser context at both widths: mobile WebKit does not
+    // support Playwright wheel input. Touch graph gestures live in visual QA.
+    for (const viewport of [{width: 1280, height: 900}, {width: 390, height: 844}]) {
+      await page.setViewportSize(viewport);
+      const pageTop = await frame.evaluate(async el => {
+        el.scrollIntoView({block: "nearest", behavior: "instant"});
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        return window.scrollY;
+      });
+      const graphBeforeScroll = await stage.boundingBox();
+      await page.mouse.move(12, viewport.height / 2);
+      await page.mouse.wheel(0, 160);
+      // A sheet resize must not start a smooth scroll back to the phone.
+      await page.waitForTimeout(700);
+      assert.ok(Math.abs(await page.evaluate(() => window.scrollY) - pageTop - 160) <= 2, "scrolling the webpage with the graph open must not snap back to the phone");
+      const graphAfterScroll = await stage.boundingBox();
+      assert.ok(Math.abs(graphAfterScroll.height - graphBeforeScroll.height) <= 1 && Math.abs(graphAfterScroll.width - graphBeforeScroll.width) <= 1, "scrolling the webpage must preserve the graph dimensions instead of squeezing the chart");
+      assert.ok(Math.abs(graphAfterScroll.y - graphBeforeScroll.y + 160) <= 2, "the graph must move with the phone during webpage scrolling");
+      await fits("Points Graph", "cover");
+      await page.mouse.wheel(0, -160);
+      await page.waitForTimeout(700);
+      assert.ok(Math.abs(await page.evaluate(() => window.scrollY) - pageTop) <= 2, "scrolling back up with the graph open must preserve the requested page position");
+      assert.deepEqual(await stage.boundingBox(), graphBeforeScroll, "scrolling the page back must return the graph to the same position and size");
+      await fits("Points Graph", "cover");
+      const controls = panel.locator(".pr-expanded-controls");
+      await controls.evaluate(el => {el.scrollTop = 0;});
+      const chartBefore = await stage.boundingBox(), controlBounds = await controls.boundingBox();
+      await page.mouse.move(controlBounds.x + controlBounds.width / 2, controlBounds.y + controlBounds.height / 2);
+      await page.mouse.wheel(0, 160);
+      await page.waitForFunction(() => document.querySelector(".pr-expanded-controls").scrollTop > 0);
+      assert.deepEqual(await stage.boundingBox(), chartBefore, "wheel scrolling the graph controls must keep the chart fixed");
+      assert.ok(Math.abs(await page.evaluate(() => window.scrollY) - pageTop) <= 2, "wheel scrolling the graph controls must leave the webpage in place");
+    }
+    await click(dialog, "Done");
     await click(nav, "Back to Matches");
     const scoreOnlyID = await page.evaluate(() => window.DeuceMatePhone.records().find(r => !r.stats.length).id);
     await root.locator(`.phone-match-wrap[data-match-id="${scoreOnlyID}"] .phone-match-row`).click();

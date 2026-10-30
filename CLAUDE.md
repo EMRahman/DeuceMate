@@ -237,12 +237,17 @@ Trends and the report below the graph also have native capture references in
 `docs/app-store-screenshots/iphone-6.9/03`–`07`. Trends uses segmented controls,
 right-side chart axes and two-column legends; report comparisons use split bars
 in separate grouped sections. The expanded graph is an in-phone full-screen
-cover with a fixed chart and separately scrolling controls. Every phone popup
-uses the shared `showSheet` presenter (sheet / menu / actions / popover / alert / cover),
+cover with a fixed chart and separately scrolling controls. Its inner surface
+keeps the full phone height while the outer dialog clips to the visible viewport;
+page scrolling must move the graph with the phone without resizing its chart.
+Every phone popup uses the shared `showSheet` presenter
+(sheet / menu / actions / popover / alert / cover),
 bounded by the frame AND the visible viewport, with phone-local dimming. Never
 use browser `alert`/`confirm` or viewport-centred modal sizing. Popups must follow
 the frame on resize/scroll, including `visualViewport`, and release observers on
-dismissal. A queued close event must not clear a newly opened presentation.
+dismissal. Size observers must only reposition the popup: revealing the phone
+again when its visible popup height changes makes webpage scrolling snap back.
+A queued close event must not clear a newly opened presentation.
 AI Coach mirrors `AICoachSheet`'s grouped app rows/perspective/Other sections;
 its prompt hand-offs remain simulated. Archive replacement uses an in-phone
 alert with the same destructive confirmation, never `window.confirm`.

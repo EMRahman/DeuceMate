@@ -219,6 +219,12 @@
     var available = Math.max(0, safeBottom - safeTop), kind = presentation.kind;
     var sheetWidth = width, inset = 0, top = safeTop;
     dialog.style.maxHeight = available + "px";
+    if (presentation.graph) {
+      // Clip the phone-sized graph to the visible viewport without reflowing
+      // its chart and controls as the page scrolls past the phone.
+      dialog.style.setProperty("--phone-graph-height", Math.max(0, height - statusHeight - 18) + "px");
+      dialog.style.setProperty("--phone-graph-offset", (innerTop + statusHeight - safeTop) + "px");
+    }
     if (kind === "alert" || kind === "popover") { sheetWidth = Math.min(presentation.width || (kind === "popover" ? 240 : 280), Math.max(0, width - (kind === "popover" && presentation.anchor ? 24 : 40))); inset = (width - sheetWidth) / 2; dialog.style.height = "auto"; }
     else if (kind === "actions") { sheetWidth = Math.max(0, width - 16); inset = 8; dialog.style.height = "auto"; }
     else if (kind === "menu") {
@@ -283,7 +289,7 @@
     clearSheet();
     if (!alreadyOpen) oldFocus = document.activeElement;
     var kind = options.graph ? "cover" : options.presentation || "sheet";
-    presentation = { kind: kind, detent: options.detent, width: options.width, anchor: options.anchor };
+    presentation = { kind: kind, detent: options.detent, width: options.width, anchor: options.anchor, graph: !!options.graph };
     dialog.dataset.presentation = kind;
     if (options.detent) dialog.dataset.detent = options.detent;
     dialog.classList.add("phone-device-dialog");
@@ -314,7 +320,8 @@
       if (cancel) cancel.classList.add("phone-sheet-cancel");
       else viewport.append(button("Cancel", closeSheet, "phone-sheet-cancel"));
     }
-    dialog.replaceChildren(header, viewport);
+    if (options.graph) dialog.replaceChildren(h("div", { class: "phone-graph-surface" }, header, viewport));
+    else dialog.replaceChildren(header, viewport);
     dialog.setAttribute("aria-label", title); dialog.setAttribute("role", kind === "alert" ? "alertdialog" : "dialog");
     frame.scrollIntoView({ block: "nearest" });
     dimmer.hidden = kind === "cover" || kind === "popover" || options.variant === "share"; frame.dataset.modal = kind;
@@ -326,7 +333,9 @@
     if (window.visualViewport) { window.visualViewport.addEventListener("resize", revealSheet); window.visualViewport.addEventListener("scroll", positionSheet); }
     if (!dialog.open) dialog.showModal();
     positionSheet();
-    if (window.ResizeObserver) { sheetObserver = new ResizeObserver(revealSheet); sheetObserver.observe(frame); sheetObserver.observe(dialog); }
+    // Page scrolling changes the visible sheet height. Reposition it without
+    // revealing the frame again, which would scroll the page back on every resize.
+    if (window.ResizeObserver) { sheetObserver = new ResizeObserver(positionSheet); sheetObserver.observe(frame); sheetObserver.observe(dialog); }
     return dialog;
   }
   function closeSheet() {
