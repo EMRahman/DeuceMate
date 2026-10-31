@@ -47,6 +47,12 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
     public var recentPoints: [Player]
     /// Whether the momentum strip was enabled when this record was saved (always true for new records).
     public var momentumEnabled: Bool
+    /// Optional opponent/partner/competition details (MATCH_TAGS_PLAN.md §4).
+    /// `nil` means "this copy has no tag information" — never "cleared"; a
+    /// clear is an empty `MatchTags` with a newer clock. Tags merge by their
+    /// own clock on every merge path (`MatchMergePolicy.resolve`,
+    /// `ArchiveBackupPolicy`), independently of which body wins.
+    public var tags: MatchTags?
 
     public init(
         id: UUID = UUID(),
@@ -76,7 +82,8 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
         totalDistanceMeters: Double? = nil,
         totalCaloriesKcal: Double? = nil,
         recentPoints: [Player] = [],
-        momentumEnabled: Bool = true
+        momentumEnabled: Bool = true,
+        tags: MatchTags? = nil
     ) {
         self.id = id
         self.startTime = startTime
@@ -106,6 +113,7 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
         self.totalCaloriesKcal = totalCaloriesKcal
         self.recentPoints = recentPoints
         self.momentumEnabled = momentumEnabled
+        self.tags = tags
     }
 
     public init(from decoder: Decoder) throws {
@@ -138,6 +146,11 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
         totalCaloriesKcal        = try c.decodeIfPresent(Double.self, forKey: .totalCaloriesKcal)
         recentPoints             = try c.decodeIfPresent([Player].self, forKey: .recentPoints) ?? []
         momentumEnabled          = try c.decodeIfPresent(Bool.self, forKey: .momentumEnabled) ?? true
+        // `try?` on top of `decodeIfPresent`: tags are optional metadata, so a
+        // malformed `tags` value (wrong JSON type) degrades to "no information"
+        // instead of failing this record — and with it the whole archive
+        // decode. `MatchTags.init(from:)` itself never throws on field contents.
+        tags                     = try? c.decodeIfPresent(MatchTags.self, forKey: .tags)
     }
 
     /// Converts raw game point counters (0–4+) to a tennis score string,

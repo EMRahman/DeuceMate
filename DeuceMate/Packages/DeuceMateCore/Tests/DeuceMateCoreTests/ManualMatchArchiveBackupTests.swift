@@ -322,6 +322,55 @@ final class ManualMatchArchiveBackupTests: XCTestCase {
     }
 }
 
+// MARK: - Tags and the forgotten-player ledger (MATCH_TAGS_PLAN.md §3, §6.2)
+
+extension ManualMatchArchiveBackupTests {
+
+    private typealias F = TagFixtures
+
+    func test_encodeDecode_roundTripsTagsAndLedger() throws {
+        let tags = F.tags(opponents: [F.player("Alex")], competition: .tournament, at: 10)
+        let ledger = ForgottenPlayerLedger(playerIDs: [F.uuid(7)])
+        let data = try ManualMatchArchiveBackup.encode(records: [F.record(tags: tags)], exportedAt: exportedAt,
+                                                       forgottenPlayers: ledger)
+        let archive = try ManualMatchArchiveBackup.decode(data)
+        XCTAssertEqual(archive.records.first?.tags, tags)
+        XCTAssertEqual(archive.forgottenPlayers, ledger)
+        XCTAssertEqual(archive.schemaVersion, 1, "additive optional field — no version bump that older builds reject")
+    }
+
+    func test_decode_archiveWithoutLedger_isNilNotEmpty() throws {
+        let data = try ManualMatchArchiveBackup.encode(records: [F.record()], exportedAt: exportedAt)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertNil(object["forgottenPlayers"], "omitted when not supplied")
+        XCTAssertNil(try ManualMatchArchiveBackup.decode(data).forgottenPlayers)
+    }
+
+    /// The user tagged a match after exporting; importing that older export
+    /// by MERGE (same body, same endTime, no tags) must keep the tag.
+    func test_importMerge_olderUntaggedExport_keepsCurrentTags() {
+        let id = UUID()
+        let tags = F.tags(opponents: [F.player("Alex")], at: 10)
+        let snapshot = ManualMatchArchiveBackup.importSnapshot(
+            importing: [F.record(id: id, tags: nil)],
+            into: [F.record(id: id, tags: tags)],
+            tombstones: [], mode: .merge
+        )
+        XCTAssertEqual(snapshot.records.first?.tags, tags)
+    }
+
+    func test_importMerge_newerTagsInArchive_areAdopted() {
+        let id = UUID()
+        let newer = F.tags(opponents: [F.player("Jo")], at: 20)
+        let snapshot = ManualMatchArchiveBackup.importSnapshot(
+            importing: [F.record(id: id, tags: newer)],
+            into: [F.record(id: id, tags: F.tags(opponents: [F.player("Alex")], at: 10))],
+            tombstones: [], mode: .merge
+        )
+        XCTAssertEqual(snapshot.records.first?.tags, newer)
+    }
+}
+
 private extension JSONEncoder {
     static var iso8601ManualArchiveTestEncoder: JSONEncoder {
         let encoder = JSONEncoder()

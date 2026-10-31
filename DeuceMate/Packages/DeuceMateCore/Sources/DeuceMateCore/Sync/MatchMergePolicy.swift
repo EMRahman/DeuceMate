@@ -8,7 +8,7 @@ public enum MatchMergePolicy {
     /// Merge `incoming` into `existing` and return the record that should be
     /// persisted.
     ///
-    /// Rules (in priority order):
+    /// The **body** is chosen by these rules (in priority order):
     /// 1. If no existing record with the same id → insert (return `incoming`).
     /// 2. If incoming is completed and existing is in-progress → replace.
     /// 3. If incoming is in-progress and existing is completed → keep existing
@@ -17,9 +17,22 @@ public enum MatchMergePolicy {
     /// 5. If both in-progress → always accept the incoming record (the watch
     ///    is source of truth; always accepting preserves undo checkpoints that
     ///    have fewer points than the prior state).
+    ///
+    /// **Tags** then merge by their own clock on every path
+    /// (`MatchTags.merged`), whichever body won. Without this, case 4's `>=`
+    /// let the watch's untagged copy of a finished match (same `endTime`)
+    /// silently wipe the phone's tags on the next history push
+    /// (MATCH_TAGS_PLAN.md §3). This is the single site the phone ← watch
+    /// sync, the manual-archive `.merge` import and the watch's `.singleMatch`
+    /// handler all go through.
     public static func resolve(incoming: MatchRecord, existing: MatchRecord?) -> MatchRecord {
         guard let existing else { return incoming }
+        var winner = resolveBody(incoming: incoming, existing: existing)
+        winner.tags = MatchTags.merged(existing.tags, incoming.tags)
+        return winner
+    }
 
+    private static func resolveBody(incoming: MatchRecord, existing: MatchRecord) -> MatchRecord {
         // Completion is represented by an end time or a winner. A completed
         // draw intentionally has no winner, so `iWon` alone is insufficient.
         let incomingIsCompleted = !incoming.isInProgress
@@ -52,11 +65,18 @@ public enum MatchMergePolicy {
 
     /// Merge `incoming` records into `current` history, applying `resolve` for
     /// each and returning the deduplicated, newest-first sorted result.
-    /// Records whose IDs appear in `tombstones` are skipped.
+    /// Records whose IDs appear in `tombstones` are skipped. Every record an
+    /// incoming copy touched is then scrubbed of `forgottenPlayers`
+    /// (MATCH_TAGS_PLAN.md §6.2) regardless of its timestamp; a scrub that
+    /// changes tags stamps a fresh revision (at or after `now`) so it
+    /// supersedes the stale copy everywhere and §6.1 reconciliation sends it
+    /// back to the watch.
     public static func merge(
         incoming: [MatchRecord],
         into current: [MatchRecord],
-        tombstones: Set<UUID> = []
+        tombstones: Set<UUID> = [],
+        forgottenPlayers: ForgottenPlayerLedger = ForgottenPlayerLedger(),
+        now: Date = Date()
     ) -> [MatchRecord] {
         var byID: [UUID: MatchRecord] = Dictionary(
             uniqueKeysWithValues: current.map { ($0.id, $0) }
@@ -65,7 +85,10 @@ public enum MatchMergePolicy {
         for record in incoming {
             guard !tombstones.contains(record.id) else { continue }
             let resolved = resolve(incoming: record, existing: byID[record.id])
-            byID[record.id] = resolved.fillingMissingHealthData(from: record)
+            byID[record.id] = forgottenPlayers.scrubbed(
+                resolved.fillingMissingHealthData(from: record),
+                now: now
+            )
         }
 
         // Stable id tiebreak so equal start times never reorder the list

@@ -164,6 +164,24 @@ When a match record arrives on the phone, `MatchMergePolicy` decides what to kee
    source of truth (this also makes undo work: the reverted state replaces the
    old one even though it has fewer points).
 
+**Match tags merge separately.** Those five rules pick the record *body*. The
+optional `tags` (opponent / partner / competition type, `MatchTags`) then merge by
+their own `updatedAt` + `revisionID` clock on **every** path, whichever body won
+(`MatchTags.merged`, called inside `MatchMergePolicy.resolve` and
+`ArchiveBackupPolicy.resolveBackup`). This matters because a finished match has
+the same `endTime` on both devices: rule 4 picks the watch's copy, and without the
+separate tag merge its untagged body would silently wipe the phone's tags on the
+next history push. `tags == nil` means "this copy has no tag information" (an
+older build re-encoded it); a clear is an *empty* tags value with a newer clock.
+Tag edits travel phone → watch on their own `matchTagsUpdate` key (never as a
+`.singleMatch` record, whose watch handler can complete a live match), and
+`MatchTags.pendingWatchUpdates` resends any tags the watch is behind on when its
+history or a newly held manifest id arrives. Forgotten players
+(`ForgottenPlayerLedger`) are scrubbed from every inbound record — watch sync,
+initial iCloud restore, manual import — regardless of timestamps. Private notes
+are never part of a record and never sync. Core policy landed in PR 1; the watch
+and iOS wiring follow — see `docs/features/MATCH_TAGS_PLAN.md`.
+
 **Tombstones:** when the user permanently deletes a match on the phone, its ID is
 remembered in a small "tombstones" list. Any future sync from the watch skips
 tombstoned IDs — so a deleted match can never be resurrected by the next history
@@ -220,6 +238,11 @@ document picker and the confirmation dialogs, persisting through
 - **Both modes un-delete:** any imported id that was previously tombstoned has
   its tombstone removed (`tombstones.subtracting(incomingIDs)`), so importing a
   match you had deleted brings it back. The result is always sorted newest-first.
+- **Forgotten players stay forgotten:** the file may carry an optional
+  forgotten-player ledger (ids only). In both modes it is unioned with the
+  phone's ledger — an older file without one cannot erase it — and every
+  resulting record is scrubbed of forgotten players. In Merge mode, tags merge
+  by their own clock (§5), so an older export cannot drop newer tags.
 
 This flow only ever writes the **phone** archive (via the same `adoptOnQueue`
 funnel as any other mutation): it does **not** push to the watch, and the watch

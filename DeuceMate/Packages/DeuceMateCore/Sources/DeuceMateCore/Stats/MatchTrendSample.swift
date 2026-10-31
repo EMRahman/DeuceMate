@@ -257,6 +257,16 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         // from the two it does expose.
         let categorizedTotal = summary.totalPoints - summary.uncategorizedCount
         guard categorizedTotal >= Self.minimumCategorizedPoints else { return nil }
+        self.init(record: record, summary: summary)
+    }
+
+    /// The same single-summary projection WITHOUT the eligibility gates —
+    /// for pairwise match comparison (`MatchComparison`), where no archive or
+    /// point-count minimum applies and every metric's own zero-denominator
+    /// guard (`TrendMetric.ratio(in:)`) decides what is "Not recorded". Trends
+    /// must keep using `init?(record:)`.
+    init(record: MatchRecord, summary: MatchStatsSummary) {
+        let categorizedTotal = summary.totalPoints - summary.uncategorizedCount
 
         func depthDictionary(_ stats: [MatchStatsSummary.RallyDepthStat]) -> [EndingShot: DepthCount] {
             var out: [EndingShot: DepthCount] = [:]

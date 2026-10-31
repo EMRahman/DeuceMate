@@ -91,4 +91,18 @@ public enum MatchSyncPayloadBuilder {
     public static func requestFullHistory() -> [String: Any] {
         [MatchSyncKey.requestFullHistory: true]
     }
+
+    // MARK: - Match tags
+
+    /// One match's tags (bidirectional; phone → watch in v1). The tags are
+    /// sanitized before encoding, and again on decode.
+    public static func matchTagsUpdate(_ update: MatchTagsUpdate) throws -> [String: Any] {
+        let sanitized = MatchTagsUpdate(matchID: update.matchID, tags: update.tags.sanitized())
+        return [MatchSyncKey.matchTagsUpdate: try JSONEncoder().encode(sanitized)]
+    }
+
+    /// Convenience for `matchTagsUpdate(MatchTagsUpdate(matchID:tags:))`.
+    public static func matchTagsUpdate(matchID: UUID, tags: MatchTags) throws -> [String: Any] {
+        try matchTagsUpdate(MatchTagsUpdate(matchID: matchID, tags: tags))
+    }
 }

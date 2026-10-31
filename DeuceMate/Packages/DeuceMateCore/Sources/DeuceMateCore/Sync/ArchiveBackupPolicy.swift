@@ -14,6 +14,19 @@ public enum ArchiveBackupPolicy {
         public let records: [MatchRecord]
         /// Permanently deleted match IDs to store alongside the records.
         public let tombstones: Set<UUID>
+        /// Forgotten player ids to store alongside the records
+        /// (MATCH_TAGS_PLAN.md §6.2). Backed up with the archive; unioned on restore.
+        public let forgottenPlayers: ForgottenPlayerLedger
+
+        public init(
+            records: [MatchRecord],
+            tombstones: Set<UUID>,
+            forgottenPlayers: ForgottenPlayerLedger = ForgottenPlayerLedger()
+        ) {
+            self.records = records
+            self.tombstones = tombstones
+            self.forgottenPlayers = forgottenPlayers
+        }
     }
 
     /// Summary of a pending restore prompt: record count and newest match date,
@@ -33,10 +46,14 @@ public enum ArchiveBackupPolicy {
 
     /// Build the outbound backup snapshot from the local canonical archive.
     /// HealthKit-derived fields are stripped before storage to comply with
-    /// App Store Review Guideline 5.1.3(ii).
+    /// App Store Review Guideline 5.1.3(ii). Tags (names, competition) are not
+    /// health data and stay in the private backup; private notes are never on
+    /// `MatchRecord`, so they cannot reach it. The forgotten-player ledger is
+    /// carried through unchanged so deletion intent is backed up too.
     public static func backupSnapshot(
         records: [MatchRecord],
-        tombstones: Set<UUID>
+        tombstones: Set<UUID>,
+        forgottenPlayers: ForgottenPlayerLedger = ForgottenPlayerLedger()
     ) -> Snapshot {
         Snapshot(
             records: sortedNewestFirst(
@@ -44,7 +61,8 @@ public enum ArchiveBackupPolicy {
                     .filter { !tombstones.contains($0.id) }
                     .map { $0.strippingHealthData() }
             ),
-            tombstones: tombstones
+            tombstones: tombstones,
+            forgottenPlayers: forgottenPlayers
         )
     }
 
@@ -54,14 +72,22 @@ public enum ArchiveBackupPolicy {
     /// authoritative for live checkpoints; iCloud is only a backup and may be
     /// stale. Backup-only records are imported, tombstones union, completed
     /// bodies can finalize local in-progress records, but a backup in-progress
-    /// body never overwrites a local in-progress body.
+    /// body never overwrites a local in-progress body. Tags merge by their own
+    /// clock on every path (`resolveBackup`). Forgotten-player ledgers union
+    /// (a backup without one, `nil`, cannot erase local deletion intent), and
+    /// every resulting record is scrubbed of forgotten players regardless of
+    /// timestamps, so a stale backup cannot resurrect a forgotten name.
     public static func initialRestore(
         localRecords: [MatchRecord],
         localTombstones: Set<UUID>,
         backupRecords: [MatchRecord],
-        backupTombstones: Set<UUID>
+        backupTombstones: Set<UUID>,
+        localForgottenPlayers: ForgottenPlayerLedger = ForgottenPlayerLedger(),
+        backupForgottenPlayers: ForgottenPlayerLedger? = nil,
+        now: Date = Date()
     ) -> Snapshot {
         let tombstones = localTombstones.union(backupTombstones)
+        let forgotten = localForgottenPlayers.union(backupForgottenPlayers)
         var byID = Dictionary(
             uniqueKeysWithValues: localRecords
                 .filter { !tombstones.contains($0.id) }
@@ -72,7 +98,11 @@ public enum ArchiveBackupPolicy {
             byID[backup.id] = resolveBackup(backup: backup, local: byID[backup.id])
         }
 
-        return Snapshot(records: sortedNewestFirst(Array(byID.values)), tombstones: tombstones)
+        return Snapshot(
+            records: sortedNewestFirst(forgotten.scrubbed(Array(byID.values), now: now)),
+            tombstones: tombstones,
+            forgottenPlayers: forgotten
+        )
     }
 
     public static func sameContents(_ a: [MatchRecord], _ b: [MatchRecord]) -> Bool {
@@ -89,9 +119,17 @@ public enum ArchiveBackupPolicy {
         }
     }
 
-    private static func resolveBackup(backup: MatchRecord, local: MatchRecord?) -> MatchRecord {
+    /// Chooses the body by the restore rules below, then merges tags by their
+    /// own clock whichever body won (MATCH_TAGS_PLAN.md §3) — a stale backup
+    /// body must neither drop newer local tags nor lose newer backup tags.
+    static func resolveBackup(backup: MatchRecord, local: MatchRecord?) -> MatchRecord {
         guard let local else { return backup }
+        var winner = resolveBackupBody(backup: backup, local: local)
+        winner.tags = MatchTags.merged(local.tags, backup.tags)
+        return winner
+    }
 
+    private static func resolveBackupBody(backup: MatchRecord, local: MatchRecord) -> MatchRecord {
         let backupIsCompleted = !backup.isInProgress
         let localIsCompleted = !local.isInProgress
 

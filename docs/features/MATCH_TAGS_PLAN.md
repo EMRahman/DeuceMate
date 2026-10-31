@@ -1,7 +1,7 @@
 <!--
 machine-readable summary (parse this block first)
 
-status: revised after owner-authorized review (2026-10-23; supersedes completed-only scope)
+status: revised after owner-authorized review (2026-10-23; supersedes completed-only scope); PR 1 (Core) implemented 2026-10-31 — PR 2/3/4 pending
 author: Claude, design session with the owner
 date: 2026-10-23
 feature: "Tag a completed or in-progress match with who was played (selectable roster) and its competition type (Friendly / League / Tournament / Practice); show the tags on the watch; compare with a previous match on iOS; add private local notes; feed selected context into AI Coach and shared reports."
@@ -652,6 +652,24 @@ Order is load-bearing: **PR 1 must merge before any PR that can write a tag**,
 otherwise the first watch sync deletes it (§3).
 
 ### PR 1 — `[Core] Match tags model, tag-preserving merge, roster`
+
+> **Status: implemented (2026-10-31, branch `feat/match-tags-core`).** Core
+> only; no UI writes tags yet. New files: `Models/MatchTags.swift`,
+> `Persistence/ForgottenPlayerLedger.swift`, `Persistence/MatchNotes.swift`,
+> `Stats/PlayerRoster.swift`, `Stats/MatchComparison.swift`. Tag merge is in
+> `MatchMergePolicy.resolve` and `ArchiveBackupPolicy.resolveBackup`; the
+> manual-archive `.merge` import and the watch `.singleMatch` handler inherit
+> it through `resolve`. Ledger union + scrub is wired into
+> `MatchMergePolicy.merge`, `ArchiveBackupPolicy.initialRestore` and
+> `ManualMatchArchiveBackup.importSnapshot` (both modes) via defaulted
+> parameters, so existing callers are unchanged until PR 3 passes a ledger.
+> The phone's exhaustive `SyncIncomingEvent` switch ignores
+> `.matchTagsUpdate` until PR 3. Additions beyond the bullets below, for the
+> later PRs: `MatchTags.displayLine` (the shared caption), `revised(after:)` /
+> `cleared(after:)` (monotonic edit clock), `MatchRecord.mergingTags`,
+> `PlayerRoster` rename/merge/forget mutations, and `Matchup` (the shared
+> baseline/head-to-head identity rule).
+
 - `Models/MatchTags.swift`, `MatchRecord.tags`, sanitizer.
 - Tag merge inside `MatchMergePolicy.resolve` and `ArchiveBackupPolicy.resolveBackup`.
 - `Stats/PlayerRoster.swift` (`PlayerRoster`, `HeadToHead`), pairwise comparison
