@@ -12,6 +12,11 @@ protocol WatchStatsStoring: StatsStoring {
     /// history, or nil for an unreadable archive, missing/completed ID or failed
     /// write. Never recreates a record from a stale history-sheet snapshot.
     func completeStoredMatch(id: UUID, at date: Date) -> [MatchRecord]?
+
+    /// Merge a tag update into an already-stored record on the store's serial
+    /// queue. Returns the saved record, or nil for an unreadable archive, a
+    /// missing ID (never creates a record) or a failed write.
+    func updateTags(id: UUID, tags: MatchTags) -> MatchRecord?
 }
 
 /// JSON-backed `StatsStoring` implementation for the watch target. Persists to
@@ -82,11 +87,29 @@ final class StatsStore: WatchStatsStoring {
         }
     }
 
+    func updateTags(id: UUID, tags: MatchTags) -> MatchRecord? {
+        queue.sync {
+            guard var records = _loadHistoryUnsafe(),
+                  let index = records.firstIndex(where: { $0.id == id }) else { return nil }
+            let updated = records[index].mergingTags(tags)
+            records[index] = updated
+            guard _writeUnsafe(records) else { return nil }
+            return updated
+        }
+    }
+
     func appendMatch(_ record: MatchRecord) {
         queue.sync {
             guard var records = _loadHistoryUnsafe() else {
                 statsStoreLogger.error("appendMatch skipped: match history unreadable; refusing to overwrite")
                 return
+            }
+            // Tags are phone-authored metadata that live checkpoints never carry.
+            // Merge the stored copy's tags forward so replacing a record by id
+            // can't erase them (MATCH_TAGS_PLAN.md §3).
+            var record = record
+            if let stored = records.first(where: { $0.id == record.id }) {
+                record = record.mergingTags(stored.tags)
             }
             records.removeAll { $0.id == record.id }
             records.append(record)

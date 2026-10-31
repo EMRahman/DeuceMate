@@ -4,7 +4,8 @@
 // vs transferFile) lives in `MatchSyncTransport`, and inbound payload decoding
 // lives in `SyncIncomingPayload`. This file owns only watch-specific behaviour:
 // kicking a full-history push when the phone activates or becomes reachable,
-// and replying to the phone's history requests.
+// and replying to the phone's history requests. Phone-authored match tags
+// arrive as `.matchTagsUpdate` and are merged into stored history only.
 import Foundation
 import os
 import WatchConnectivity
@@ -40,6 +41,9 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     /// match. The view model finalizes its newer authoritative score and clears
     /// the live session rather than leaving two states for the same identity.
     var onCompletedMatchReceived: ((MatchRecord) -> Void)?
+    /// Called on the main thread for every phone tag update, so the live match
+    /// (which is not in the history store) can keep the tags on its own records.
+    var onMatchTagsReceived: ((_ matchID: UUID, _ tags: MatchTags) -> Void)?
 
     private let transport = MatchSyncTransport(
         logger: Logger(subsystem: "com.deucemate.sync", category: "Watch")
@@ -277,6 +281,18 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
                     NotificationCenter.default.post(name: .watchMatchHistoryDidChange, object: nil)
                     if !record.isInProgress {
                         self.onCompletedMatchReceived?(record)
+                    }
+                }
+            case .matchTagsUpdate(let id, let tags):
+                // Metadata only. Never routed through appendMatch (hides write
+                // failures) or .singleMatch (would complete a live match), and
+                // never creates a record: an ID the watch doesn't hold is a
+                // no-op, and the phone's reconciliation resends later.
+                let saved = StatsStore.shared.updateTags(id: id, tags: tags)
+                DispatchQueue.main.async {
+                    self.onMatchTagsReceived?(id, tags)
+                    if saved != nil {
+                        NotificationCenter.default.post(name: .watchMatchHistoryDidChange, object: nil)
                     }
                 }
             case .decodeError(let key, let error):
