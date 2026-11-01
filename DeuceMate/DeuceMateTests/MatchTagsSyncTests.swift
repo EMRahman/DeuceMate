@@ -61,6 +61,34 @@ struct MatchTagsSyncTests {
         }
 
         func remove() { try? FileManager.default.removeItem(at: root) }
+
+        var canonical: URL { root.appendingPathComponent("MatchArchive", isDirectory: true) }
+        var ledgerURL: URL { canonical.appendingPathComponent("forgottenPlayers.json") }
+
+        /// A second process's view of the same files — what a relaunch loads.
+        func relaunchedStore() -> PhoneStatsStore {
+            PhoneStatsStore(storageConfiguration: .init(
+                canonicalDirectoryURL: canonical,
+                legacyDocumentsDirectoryURL: root.appendingPathComponent("Documents", isDirectory: true),
+                startsICloudSync: false
+            ))
+        }
+
+        func makeNotesStore() -> MatchNotesStore {
+            MatchNotesStore(configuration: .init(directoryURL: root.appendingPathComponent("MatchNotes", isDirectory: true)))
+        }
+
+        /// Storage becomes unwritable mid-session: a non-empty directory at the
+        /// ledger path (the first canonical file written) defeats every write.
+        func blockCanonicalWrites() throws {
+            try? FileManager.default.removeItem(at: ledgerURL) // the current ledger file
+            try FileManager.default.createDirectory(at: ledgerURL, withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: ledgerURL.appendingPathComponent("blocker"))
+        }
+
+        func unblockCanonicalWrites() throws {
+            try FileManager.default.removeItem(at: ledgerURL)
+        }
     }
 
     private func match(id: UUID = UUID()) -> MatchRecord {
@@ -156,7 +184,7 @@ struct MatchTagsSyncTests {
         let record = match()
         h.store.saveHistory([record])
         let tagged = try h.store.updateTags(id: record.id, tags: MatchTags(opponents: [alex], updatedAt: Date()))
-        h.store.forgetPlayer(alex.id)
+        try h.store.forgetPlayer(alex.id)
         h.session.reset()
 
         var stale = record
@@ -185,6 +213,86 @@ struct MatchTagsSyncTests {
         #expect(h.store.loadHistory().first?.isInProgress == false)
     }
 
+    // MARK: - Players actions when storage can't be written (the user's view)
+
+    /// Settings → Players → Forget with unwritable storage: the action fails
+    /// with the user-facing message, nothing reaches the watch, the private
+    /// note the user asked to delete is kept, and the player is still listed —
+    /// now and after a relaunch.
+    @Test func forgetWithUnwritableStorageShowsAnErrorAndPushesNothing() async throws {
+        let h = Harness()
+        defer { h.remove() }
+        let alex = TaggedPlayer(name: "Alex")
+        let record = match()
+        h.store.saveHistory([record])
+        try h.store.updateTags(id: record.id, tags: MatchTags(opponents: [alex], updatedAt: Date()))
+        h.service.handle([.watchManifest([record.id])]) // the watch holds it
+        await drainMain()
+        let notes = h.makeNotesStore()
+        try notes.save(text: "Alex's backhand", for: record.id)
+        let actions = PlayerRosterActions(store: h.store, notesStore: notes, syncService: h.service)
+        try h.blockCanonicalWrites()
+        h.session.reset()
+
+        var thrown: Error?
+        do { try actions.forget(alex.id, deletingNotesFor: [record.id]) } catch { thrown = error }
+
+        #expect(thrown as? PhoneStatsStore.TagEditError == .notPersisted)
+        #expect(thrown?.localizedDescription.contains("nothing was changed") == true)
+        await drainMain()
+        #expect(h.session.tagUpdates.isEmpty)
+        #expect(notes.note(for: record.id)?.text == "Alex's backhand")
+        #expect(PlayerRoster.entries(from: h.store.history, forgotten: h.store.forgottenPlayers).map(\.name) == ["Alex"])
+        try h.unblockCanonicalWrites()
+        #expect(h.relaunchedStore().rosterEntries().map(\.name) == ["Alex"])
+    }
+
+    @Test func renameAndMergeWithUnwritableStoragePushNothing() async throws {
+        let h = Harness()
+        defer { h.remove() }
+        let alex = TaggedPlayer(name: "Alex"), duplicate = TaggedPlayer(name: "alex")
+        let a = match(), b = match()
+        h.store.saveHistory([a, b])
+        try h.store.updateTags(id: a.id, tags: MatchTags(opponents: [alex], updatedAt: Date()))
+        try h.store.updateTags(id: b.id, tags: MatchTags(opponents: [duplicate], updatedAt: Date()))
+        h.service.handle([.watchManifest([a.id, b.id])])
+        await drainMain()
+        let actions = PlayerRosterActions(store: h.store, notesStore: h.makeNotesStore(), syncService: h.service)
+        try h.blockCanonicalWrites()
+        h.session.reset()
+
+        #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
+            try actions.rename(alex.id, to: "Alexandra")
+        }
+        #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
+            try actions.merge(duplicate.id, into: alex.id)
+        }
+
+        #expect(h.session.tagUpdates.isEmpty)
+        #expect(Set(h.store.rosterEntries().map(\.name)) == ["Alex", "alex"])
+    }
+
+    /// The same action with working storage does push, so the failure tests
+    /// above prove the guard rather than an inert path.
+    @Test func forgetWithWritableStoragePushesTheScrubbedTags() async throws {
+        let h = Harness()
+        defer { h.remove() }
+        let alex = TaggedPlayer(name: "Alex")
+        let record = match()
+        h.store.saveHistory([record])
+        try h.store.updateTags(id: record.id, tags: MatchTags(opponents: [alex], updatedAt: Date()))
+        h.service.handle([.watchManifest([record.id])])
+        await drainMain()
+        let actions = PlayerRosterActions(store: h.store, notesStore: h.makeNotesStore(), syncService: h.service)
+        h.session.reset()
+
+        try actions.forget(alex.id)
+
+        #expect(h.session.tagUpdates.map(\.matchID) == [record.id])
+        #expect(h.session.tagUpdates.first?.tags.playerIDs.contains(alex.id) == false)
+        #expect(h.relaunchedStore().forgottenPlayerLedger().contains(alex.id))
+    }
+
     @Test func watchMirrorRowsNeverShowAForgottenPlayer() async throws {
         let h = Harness()
         defer { h.remove() }
@@ -192,7 +300,7 @@ struct MatchTagsSyncTests {
         let watchOnly = match()
         var stale = watchOnly
         stale.tags = MatchTags(opponents: [alex], updatedAt: Date())
-        h.store.forgetPlayer(alex.id)
+        try h.store.forgetPlayer(alex.id)
         await drainMain()
 
         h.service.handle([.watchManifest([watchOnly.id])])
