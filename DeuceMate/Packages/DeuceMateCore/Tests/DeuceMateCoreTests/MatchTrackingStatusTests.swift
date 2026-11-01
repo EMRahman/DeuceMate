@@ -316,4 +316,37 @@ final class MatchTrackingStatusTests: XCTestCase {
         )
         XCTAssertFalse(status.accessibilityDescription.contains("*"), status.accessibilityDescription)
     }
+
+    // MARK: - Tap destination
+
+    func test_destination_pointTracking_alwaysTheToggle() {
+        for enabled in [true, false] {
+            let status = MatchTrackingStatus.pointTracking(isEnabled: enabled, matchFormat: .standard)
+            for access in HealthAccess.allCases {
+                XCTAssertEqual(status.destination(access: access), .pointTrackingToggle)
+            }
+        }
+    }
+
+    func test_destination_health_onlyOffersThePromptWhileUnanswered() {
+        for access in HealthAccess.allCases {
+            let status = MatchTrackingStatus.healthTracking(access: access)
+            XCTAssertEqual(
+                status.destination(access: access),
+                access == .notDetermined ? .requestHealthAccess : .none,
+                "\(access)"
+            )
+        }
+    }
+
+    func test_destination_pulseCoach_needsHeartRateToBeCalibratable() {
+        for access in HealthAccess.allCases {
+            let status = MatchTrackingStatus.pulseCoach(
+                access: access, birthYear: 0, maxHROverride: 0, currentYear: year
+            )
+            let expected: TrackingDestination =
+                (access == .authorized || access == .notDetermined) ? .pulseCoachSettings : .none
+            XCTAssertEqual(status.destination(access: access), expected, "\(access)")
+        }
+    }
 }
