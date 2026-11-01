@@ -24,6 +24,8 @@ struct MatchInfoEditorView: View {
     @State private var pickerSlot: Slot?
     @State private var saveError: String?
     @State private var showClearConfirmation = false
+    @State private var showDiscardConfirmation = false
+    @State private var originalTags: MatchTags?
 
     /// Which player position the roster picker is filling.
     enum Slot: Hashable, Identifiable {
@@ -40,6 +42,16 @@ struct MatchInfoEditorView: View {
     init(record: MatchRecord) {
         self.record = record
         let tags = record.tags
+        let opponentCount = record.matchType == .doubles ? 2 : 1
+        let normalizedTags = tags?.sanitized()
+        _originalTags = State(initialValue: normalizedTags.map {
+            MatchTags(
+                opponents: Array($0.opponents.prefix(opponentCount)),
+                partner: record.matchType == .doubles ? $0.partner : nil,
+                competitionTypeRaw: $0.competitionTypeRaw,
+                updatedAt: $0.updatedAt
+            )
+        })
         _competition = State(initialValue: tags?.competitionType)
         _unknownCompetitionRaw = State(initialValue: tags?.competitionType == nil ? tags?.competitionTypeRaw : nil)
         let slots = record.matchType == .doubles ? 2 : 1
@@ -70,7 +82,7 @@ struct MatchInfoEditorView: View {
     private var hasStoredDetails: Bool { !(storedTags?.isEmpty ?? true) }
 
     private var hasChanges: Bool {
-        let stored = storedTags ?? MatchTags(competitionTypeRaw: nil, updatedAt: .distantPast)
+        let stored = originalTags ?? MatchTags(competitionTypeRaw: nil, updatedAt: .distantPast)
         let current = draft.sanitized()
         return current.opponents != stored.opponents
             || current.partner != stored.partner
@@ -117,7 +129,7 @@ struct MatchInfoEditorView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") { cancel() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save(draft) }
@@ -155,6 +167,20 @@ struct MatchInfoEditorView: View {
                 Text(saveError ?? "")
             }
         }
+        .confirmationDialog(
+            "Discard unsaved changes?",
+            isPresented: $showDiscardConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Keep Editing", role: .cancel) {}
+            Button("Discard Changes", role: .destructive) { dismiss() }
+        } message: {
+            Text("Your changes to Match Info haven't been saved.")
+        }
+        .protectDraftDismissal(
+            isDirty: Binding(get: { self.hasChanges }, set: { _ in }),
+            isDiscardPromptPresented: $showDiscardConfirmation
+        )
     }
 
     // MARK: - Competition
@@ -259,7 +285,7 @@ struct MatchInfoEditorView: View {
                         : GridItem(.adaptive(minimum: 120), alignment: .leading)], spacing: 8) {
                         ForEach(Array(recent)) { entry in
                             Button {
-                                assign(TaggedPlayer(id: entry.id, name: entry.name), to: slot)
+                                assign(entry.taggedPlayer, to: slot)
                             } label: {
                                 Text(entry.name)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -323,6 +349,14 @@ struct MatchInfoEditorView: View {
             dismiss()
         } catch {
             saveError = error.localizedDescription
+        }
+    }
+
+    private func cancel() {
+        if hasChanges {
+            showDiscardConfirmation = true
+        } else {
+            dismiss()
         }
     }
 }

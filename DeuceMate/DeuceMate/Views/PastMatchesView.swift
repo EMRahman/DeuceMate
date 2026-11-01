@@ -131,6 +131,8 @@ struct PastMatchesView: View {
             // docs/features/PERFORMANCE_TRENDS_PLAN.md).
             TrendsSection(records: store.history)
 
+            OpponentsSection(records: store.history, forgotten: store.forgottenPlayers)
+
             // Live Match section
             if let liveRecord = store.history.first(where: { $0.id == activeID }) {
                 Section {

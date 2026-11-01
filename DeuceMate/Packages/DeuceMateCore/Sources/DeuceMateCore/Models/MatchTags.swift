@@ -19,20 +19,56 @@ import Foundation
 /// player is first added, and reused whenever they are picked from the roster,
 /// so two different "Alex"es stay separate and a rename can follow one person
 /// across every match.
+public enum PlayerSex: String, CaseIterable, Sendable {
+    case female, male, intersex
+
+    public var displayLabel: String {
+        switch self {
+        case .female: return "Female"
+        case .male: return "Male"
+        case .intersex: return "Intersex"
+        }
+    }
+}
+
 public struct TaggedPlayer: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: UUID
     /// Sanitized display snapshot (see `MatchTags.sanitizedName(_:)`).
     public var name: String
 
-    public init(id: UUID = UUID(), name: String) {
+    public var age: Int?
+    public var sexRaw: String?
+
+    public var sex: PlayerSex? {
+        get { sexRaw.flatMap(PlayerSex.init(rawValue:)) }
+        set { sexRaw = newValue?.rawValue }
+    }
+
+    public static let maxSexRawLength = 64
+
+    public init(id: UUID = UUID(), name: String, age: Int? = nil, sexRaw: String? = nil) {
         self.id = id
         self.name = name
+        self.age = Self.sanitizedAge(age)
+        self.sexRaw = Self.sanitizedSexRaw(sexRaw)
+    }
+
+    static func sanitizedAge(_ age: Int?) -> Int? {
+        age.flatMap { (0...120).contains($0) ? $0 : nil }
+    }
+
+    static func sanitizedSexRaw(_ raw: String?) -> String? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
+              !raw.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) else { return nil }
+        return String(raw.prefix(maxSexRawLength))
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
         name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? ""
+        age = Self.sanitizedAge(try? c.decodeIfPresent(Int.self, forKey: .age))
+        sexRaw = Self.sanitizedSexRaw(try? c.decodeIfPresent(String.self, forKey: .sexRaw))
     }
 }
 
@@ -206,8 +242,15 @@ public struct MatchTags: Codable, Equatable, Sendable {
     }
 
     private var canonicalContentKey: String {
-        let players = allPlayers.map { "\($0.id.uuidString)=\($0.name)" }.joined(separator: "|")
-        return "\(partner?.id.uuidString ?? "-")#\(competitionTypeRaw ?? "-")#\(players)"
+        func field(_ value: String?) -> String {
+            guard let value else { return "N" }
+            return "S\(value.utf8.count):\(value)"
+        }
+        func player(_ value: TaggedPlayer) -> String {
+            field(value.id.uuidString) + field(value.name) + field(value.age.map(String.init)) + field(value.sexRaw)
+        }
+        return field(competitionTypeRaw) + field(partner.map(player))
+            + "\(opponents.count):" + opponents.map(player).joined()
     }
 
     // MARK: Editing
@@ -266,7 +309,7 @@ public struct MatchTags: Codable, Equatable, Sendable {
 
     private static func sanitizedPlayer(_ player: TaggedPlayer) -> TaggedPlayer? {
         let name = sanitizedName(player.name)
-        return name.isEmpty ? nil : TaggedPlayer(id: player.id, name: name)
+        return name.isEmpty ? nil : TaggedPlayer(id: player.id, name: name, age: player.age, sexRaw: player.sexRaw)
     }
 
     /// Trim, turn line breaks into spaces, drop other control characters and

@@ -18,8 +18,8 @@ struct MatchDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appTheme) private var theme
     @EnvironmentObject private var syncService: PhoneMatchSyncService
-    // Must be supplied by every presenter of MatchDetailView (only the
-    // PastMatchesView sheet today). Used to tell whether this match is still in
+    // Must be supplied by every presenter of MatchDetailView (the PastMatchesView
+    // and opponent-history sheets). Used to tell whether this match is still in
     // the phone archive and to restore it on "Sync to iPhone".
     @EnvironmentObject private var store: PhoneStatsStore
 

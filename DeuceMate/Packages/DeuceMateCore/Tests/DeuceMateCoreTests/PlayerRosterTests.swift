@@ -13,6 +13,29 @@ final class PlayerRosterTests: XCTestCase {
     private let sam = TagFixtures.player("Sam", id: TagFixtures.uuid(4))
     private let kim = TagFixtures.player("Kim", id: TagFixtures.uuid(5))
 
+    func test_profileFollowsLatestRevisionAndMutationsAcrossRoles() throws {
+        let older = TaggedPlayer(id: alex.id, name: "Alex", age: 30, sexRaw: "male")
+        let newer = TaggedPlayer(id: alex.id, name: "Alexandra", age: 31, sexRaw: "future")
+        let a = F.record(start: 100, tags: F.tags(opponents: [older], at: 1))
+        let b = F.record(start: 0, type: .doubles, tags: F.tags(opponents: [jo], partner: newer, at: 2))
+        let records = [a, b]
+        let entry = try XCTUnwrap(PlayerRoster.entries(from: records).first { $0.id == alex.id })
+        XCTAssertEqual(entry.taggedPlayer, newer)
+        XCTAssertEqual(OpponentDirectory.entries(from: records).first?.taggedPlayer, newer)
+        let renamed = PlayerRoster.renaming(alex.id, to: "Ali", in: records)
+        XCTAssertEqual(renamed.records[0].tags?.opponents.first?.age, 30)
+        let updated = PlayerRoster.updatingDetails(alex.id, age: 40, sexRaw: "female", in: records)
+        XCTAssertEqual(updated.affectedMatchIDs, [a.id, b.id])
+        XCTAssertEqual(updated.records[0].tags?.opponents.first?.sex, .female)
+        XCTAssertEqual(updated.records[1].tags?.partner?.age, 40)
+        let cleared = PlayerRoster.updatingDetails(alex.id, age: nil, sexRaw: nil, in: updated.records)
+        XCTAssertNil(cleared.records[0].tags?.opponents.first?.age)
+        XCTAssertNil(cleared.records[1].tags?.partner?.sexRaw)
+        let duplicate = F.record(tags: F.tags(opponents: [alex2]))
+        let merged = PlayerRoster.merging(alex2.id, into: alex.id, in: records + [duplicate])
+        XCTAssertEqual(merged.records[2].tags?.opponents.first, newer)
+    }
+
     // MARK: - Roster
 
     func test_entries_mostRecentFirst_countsDistinctMatchesInAnyRole() {

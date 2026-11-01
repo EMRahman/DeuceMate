@@ -357,6 +357,12 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         try applyRosterMutation { PlayerRoster.renaming(playerID, to: newName, in: $0, now: now) }
     }
 
+    /// Updates a player's optional age and sex snapshot in every match.
+    @discardableResult
+    func updatePlayerDetails(_ playerID: UUID, age: Int?, sexRaw: String?, now: Date = Date()) throws -> Set<UUID> {
+        try applyRosterMutation { PlayerRoster.updatingDetails(playerID, age: age, sexRaw: sexRaw, in: $0, now: now) }
+    }
+
     /// Merges duplicate `duplicateID` into `keptID` in every match. Throws
     /// like `renamePlayer`.
     @discardableResult
