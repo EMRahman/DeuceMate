@@ -54,7 +54,7 @@ struct MatchNotesEditorView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Stored on this iPhone. Not backed up automatically.")
                             .fontWeight(.semibold)
-                        Text("Private notes aren't synced to Apple Watch, aren't in the iCloud or device backup, and aren't added to shared reports or AI Coach. If you delete the app or move to a new iPhone, they don't come back.")
+                        Text("Private notes aren't synced to Apple Watch and aren't in the iCloud or device backup. They are never added to a shared report, AI Coach prompt or exported archive unless you choose Include Private Note when sharing. If you delete the app or move to a new iPhone, they don't come back.")
                         Text("\(draft.count) / \(MatchNotesPolicy.maxLength)")
                             .monospacedDigit()
                     }

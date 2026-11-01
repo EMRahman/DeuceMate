@@ -4,6 +4,19 @@
 import SwiftUI
 import DeuceMateCore
 
+/// Everything the prompt closure reads from its parent. The sheet caches the
+/// built prompt in state, so it must regenerate when ANY of these change - a
+/// Watch checkpoint, match completion or health backfill can arrive while the
+/// sheet is open and would otherwise leave Copy/Share/Launch sending a stale
+/// score. Equality is by value, so an unchanged re-render never rebuilds.
+struct AICoachSourceIdentity: Equatable {
+    let record: MatchRecord
+    let maxHR: Int
+    let playerNTRP: String
+    let note: String?
+    let headToHead: HeadToHeadRecord?
+}
+
 struct AICoachSheet: View {
     enum Perspective: String, CaseIterable, Identifiable {
         case me
@@ -12,11 +25,19 @@ struct AICoachSheet: View {
         var label: String { self == .me ? "My Stats" : "Opponent's" }
     }
 
-    let mePrompt: String
-    let opponentPrompt: String
+    /// Builds the prompt for a perspective with the sheet's own toggles. Pure
+    /// and synchronous: the sheet rebuilds whenever a toggle changes, so a
+    /// copied or shared prompt always matches what the toggles show.
+    let buildPrompt: (_ focal: Player, _ includeNames: Bool, _ includeNotes: Bool) -> String
     let hasOpponentPrompt: Bool
     let filenameMe: String
     let filenameOpponent: String
+    /// Whether anyone is tagged on this match (names toggle is shown only then).
+    let hasTaggedPeople: Bool
+    /// The stored private note, if any (the notes toggle is shown only then).
+    let noteText: String?
+    /// Refresh identity: the prompt is rebuilt when this changes (see type doc).
+    let sourceIdentity: AICoachSourceIdentity
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appTheme) private var theme
@@ -24,9 +45,17 @@ struct AICoachSheet: View {
     @State private var installed: [AICoachApp] = []
     @State private var toast: String?
     @State private var toastWorkItem: DispatchWorkItem?
+    /// Both default OFF every time the sheet opens: names and notes are
+    /// per-hand-off opt-ins (MATCH_TAGS_PLAN.md §7.3), never remembered.
+    @State private var includeNames = false
+    @State private var includeNotes = false
+    @State private var showNotesReview = false
+    @State private var activePrompt = ""
 
-    private var activePrompt: String {
-        perspective == .me ? mePrompt : opponentPrompt
+    private var focal: Player { perspective == .me ? .me : .opponent }
+
+    private func refreshPrompt() {
+        activePrompt = buildPrompt(focal, includeNames, includeNotes && noteText != nil)
     }
 
     private var activeFilename: String {
@@ -69,6 +98,10 @@ struct AICoachSheet: View {
                              ? "Coaching tips for your own performance."
                              : "Generate a prompt to share with your opponent — coaching for their side of the match.")
                     }
+                }
+
+                if hasTaggedPeople || noteText != nil {
+                    promptContentsSection
                 }
 
                 if installed.isEmpty {
@@ -148,7 +181,86 @@ struct AICoachSheet: View {
         }
         .onAppear {
             installed = AICoachLauncher.installedApps()
+            refreshPrompt()
         }
+        .onChange(of: perspective) { _, _ in refreshPrompt() }
+        .onChange(of: includeNames) { _, _ in refreshPrompt() }
+        .onChange(of: includeNotes) { _, _ in refreshPrompt() }
+        // Toggles and perspective are @State, so they survive this refresh.
+        .onChange(of: sourceIdentity) { _, _ in refreshPrompt() }
+        .sheet(isPresented: $showNotesReview) {
+            if let noteText {
+                NotesExportReviewSheet(
+                    noteText: noteText,
+                    includeNames: includeNames,
+                    destination: "the AI prompt",
+                    onConfirm: {
+                        includeNotes = true
+                        showNotesReview = false
+                    },
+                    onCancel: { showNotesReview = false }
+                )
+            }
+        }
+    }
+
+    // MARK: - Prompt contents (names / private note)
+
+    @ViewBuilder
+    private var promptContentsSection: some View {
+        Section {
+            if hasTaggedPeople {
+                Toggle("Include player names", isOn: $includeNames)
+                    .accessibilityIdentifier("ai-include-names")
+            }
+            if noteText != nil {
+                Toggle("Include private note", isOn: Binding(
+                    get: { includeNotes },
+                    set: { wantsOn in
+                        // Turning ON goes through the review step; OFF is immediate.
+                        if wantsOn { showNotesReview = true } else { includeNotes = false }
+                    }
+                ))
+                .accessibilityIdentifier("ai-include-notes")
+            }
+            NavigationLink {
+                promptPreview
+            } label: {
+                Label("Preview Prompt", systemImage: "doc.text.magnifyingglass")
+            }
+            .accessibilityIdentifier("ai-preview-prompt")
+        } header: {
+            Text("Prompt Contents")
+        } footer: {
+            VStack(alignment: .leading, spacing: 6) {
+                if hasTaggedPeople {
+                    Text(MatchExportDisclosure.namesCaption(isOn: includeNames, forAI: true))
+                }
+                if noteText != nil {
+                    Text(includeNotes
+                         ? "Your private note is quoted in the prompt as background context."
+                         : "Your private note is not included.")
+                }
+                if includeNotes && !includeNames {
+                    Text(MatchExportDisclosure.namesOffNotesWarning)
+                        .foregroundStyle(.orange)
+                        .accessibilityIdentifier("ai-names-off-notes-warning")
+                }
+            }
+        }
+    }
+
+    private var promptPreview: some View {
+        ScrollView {
+            Text(activePrompt)
+                .font(.footnote.monospaced())
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .accessibilityIdentifier("ai-prompt-text")
+        }
+        .navigationTitle("Prompt")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     @ViewBuilder

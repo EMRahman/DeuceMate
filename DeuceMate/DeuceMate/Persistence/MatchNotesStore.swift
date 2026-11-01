@@ -148,6 +148,19 @@ final class MatchNotesStore: ObservableObject {
         }
     }
 
+    /// Restores notes from an opted-in manual archive section into the
+    /// backup-excluded sidecar, merged by each note's own revision order (a
+    /// newer local note is never overwritten; an included empty entry clears).
+    /// Throws, changing nothing, when the sidecar is unreadable.
+    func importNotes(_ incoming: [MatchNote]) throws {
+        guard !incoming.isEmpty else { return }
+        try queue.sync {
+            guard !writesSuspended else { throw StoreError.unreadableFile }
+            let merged = MatchNotesPolicy.merge(incoming, into: Array(current.values))
+            try persistOnQueue(Dictionary(uniqueKeysWithValues: merged.map { ($0.matchID, $0) }))
+        }
+    }
+
     /// What replacing the archive with one holding `retainedMatchIDs` would
     /// do to notes. `discarded` lists non-empty notes that would be deleted.
     func replacePlan(retainedMatchIDs: Set<UUID>) -> MatchNotesPolicy.ReplacePlan {
