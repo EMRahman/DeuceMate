@@ -172,13 +172,18 @@ struct SettingsView: View {
             syncStatus = .succeeded
             syncRequestedAt = nil
         }
-        .alert("Export Match Archive", isPresented: $showArchiveExportDisclosure) {
-            Button("Export") { prepareManualArchiveExport() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            // SwiftUI evaluates this closure on every body pass; only scan the
-            // archive when the alert is actually up.
-            Text(showArchiveExportDisclosure ? archiveExportDisclosureMessage : "")
+        .sheet(isPresented: $showArchiveExportDisclosure) {
+            // The disclosure plus the separate, default-off private-notes
+            // opt-in with an exact preview. Built when the sheet is up only.
+            ArchiveExportOptionsSheet(
+                baseMessage: archiveExportDisclosureMessage,
+                notes: archiveExportNoteLines,
+                onExport: { includeNotes in
+                    showArchiveExportDisclosure = false
+                    prepareManualArchiveExport(includeNotes: includeNotes)
+                },
+                onCancel: { showArchiveExportDisclosure = false }
+            )
         }
         .fileExporter(
             isPresented: $showArchiveExporter,
@@ -488,7 +493,7 @@ struct SettingsView: View {
             } header: {
                 Text("Backup & Transfer")
             } footer: {
-                Text("Automatic iCloud and device restores keep scores and non-health stats, but not recorded heart rate, steps, distance, or calories. Before moving to a new iPhone, Export Match Archive here, then Import it on the new phone. Manual archive files are full-fidelity and may include those HealthKit-derived values and the player names you added. Private match notes stay on this iPhone and aren't included in any backup or archive file.")
+                Text("Automatic iCloud and device restores keep scores and non-health stats, but not recorded heart rate, steps, distance, or calories. Before moving to a new iPhone, Export Match Archive here, then Import it on the new phone. Manual archive files are full-fidelity and may include those HealthKit-derived values and the player names you added. Private match notes stay on this iPhone and are never in an automatic backup; you can choose to include them in a manual archive file when you export.")
             }
 
             Section {
@@ -713,12 +718,27 @@ struct SettingsView: View {
         return HealthExportConsent.disclosure(fields: fields, destination: .archiveFile).message
     }
 
-    private func prepareManualArchiveExport() {
+    /// Every non-empty private note on a match in the archive, newest match
+    /// first - exactly what "Include private notes" would write.
+    private var archiveExportNoteLines: [ArchiveExportOptionsSheet.NoteLine] {
+        let notes = Dictionary(
+            MatchNotesStore.shared.allNotes().filter { !$0.isCleared }.map { ($0.matchID, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return store.history.compactMap { record in
+            notes[record.id].map { ArchiveExportOptionsSheet.NoteLine(note: $0, matchDate: record.startTime) }
+        }
+    }
+
+    private func prepareManualArchiveExport(includeNotes: Bool) {
         archiveTransferStatus = nil
         let store = store
+        // Resolved here (main actor) so the exact set the user reviewed is the
+        // set written, even if a note changes while the file is prepared.
+        let notes = includeNotes ? archiveExportNoteLines.map(\.note) : nil
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                let data = try store.exportManualArchiveData()
+                let data = try store.exportManualArchiveData(notes: notes)
                 DispatchQueue.main.async {
                     archiveExportDocument = MatchArchiveDocument(data: data)
                     showArchiveExporter = true
@@ -791,6 +811,10 @@ struct SettingsView: View {
             do {
                 let preview = try store.importManualArchive(data: pendingImportData, mode: mode)
                 let verb = mode == .merge ? "merged" : "replaced"
+                // Notes ride in an optional section of the file. A file without
+                // one is "no information" and never touches existing notes.
+                let importedNotes = (try? ManualMatchArchiveBackup.decode(pendingImportData))
+                    .map(ManualMatchArchiveBackup.importableNotes(from:)) ?? []
                 // Merge keeps every current match, so every note stays. A
                 // confirmed Replace keeps notes only for matches in the file
                 // (the confirmation stated how many would go).
@@ -800,6 +824,13 @@ struct SettingsView: View {
                         try MatchNotesStore.shared.applyReplace(retainedMatchIDs: retainedIDs)
                     } catch {
                         notesWarning = " Private notes were left unchanged: \(error.localizedDescription)"
+                    }
+                }
+                if !importedNotes.isEmpty && notesWarning.isEmpty {
+                    do {
+                        try MatchNotesStore.shared.importNotes(importedNotes)
+                    } catch {
+                        notesWarning = " The archive's private notes could not be restored: \(error.localizedDescription)"
                     }
                 }
                 DispatchQueue.main.async {
@@ -843,8 +874,11 @@ struct SettingsView: View {
         let healthText = preview.includesHealthData
             ? "This archive includes HealthKit-derived heart rate, steps, distance, and calories when recorded."
             : "This archive does not report included health data."
+        let notesText = preview.noteCount > 0
+            ? " It also includes \(preview.noteCount) private \(preview.noteCount == 1 ? "note" : "notes"), restored only to this iPhone's private notes (a newer note already here is kept)."
+            : ""
         let choices = "Merge keeps your current matches and adds these, preferring the more complete copy of any duplicate. Replace swaps your iPhone archive for this file — matches still on your watch can sync back."
-        return "\(preview.recordCount) matches found. \(choices) \(healthText)"
+        return "\(preview.recordCount) matches found. \(choices) \(healthText)\(notesText)"
     }
 
     // The same public pages the App Store listing points at — keep in lockstep

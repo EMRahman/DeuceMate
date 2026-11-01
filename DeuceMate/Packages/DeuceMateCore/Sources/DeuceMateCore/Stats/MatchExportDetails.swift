@@ -102,8 +102,12 @@ public struct MatchExportDetails: Equatable, Sendable {
         self.hasTaggedPartner = tags?.partner != nil
         self.opponentNames = includeNames ? opponents.map(\.name) : []
         self.partnerName = includeNames ? tags?.partner?.name : nil
-        self.headToHead = headToHead.map { MatchComparisonFormat.headToHeadSummary($0) }
-        self.headToHeadOpponentSide = headToHead.map { MatchComparisonFormat.headToHeadSummary($0.fromOpponentSide) }
+        // Same visibility rule as the on-screen Match Info line: nothing until
+        // there is at least one completed result, so the AI scope equals the
+        // screen's.
+        let h2h = headToHead.flatMap { $0.played > 0 ? $0 : nil }
+        self.headToHead = h2h.map { MatchComparisonFormat.headToHeadSummary($0) }
+        self.headToHeadOpponentSide = h2h.map { MatchComparisonFormat.headToHeadSummary($0.fromOpponentSide) }
         let cleanNote = note.map(MatchNotesPolicy.sanitizedText) ?? ""
         self.note = (includeNotes && !cleanNote.isEmpty) ? cleanNote : nil
         self.includesNames = includeNames
@@ -123,15 +127,26 @@ public struct MatchExportDetails: Equatable, Sendable {
     // MARK: - Text report lines
 
     /// "Competition / Opponent(s) / Partner" overview rows for the plain-text
-    /// summary and full export. Names only appear when included; with names
-    /// off only the competition remains. Pairs of (label, value).
-    public var overviewRows: [(label: String, value: String)] {
+    /// summary and full export, as the recorder reads them. Names only appear
+    /// when included; with names off only the competition remains.
+    public var overviewRows: [(label: String, value: String)] { overviewRows(for: .me) }
+
+    /// The same rows framed for `focal`: in the opponent's export the tagged
+    /// opponents are the READER's own side ("Your side"), so the label never
+    /// calls the reader their own opponent.
+    public func overviewRows(for focal: Player) -> [(label: String, value: String)] {
         var rows: [(String, String)] = []
         if let competitionLabel { rows.append(("Competition:", competitionLabel)) }
-        if !opponentNames.isEmpty {
-            rows.append((opponentNames.count == 1 ? "Opponent:" : "Opponents:", opponentNames.joined(separator: " & ")))
+        switch focal {
+        case .me:
+            if !opponentNames.isEmpty {
+                rows.append((opponentNames.count == 1 ? "Opponent:" : "Opponents:", opponentNames.joined(separator: " & ")))
+            }
+            if let partnerName { rows.append(("Partner:", partnerName)) }
+        case .opponent:
+            if !opponentNames.isEmpty { rows.append(("Your side:", opponentNames.joined(separator: " & "))) }
+            if let partnerName { rows.append(("Recorder's partner:", partnerName)) }
         }
-        if let partnerName { rows.append(("Partner:", partnerName)) }
         return rows
     }
 
@@ -245,7 +260,7 @@ public struct MatchExportDetails: Equatable, Sendable {
 
     /// Every line prefixed "> " so a multiline note stays visibly one quoted
     /// block that cannot read as part of the surrounding prompt.
-    static func quoted(_ text: String) -> String {
+    public static func quoted(_ text: String) -> String {
         text.split(separator: "\n", omittingEmptySubsequences: false)
             .map { "> " + $0 }
             .joined(separator: "\n")

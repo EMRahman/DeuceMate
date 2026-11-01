@@ -393,13 +393,16 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     // MARK: - Manual archive export/import
 
-    /// Full-fidelity archive (names included, private notes never) plus the
-    /// forgotten-player ledger, so a restore elsewhere keeps deletion intent.
-    func exportManualArchiveData() throws -> Data {
+    /// Full-fidelity archive (names included) plus the forgotten-player ledger,
+    /// so a restore elsewhere keeps deletion intent. Private notes are written
+    /// ONLY when the caller passes `notes` (the user's separate, default-off
+    /// "Include private notes" opt-in); `nil` omits the section entirely.
+    func exportManualArchiveData(notes: [MatchNote]? = nil) throws -> Data {
         try queue.sync {
             try ManualMatchArchiveBackup.encode(
                 records: records,
-                forgottenPlayers: forgotten.isEmpty ? nil : forgotten
+                forgottenPlayers: forgotten.isEmpty ? nil : forgotten,
+                notes: notes
             )
         }
     }
@@ -423,7 +426,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         let preview = ManualMatchArchiveBackup.ImportPreview(
             recordCount: archive.records.count,
             includesHealthData: archive.includesHealthData,
-            exportedAt: archive.exportedAt
+            exportedAt: archive.exportedAt,
+            noteCount: archive.notes?.filter { !$0.isCleared }.count ?? 0
         )
 
         queue.sync {

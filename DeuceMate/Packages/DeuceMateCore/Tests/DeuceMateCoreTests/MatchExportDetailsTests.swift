@@ -66,6 +66,10 @@ final class MatchExportDetailsTests: XCTestCase {
         XCTAssertEqual(d.overviewRows[1].value, "Alex & Jo")
         XCTAssertEqual(d.overviewRows[2].value, "Sam")
         XCTAssertEqual(details(singles(), names: true, notes: false).overviewRows[1].label, "Opponent:")
+        let opp = details(doubles(), names: true, notes: false).overviewRows(for: .opponent)
+        XCTAssertEqual(opp.map(\.label), ["Competition:", "Your side:", "Recorder's partner:"])
+        XCTAssertEqual(opp[1].value, "Alex & Jo")
+        XCTAssertEqual(opp[2].value, "Sam")
     }
 
     func test_noDetails_emitNothingEvenWhenTheRecordIsTagged() {

@@ -12,14 +12,25 @@ nonisolated struct MatchExporter {
     // MARK: - Public API
 
     /// Summarised stats only. No AI references.
-    static func summaryExport(for record: MatchRecord, maxHR: Int = 190, focal: Player = .me) -> String {
-        buildDataSections(for: record, includeRawPoints: false, focal: focal, maxHR: maxHR)
+    ///
+    /// `details` is the match context the user chose to share (competition,
+    /// opponent/partner names, an opted-in private note — see
+    /// `MatchExportDetails`). The default shares nothing from the record's tags,
+    /// so a caller that forgets it can never leak a name or a note.
+    static func summaryExport(
+        for record: MatchRecord, maxHR: Int = 190, focal: Player = .me,
+        details: MatchExportDetails = .none
+    ) -> String {
+        buildDataSections(for: record, includeRawPoints: false, focal: focal, maxHR: maxHR, details: details)
     }
 
     /// Summarised stats + raw point-by-point table. No AI references.
     /// Only useful when outcome tracking was enabled.
-    static func fullExport(for record: MatchRecord, maxHR: Int = 190, focal: Player = .me) -> String {
-        buildDataSections(for: record, includeRawPoints: true, focal: focal, maxHR: maxHR)
+    static func fullExport(
+        for record: MatchRecord, maxHR: Int = 190, focal: Player = .me,
+        details: MatchExportDetails = .none
+    ) -> String {
+        buildDataSections(for: record, includeRawPoints: true, focal: focal, maxHR: maxHR, details: details)
     }
 
     /// AI coaching prompt followed by summary stats and raw points.
@@ -28,11 +39,16 @@ nonisolated struct MatchExporter {
     /// shared with the opponent for coaching tips on their side of the match.
     /// `playerNTRP` is used to tailor the prompt preamble to the player's level
     /// (e.g. "3.0–3.5") so the AI gives appropriately targeted advice.
+    ///
+    /// `details` adds a `## Match Context` section (competition, singles/doubles,
+    /// head-to-head, names only if the caller opted in, a quoted private note
+    /// only after its separate opt-in). Without it the prompt carries no tag data.
     static func aiPromptExport(
         for record: MatchRecord,
         maxHR: Int = 190,
         focal: Player = .me,
-        playerNTRP: String = "3.0–3.5"
+        playerNTRP: String = "3.0–3.5",
+        details: MatchExportDetails = .none
     ) -> String {
         let hasStats = !record.stats.isEmpty
         let title = focal == .opponent
@@ -45,23 +61,32 @@ nonisolated struct MatchExporter {
         sections.append("<!-- Paste into your favorite GenAI tool — then delete this line -->")
         sections.append(title)
         sections.append(prompt)
-        sections.append(contentsOf: dataSections(for: record, includeRawPoints: true, focal: focal, maxHR: maxHR))
+        if let context = details.aiContextSection(focal: focal) {
+            sections.append(context)
+        }
+        // The AI prompt carries the details in `## Match Context`, not as
+        // overview rows, so nothing appears twice.
+        sections.append(contentsOf: dataSections(for: record, includeRawPoints: true, focal: focal, maxHR: maxHR,
+                                                 details: .none))
         return sections.joined(separator: "\n\n")
     }
 
     // MARK: - Core builders
 
-    private static func buildDataSections(for record: MatchRecord, includeRawPoints: Bool, focal: Player, maxHR: Int) -> String {
+    private static func buildDataSections(for record: MatchRecord, includeRawPoints: Bool, focal: Player, maxHR: Int,
+                                          details: MatchExportDetails) -> String {
         var sections: [String] = []
         let title = focal == .opponent
             ? "# DeuceMate Match Export (Opponent Perspective)"
             : "# DeuceMate Match Export"
         sections.append(title)
-        sections.append(contentsOf: dataSections(for: record, includeRawPoints: includeRawPoints, focal: focal, maxHR: maxHR))
+        sections.append(contentsOf: dataSections(for: record, includeRawPoints: includeRawPoints, focal: focal,
+                                                 maxHR: maxHR, details: details))
         return sections.joined(separator: "\n\n")
     }
 
-    private static func dataSections(for record: MatchRecord, includeRawPoints: Bool, focal: Player, maxHR: Int = 190) -> [String] {
+    private static func dataSections(for record: MatchRecord, includeRawPoints: Bool, focal: Player, maxHR: Int = 190,
+                                     details: MatchExportDetails = .none) -> [String] {
         let allStats = record.stats
         let hasStats = !allStats.isEmpty
         // Compute outcome stats on the categorized subset only, mirroring MatchDetailView's
@@ -85,7 +110,10 @@ nonisolated struct MatchExporter {
         ) : fullSummary
 
         var sections: [String] = []
-        sections.append(matchOverview(record: record, focal: focal))
+        sections.append(matchOverview(record: record, focal: focal, details: details))
+        if let privateNote = details.privateNoteSection {
+            sections.append(privateNote)
+        }
 
         if hasStats {
             sections.append(pointsSummary(summary: fullSummary))
@@ -142,7 +170,7 @@ nonisolated struct MatchExporter {
 
     // MARK: - Section builders
 
-    private static func matchOverview(record: MatchRecord, focal: Player) -> String {
+    private static func matchOverview(record: MatchRecord, focal: Player, details: MatchExportDetails) -> String {
         let result: String
         if record.isInProgress {
             result = "In Progress"
@@ -156,6 +184,11 @@ nonisolated struct MatchExporter {
         var lines = ["## Match Overview"]
         lines.append(row("Date:", exportDateFormatter.string(from: record.startTime)))
         lines.append(row("Format:", formatLabel(record: record)))
+        // Competition / Opponent(s) / Partner: only what the caller chose to
+        // share (names appear only when "Include player names" is on).
+        for detail in details.overviewRows(for: focal) {
+            lines.append(row(detail.label, detail.value))
+        }
         lines.append(row("Result:", result))
         lines.append(row("Score:", scoreString(record: record, focal: focal) ?? "—"))
         lines.append(row("Duration:", totalDurationString(record: record)))
