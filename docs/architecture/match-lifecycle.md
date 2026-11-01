@@ -163,6 +163,23 @@ HR-tagged points). *Files: `MatchDetailView`, `PointsGraphView`,
 `HealthKitHRFetcher`, `MatchStatsSummary`, `RecCoachInsights`/`RecCoachSection`,
 `PulseCoachInsights`/`PulseCoachSection`.*
 
+**7a · Match details, notes & comparison (phone, optional).** At any point after
+the match reaches the phone archive — including while it is still **in progress**
+— the user can open **Match Info** to record who they played (opponent, or partner
+plus two opponents in doubles, picked from a roster derived from the archive) and
+the competition type. This edits only the match's `tags`; it never changes the
+score or completes the match, and the edit is pushed to the watch on its own
+`matchTagsUpdate` key. A **private note** saves to an iPhone-only, backup-excluded
+sidecar, separate from the record. **Compare with Previous Match** sets the match
+beside the last one against the same opponent(s) — or the last of the same
+singles/doubles type when it is untagged — with partial stats labelled and a
+completed-only head-to-head. Settings → Players renames, merges or forgets a
+player across every match. *Files: `MatchInfoSection`, `MatchInfoEditorView`,
+`PlayerPickerView`, `MatchNotesEditorView`, `MatchComparisonView`,
+`PlayersSettingsView`, `PhoneStatsStore`, `MatchNotesStore`; Core `MatchTags`,
+`PlayerRoster`, `MatchComparison`, `MatchNotes`, `ForgottenPlayerLedger`. See
+[MATCH_TAGS_PLAN.md](../features/MATCH_TAGS_PLAN.md).*
+
 **8 · Export & AI coaching (phone).** The player can export a text summary, a full
 point-by-point report, or an AI coaching prompt tuned to their skill level, and
 hand it straight to an installed AI chat app (ChatGPT, Claude, Gemini, Perplexity,
@@ -188,7 +205,8 @@ see [INTERACTIVE_HTML_EXPORT_PLAN.md](../features/INTERACTIVE_HTML_EXPORT_PLAN.m
 
 **9 · Housekeeping.** From the phone the user can free up watch space (delete from
 the watch, keep the archive copy — the badge flips to "phone only") or delete a
-match permanently (tombstoned so no future sync resurrects it). A watch-only match
+match permanently (tombstoned so no future sync resurrects it; its private note is
+deleted too). A watch-only match
 can be pulled back into the phone archive at any time.
 *Files: `PastMatchesView`, `PhoneStatsStore`, `PhoneMatchSyncService`.*
 

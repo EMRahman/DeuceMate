@@ -1,7 +1,7 @@
 <!--
 machine-readable summary (parse this block first)
 
-status: revised after owner-authorized review (2026-10-23; supersedes completed-only scope); PR 1 (Core) implemented 2026-10-31 — PR 2/3/4 pending
+status: revised after owner-authorized review (2026-10-23; supersedes completed-only scope); PR 1 (Core) implemented 2026-10-31; PR 2 (Watch) implemented 2026-10-31; PR 3 (iOS editor, notes, comparison) implemented 2026-10-31; PR 4 (exports) implemented 2026-11-01 — all v1 PRs implemented, pending review
 author: Claude, design session with the owner
 date: 2026-10-23
 feature: "Tag a completed or in-progress match with who was played (selectable roster) and its competition type (Friendly / League / Tournament / Practice); show the tags on the watch; compare with a previous match on iOS; add private local notes; feed selected context into AI Coach and shared reports."
@@ -689,10 +689,41 @@ otherwise the first watch sync deletes it (§3).
 - Handle `.matchTagsUpdate` in `WatchMatchSyncService`; `StatsStore.updateTags`
   with `StatsStoreTests` for unreadable history / missing id / write failure.
 - Caption in `MatchHistoryView` and `MatchStatsView`.
+- **Implemented.** Beyond the list above: `ScoreViewModel.liveMatchTags`
+  (persisted in `appState.json` as optional `currentMatchTags`) keeps a resumed
+  match's tags, because resume removes the record from history; a phone tag push
+  for the live match is merged there since it is not in the store. Browser demo
+  (`watch-demo-history.js`) not changed: its seeded matches carry no tags, so
+  there is nothing true to show — follow-up if demo matches ever gain tags.
 - Ships before PR 3 so a watch that can display tags exists when the phone
   starts writing them (not required for safety — PR 1 covers that).
 
 ### PR 3 — `[iOS] Edit match details, private notes and previous-match comparison`
+
+> **Status: implemented (2026-10-31, branch `feat/match-tags-ios`, stacked on
+> PR 1).** Store: `PhoneStatsStore.updateTags(id:tags:)` stamps the editor's
+> draft on the store queue against the stored revision (`revised(after:)` /
+> `cleared(after:)`), `applyIncomingTags`, `renamePlayer` / `mergePlayers` /
+> `forgetPlayer`; `appendMatch` and `saveHistory` (the two non-merge replace
+> paths) carry stored tags forward; `syncToPhone`, watch merge, both manual
+> import modes, incoming tag updates and the initial iCloud restore all union and
+> scrub with the persisted, backed-up ledger (`forgottenPlayers.json`, written
+> before the archive and re-applied on load). Sync: edit-time pushes only for
+> `onWatchIDs`; §6.1 reconciliation after every history/single-match merge and
+> for manifest `newlyHeldIDs`; incoming `.matchTagsUpdate` merged defensively and
+> answered when the phone is newer; watch mirror scrubbed. Notes:
+> `MatchNotesStore` in its own backup-excluded directory (directory flag
+> verified before writing, file flag reapplied after every atomic write; an
+> unreadable file suspends writes). UI: `Views/MatchInfo/` (Match Info row and
+> editor with roster picker, notes editor, comparison + baseline picker,
+> Settings → Players, archive caption); `MatchDetailView` re-resolves its record
+> by id and rebuilds the export snapshot when it changes. Wording helper:
+> Core `MatchComparisonFormat` (shared with PR 4's AI head-to-head). Privacy
+> policy, `APP_STORE_METADATA.md` and architecture docs updated. Not done here:
+> the iPhone browser replica (`docs/website/assets/phone-demo*.js`) parity —
+> follow-up; a manual "Include private notes" archive option and notes in
+> exports — PR 4.
+
 - `PhoneStatsStore.updateTags(id:tags:)`; edit-time push via `onWatchIDs`
   plus §6.1 reconciliation on history and manifest arrival.
 - Editor sheet + picker, detail row, archive subtitle,
@@ -705,6 +736,28 @@ otherwise the first watch sync deletes it (§3).
   new files, phone-owned metadata and local notes storage.
 
 ### PR 4 — `[Core][iOS] Use tags in AI Coach and shared reports`
+
+> **Status: implemented (2026-11-01, branch `feat/match-tags-exports`, stacked on
+> PR 3).** Core: `Stats/MatchExportDetails.swift` is the single place that decides
+> what may leave the device — names and the note are applied at construction (so
+> no builder can leak what was excluded), the AI `## Match Context` section, text
+> overview rows, reader-framed HTML side names and the shared disclosure copy
+> (`MatchExportDisclosure`) live there; HTML schema 12 -> 13
+> (`Meta.competitionTypeLabel` / `readerSideNames` / `otherSideNames` /
+> `privateNote`), static fallback and viewer JS paint them;
+> `ManualMatchArchiveBackup.Archive.notes` is an optional section (omitted = no
+> information). iOS: `MatchExporter` takes `details:` (default shares nothing),
+> `AICoachSheet` has its own Include-names / Include-private-note switches (both
+> OFF on every open) with a prompt preview, the share menu has Include player
+> names (ON) / Include private note (OFF, reviewed) switches that feed
+> `ExportInputs`, an included note joins the health alert in one step,
+> `ExportFilenames` keeps names out of file names, and the manual-archive export
+> is now a sheet with a default-off "Include private notes" opt-in and exact
+> preview; import restores notes only into the backup-excluded sidecar.
+> Deviations: head-to-head is omitted from the prompt until there is at least one
+> completed result (the on-screen rule), and the opponent perspective's prompt
+> inverts W/L. Not done: the iPhone browser replica (`docs/website/assets/phone-demo*.js`)
+> does not show tags/notes in its exports - follow-up.
 - AI `## Match Context` + head-to-head; names toggle (default off).
 - Text export lines; HTML `Meta` fields, schema 13, static fallback; hostile-name tests.
 - Share-menu names toggle; separate notes opt-in and exact preview in reports,

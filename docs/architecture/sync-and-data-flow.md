@@ -53,6 +53,7 @@ flowchart RL
     P -- "delete this match from the watch<br/>(phone keeps its archive copy)" --> W
     P -- "manually entered or resumed match<br/>(handed to the watch to own)" --> W
     P -- "End at Current Score<br/>(completed archive checkpoint)" --> W
+    P -- "match tags update — opponent / partner /<br/>competition only (never a whole record,<br/>never notes)" --> W
 ```
 
 Two safety properties worth knowing as a reviewer:
@@ -179,8 +180,40 @@ Tag edits travel phone → watch on their own `matchTagsUpdate` key (never as a
 history or a newly held manifest id arrives. Forgotten players
 (`ForgottenPlayerLedger`) are scrubbed from every inbound record — watch sync,
 initial iCloud restore, manual import — regardless of timestamps. Private notes
-are never part of a record and never sync. Core policy landed in PR 1; the watch
-and iOS wiring follow — see `docs/features/MATCH_TAGS_PLAN.md`.
+are never part of a record and never sync. See `docs/features/MATCH_TAGS_PLAN.md`.
+
+**iPhone wiring (match details).** Tags are edited only on the iPhone, for
+completed *and* in-progress archived matches; a tag edit never changes the score
+or completion state. `PhoneStatsStore.updateTags` stamps the editor's draft against
+the stored revision on the store queue (a strictly later clock even if the device
+clock went backwards; an empty draft becomes an explicit clear), and
+`appendMatch`/`saveHistory` carry stored tags forward so End at Current Score from a
+stale copy cannot drop them. The phone then pushes `matchTagsUpdate`:
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant P as iPhone app
+    participant W as Watch app
+    U->>P: Save Match Info / rename / merge / forget
+    P->>P: PhoneStatsStore stamps + merges tags<br/>(forget also writes the id-only ledger)
+    opt watch holds the match (onWatchIDs)
+        P->>W: matchTagsUpdate (tags only, queued if away)
+    end
+    W-->>P: later: history / single match (watch's copy of tags)
+    P->>P: Merge, scrub forgotten players
+    P->>W: matchTagsUpdate for every id whose phone tags are newer
+    W-->>P: manifest
+    P->>W: matchTagsUpdate (incl. empty clears) for ids newly in the manifest only
+```
+
+An incoming `matchTagsUpdate` (v1 watches never author one) is merged by the same
+clock; if the phone's copy is newer — a stale echo or a forgotten-player scrub —
+the phone answers with its own. Cached watch-mirror rows are scrubbed of forgotten
+players before display. The forgotten-player ledger is persisted next to the
+tombstones (`forgottenPlayers.json`, ids only), written before the archive,
+re-applied on load, and backed up to iCloud with it; initial restore unions the
+backup's ledger.
 
 **Tombstones:** when the user permanently deletes a match on the phone, its ID is
 remembered in a small "tombstones" list. Any future sync from the watch skips
@@ -242,7 +275,14 @@ document picker and the confirmation dialogs, persisting through
   forgotten-player ledger (ids only). In both modes it is unioned with the
   phone's ledger — an older file without one cannot erase it — and every
   resulting record is scrubbed of forgotten players. In Merge mode, tags merge
-  by their own clock (§5), so an older export cannot drop newer tags.
+  by their own clock (§5), so an older export cannot drop newer tags. Export
+  writes the phone's ledger into the file.
+- **Private notes are never in the file.** They live in the iPhone-only,
+  backup-excluded `MatchNotesStore` sidecar. Merge leaves every note alone; a
+  confirmed Replace keeps notes only for matches in the file, and the Replace
+  confirmation states how many notes on other matches will be deleted
+  (`MatchNotesPolicy.replacePlan`). Permanently deleting a match also deletes its
+  note.
 
 This flow only ever writes the **phone** archive (via the same `adoptOnQueue`
 funnel as any other mutation): it does **not** push to the watch, and the watch

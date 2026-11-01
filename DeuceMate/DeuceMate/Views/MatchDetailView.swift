@@ -5,7 +5,15 @@ import UIKit
 import DeuceMateCore
 
 struct MatchDetailView: View {
-    let record: MatchRecord
+    /// The displayed match, re-resolved by id from the live store whenever the
+    /// archive changes (tag edits, watch syncs, imports), so the header, Match
+    /// Info and the export snapshot never show a stale copy. A watch-only row
+    /// (not in the archive) keeps the value it was opened with.
+    @State private var record: MatchRecord
+
+    init(record: MatchRecord) {
+        _record = State(initialValue: record)
+    }
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appTheme) private var theme
@@ -17,22 +25,18 @@ struct MatchDetailView: View {
 
     /// Shared reader for the two stored max-HR settings (see MaxHRSetting) so
     /// this view doesn't carry its own copy of their UserDefaults keys.
-    /// Not `private`: a private *stored* property (unlike a private property-
-    /// wrapped one) makes the synthesized memberwise init private too, and
-    /// callers construct this view as `MatchDetailView(record:)`.
     var maxHRSetting = MaxHRSetting()
     @AppStorage("playerNTRP") private var playerNTRP: String = "3.0–3.5"
     @State private var tab: Tab = .stats
     @State private var setFilter: SetFilter = .all
     @State private var exportSummary: String = ""
     @State private var exportFull: String = ""
-    @State private var exportAI: String = ""
     @State private var exportSummaryOpp: String = ""
     @State private var exportFullOpp: String = ""
-    @State private var exportAIOpp: String = ""
     /// Temp-file URLs of the self-contained interactive HTML exports, shared as
     /// files: one framed for me, one framed for the opponent (their "Me", so it
-    /// says they won when they did). Built once in `.task`.
+    /// says they won when they did). Built in `.task`, each build in its own
+    /// `ExportStaging` generation directory so builds never share a path.
     @State private var htmlExportURL: URL?
     @State private var htmlExportURLOpp: URL?
     @State private var showAICoachSheet: Bool = false
@@ -43,9 +47,65 @@ struct MatchDetailView: View {
     /// The export currently presented in the system share sheet (set directly for
     /// health-free exports, or after the user confirms the disclosure).
     @State private var activeShare: ShareRequest?
+    /// Retired export generations whose files the open share sheet is still
+    /// handing out; deleted when that sheet closes (`releaseHeldExports`).
+    @State private var exportGenerationsHeldByShare: Set<ExportStaging.Generation> = []
     @State private var showEndAtCurrentScoreConfirmation = false
+    @State private var showMatchInfoEditor = false
+    @State private var showNotesEditor = false
+    /// Share-menu choices for the TEXT and HTML reports (MATCH_TAGS_PLAN.md
+    /// 7.3): names ON by default (OQ-2), the private note OFF by default and
+    /// only enabled through its review sheet. The AI Coach sheet keeps its own
+    /// toggles (both off). Both feed `ExportInputs`, so changing either
+    /// rebuilds the snapshot and clears the old files first.
+    @State private var shareIncludeNames = true
+    @State private var shareIncludeNotes = false
+    @State private var showShareNotesReview = false
+    @ObservedObject private var notesStore: MatchNotesStore = .shared
 
     private enum Tab { case stats, points }
+
+    /// Everything the prebuilt export snapshot depends on. A change to any of
+    /// these restarts the export task, which clears every cached string and
+    /// file URL first - so a file built with a toggle on can never be shared
+    /// after the toggle is turned off - and stages its files in a fresh
+    /// `ExportStaging` generation.
+    private struct ExportInputs: Equatable {
+        let record: MatchRecord
+        let maxHR: Int
+        let ntrp: String
+        let includeNames: Bool
+        let includeNotes: Bool
+        /// The stored note text (so editing a note rebuilds an included copy).
+        let noteText: String?
+        /// Completed-only head-to-head; a new result rebuilds the context.
+        let headToHead: HeadToHeadRecord?
+    }
+
+    /// The live private note for this match (nil when none).
+    private var noteText: String? { notesStore.note(for: record.id)?.text }
+
+    /// Completed-only head-to-head for this match's own matchup - the same
+    /// value Match Info and the compare screen show.
+    private var headToHead: HeadToHeadRecord? { HeadToHead.record(for: record, in: store.history) }
+
+    private var hasTaggedPeople: Bool {
+        guard let tags = record.tags else { return false }
+        return !tags.opponents.isEmpty || tags.partner != nil
+    }
+
+    /// The match context the TEXT/HTML reports carry right now.
+    private var shareDetails: MatchExportDetails {
+        MatchExportDetails(record: record, note: noteText, headToHead: headToHead,
+                           includeNames: shareIncludeNames, includeNotes: shareIncludeNotes)
+    }
+
+    private var currentExportInputs: ExportInputs {
+        ExportInputs(record: record, maxHR: resolvedMaxHR, ntrp: playerNTRP,
+                     includeNames: shareIncludeNames,
+                     includeNotes: shareIncludeNotes && noteText != nil,
+                     noteText: noteText, headToHead: headToHead)
+    }
 
     private var meColor:  Color { theme.colors.me }
     private var oppColor: Color { theme.colors.opponent }
@@ -315,8 +375,12 @@ struct MatchDetailView: View {
         let fields = HealthExportConsent.presentFields(
             in: record, focal: focal, includesRawPoints: includesRawPoints
         )
-        let request = ShareRequest(items: items, healthFields: fields)
-        if fields.isEmpty {
+        // An included private note is disclosed in the SAME alert as any
+        // health data, so everything leaving the device is one reviewable step.
+        let sharesNote = shareDetails.note != nil
+        let request = ShareRequest(items: items, healthFields: fields,
+                                   includesNote: sharesNote, includeNames: shareIncludeNames)
+        if fields.isEmpty && !sharesNote {
             activeShare = request
         } else {
             pendingDisclosure = .share(request)
@@ -340,14 +404,16 @@ struct MatchDetailView: View {
     /// Perform a disclosed action once the user confirms.
     private func confirmDisclosure(_ disclosure: PendingHealthDisclosure) {
         switch disclosure {
-        case .share(let request): activeShare = request
+        case .share(let request):
+            // The snapshot was rebuilt while the alert was up: its files are
+            // gone, and the share menu now offers the current ones instead.
+            guard request.stagedFilesExist else { return }
+            activeShare = request
         case .aiCoach:            showAICoachSheet = true
         }
     }
 
     private func exportFilename(for record: MatchRecord, mode: ExportMode = .summary) -> String {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withFullDate]
         let suffix: String
         switch mode {
         case .summary:    suffix = ""
@@ -357,38 +423,56 @@ struct MatchDetailView: View {
         case .fullOpp:    suffix = "_full_opponent"
         case .aiOpp:      suffix = "_ai_prompt_opponent"
         }
-        return "deuce_mate_\(f.string(from: record.startTime))\(suffix).txt"
+        // Date-based only: names and tags never reach a filename.
+        return ExportFilenames.text(startTime: record.startTime, suffix: suffix)
     }
 
-    /// Filename for the interactive HTML export framed for `perspective`.
-    /// Includes the match start time so same-day matches don't collide in the
-    /// temporary directory. POSIX locale keeps the format deterministic.
+    /// Filename for the interactive HTML export framed for `perspective` — the
+    /// name the recipient sees. Paths are kept apart by the per-build
+    /// `ExportStaging` directory, not by this name. POSIX locale keeps the
+    /// format deterministic.
     private func htmlExportFilename(for perspective: Player) -> String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd_HHmm"
-        let suffix = perspective == .opponent ? "_opponent" : ""
-        return "deuce_mate_\(f.string(from: record.startTime))\(suffix).html"
+        ExportFilenames.html(startTime: record.startTime, opponentPerspective: perspective == .opponent)
+    }
+
+    /// A published export generation stops being current (newer inputs, or the
+    /// screen went away). A pending "Share health data?" for its files is
+    /// dropped — it would share a superseded report — and its files are
+    /// deleted, unless the share sheet is handing them out right now, in which
+    /// case they go when that sheet closes.
+    private func retireExportGeneration(_ generation: ExportStaging.Generation) {
+        if case .share(let request)? = pendingDisclosure, request.references(generation) {
+            pendingDisclosure = nil
+        }
+        if let activeShare, activeShare.references(generation) {
+            exportGenerationsHeldByShare.insert(generation)
+        } else {
+            ExportStaging.shared.endGeneration(generation)
+        }
+    }
+
+    private func releaseHeldExports() {
+        for generation in exportGenerationsHeldByShare where !(activeShare?.references(generation) ?? false) {
+            ExportStaging.shared.endGeneration(generation)
+            exportGenerationsHeldByShare.remove(generation)
+        }
     }
 
     /// Generate the interactive HTML framed for `perspective` and stage it in
-    /// the temporary directory. The page carries the full match record,
-    /// including HealthKit-derived values, so the staged file gets the same
-    /// data-at-rest class as the canonical archive. `nil` if the write fails.
+    /// this build's own `generation` directory, so a superseded build can never
+    /// overwrite the file a newer one published. The page carries the full
+    /// match record, including HealthKit-derived values, so the staged file
+    /// gets the same data-at-rest class as the canonical archive (see
+    /// `ExportStaging.write`). `nil` if the write fails.
     nonisolated private static func stageHTMLExport(
         record: MatchRecord, maxHR: Int, perspective: Player,
-        aiPromptMe: String, aiPromptOpponent: String?, filename: String
+        aiPromptMe: String, aiPromptOpponent: String?, details: MatchExportDetails, filename: String,
+        generation: ExportStaging.Generation, staging: ExportStaging
     ) -> URL? {
         let html = MatchHTMLExporter.html(for: record, maxHR: maxHR, perspective: perspective,
-                                          aiPromptMe: aiPromptMe, aiPromptOpponent: aiPromptOpponent)
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-        do {
-            try Data(html.utf8).write(
-                to: url,
-                options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
-            )
-            return url
-        } catch { return nil }
+                                          aiPromptMe: aiPromptMe, aiPromptOpponent: aiPromptOpponent,
+                                          details: details)
+        return try? staging.write(Data(html.utf8), named: filename, in: generation)
     }
 
     var body: some View {
@@ -454,6 +538,16 @@ struct MatchDetailView: View {
                 }
                 .padding(.vertical, 6)
             }
+
+            // Opponent / competition, private note, and the previous-match
+            // comparison (MATCH_TAGS_PLAN.md §7.1). Editable for completed and
+            // in-progress archived matches; never changes the score.
+            MatchInfoSection(
+                record: record,
+                isInArchive: store.history.contains { $0.id == record.id },
+                showEditor: $showMatchInfoEditor,
+                showNotesEditor: $showNotesEditor
+            )
 
             // Keep the graph route visible for manually entered matches. Its
             // explicit empty state explains why there is no point-level chart.
@@ -636,51 +730,86 @@ struct MatchDetailView: View {
         .listStyle(.insetGrouped)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            guard exportSummary.isEmpty else { return }
+        // Keep the shown record current: tag edits, watch syncs and imports
+        // replace the archive copy, and the export snapshot below is rebuilt
+        // from whatever this resolves to.
+        .onReceive(store.$history) { history in
+            if let latest = history.first(where: { $0.id == record.id }), latest != record {
+                record = latest
+            }
+        }
+        // The share/AI exports are a prebuilt snapshot of `record`. Rebuild
+        // them whenever the record (or an export input) changes, and clear the
+        // old snapshot first so a stale copy can never be shared meanwhile.
+        // Each run owns one `ExportStaging` generation (its own directory) for
+        // the files it stages: a superseded run deletes its own files instead
+        // of publishing them, and a published run keeps its files only until
+        // SwiftUI cancels it (newer inputs, or the screen going away).
+        .task(id: currentExportInputs) {
+            exportSummary = ""; exportFull = ""; exportSummaryOpp = ""; exportFullOpp = ""
+            htmlExportURL = nil; htmlExportURLOpp = nil
             let record = record
             let maxHR = resolvedMaxHR
             let filename = htmlExportFilename(for: .me)
             let filenameOpp = htmlExportFilename(for: .opponent)
             let ntrp = playerNTRP
-            async let summary    = Task.detached { MatchExporter.summaryExport(for: record, maxHR: maxHR, focal: .me)       }.value
-            async let full       = Task.detached { MatchExporter.fullExport(for: record,    maxHR: maxHR, focal: .me)       }.value
-            async let summaryOpp = Task.detached { MatchExporter.summaryExport(for: record, maxHR: maxHR, focal: .opponent) }.value
-            async let fullOpp    = Task.detached { MatchExporter.fullExport(for: record,    maxHR: maxHR, focal: .opponent) }.value
+            let staging = ExportStaging.shared
+            let generation = staging.beginGeneration()
+            // The names/notes choices were applied when `details` was built, so
+            // none of the builders below can see what the user left out.
+            let details = shareDetails
+            async let summary    = Task.detached { MatchExporter.summaryExport(for: record, maxHR: maxHR, focal: .me, details: details)       }.value
+            async let full       = Task.detached { MatchExporter.fullExport(for: record,    maxHR: maxHR, focal: .me, details: details)       }.value
+            async let summaryOpp = Task.detached { MatchExporter.summaryExport(for: record, maxHR: maxHR, focal: .opponent, details: details) }.value
+            async let fullOpp    = Task.detached { MatchExporter.fullExport(for: record,    maxHR: maxHR, focal: .opponent, details: details) }.value
             // Generate AND write both interactive HTML files (mine + the
-            // opponent's) off the main thread so the ~30–80 KB file writes never
-            // stutter the UI. The AI coaching prompts (same builder as the AI
-            // Coach sheet) are embedded so the shared page offers the same
-            // one-tap coaching launch; the opponent's page offers only theirs.
+            // opponent's) off the main thread so the ~30-80 KB file writes never
+            // stutter the UI. The AI coaching prompts embedded in the page follow
+            // the SAME names/notes choices as the page itself; the opponent's
+            // page offers only theirs.
             async let htmlURLs   = Task.detached { () -> (URL?, URL?) in
-                let aiMe  = MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .me, playerNTRP: ntrp)
+                // Leftovers of builds that never ended (e.g. the app was killed).
+                staging.sweepInactive()
+                let aiMe  = MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .me, playerNTRP: ntrp, details: details)
                 let aiOpp = record.stats.isEmpty
                     ? nil
-                    : MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .opponent, playerNTRP: ntrp)
+                    : MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .opponent, playerNTRP: ntrp, details: details)
                 let mine = Self.stageHTMLExport(record: record, maxHR: maxHR, perspective: .me,
-                                                aiPromptMe: aiMe, aiPromptOpponent: aiOpp, filename: filename)
+                                                aiPromptMe: aiMe, aiPromptOpponent: aiOpp, details: details,
+                                                filename: filename, generation: generation, staging: staging)
                 let theirs = Self.stageHTMLExport(record: record, maxHR: maxHR, perspective: .opponent,
-                                                  aiPromptMe: aiMe, aiPromptOpponent: aiOpp, filename: filenameOpp)
+                                                  aiPromptMe: aiMe, aiPromptOpponent: aiOpp, details: details,
+                                                  filename: filenameOpp, generation: generation, staging: staging)
                 return (mine, theirs)
             }.value
+            // Awaiting the detached writer means its files are complete before
+            // either branch below can delete them.
             let (s, f, so, fo, urls) = await (summary, full, summaryOpp, fullOpp, htmlURLs)
+            // A newer record or toggle superseded this build while it ran: drop
+            // it, files included - they were never published.
+            guard !Task.isCancelled else {
+                staging.endGeneration(generation)
+                return
+            }
             exportSummary = s; exportFull = f; exportSummaryOpp = so; exportFullOpp = fo
             (htmlExportURL, htmlExportURLOpp) = urls
+            // Keep this generation's files exactly as long as they are the
+            // published snapshot. The next run clears the URLs before it
+            // starts, so deleting here never strands a shown share option.
+            await ExportStaging.waitUntilCancelled()
+            retireExportGeneration(generation)
         }
-        .task(id: "\(playerNTRP)-\(resolvedMaxHR)") {
-            let record = record
-            let maxHR = resolvedMaxHR
-            let ntRP = playerNTRP
-            async let ai    = Task.detached { MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .me,       playerNTRP: ntRP) }.value
-            async let aiOpp = Task.detached { MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .opponent, playerNTRP: ntRP) }.value
-            (exportAI, exportAIOpp) = await (ai, aiOpp)
+        // A deleted note can no longer be "included": reset the opt-in so a
+        // later note starts from the default (off) and is reviewed again.
+        .onChange(of: noteText) { _, newValue in
+            if newValue == nil { shareIncludeNotes = false }
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button("Done") { dismiss() }
             }
             ToolbarItem(placement: .navigationBarTrailing) {
-                if exportSummary.isEmpty || exportAI.isEmpty {
+                if exportSummary.isEmpty {
                     ProgressView().controlSize(.small)
                 } else {
                     Button {
@@ -695,6 +824,24 @@ struct MatchDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if !exportSummary.isEmpty {
                     Menu {
+                        if hasTaggedPeople || noteText != nil {
+                            Section {
+                                if hasTaggedPeople {
+                                    Toggle("Include player names", isOn: $shareIncludeNames)
+                                }
+                                if noteText != nil {
+                                    Toggle("Include private note", isOn: Binding(
+                                        get: { shareIncludeNotes },
+                                        set: { wantsOn in
+                                            // ON goes through the review sheet; OFF is immediate.
+                                            if wantsOn { showShareNotesReview = true } else { shareIncludeNotes = false }
+                                        }
+                                    ))
+                                }
+                            } header: {
+                                Text("Include in Reports")
+                            }
+                        }
                         if htmlExportURL != nil || htmlExportURLOpp != nil {
                             Section {
                                 Menu {
@@ -738,13 +885,7 @@ struct MatchDetailView: View {
             }
         }
         .sheet(isPresented: $showAICoachSheet) {
-            AICoachSheet(
-                mePrompt: exportAI,
-                opponentPrompt: exportAIOpp,
-                hasOpponentPrompt: !record.stats.isEmpty,
-                filenameMe: exportFilename(for: record, mode: .ai),
-                filenameOpponent: exportFilename(for: record, mode: .aiOpp)
-            )
+            aiCoachSheet
         }
         .confirmationDialog(
             "End at current score?",
@@ -762,7 +903,7 @@ struct MatchDetailView: View {
         // sheet and the AI Coach hand-off. Naming + the recipient clause come
         // from Core's single source; confirming proceeds full-fidelity.
         .alert(
-            "Share health data?",
+            disclosureTitle,
             isPresented: Binding(
                 get: { pendingDisclosure != nil },
                 set: { if !$0 { pendingDisclosure = nil } }
@@ -777,13 +918,79 @@ struct MatchDetailView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: { disclosure in
-            Text(HealthExportConsent.disclosure(
-                fields: disclosure.fields, destination: disclosure.destination
-            ).message)
+            Text(disclosureMessage(for: disclosure))
         }
-        .sheet(item: $activeShare) { request in
+        .sheet(isPresented: $showShareNotesReview) {
+            if let noteText {
+                NotesExportReviewSheet(
+                    noteText: noteText,
+                    includeNames: shareIncludeNames,
+                    destination: "text and web reports",
+                    onConfirm: {
+                        shareIncludeNotes = true
+                        showShareNotesReview = false
+                    },
+                    onCancel: { showShareNotesReview = false }
+                )
+            }
+        }
+        .sheet(item: $activeShare, onDismiss: releaseHeldExports) { request in
             ShareSheet(activityItems: request.items) { activeShare = nil }
         }
+        .sheet(isPresented: $showMatchInfoEditor) {
+            MatchInfoEditorView(record: record)
+                .environmentObject(store)
+                .environmentObject(syncService)
+        }
+        .sheet(isPresented: $showNotesEditor) {
+            MatchNotesEditorView(matchID: record.id)
+        }
+    }
+
+    /// AI Coach hand-off. The sheet owns its own names/notes toggles (both off
+    /// by default) and rebuilds the prompt from this pure closure on change.
+    private var aiCoachSheet: some View {
+        let record = record
+        let maxHR = resolvedMaxHR
+        let ntrp = playerNTRP
+        let note = noteText
+        let h2h = headToHead
+        return AICoachSheet(
+            buildPrompt: { focal, names, notes in
+                MatchExporter.aiPromptExport(
+                    for: record, maxHR: maxHR, focal: focal, playerNTRP: ntrp,
+                    details: MatchExportDetails(record: record, note: note, headToHead: h2h,
+                                                includeNames: names, includeNotes: notes)
+                )
+            },
+            hasOpponentPrompt: !record.stats.isEmpty,
+            filenameMe: exportFilename(for: record, mode: .ai),
+            filenameOpponent: exportFilename(for: record, mode: .aiOpp),
+            hasTaggedPeople: hasTaggedPeople,
+            noteText: note,
+            sourceIdentity: AICoachSourceIdentity(
+                record: record, maxHR: maxHR, playerNTRP: ntrp, note: note, headToHead: h2h)
+        )
+    }
+
+    private var disclosureTitle: String {
+        guard let disclosure = pendingDisclosure else { return "Share health data?" }
+        switch (disclosure.fields.isEmpty, disclosure.includesNote) {
+        case (false, false): return "Share health data?"
+        case (false, true):  return "Share health data and private note?"
+        case (true, _):      return "Share private note?"
+        }
+    }
+
+    private func disclosureMessage(for disclosure: PendingHealthDisclosure) -> String {
+        let health = disclosure.fields.isEmpty
+            ? nil
+            : HealthExportConsent.disclosure(fields: disclosure.fields, destination: disclosure.destination).message
+        return MatchExportDisclosure.combinedMessage(
+            healthMessage: health,
+            includesNotes: disclosure.includesNote,
+            includeNames: disclosure.includeNames
+        ) ?? ""
     }
 
     private func endAtCurrentScore() {
@@ -1241,6 +1448,23 @@ private struct ShareRequest: Identifiable {
     let id = UUID()
     let items: [Any]
     let healthFields: [HealthExportField]
+    /// Whether the shared files/text carry the user's private note, and whether
+    /// names were on - both are disclosed in the same alert as health data.
+    var includesNote: Bool = false
+    var includeNames: Bool = true
+
+    private var fileURLs: [URL] { items.compactMap { $0 as? URL }.filter(\.isFileURL) }
+
+    /// Whether this share hands out a file staged in `generation`.
+    func references(_ generation: ExportStaging.Generation) -> Bool {
+        fileURLs.contains(where: generation.contains)
+    }
+
+    /// False once a staged file it carries has been deleted (its generation
+    /// was retired while the request waited).
+    var stagedFilesExist: Bool {
+        fileURLs.allSatisfy { FileManager.default.fileExists(atPath: $0.path) }
+    }
 }
 
 /// A user action awaiting the per-export HealthKit disclosure: either a system
@@ -1262,6 +1486,16 @@ private enum PendingHealthDisclosure: Identifiable {
         case .share(let request):  return request.healthFields
         case .aiCoach(let fields): return fields
         }
+    }
+
+    var includesNote: Bool {
+        if case .share(let request) = self { return request.includesNote }
+        return false
+    }
+
+    var includeNames: Bool {
+        if case .share(let request) = self { return request.includeNames }
+        return true
     }
 
     var destination: HealthExportDestination {
