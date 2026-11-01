@@ -96,10 +96,15 @@ final class MatchNotesStore: ObservableObject {
 
     // MARK: - Reading
 
-    /// The live (non-empty) note for `matchID`, if any.
+    /// The live (non-empty) note for `matchID`, if any. Reads the queue's
+    /// state, not the `@Published` mirror, so a read straight after `save` /
+    /// `importNotes` sees that write (the mirror updates on a later main-queue
+    /// hop; views still redraw from it).
     func note(for matchID: UUID) -> MatchNote? {
-        guard let note = notes[matchID], !note.isCleared else { return nil }
-        return note
+        queue.sync {
+            guard let note = current[matchID], !note.isCleared else { return nil }
+            return note
+        }
     }
 
     /// Queue-consistent snapshot of every entry (tests, replace planning).
