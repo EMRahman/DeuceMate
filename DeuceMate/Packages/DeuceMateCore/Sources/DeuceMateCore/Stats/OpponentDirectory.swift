@@ -23,8 +23,15 @@ public enum OpponentDirectory {
         }
         return appearances.compactMap { id, appearance in
             guard let roster = rosterByID[id] else { return nil }
-            return RosterEntry(id: id, name: roster.name, matchCount: appearance.count,
-                               lastPlayed: appearance.lastPlayed, age: roster.age, sexRaw: roster.sexRaw)
+            return RosterEntry(
+                id: id,
+                name: roster.name,
+                matchCount: appearance.count,
+                lastPlayed: appearance.lastPlayed,
+                handednessRaw: roster.handednessRaw,
+                backhandRaw: roster.backhandRaw,
+                playStyleRaw: roster.playStyleRaw
+            )
         }.sorted { a, b in
             if a.lastPlayed != b.lastPlayed { return a.lastPlayed > b.lastPlayed }
             let byName = a.name.localizedCaseInsensitiveCompare(b.name)

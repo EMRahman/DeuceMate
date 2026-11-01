@@ -148,26 +148,37 @@ final class MatchDetailsUITests: XCTestCase {
         manage.tap()
         XCTAssertTrue(app.textFields["rename-player-field"].waitForExistence(timeout: 5))
 
-        let age = app.textFields["player-age-field"]
-        for _ in 0..<5 where !age.isHittable { app.swipeUp() }
-        age.tap()
-        age.typeText("35")
-        let sexPicker = app.buttons["player-sex-picker"]
-        sexPicker.tap()
-        app.buttons["Male"].tap()
+        let handednessPicker = app.buttons["player-handedness-picker"]
+        for _ in 0..<5 where !handednessPicker.isHittable { app.swipeUp() }
+        handednessPicker.tap()
+        app.buttons["Left-handed"].tap()
+
+        let backhandPicker = app.buttons["player-backhand-picker"]
+        for _ in 0..<5 where !backhandPicker.isHittable { app.swipeUp() }
+        backhandPicker.tap()
+        app.buttons["One-handed"].tap()
+
+        let playStylePicker = app.buttons["player-play-style-picker"]
+        for _ in 0..<5 where !playStylePicker.isHittable { app.swipeUp() }
+        playStylePicker.tap()
+        app.buttons["Serve & Volley"].tap()
+
         let saveDetails = app.buttons["save-player-details"]
         for _ in 0..<5 where !saveDetails.isHittable { app.swipeUp() }
         saveDetails.tap()
         let playerBack = app.navigationBars.buttons.firstMatch
         playerBack.tap()
-        for _ in 0..<8 where !app.staticTexts["35"].isHittable { app.swipeDown() }
-        XCTAssertTrue(app.staticTexts["35"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Male"].exists)
+        let handednessRow = app.staticTexts["Handedness, Left-handed"]
+        for _ in 0..<8 where !handednessRow.isHittable { app.swipeDown() }
+        XCTAssertTrue(handednessRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Backhand, One-handed"].exists)
+        XCTAssertTrue(app.staticTexts["Play Style, Serve & Volley"].exists)
         for _ in 0..<8 where !manage.isHittable { app.swipeUp() }
         manage.tap()
-        XCTAssertTrue(app.textFields["player-age-field"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.textFields["player-age-field"].value as? String, "35")
-        XCTAssertTrue(app.buttons["player-sex-picker"].label.contains("Male"))
+        XCTAssertTrue(app.buttons["player-handedness-picker"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["player-handedness-picker"].label.contains("Left-handed"))
+        XCTAssertTrue(app.buttons["player-backhand-picker"].label.contains("One-handed"))
+        XCTAssertTrue(app.buttons["player-play-style-picker"].label.contains("Serve & Volley"))
         app.navigationBars.buttons.firstMatch.tap()
 
         manage.tap()

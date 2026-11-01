@@ -136,6 +136,9 @@ New file `Models/MatchTags.swift`:
 public struct TaggedPlayer: Codable, Equatable, Hashable, Sendable {
     public let id: UUID
     public var name: String            // sanitized display snapshot
+    public var handednessRaw: String?  // PlayerHandedness (rightHanded / leftHanded)
+    public var backhandRaw: String?    // PlayerBackhand (twoHanded / oneHanded)
+    public var playStyleRaw: String?   // PlayerPlayStyle (allCourt / aggressiveBaseliner / counterpuncher / serveAndVolley / pusher)
 }
 
 public enum CompetitionType: String, CaseIterable, Sendable {

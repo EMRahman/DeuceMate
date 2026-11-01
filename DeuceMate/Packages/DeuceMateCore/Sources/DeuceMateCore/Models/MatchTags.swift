@@ -13,62 +13,132 @@
 //   than failing the whole `[MatchRecord]` archive decode (TECHNICAL_DEBT #18).
 import Foundation
 
+// MARK: - Player tennis profile
+
+/// Deliberately **not** `Codable`: only `TaggedPlayer.handednessRaw` is
+/// persisted so an unknown future case round-trips instead of failing archive
+/// decode on an older build. Never rename a raw value (pinned in `MatchTagsTests`).
+public enum PlayerHandedness: String, CaseIterable, Sendable, Identifiable {
+    case rightHanded
+    case leftHanded
+
+    public var id: String { rawValue }
+
+    public var displayLabel: String {
+        switch self {
+        case .rightHanded: return "Right-handed"
+        case .leftHanded:  return "Left-handed"
+        }
+    }
+}
+
+/// Deliberately **not** `Codable`: only `TaggedPlayer.backhandRaw` is persisted.
+/// Never rename a raw value (pinned in `MatchTagsTests`).
+public enum PlayerBackhand: String, CaseIterable, Sendable, Identifiable {
+    case twoHanded
+    case oneHanded
+
+    public var id: String { rawValue }
+
+    public var displayLabel: String {
+        switch self {
+        case .twoHanded: return "Two-handed"
+        case .oneHanded: return "One-handed"
+        }
+    }
+}
+
+/// Deliberately **not** `Codable`: only `TaggedPlayer.playStyleRaw` is persisted.
+/// Never rename a raw value (pinned in `MatchTagsTests`).
+public enum PlayerPlayStyle: String, CaseIterable, Sendable, Identifiable {
+    case allCourt
+    case aggressiveBaseliner
+    case counterpuncher
+    case serveAndVolley
+    case pusher
+
+    public var id: String { rawValue }
+
+    public var displayLabel: String {
+        switch self {
+        case .allCourt:            return "All-Court"
+        case .aggressiveBaseliner: return "Aggressive Baseliner"
+        case .counterpuncher:      return "Counterpuncher"
+        case .serveAndVolley:      return "Serve & Volley"
+        case .pusher:              return "Pusher"
+        }
+    }
+}
+
 // MARK: - TaggedPlayer
 
 /// One named person attached to a match. The `id` is minted once, when the
 /// player is first added, and reused whenever they are picked from the roster,
 /// so two different "Alex"es stay separate and a rename can follow one person
 /// across every match.
-public enum PlayerSex: String, CaseIterable, Sendable {
-    case female, male, intersex
-
-    public var displayLabel: String {
-        switch self {
-        case .female: return "Female"
-        case .male: return "Male"
-        case .intersex: return "Intersex"
-        }
-    }
-}
-
 public struct TaggedPlayer: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: UUID
     /// Sanitized display snapshot (see `MatchTags.sanitizedName(_:)`).
     public var name: String
 
-    public var age: Int?
-    public var sexRaw: String?
+    public var handednessRaw: String?
+    public var backhandRaw: String?
+    public var playStyleRaw: String?
 
-    public var sex: PlayerSex? {
-        get { sexRaw.flatMap(PlayerSex.init(rawValue:)) }
-        set { sexRaw = newValue?.rawValue }
+    public var handedness: PlayerHandedness? {
+        get { handednessRaw.flatMap(PlayerHandedness.init(rawValue:)) }
+        set { handednessRaw = newValue?.rawValue }
     }
 
-    public static let maxSexRawLength = 64
+    public var backhand: PlayerBackhand? {
+        get { backhandRaw.flatMap(PlayerBackhand.init(rawValue:)) }
+        set { backhandRaw = newValue?.rawValue }
+    }
 
-    public init(id: UUID = UUID(), name: String, age: Int? = nil, sexRaw: String? = nil) {
+    public var playStyle: PlayerPlayStyle? {
+        get { playStyleRaw.flatMap(PlayerPlayStyle.init(rawValue:)) }
+        set { playStyleRaw = newValue?.rawValue }
+    }
+
+    /// Compact summary of known tennis attributes (e.g.
+    /// "Left-handed · One-handed backhand · Serve & Volley"), or `nil`.
+    public var profileSummary: String? {
+        var parts: [String] = []
+        if let handedness { parts.append(handedness.displayLabel) }
+        if let backhand { parts.append("\(backhand.displayLabel) backhand") }
+        if let playStyle { parts.append(playStyle.displayLabel) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    public static let maxAttributeRawLength = 64
+
+    public init(
+        id: UUID = UUID(),
+        name: String,
+        handednessRaw: String? = nil,
+        backhandRaw: String? = nil,
+        playStyleRaw: String? = nil
+    ) {
         self.id = id
         self.name = name
-        self.age = Self.sanitizedAge(age)
-        self.sexRaw = Self.sanitizedSexRaw(sexRaw)
+        self.handednessRaw = Self.sanitizedAttributeRaw(handednessRaw)
+        self.backhandRaw = Self.sanitizedAttributeRaw(backhandRaw)
+        self.playStyleRaw = Self.sanitizedAttributeRaw(playStyleRaw)
     }
 
-    static func sanitizedAge(_ age: Int?) -> Int? {
-        age.flatMap { (0...120).contains($0) ? $0 : nil }
-    }
-
-    static func sanitizedSexRaw(_ raw: String?) -> String? {
+    static func sanitizedAttributeRaw(_ raw: String?) -> String? {
         guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
               !raw.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) else { return nil }
-        return String(raw.prefix(maxSexRawLength))
+        return String(raw.prefix(maxAttributeRawLength))
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
         name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? ""
-        age = Self.sanitizedAge(try? c.decodeIfPresent(Int.self, forKey: .age))
-        sexRaw = Self.sanitizedSexRaw(try? c.decodeIfPresent(String.self, forKey: .sexRaw))
+        handednessRaw = Self.sanitizedAttributeRaw(try? c.decodeIfPresent(String.self, forKey: .handednessRaw))
+        backhandRaw = Self.sanitizedAttributeRaw(try? c.decodeIfPresent(String.self, forKey: .backhandRaw))
+        playStyleRaw = Self.sanitizedAttributeRaw(try? c.decodeIfPresent(String.self, forKey: .playStyleRaw))
     }
 }
 
@@ -247,7 +317,11 @@ public struct MatchTags: Codable, Equatable, Sendable {
             return "S\(value.utf8.count):\(value)"
         }
         func player(_ value: TaggedPlayer) -> String {
-            field(value.id.uuidString) + field(value.name) + field(value.age.map(String.init)) + field(value.sexRaw)
+            field(value.id.uuidString)
+                + field(value.name)
+                + field(value.handednessRaw)
+                + field(value.backhandRaw)
+                + field(value.playStyleRaw)
         }
         return field(competitionTypeRaw) + field(partner.map(player))
             + "\(opponents.count):" + opponents.map(player).joined()
@@ -309,7 +383,13 @@ public struct MatchTags: Codable, Equatable, Sendable {
 
     private static func sanitizedPlayer(_ player: TaggedPlayer) -> TaggedPlayer? {
         let name = sanitizedName(player.name)
-        return name.isEmpty ? nil : TaggedPlayer(id: player.id, name: name, age: player.age, sexRaw: player.sexRaw)
+        return name.isEmpty ? nil : TaggedPlayer(
+            id: player.id,
+            name: name,
+            handednessRaw: player.handednessRaw,
+            backhandRaw: player.backhandRaw,
+            playStyleRaw: player.playStyleRaw
+        )
     }
 
     /// Trim, turn line breaks into spaces, drop other control characters and

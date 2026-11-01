@@ -8,36 +8,100 @@ final class MatchTagsTests: XCTestCase {
 
     private typealias F = TagFixtures
 
-    func test_playerDemographics_decodeSanitizeAndRoundTrip() throws {
+    func test_playerProfile_decodeSanitizeAndRoundTrip() throws {
         let id = F.uuid(1)
         let old = try JSONDecoder().decode(TaggedPlayer.self, from: Data("{\"id\":\"\(id)\",\"name\":\"Alex\"}".utf8))
-        XCTAssertNil(old.age)
-        XCTAssertNil(old.sexRaw)
-        let malformed = try JSONDecoder().decode(TaggedPlayer.self, from: Data("{\"id\":\"\(id)\",\"name\":\"Alex\",\"age\":\"bad\",\"sexRaw\":42}".utf8))
-        XCTAssertNil(malformed.age)
-        XCTAssertNil(malformed.sexRaw)
-        let player = TaggedPlayer(id: id, name: "Alex", age: 121, sexRaw: "future")
-        XCTAssertNil(player.age)
-        XCTAssertNil(player.sex)
-        XCTAssertEqual(try JSONDecoder().decode(TaggedPlayer.self, from: JSONEncoder().encode(player)).sexRaw, "future")
-        XCTAssertEqual(TaggedPlayer(name: "A", age: 0, sexRaw: String(repeating: "x", count: 100)).sexRaw?.count, 64)
-        var changed = player
-        changed.sex = .female
-        XCTAssertEqual(changed.sexRaw, "female")
-        changed.age = -1
-        XCTAssertNil(F.tags(opponents: [changed]).sanitized().opponents.first?.age)
+        XCTAssertNil(old.handednessRaw)
+        XCTAssertNil(old.backhandRaw)
+        XCTAssertNil(old.playStyleRaw)
+        XCTAssertNil(old.profileSummary)
+
+        let malformed = try JSONDecoder().decode(
+            TaggedPlayer.self,
+            from: Data("{\"id\":\"\(id)\",\"name\":\"Alex\",\"handednessRaw\":42,\"backhandRaw\":true,\"playStyleRaw\":[]}".utf8)
+        )
+        XCTAssertNil(malformed.handednessRaw)
+        XCTAssertNil(malformed.backhandRaw)
+        XCTAssertNil(malformed.playStyleRaw)
+
+        let control = TaggedPlayer(
+            id: id,
+            name: "Alex",
+            handednessRaw: "left\u{0007}",
+            backhandRaw: "   ",
+            playStyleRaw: String(repeating: "x", count: 100)
+        )
+        XCTAssertNil(control.handednessRaw, "control characters are rejected")
+        XCTAssertNil(control.backhandRaw, "whitespace-only raw becomes nil")
+        XCTAssertEqual(control.playStyleRaw?.count, TaggedPlayer.maxAttributeRawLength)
+
+        let future = TaggedPlayer(
+            id: id,
+            name: "Alex",
+            handednessRaw: "ambidextrous",
+            backhandRaw: "twoHandedSlice",
+            playStyleRaw: "chipAndCharge"
+        )
+        XCTAssertNil(future.handedness)
+        XCTAssertNil(future.backhand)
+        XCTAssertNil(future.playStyle)
+        XCTAssertNil(future.profileSummary, "unknown future raw values are kept without fabricating labels")
+        let roundTripped = try JSONDecoder().decode(TaggedPlayer.self, from: JSONEncoder().encode(future))
+        XCTAssertEqual(roundTripped, future)
+
+        var typed = TaggedPlayer(id: id, name: "Alex")
+        typed.handedness = .leftHanded
+        typed.backhand = .oneHanded
+        typed.playStyle = .serveAndVolley
+        XCTAssertEqual(typed.handednessRaw, "leftHanded")
+        XCTAssertEqual(typed.backhandRaw, "oneHanded")
+        XCTAssertEqual(typed.playStyleRaw, "serveAndVolley")
+        XCTAssertEqual(typed.profileSummary, "Left-handed · One-handed backhand · Serve & Volley")
+
+        typed.handednessRaw = "  "
+        XCTAssertNil(F.tags(opponents: [typed]).sanitized().opponents.first?.handednessRaw)
     }
 
-    func test_demographics_breakEqualClockTiesCommutatively() {
-        let a = F.tags(opponents: [TaggedPlayer(id: F.uuid(1), name: "Alex", age: 20)], at: 10)
+    func test_playerProfile_rawValuesAndLabelsArePinned() {
+        XCTAssertEqual(PlayerHandedness.rightHanded.rawValue, "rightHanded")
+        XCTAssertEqual(PlayerHandedness.leftHanded.rawValue, "leftHanded")
+        XCTAssertEqual(PlayerHandedness.allCases.map(\.displayLabel), ["Right-handed", "Left-handed"])
+
+        XCTAssertEqual(PlayerBackhand.twoHanded.rawValue, "twoHanded")
+        XCTAssertEqual(PlayerBackhand.oneHanded.rawValue, "oneHanded")
+        XCTAssertEqual(PlayerBackhand.allCases.map(\.displayLabel), ["Two-handed", "One-handed"])
+
+        XCTAssertEqual(PlayerPlayStyle.allCourt.rawValue, "allCourt")
+        XCTAssertEqual(PlayerPlayStyle.aggressiveBaseliner.rawValue, "aggressiveBaseliner")
+        XCTAssertEqual(PlayerPlayStyle.counterpuncher.rawValue, "counterpuncher")
+        XCTAssertEqual(PlayerPlayStyle.serveAndVolley.rawValue, "serveAndVolley")
+        XCTAssertEqual(PlayerPlayStyle.pusher.rawValue, "pusher")
+        XCTAssertEqual(
+            PlayerPlayStyle.allCases.map(\.displayLabel),
+            ["All-Court", "Aggressive Baseliner", "Counterpuncher", "Serve & Volley", "Pusher"]
+        )
+    }
+
+    func test_playerProfile_breaksEqualClockTiesCommutatively() {
+        let a = F.tags(
+            opponents: [TaggedPlayer(id: F.uuid(1), name: "Alex", handednessRaw: "rightHanded")],
+            at: 10,
+            revision: MatchTags.legacyRevisionID
+        )
         var b = a
-        b.opponents[0].age = 21
+        b.opponents[0].handedness = .leftHanded
         XCTAssertEqual(MatchTags.merged(a, b), MatchTags.merged(b, a))
         XCTAssertNotEqual(a.supersedes(b), b.supersedes(a))
     }
 
-    func test_demographics_surviveWireAndManualArchive() throws {
-        let player = TaggedPlayer(id: F.uuid(1), name: "Alex", age: 42, sexRaw: "future")
+    func test_playerProfile_survivesWireAndManualArchive() throws {
+        let player = TaggedPlayer(
+            id: F.uuid(1),
+            name: "Alex",
+            handednessRaw: "leftHanded",
+            backhandRaw: "oneHanded",
+            playStyleRaw: "futureStyle"
+        )
         let tags = F.tags(opponents: [player], at: 1)
         let record = F.record(tags: tags)
         let payload = try MatchSyncPayloadBuilder.matchTagsUpdate(matchID: record.id, tags: tags)

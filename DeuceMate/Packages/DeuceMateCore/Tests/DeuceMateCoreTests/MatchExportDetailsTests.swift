@@ -177,6 +177,48 @@ final class MatchExportDetailsTests: XCTestCase {
         XCTAssertFalse(bare.contains("Coaching steer"))
     }
 
+    func test_aiContext_includesTennisPlayingStyleWithoutLeakingWithheldNames() throws {
+        let styledAlex = TaggedPlayer(
+            id: alex.id,
+            name: "Alex",
+            handednessRaw: PlayerHandedness.leftHanded.rawValue,
+            backhandRaw: PlayerBackhand.oneHanded.rawValue,
+            playStyleRaw: PlayerPlayStyle.serveAndVolley.rawValue
+        )
+        let styledSam = TaggedPlayer(
+            id: sam.id,
+            name: "Sam",
+            handednessRaw: PlayerHandedness.rightHanded.rawValue,
+            playStyleRaw: PlayerPlayStyle.aggressiveBaseliner.rawValue
+        )
+        let singlesRecord = F.record(tags: F.tags(opponents: [styledAlex]))
+        let singlesWithheld = try XCTUnwrap(
+            MatchExportDetails(record: singlesRecord, includeNames: false, includeNotes: false).aiContextSection(focal: .me)
+        )
+        XCTAssertFalse(singlesWithheld.contains("Alex"))
+        XCTAssertTrue(singlesWithheld.contains("- Opponent playing style: Left-handed · One-handed backhand · Serve & Volley"))
+
+        let singlesOpp = try XCTUnwrap(
+            MatchExportDetails(record: singlesRecord, includeNames: false, includeNotes: false).aiContextSection(focal: .opponent)
+        )
+        XCTAssertFalse(singlesOpp.contains("Alex"))
+        XCTAssertTrue(singlesOpp.contains("- Your playing style: Left-handed · One-handed backhand · Serve & Volley"))
+
+        let doublesRecord = F.record(type: .doubles, tags: F.tags(opponents: [styledAlex, jo], partner: styledSam))
+        let doublesWithheld = try XCTUnwrap(
+            MatchExportDetails(record: doublesRecord, includeNames: false, includeNotes: false).aiContextSection(focal: .me)
+        )
+        XCTAssertFalse(doublesWithheld.contains("Alex"))
+        XCTAssertFalse(doublesWithheld.contains("Sam"))
+        XCTAssertTrue(doublesWithheld.contains("- Opponent 1 playing style: Left-handed · One-handed backhand · Serve & Volley"))
+        XCTAssertTrue(doublesWithheld.contains("- Partner playing style: Right-handed · Aggressive Baseliner"))
+
+        let doublesNamed = try XCTUnwrap(
+            MatchExportDetails(record: doublesRecord, includeNames: true, includeNotes: false).aiContextSection(focal: .me)
+        )
+        XCTAssertTrue(doublesNamed.contains("- Opponent playing style (\"Alex\"): Left-handed · One-handed backhand · Serve & Volley"))
+    }
+
     // MARK: - HTML reader framing (Swift, both perspectives)
 
     func test_sideNames_singles_bothPerspectives() {
