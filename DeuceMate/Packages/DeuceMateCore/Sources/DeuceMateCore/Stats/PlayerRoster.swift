@@ -221,12 +221,17 @@ public enum PlayerRoster {
     public static func updatingDetails(
         _ playerID: UUID, age: Int?, sexRaw: String?, in records: [MatchRecord], now: Date = Date()
     ) -> RosterMutation {
-        rewriting(records, now: now) { tags in
+        guard let current = entries(from: records).first(where: { $0.id == playerID }) else {
+            return RosterMutation(records: records, affectedMatchIDs: [])
+        }
+        return rewriting(records, now: now) { tags in
             if tags.partner?.id == playerID {
+                tags.partner?.name = current.name
                 tags.partner?.age = age
                 tags.partner?.sexRaw = sexRaw
             }
             for i in tags.opponents.indices where tags.opponents[i].id == playerID {
+                tags.opponents[i].name = current.name
                 tags.opponents[i].age = age
                 tags.opponents[i].sexRaw = sexRaw
             }
