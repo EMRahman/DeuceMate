@@ -321,6 +321,11 @@ class ScoreViewModel: ObservableObject {
     /// Internal-readable so views can detect "this stored record IS the live
     /// match" and skip the replace-confirm alert.
     private(set) var currentMatchID: UUID? = nil
+    /// Phone-authored tags of the live match, carried only so every record the
+    /// watch writes or sends for it keeps them. A resumed match is removed from
+    /// the history store, so without this the next checkpoint/finalize would be
+    /// tag-less (MATCH_TAGS_PLAN.md §3). Never edited on the watch (v1).
+    private(set) var liveMatchTags: MatchTags? = nil
     @Published private(set) var tiebreakStartServer: Player? = nil
     @Published private(set) var tiebreakFirstPointReceiver: Player? = nil
     @Published private(set) var lastTiebreakPointServer: Player? = nil
@@ -466,6 +471,8 @@ class ScoreViewModel: ObservableObject {
         let matchFormat: MatchFormat
         // v5 field — deferred doubles team-server decision.
         let needsDoublesTeamServerDecision: Bool
+        // v6 field — tags of a resumed live match (optional; additive).
+        let currentMatchTags: MatchTags?
 
         init(version: Int,
              sets: [SetScore],
@@ -493,7 +500,9 @@ class ScoreViewModel: ObservableObject {
              doublesServiceIndex: Int = 0,
              tiebreakStartDoublesIndex: Int = 0,
              matchFormat: MatchFormat = .standard,
-             needsDoublesTeamServerDecision: Bool = false) {
+             needsDoublesTeamServerDecision: Bool = false,
+             currentMatchTags: MatchTags? = nil) {
+            self.currentMatchTags = currentMatchTags
             self.version = version
             self.sets = sets
             self.currentPointsMe = currentPointsMe
@@ -552,6 +561,8 @@ class ScoreViewModel: ObservableObject {
             tiebreakStartDoublesIndex = try c.decodeIfPresent(Int.self, forKey: .tiebreakStartDoublesIndex) ?? 0
             matchFormat = try c.decodeIfPresent(MatchFormat.self, forKey: .matchFormat) ?? .standard
             needsDoublesTeamServerDecision = try c.decodeIfPresent(Bool.self, forKey: .needsDoublesTeamServerDecision) ?? false
+            // Optional metadata: a malformed value degrades to "no information".
+            currentMatchTags = try? c.decodeIfPresent(MatchTags.self, forKey: .currentMatchTags)
         }
     }
     
@@ -1357,7 +1368,8 @@ class ScoreViewModel: ObservableObject {
             setElapsedSeconds: finalSetElapsed,
             totalSteps: hkSnapshot?.steps,
             totalDistanceMeters: hkSnapshot?.distanceMeters,
-            totalCaloriesKcal: hkSnapshot?.caloriesKcal
+            totalCaloriesKcal: hkSnapshot?.caloriesKcal,
+            tags: liveMatchTags
         )
         // Belt-and-braces: if this append will evict the oldest watch record,
         // push the full history first so the phone archives the about-to-be-
@@ -1408,6 +1420,16 @@ class ScoreViewModel: ObservableObject {
         clearMatch(completeAtCurrentScore: true)
     }
 
+    /// Merges a phone-authored tag update into the live match when it targets
+    /// this exact identity. The live match is not (or no longer) in the history
+    /// store, so `StatsStore.updateTags` can't reach it. Metadata only: never
+    /// touches score or completion.
+    func applyIncomingMatchTags(_ tags: MatchTags, matchID: UUID) {
+        guard currentMatchID == matchID else { return }
+        liveMatchTags = MatchTags.merged(liveMatchTags, tags)
+        saveState()
+    }
+
     /// Completes a parked history record without disturbing any other live
     /// match. A full-history push carries the update without changing the
     /// phone's active-match pointer. Only a successful storage transaction may
@@ -1445,6 +1467,7 @@ class ScoreViewModel: ObservableObject {
         pendingAnnouncementWorkItem = nil
         isOnSecondServe = false
         currentMatchID = nil
+        liveMatchTags = nil
         matchElapsedSeconds = 0
         setElapsedSeconds = [:]
         currentSetSessionStart = nil
@@ -1550,6 +1573,7 @@ class ScoreViewModel: ObservableObject {
         currentMatchStats = record.stats
         matchStartTime = record.startTime
         currentMatchID = record.id
+        liveMatchTags = record.tags
         // Resume does not preserve the per-point HistoryEntry chain — undo
         // therefore only works for points scored after the resume. This is an
         // accepted v1 limitation since we don't persist `history` in
@@ -1572,8 +1596,11 @@ class ScoreViewModel: ObservableObject {
         workoutManager.startWorkout(startDate: matchStartTime ?? Date())
         // Signal HomeView to navigate to the score view.
         shouldOpenMatchView = true
-        // Drop from store; will be re-appended on next finalize.
-        statsStore.removeMatch(id: record.id)
+        // Drop from store; will be re-appended on next finalize. The sheet's
+        // snapshot can predate a phone tag update the store has since saved, so
+        // merge the stored copy's current tags in as it is removed.
+        let storedTags = statsStore.removeMatchReturningTags(id: record.id)
+        liveMatchTags = MatchTags.merged(liveMatchTags, storedTags)
         saveState()
     }
     
@@ -1629,7 +1656,8 @@ class ScoreViewModel: ObservableObject {
             doublesServiceIndex: doublesServiceIndex,
             tiebreakStartDoublesIndex: tiebreakStartDoublesIndex,
             matchFormat: matchFormat,
-            needsDoublesTeamServerDecision: needsDoublesTeamServerDecision
+            needsDoublesTeamServerDecision: needsDoublesTeamServerDecision,
+            currentMatchTags: liveMatchTags
         )
         do {
             // Class B (until-first-unlock): the live-match state must stay writable
@@ -1670,7 +1698,8 @@ class ScoreViewModel: ObservableObject {
                 matchElapsedSeconds: snapshotElapsed,
                 setElapsedSeconds: snapshotSetElapsed,
                 recentPoints: Array((resumedRecentPoints + history.map { $0.player }).suffix(8)),
-                momentumEnabled: momentumEnabled
+                momentumEnabled: momentumEnabled,
+                tags: liveMatchTags
             )
             let ann = phoneAnnouncementsEnabled ? pendingPhoneAnnouncement : nil
             pendingPhoneAnnouncement = nil
@@ -1713,6 +1742,7 @@ class ScoreViewModel: ObservableObject {
             isOnSecondServe = state.isOnSecondServe
             pendingStatPoint = state.pendingStatPoint
             currentMatchID = state.currentMatchID
+            liveMatchTags = state.currentMatchTags
             matchElapsedSeconds = state.matchElapsedSeconds
             setElapsedSeconds = state.setElapsedSeconds
             if let symbol = state.pendingAnnouncementMessage {
@@ -1760,6 +1790,7 @@ class ScoreViewModel: ObservableObject {
             pendingStatPoint = nil
             pendingOutcome = nil
             currentMatchID = nil
+            liveMatchTags = nil
             matchType = .singles
             matchFormat = .standard
             doublesServer = nil

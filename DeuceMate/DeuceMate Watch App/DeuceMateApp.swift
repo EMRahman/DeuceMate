@@ -60,6 +60,9 @@ struct DeuceMateApp: App {
                 sync.onCompletedMatchReceived = { [weak viewModel] record in
                     viewModel?.completeCurrentMatchIfMatching(record.id)
                 }
+                sync.onMatchTagsReceived = { [weak viewModel] id, tags in
+                    viewModel?.applyIncomingMatchTags(tags, matchID: id)
+                }
                 viewModel.syncService = sync
                 // Register all inbound handlers before activation. An already
                 // available phone payload can arrive immediately on start.

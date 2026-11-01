@@ -442,6 +442,11 @@ struct DeuceMate_Watch_AppTests {
             records[index] = records[index].endingAtCurrentScore(at: date)
             return records
         }
+        func updateTags(id: UUID, tags: MatchTags) -> MatchRecord? {
+            guard let index = records.firstIndex(where: { $0.id == id }) else { return nil }
+            records[index] = records[index].mergingTags(tags)
+            return records[index]
+        }
         func appendMatch(_ record: MatchRecord) {
             appendCallCount += 1
             records.removeAll { $0.id == record.id }
@@ -450,6 +455,11 @@ struct DeuceMate_Watch_AppTests {
         func removeMatch(id: UUID) {
             removeCallCount += 1
             records.removeAll { $0.id == id }
+        }
+        func removeMatchReturningTags(id: UUID) -> MatchTags? {
+            let tags = records.first { $0.id == id }?.tags
+            removeMatch(id: id)
+            return tags
         }
     }
 

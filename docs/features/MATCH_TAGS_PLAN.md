@@ -1,7 +1,7 @@
 <!--
 machine-readable summary (parse this block first)
 
-status: revised after owner-authorized review (2026-10-23; supersedes completed-only scope); PR 1 (Core) implemented 2026-10-31 — PR 2/3/4 pending
+status: revised after owner-authorized review (2026-10-23; supersedes completed-only scope); PR 1 (Core) implemented 2026-10-31; PR 2 (Watch) implemented 2026-10-31 — PR 3/4 pending
 author: Claude, design session with the owner
 date: 2026-10-23
 feature: "Tag a completed or in-progress match with who was played (selectable roster) and its competition type (Friendly / League / Tournament / Practice); show the tags on the watch; compare with a previous match on iOS; add private local notes; feed selected context into AI Coach and shared reports."
@@ -689,6 +689,12 @@ otherwise the first watch sync deletes it (§3).
 - Handle `.matchTagsUpdate` in `WatchMatchSyncService`; `StatsStore.updateTags`
   with `StatsStoreTests` for unreadable history / missing id / write failure.
 - Caption in `MatchHistoryView` and `MatchStatsView`.
+- **Implemented.** Beyond the list above: `ScoreViewModel.liveMatchTags`
+  (persisted in `appState.json` as optional `currentMatchTags`) keeps a resumed
+  match's tags, because resume removes the record from history; a phone tag push
+  for the live match is merged there since it is not in the store. Browser demo
+  (`watch-demo-history.js`) not changed: its seeded matches carry no tags, so
+  there is nothing true to show — follow-up if demo matches ever gain tags.
 - Ships before PR 3 so a watch that can display tags exists when the phone
   starts writing them (not required for safety — PR 1 covers that).
 
