@@ -153,11 +153,14 @@ public struct MatchComparison: Sendable {
     public init(current: MatchRecord, baseline: MatchRecord) {
         let currentSample = Self.sample(current)
         let baselineSample = Self.sample(baseline)
+        let currentServe = Self.sample(current, categorizedOnly: true)
+        let baselineServe = Self.sample(baseline, categorizedOnly: true)
         self.current = Self.side(current, sample: currentSample)
         self.baseline = Self.side(baseline, sample: baselineSample)
         self.rows = Self.metrics.map { metric in
-            let a = Self.ratio(metric, in: currentSample)
-            let b = Self.ratio(metric, in: baselineSample)
+            let serveSplit = Self.requiresOutcomeTracking(metric)
+            let a = Self.ratio(metric, in: serveSplit ? currentServe : currentSample)
+            let b = Self.ratio(metric, in: serveSplit ? baselineServe : baselineSample)
             guard let a, let b else {
                 return Row(metric: metric, current: a, baseline: b, percentagePointChange: nil, direction: nil)
             }
@@ -184,14 +187,21 @@ public struct MatchComparison: Sendable {
         }
     }
 
-    private static func sample(_ record: MatchRecord) -> MatchTrendSample {
-        let summary = MatchStatsSummary(stats: record.stats, focal: .me,
+    /// `categorizedOnly` projects the record through a summary of its
+    /// categorized points, for the serve/return splits: an uncategorized
+    /// point's default `isSecondServe == false` would otherwise be counted as a
+    /// first serve (1 tracked second serve + 9 untracked service points would
+    /// read as 90% first-serve-in). A split with no categorized denominator
+    /// stays nil ("Not recorded"), never zero.
+    private static func sample(_ record: MatchRecord, categorizedOnly: Bool = false) -> MatchTrendSample {
+        let stats = categorizedOnly ? record.stats.filter { $0.outcome != .uncategorized } : record.stats
+        let summary = MatchStatsSummary(stats: stats, focal: .me,
                                         setElapsedSeconds: record.setElapsedSeconds)
         return MatchTrendSample(record: record, summary: summary)
     }
 
     private static func ratio(_ metric: TrendMetric, in sample: MatchTrendSample) -> TrendMetric.Ratio? {
-        if requiresOutcomeTracking(metric) && sample.categorizedPoints == 0 { return nil }
+        if requiresOutcomeTracking(metric) && sample.totalPoints == 0 { return nil }
         return metric.ratio(in: sample)
     }
 

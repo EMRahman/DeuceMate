@@ -182,7 +182,10 @@ public enum MatchNotesCodec {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             format = try c.decode(String.self, forKey: .format)
             schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
-            notes = try c.decodeIfPresent([MatchNote].self, forKey: .notes) ?? []
+            // `notes` is schema 1's foundational payload, not an additive field:
+            // missing or null must THROW so a malformed sidecar is never read
+            // as an intentionally empty one (`[]`) and overwritten on save.
+            notes = try c.decode([MatchNote].self, forKey: .notes)
         }
     }
 

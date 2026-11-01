@@ -111,6 +111,15 @@ final class MatchNotesTests: XCTestCase {
             Data(#"{"format":"deucemate.matchNotes","notes":[{"text":"no id"}]}"#.utf8)))
     }
 
+    func test_codec_requiresNotesArray_emptyArrayIsTheOnlyEmpty() throws {
+        let head = #"{"format":"deucemate.matchNotes","schemaVersion":1"#
+        XCTAssertThrowsError(try MatchNotesCodec.decode(Data((head + #","notes":null}"#).utf8)))
+        XCTAssertThrowsError(try MatchNotesCodec.decode(Data((head + "}").utf8)))
+        XCTAssertEqual(try MatchNotesCodec.decode(Data((head + #","notes":[]}"#).utf8)), [])
+        let valid = Data((head + #","notes":[{"matchID":"00000000-0000-0000-0000-000000000001","text":"hi"}]}"#).utf8)
+        XCTAssertEqual(try MatchNotesCodec.decode(valid).count, 1)
+    }
+
     func test_codec_decodesAdditiveDefaults() throws {
         let data = Data(#"""
         {"format":"deucemate.matchNotes",
