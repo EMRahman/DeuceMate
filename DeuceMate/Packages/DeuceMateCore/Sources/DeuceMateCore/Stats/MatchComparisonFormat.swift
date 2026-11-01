@@ -27,10 +27,12 @@ public enum MatchComparisonFormat {
         return "\u{00B1}0 pts"
     }
 
-    /// "1 h 05 min" / "48 min", or "Not recorded".
+    /// "1 h 05 min" / "48 min" / "< 1 min" (never a misleading "0 min"), or
+    /// "Not recorded".
     public static func duration(_ seconds: TimeInterval?) -> String {
         guard let seconds, seconds > 0 else { return notRecorded }
         let minutes = Int(seconds) / 60
+        if minutes == 0 { return "< 1 min" }
         if minutes >= 60 {
             return String(format: "%d h %02d min", minutes / 60, minutes % 60)
         }

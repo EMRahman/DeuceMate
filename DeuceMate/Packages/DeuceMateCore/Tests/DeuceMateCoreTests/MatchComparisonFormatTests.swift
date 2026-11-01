@@ -26,6 +26,7 @@ final class MatchComparisonFormatTests: XCTestCase {
     func test_duration_formatsMinutesAndHours() {
         XCTAssertEqual(MatchComparisonFormat.duration(48 * 60 + 30), "48 min")
         XCTAssertEqual(MatchComparisonFormat.duration(65 * 60), "1 h 05 min")
+        XCTAssertEqual(MatchComparisonFormat.duration(25), "< 1 min")
         XCTAssertEqual(MatchComparisonFormat.duration(nil), "Not recorded")
         XCTAssertEqual(MatchComparisonFormat.duration(0), "Not recorded")
     }
