@@ -5,7 +5,15 @@ import UIKit
 import DeuceMateCore
 
 struct MatchDetailView: View {
-    let record: MatchRecord
+    /// The displayed match, re-resolved by id from the live store whenever the
+    /// archive changes (tag edits, watch syncs, imports), so the header, Match
+    /// Info and the export snapshot never show a stale copy. A watch-only row
+    /// (not in the archive) keeps the value it was opened with.
+    @State private var record: MatchRecord
+
+    init(record: MatchRecord) {
+        _record = State(initialValue: record)
+    }
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appTheme) private var theme
@@ -17,9 +25,6 @@ struct MatchDetailView: View {
 
     /// Shared reader for the two stored max-HR settings (see MaxHRSetting) so
     /// this view doesn't carry its own copy of their UserDefaults keys.
-    /// Not `private`: a private *stored* property (unlike a private property-
-    /// wrapped one) makes the synthesized memberwise init private too, and
-    /// callers construct this view as `MatchDetailView(record:)`.
     var maxHRSetting = MaxHRSetting()
     @AppStorage("playerNTRP") private var playerNTRP: String = "3.0–3.5"
     @State private var tab: Tab = .stats
@@ -44,8 +49,18 @@ struct MatchDetailView: View {
     /// health-free exports, or after the user confirms the disclosure).
     @State private var activeShare: ShareRequest?
     @State private var showEndAtCurrentScoreConfirmation = false
+    @State private var showMatchInfoEditor = false
+    @State private var showNotesEditor = false
 
     private enum Tab { case stats, points }
+
+    /// Everything the prebuilt export snapshot depends on. A change to any of
+    /// these restarts the export task (PR 4 adds the names/notes toggles here).
+    private struct ExportInputs: Equatable {
+        let record: MatchRecord
+        let maxHR: Int
+        let ntrp: String
+    }
 
     private var meColor:  Color { theme.colors.me }
     private var oppColor: Color { theme.colors.opponent }
@@ -455,6 +470,16 @@ struct MatchDetailView: View {
                 .padding(.vertical, 6)
             }
 
+            // Opponent / competition, private note, and the previous-match
+            // comparison (MATCH_TAGS_PLAN.md §7.1). Editable for completed and
+            // in-progress archived matches; never changes the score.
+            MatchInfoSection(
+                record: record,
+                isInArchive: store.history.contains { $0.id == record.id },
+                showEditor: $showMatchInfoEditor,
+                showNotesEditor: $showNotesEditor
+            )
+
             // Keep the graph route visible for manually entered matches. Its
             // explicit empty state explains why there is no point-level chart.
             Section("Points Graph") {
@@ -636,8 +661,21 @@ struct MatchDetailView: View {
         .listStyle(.insetGrouped)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            guard exportSummary.isEmpty else { return }
+        // Keep the shown record current: tag edits, watch syncs and imports
+        // replace the archive copy, and the export snapshot below is rebuilt
+        // from whatever this resolves to.
+        .onReceive(store.$history) { history in
+            if let latest = history.first(where: { $0.id == record.id }), latest != record {
+                record = latest
+            }
+        }
+        // The share/AI exports are a prebuilt snapshot of `record`. Rebuild
+        // them whenever the record (or an export input) changes, and clear the
+        // old snapshot first so a stale copy can never be shared meanwhile.
+        .task(id: ExportInputs(record: record, maxHR: resolvedMaxHR, ntrp: playerNTRP)) {
+            exportSummary = ""; exportFull = ""; exportSummaryOpp = ""; exportFullOpp = ""
+            exportAI = ""; exportAIOpp = ""
+            htmlExportURL = nil; htmlExportURLOpp = nil
             let record = record
             let maxHR = resolvedMaxHR
             let filename = htmlExportFilename(for: .me)
@@ -663,17 +701,15 @@ struct MatchDetailView: View {
                                                   aiPromptMe: aiMe, aiPromptOpponent: aiOpp, filename: filenameOpp)
                 return (mine, theirs)
             }.value
+            async let ai    = Task.detached { MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .me,       playerNTRP: ntrp) }.value
+            async let aiOpp = Task.detached { MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .opponent, playerNTRP: ntrp) }.value
             let (s, f, so, fo, urls) = await (summary, full, summaryOpp, fullOpp, htmlURLs)
+            let (a, ao) = await (ai, aiOpp)
+            // A newer record superseded this build while it ran: drop it.
+            guard !Task.isCancelled else { return }
             exportSummary = s; exportFull = f; exportSummaryOpp = so; exportFullOpp = fo
             (htmlExportURL, htmlExportURLOpp) = urls
-        }
-        .task(id: "\(playerNTRP)-\(resolvedMaxHR)") {
-            let record = record
-            let maxHR = resolvedMaxHR
-            let ntRP = playerNTRP
-            async let ai    = Task.detached { MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .me,       playerNTRP: ntRP) }.value
-            async let aiOpp = Task.detached { MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .opponent, playerNTRP: ntRP) }.value
-            (exportAI, exportAIOpp) = await (ai, aiOpp)
+            (exportAI, exportAIOpp) = (a, ao)
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -783,6 +819,14 @@ struct MatchDetailView: View {
         }
         .sheet(item: $activeShare) { request in
             ShareSheet(activityItems: request.items) { activeShare = nil }
+        }
+        .sheet(isPresented: $showMatchInfoEditor) {
+            MatchInfoEditorView(record: record)
+                .environmentObject(store)
+                .environmentObject(syncService)
+        }
+        .sheet(isPresented: $showNotesEditor) {
+            MatchNotesEditorView(matchID: record.id)
         }
     }
 

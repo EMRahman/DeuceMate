@@ -136,6 +136,8 @@ struct SettingsView: View {
     @State private var archiveExportDocument = MatchArchiveDocument()
     @State private var pendingImportData: Data?
     @State private var pendingImportPreview: ManualMatchArchiveBackup.ImportPreview?
+    /// Ids of the matches in the selected archive file — what a Replace keeps.
+    @State private var pendingImportRecordIDs: Set<UUID> = []
     @State private var archiveTransferStatus: ArchiveTransferStatus?
 
     private var selectedTheme: Binding<AppTheme> {
@@ -151,6 +153,7 @@ struct SettingsView: View {
             sharedConfigSection
             pulseCoachSectionView
             aiCoachingSection
+            playersSection
             iPhoneOnlySection
         }
         .listStyle(.insetGrouped)
@@ -228,7 +231,7 @@ struct SettingsView: View {
             }
             Button("Cancel", role: .cancel) { clearPendingManualArchiveImport() }
         } message: { preview in
-            Text("This will replace \(store.history.count) current matches with \(preview.recordCount) imported matches. Imported health data will be preserved.")
+            Text(replaceConfirmationMessage(preview))
         }
     }
 
@@ -360,6 +363,30 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Players (match details roster)
+
+    private var playersSection: some View {
+        Section {
+            NavigationLink {
+                PlayersSettingsView()
+                    .environmentObject(syncService)
+            } label: {
+                LabeledContent {
+                    let count = PlayerRoster.entries(from: store.history, forgotten: store.forgottenPlayers).count
+                    Text("\(count)")
+                        .foregroundStyle(.secondary)
+                } label: {
+                    Label("Players", systemImage: "person.2")
+                }
+            }
+            .accessibilityIdentifier("players-settings")
+        } header: {
+            Text("Match Details")
+        } footer: {
+            Text("Rename, merge or forget the opponents and partners you've added to matches.")
+        }
+    }
+
     // MARK: - iPhone Only
 
     private var iPhoneOnlySection: some View {
@@ -461,7 +488,7 @@ struct SettingsView: View {
             } header: {
                 Text("Backup & Transfer")
             } footer: {
-                Text("Automatic iCloud and device restores keep scores and non-health stats, but not recorded heart rate, steps, distance, or calories. Before moving to a new iPhone, Export Match Archive here, then Import it on the new phone. Manual archive files are full-fidelity and may include those HealthKit-derived values.")
+                Text("Automatic iCloud and device restores keep scores and non-health stats, but not recorded heart rate, steps, distance, or calories. Before moving to a new iPhone, Export Match Archive here, then Import it on the new phone. Manual archive files are full-fidelity and may include those HealthKit-derived values and the player names you added. Private match notes stay on this iPhone and aren't included in any backup or archive file.")
             }
 
             Section {
@@ -722,8 +749,10 @@ struct SettingsView: View {
                     }
                     let data = try Data(contentsOf: url)
                     let preview = try store.previewManualArchiveImport(data: data)
+                    let recordIDs = try store.manualArchiveRecordIDs(data: data)
                     DispatchQueue.main.async {
                         pendingImportPreview = preview
+                        pendingImportRecordIDs = recordIDs
                         pendingImportData = data
                         showArchiveImportOptions = true
                     }
@@ -757,14 +786,26 @@ struct SettingsView: View {
 
         archiveTransferStatus = nil
         let store = store
+        let retainedIDs = pendingImportRecordIDs
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let preview = try store.importManualArchive(data: pendingImportData, mode: mode)
                 let verb = mode == .merge ? "merged" : "replaced"
+                // Merge keeps every current match, so every note stays. A
+                // confirmed Replace keeps notes only for matches in the file
+                // (the confirmation stated how many would go).
+                var notesWarning = ""
+                if mode == .replace {
+                    do {
+                        try MatchNotesStore.shared.applyReplace(retainedMatchIDs: retainedIDs)
+                    } catch {
+                        notesWarning = " Private notes were left unchanged: \(error.localizedDescription)"
+                    }
+                }
                 DispatchQueue.main.async {
                     archiveTransferStatus = ArchiveTransferStatus(
-                        message: "Archive \(verb): \(preview.recordCount) matches imported",
-                        isSuccess: true
+                        message: "Archive \(verb): \(preview.recordCount) matches imported.\(notesWarning)",
+                        isSuccess: notesWarning.isEmpty
                     )
                     clearPendingManualArchiveImport()
                 }
@@ -782,6 +823,20 @@ struct SettingsView: View {
     private func clearPendingManualArchiveImport() {
         pendingImportData = nil
         pendingImportPreview = nil
+        pendingImportRecordIDs = []
+    }
+
+    /// Replace confirmation, including what happens to private notes on
+    /// matches the file doesn't contain (MATCH_TAGS_PLAN.md §4.1: never
+    /// silently orphan or erase them).
+    private func replaceConfirmationMessage(_ preview: ManualMatchArchiveBackup.ImportPreview) -> String {
+        var message = "This will replace \(store.history.count) current matches with \(preview.recordCount) imported matches. Imported health data will be preserved."
+        let plan = MatchNotesStore.shared.replacePlan(retainedMatchIDs: pendingImportRecordIDs)
+        if plan.requiresConfirmation {
+            let count = plan.discarded.count
+            message += " Private notes on \(count == 1 ? "1 match" : "\(count) matches") not in this file will be deleted from this iPhone."
+        }
+        return message
     }
 
     private func importPreviewMessage(_ preview: ManualMatchArchiveBackup.ImportPreview) -> String {
