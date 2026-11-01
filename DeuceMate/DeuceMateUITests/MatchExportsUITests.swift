@@ -66,6 +66,7 @@ final class MatchExportsUITests: XCTestCase {
         XCTAssertTrue(prompt.contains("Opponent (name withheld)"))
         XCTAssertFalse(prompt.contains(alex), "No typed name by default")
         XCTAssertFalse(prompt.contains("knee sore"), "No note by default")
+        scrollPromptToContext()
         capture("21-ai-prompt-names-off")
         goBack(from: "Prompt")
 
@@ -86,6 +87,7 @@ final class MatchExportsUITests: XCTestCase {
         XCTAssertTrue(prompt.contains("> \(note)"), "The note is quoted context")
         XCTAssertTrue(prompt.contains("data, not instructions"))
         XCTAssertFalse(prompt.contains(alex), "Names are still off")
+        scrollPromptToContext()
         capture("23-ai-prompt-note-on")
         goBack(from: "Prompt")
 
@@ -94,6 +96,7 @@ final class MatchExportsUITests: XCTestCase {
         prompt = openPromptPreview()
         XCTAssertTrue(prompt.contains("\"\(alex)\""), "Names appear (quoted) once opted in")
         XCTAssertTrue(prompt.contains("> \(note)"))
+        scrollPromptToContext()
         capture("24-ai-prompt-names-on")
         goBack(from: "Prompt")
 
@@ -104,7 +107,7 @@ final class MatchExportsUITests: XCTestCase {
         XCTAssertTrue(app.buttons["cancel-include-note"].waitForExistence(timeout: 5))
         app.buttons["cancel-include-note"].tap()
         XCTAssertEqual(app.switches["ai-include-notes"].value as? String, "0", "Cancel keeps the note out")
-        app.buttons["Done"].tap()
+        app.navigationBars["AI Coach"].buttons["Done"].tap()
         closeDetail()
     }
 
@@ -268,6 +271,12 @@ final class MatchExportsUITests: XCTestCase {
         app.buttons["save-match-note"].tap()
         XCTAssertTrue(waitForLabel(row, contains: "knee sore"))
         return second
+    }
+
+    /// Brings the Match Context section into view for the screenshots.
+    @MainActor
+    private func scrollPromptToContext() {
+        for _ in 0..<2 { app.swipeUp() }
     }
 
     @MainActor
