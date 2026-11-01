@@ -28,7 +28,26 @@ point's tiebreak state for iOS-parity chart bands; v9 added per-player Serving
 counts and palette metadata; v10 adds after-point game/match labels for graph inspection while preserving before-point history scores; v11 adds the top-level
 `perspective` + `meta.perspectiveNote` and makes every "me" field reader-framed; v12
 adds the `promo` block — a "Tracked with DeuceMate" strip at the top of the page linking
-to the App Store and the marketing site, since the recipient usually doesn't have the app.)*
+to the App Store and the marketing site, since the recipient usually doesn't have the app;
+v13 adds the match-detail `meta` fields from MATCH_TAGS_PLAN.md PR 4 — `competitionTypeLabel`,
+reader-framed `readerSideNames` / `otherSideNames` and the opt-in `privateNote`.)*
+
+**Match details (schema 13).** The share menu has an *Include in Reports* section with an
+**Include player names** switch (default ON for reports) and, when the match has a note, an
+**Include private note** switch (default OFF; turning it on opens a review of the exact text
+and a personal/health-information disclosure, and an included note is added to the pre-share
+alert). Both switches feed the iOS export-snapshot inputs, so a change clears and rebuilds every
+cached file. All filtering happens in Core's `MatchExportDetails` *before* the view model is built:
+with names off no typed name exists to leak into the JSON, the static fallback or the embedded AI
+prompt. The sides are **reader-framed in Swift** — the recorder's file reads "Me & partner vs
+opponents", the opponent's file reads "opponents vs Opponent & the recorder's partner" (the
+recorder's own name is never known, so a seat is a placeholder) — and the viewer JS only paints
+(`textContent`; the static fallback goes through `esc`, which now also entity-escapes U+2028/9).
+The note is painted `white-space: pre-wrap` in a "Private note" block. Escaping reuses
+`MatchHTMLExporter.scriptSafe`; `MatchExportDetailsTests` covers hostile names
+(`</script><script>alert(1)</script>`, `<!--`, U+2028) and hostile multiline notes in both
+perspectives, plus the CSP and `assertOnlyOptInLinks`-style invariants. Filenames stay date-only
+(`ExportFilenames` takes only the start time).
 
 Chosen over a hosted "share a link" approach because it needs **no server, no
 hosting, no database, no link expiry**, and adds **no networking** to an app that

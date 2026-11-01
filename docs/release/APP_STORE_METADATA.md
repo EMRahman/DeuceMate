@@ -452,12 +452,26 @@ When completing the App Privacy questionnaire in App Store Connect:
   sync and manual archives. No Contacts access. On this basis "Data Not
   Collected" still appears to match Apple's definition (the developer and any
   integrated partner cannot access the data), but this is **not** a guarantee:
-  re-confirm the label at release against the shipped build — and again when
-  the follow-up export work (names in shared reports, opt-in names/notes in AI
-  prompts) ships, since a user-initiated hand-off alone is not a blanket
-  exemption (MATCH_TAGS_PLAN.md §8, S10). The published privacy policy
+  re-confirm the label at release against the shipped build, since a
+  user-initiated hand-off alone is not a blanket exemption (MATCH_TAGS_PLAN.md
+  §8, S10). The published privacy policy
   (`docs/website/privacy.html`, "Match Details, Player Names & Private Notes")
   describes the storage, backup, forget-player and recovery limits.
+- **Match details in exports (PR 4, final hand-off).** Competition type and
+  head-to-head always accompany an AI Coach prompt; opponent/partner names are
+  in shared text/interactive-HTML reports by default (visible "Include player
+  names" switch) and **off** in AI prompts by default; the private note enters a
+  report, AI prompt or manual archive only through a separate per-export
+  "Include private note(s)" opt-in (off every time) that shows the exact text,
+  states it may hold personal or health information, and warns when names are
+  off but the prose may still name people. An included note is added to the same
+  pre-share alert as any health disclosure. Filenames are date-only and
+  announcements never speak names. The AI hand-off is the clipboard or an app
+  the user opens (no DeuceMate server, no SDK, no automatic transmission), so
+  the privacy-label assessment above is unchanged: still **Data Not
+  Collected** on the same reasoning, but re-confirm against the shipped build
+  and against Apple's wording at submission. Interactive-HTML exports carry the
+  names/note only as inert, escaped text and still load no external resource.
 
 ---
 
