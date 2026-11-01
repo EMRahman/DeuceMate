@@ -162,47 +162,45 @@ struct MatchInfoEditorView: View {
     @ViewBuilder
     private var competitionSection: some View {
         Section {
-            // The four labels fit as segments at standard text sizes ("Not
-            // set" is no segment selected, cleared from the header); the menu
-            // keeps every choice readable at larger sizes.
-            if dynamicTypeSize >= .xLarge {
-                Picker("Competition Type", selection: $competition) {
-                    Text("Not set").tag(CompetitionType?.none)
-                    competitionOptions
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .leading),
+                                     count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: 10) {
+                ForEach(CompetitionType.allCases) { type in
+                    Button {
+                        competition = type
+                        unknownCompetitionRaw = nil
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(type.displayLabel)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Image(systemName: competition == type ? "checkmark.circle.fill" : "circle")
+                        }
+                        .padding(.horizontal, 10)
+                        .frame(minHeight: 44)
+                        .padding(.vertical, 4)
+                        .background(competition == type ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08),
+                                    in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(competition == type ? Color.accentColor : Color.primary)
+                    .accessibilityLabel(type.displayLabel)
+                    .accessibilityAddTraits(competition == type ? .isSelected : [])
+                    .accessibilityIdentifier("competition-\(type.rawValue)")
                 }
-                .pickerStyle(.menu)
-                .labelsHidden() // the section header already says it
-                .accessibilityIdentifier("competition-type-picker")
-            } else {
-                Picker("Competition Type", selection: $competition) {
-                    competitionOptions
+            }
+            if competition != nil || unknownCompetitionRaw != nil {
+                Button("Clear selection") {
+                    competition = nil
+                    unknownCompetitionRaw = nil
                 }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("competition-type-picker")
+                .accessibilityIdentifier("competition-not-set")
             }
         } header: {
-            HStack {
-                Text("Competition Type")
-                Spacer()
-                if competition != nil && dynamicTypeSize < .xLarge {
-                    Button("Not Set") { competition = nil }
-                        .font(.footnote)
-                        .textCase(nil)
-                        .accessibilityLabel("Set competition type to not set")
-                        .accessibilityIdentifier("competition-not-set")
-                }
-            }
+            Text("Competition Type")
         } footer: {
             if unknownCompetitionRaw != nil && competition == nil {
                 Text("This match has a competition type from a newer version of DeuceMate. It's kept unless you choose another.")
             }
-        }
-    }
-
-    @ViewBuilder
-    private var competitionOptions: some View {
-        ForEach(CompetitionType.allCases) { type in
-            Text(type.displayLabel).tag(CompetitionType?.some(type))
         }
     }
 
@@ -244,10 +242,47 @@ struct MatchInfoEditorView: View {
                 .accessibilityLabel("Remove \(player.name)")
             }
         } else {
-            Button {
-                pickerSlot = slot
-            } label: {
-                Label(addTitle, systemImage: "plus.circle.fill")
+            VStack(alignment: .leading, spacing: 10) {
+                if isDoubles {
+                    Text(pickerTitle(for: slot))
+                        .font(.subheadline.weight(.semibold))
+                }
+                let recent = PlayerRoster.entries(from: store.history, forgotten: store.forgottenPlayers)
+                    .filter { !excludedIDs(for: slot).contains($0.id) }
+                    .prefix(3)
+                if !recent.isEmpty {
+                    Text("Recent players")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    LazyVGrid(columns: [dynamicTypeSize.isAccessibilitySize
+                        ? GridItem(.flexible(), alignment: .leading)
+                        : GridItem(.adaptive(minimum: 120), alignment: .leading)], spacing: 8) {
+                        ForEach(Array(recent)) { entry in
+                            Button {
+                                assign(TaggedPlayer(id: entry.id, name: entry.name), to: slot)
+                            } label: {
+                                Text(entry.name)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                    .padding(.horizontal, 10)
+                                    .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.tint)
+                            .accessibilityLabel("Use \(entry.name) as \(pickerTitle(for: slot).lowercased())")
+                            .accessibilityIdentifier("recent-\(slot.id)-\(entry.name)")
+                        }
+                    }
+                }
+                Button {
+                    pickerSlot = slot
+                } label: {
+                    Label("Search or add player…", systemImage: "magnifyingglass")
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("\(pickerTitle(for: slot)), search or add player")
+                .accessibilityIdentifier(addTitle)
             }
         }
     }
@@ -255,7 +290,7 @@ struct MatchInfoEditorView: View {
     private func pickerTitle(for slot: Slot) -> String {
         switch slot {
         case .partner: return "Partner"
-        case .opponent: return isDoubles ? "Opponent" : "Opponent"
+        case .opponent(let index): return isDoubles ? "Opponent \(index + 1)" : "Opponent"
         }
     }
 

@@ -360,14 +360,23 @@ confirmation; otherwise direct the user to review those notes.
 
 ### 7.1 iOS
 
-- **MatchDetailView:** a "Match Info" row under the header —
-  `vs Alex · League` or `With Sam vs Alex & Jo · Tournament`, "Add opponent &
-  type" when empty. Tapping opens a sheet: Competition Type segmented control (Friendly / League / Tournament / Practice), then
-  Opponent(s) (+ Partner for doubles) using the picker. Include a "Not set"
-  competition choice; use a menu/list if the four labels do not fit at large
-  Dynamic Type sizes. Available for completed and in-progress archived records.
-  Show an optional Notes preview with a separate editor and local-storage copy
-  (§4.1); do not put private note text into archive-row subtitles.
+- **MatchDetailView:** a collapsible "Match Info" section under the header,
+  initially collapsed. Its compact summary shows `vs Alex · League` (or
+  `With Sam vs Alex & Jo · Tournament`), "Add match details" when empty,
+  and a note icon when a private note exists. The phone-local
+  `matchInfoExpanded` preference remembers expansion across matches and launches.
+  Expanding reveals the editing row, existing notes preview, and comparison.
+  Editor sheets remain hosted by `MatchDetailView`, outside lazy List rows.
+- **Match Info editor:** Competition Type uses two columns of full-label choices
+  (Friendly / League / Tournament / Practice), or full-width rows at accessibility
+  text sizes. Selection has a checkmark and a separate "Clear selection" action.
+  Unknown future types survive untouched edits; explicitly choosing or clearing
+  replaces them. Each empty Opponent / Partner slot previews up to three recent
+  roster players, excluding forgotten players and identities in other slots.
+  Tapping a name fills that draft slot without navigation; Save commits it.
+  "Search or add player…" opens the full searchable roster. Doubles suggestions
+  identify Partner / Opponent 1 / Opponent 2 explicitly. Completed and in-progress
+  archived records remain editable without changing score or completion.
 - **PastMatchesView:** the same one-line subtitle in each row (cheap, already a
   `MatchRecord`-driven row; respects the TECHNICAL_DEBT #13 note — put the
   subtitle helper in Core or a small view file, not in `PastMatchesView`).
@@ -765,6 +774,37 @@ otherwise the first watch sync deletes it (§3).
   cached payload invalidation and every included/omitted combination.
 - Extend PR 3 privacy wording for exports; re-evaluate the privacy label against
   the final hand-off; update `INTERACTIVE_HTML_EXPORT_PLAN.md`.
+
+### Match Info UX review — 2026-11-01
+
+Implemented in the UX follow-up: compact, remembered Match Info disclosure;
+readable Competition Type choices; and inline recent-player suggestions (§7.1).
+
+The owner deferred these five opportunities for a later pass. Keep them here
+as an actionable checklist; none is part of the current implementation:
+
+- [ ] **Protect unsaved edits.** In both Match Info and Private Note editors,
+  guard Cancel and swipe dismissal when the draft changed. Offer Keep Editing
+  and Discard Changes; unchanged drafts should dismiss without friction.
+- [ ] **Reveal private-note text intentionally.** The collapsed summary only
+  indicates that a note exists, but expanding Match Info still reveals up to
+  three lines. Consider a "Private note saved" row that reveals text only when
+  deliberately opened, useful when showing another player the graph.
+- [ ] **Explain comparison before navigation.** Where a baseline exists, show
+  "Compare with last match vs Alex" and its date. For watch-only records, offer
+  syncing to iPhone before comparison instead of an unavailable destination.
+  Preserve the existing exact-matchup and same-type fallback rules.
+- [ ] **Shorten editor guidance.** Keep "Stored on this iPhone. Not backed up
+  automatically." visible, move the longer explanation into About Private Notes,
+  and shorten player-name guidance without hiding storage/sharing implications.
+- [ ] **Find matches by their tags.** Add archive search by player and filtering
+  by competition. This is distinct from the planned Trends filters below.
+
+Acceptance for the implemented changes: compact summary before graph, both
+expansion states surviving relaunch, full Tournament label on narrow phones and
+at accessibility sizes, direct recent-player reuse without duplicate identities,
+and exclusion of players already placed in another doubles slot. Existing
+search, clear, notes, comparisons and export flows must remain usable.
 
 ### Later (v2)
 Watch quick-tag (§9); Trends filters by competition and by opponent (new
