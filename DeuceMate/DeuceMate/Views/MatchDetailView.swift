@@ -919,7 +919,9 @@ struct MatchDetailView: View {
             filenameMe: exportFilename(for: record, mode: .ai),
             filenameOpponent: exportFilename(for: record, mode: .aiOpp),
             hasTaggedPeople: hasTaggedPeople,
-            noteText: note
+            noteText: note,
+            sourceIdentity: AICoachSourceIdentity(
+                record: record, maxHR: maxHR, playerNTRP: ntrp, note: note, headToHead: h2h)
         )
     }
 

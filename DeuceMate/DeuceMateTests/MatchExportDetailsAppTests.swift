@@ -260,4 +260,52 @@ struct MatchExportDetailsAppTests {
         // The unreadable file was not overwritten.
         #expect(String(decoding: try Data(contentsOf: dir.appendingPathComponent(MatchNotesStore.filename)), as: UTF8.self) == "not json")
     }
+
+    // MARK: - Review fixes (#148)
+
+    @Test func clearedNoteTravelsInTheOptedInArchiveAndClearsTheOlderNoteOnImport() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let r = record()
+        let source = fixture.archiveStore("src")
+        source.saveHistory([r])
+        let old = MatchNote(matchID: r.id, text: "old note", updatedAt: Date(timeIntervalSince1970: 1_700_000_100))
+        let cleared = MatchNotesPolicy.edit(matchID: r.id, text: "", previous: old,
+                                            now: Date(timeIntervalSince1970: 1_700_000_500))
+        let orphan = MatchNote(matchID: UUID(), text: "orphan", updatedAt: Date())
+
+        // The export selection keeps the clear (and drops orphans).
+        let entries = ManualMatchArchiveBackup.exportableNotes([cleared, orphan], for: [r])
+        #expect(entries == [cleared])
+
+        let exported = try source.exportManualArchiveData(notes: entries)
+        let archive = try ManualMatchArchiveBackup.decode(exported)
+        #expect(archive.notes?.count == 1)
+        #expect(archive.notes?.first?.isCleared == true)
+        #expect(try ManualMatchArchiveBackup.preview(exported).noteCount == 0)
+
+        // The other phone still holds the old note; importing clears it.
+        let other = fixture.notesStore("other")
+        try other.importNotes([old])
+        #expect(other.note(for: r.id)?.text == "old note")
+        try other.importNotes(ManualMatchArchiveBackup.importableNotes(from: archive))
+        #expect(other.note(for: r.id) == nil, "the clear emptied the older note")
+        #expect(other.allNotes().first { $0.matchID == r.id }?.isCleared == true)
+    }
+
+    @Test func aiCoachSourceIdentityChangesWhenTheRecordUpdatesAndPromptFollows() {
+        let r = record()
+        var updated = r
+        updated.setScores = [SetScore(gamesMe: 6, gamesOpponent: 4), SetScore(gamesMe: 2, gamesOpponent: 1)]
+        func identity(_ rec: MatchRecord, note: String? = nil) -> AICoachSourceIdentity {
+            AICoachSourceIdentity(record: rec, maxHR: 190, playerNTRP: "3.0", note: note, headToHead: nil)
+        }
+        #expect(identity(r) == identity(r))
+        #expect(identity(r) != identity(updated))
+        #expect(identity(r) != identity(r, note: "new"))
+        func prompt(_ rec: MatchRecord) -> String {
+            MatchExporter.aiPromptExport(for: rec, details: MatchExportDetails(record: rec, includeNames: false, includeNotes: false))
+        }
+        #expect(prompt(r) != prompt(updated))
+    }
 }

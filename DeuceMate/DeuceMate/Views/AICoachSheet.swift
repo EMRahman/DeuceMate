@@ -4,6 +4,19 @@
 import SwiftUI
 import DeuceMateCore
 
+/// Everything the prompt closure reads from its parent. The sheet caches the
+/// built prompt in state, so it must regenerate when ANY of these change - a
+/// Watch checkpoint, match completion or health backfill can arrive while the
+/// sheet is open and would otherwise leave Copy/Share/Launch sending a stale
+/// score. Equality is by value, so an unchanged re-render never rebuilds.
+struct AICoachSourceIdentity: Equatable {
+    let record: MatchRecord
+    let maxHR: Int
+    let playerNTRP: String
+    let note: String?
+    let headToHead: HeadToHeadRecord?
+}
+
 struct AICoachSheet: View {
     enum Perspective: String, CaseIterable, Identifiable {
         case me
@@ -23,6 +36,8 @@ struct AICoachSheet: View {
     let hasTaggedPeople: Bool
     /// The stored private note, if any (the notes toggle is shown only then).
     let noteText: String?
+    /// Refresh identity: the prompt is rebuilt when this changes (see type doc).
+    let sourceIdentity: AICoachSourceIdentity
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appTheme) private var theme
@@ -171,6 +186,8 @@ struct AICoachSheet: View {
         .onChange(of: perspective) { _, _ in refreshPrompt() }
         .onChange(of: includeNames) { _, _ in refreshPrompt() }
         .onChange(of: includeNotes) { _, _ in refreshPrompt() }
+        // Toggles and perspective are @State, so they survive this refresh.
+        .onChange(of: sourceIdentity) { _, _ in refreshPrompt() }
         .sheet(isPresented: $showNotesReview) {
             if let noteText {
                 NotesExportReviewSheet(

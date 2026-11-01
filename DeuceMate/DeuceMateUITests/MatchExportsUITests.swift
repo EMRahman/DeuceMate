@@ -255,6 +255,43 @@ final class MatchExportsUITests: XCTestCase {
         done.tap()
     }
 
+    @MainActor
+    func testArchiveExportStillOffersNotesOptInWhenEveryNoteWasCleared() throws {
+        launch()
+        _ = try seedTaggedPair(opponent: "Alex \(token)", note: note)
+        // Clear the note: the editor saves an explicit empty revision.
+        let row = app.buttons["match-notes-row"]
+        for _ in 0..<6 where !row.isHittable { app.swipeUp() }
+        row.tap()
+        let editor = app.textViews["match-notes-editor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        let delete = app.buttons["delete-match-note"]
+        for _ in 0..<4 where !delete.isHittable { app.swipeUp() }
+        delete.tap()
+        let confirm = app.sheets.buttons["Delete Note"].firstMatch.exists
+            ? app.sheets.buttons["Delete Note"].firstMatch
+            : app.buttons.matching(identifier: "Delete Note").element(boundBy: 1)
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        XCTAssertTrue(editor.waitForNonExistence(timeout: 5), "Editor closes after deleting the note")
+        closeDetail()
+        app.navigationBars["Matches"].buttons["Settings"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        let export = app.buttons["Export Match Archive"]
+        for _ in 0..<8 where !(export.exists && export.isHittable) { app.swipeUp() }
+        export.tap()
+        XCTAssertTrue(app.navigationBars["Export Match Archive"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.switches["archive-include-notes"].waitForExistence(timeout: 5),
+                      "A cleared note still needs the opt-in so the clear can transfer")
+        flipSwitch("archive-include-notes")
+        XCTAssertTrue(app.descendants(matching: .any)["archive-notes-cleared"].waitForExistence(timeout: 3))
+        XCTAssertFalse(anyElement(containing: note).exists, "Cleared text is never previewed")
+        app.navigationBars["Export Match Archive"].buttons["Cancel"].tap()
+        let done = app.navigationBars["Settings"].buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5))
+        done.tap()
+    }
+
     // MARK: - Helpers: scenario
 
     /// Two completed singles matches against the same opponent (so a
