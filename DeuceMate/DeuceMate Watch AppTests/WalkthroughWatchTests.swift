@@ -154,6 +154,10 @@ private final class PracticeStoreSpy: WatchStatsStoring {
         calls += 1
         return nil
     }
+    func updateTags(id: UUID, tags: MatchTags) -> MatchRecord? {
+        calls += 1
+        return nil
+    }
     func appendMatch(_ record: MatchRecord) { calls += 1 }
     func removeMatch(id: UUID) { calls += 1 }
 }

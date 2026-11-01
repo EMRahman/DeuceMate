@@ -95,6 +95,7 @@ struct MatchHistoryView: View {
                            matchType: record.matchType,
                            matchFormat: record.matchFormat,
                            matchIsComplete: !record.isInProgress,
+                           tagsLine: record.tags?.displayLine,
                            resumableRecord: record.isInProgress ? record : nil,
                            setElapsedSeconds: record.setElapsedSeconds,
                            currentSetSessionStart: nil,
@@ -130,6 +131,16 @@ struct MatchHistoryView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    // Read-only, phone-authored (v1). One truncating line so a
+                    // long name or a large Dynamic Type size can't grow the row.
+                    if let tagsLine = record.tags?.displayLine {
+                        Text(tagsLine)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .accessibilityLabel("Match details: \(tagsLine)")
+                    }
                 }
                 Spacer()
                 if isInProgress {

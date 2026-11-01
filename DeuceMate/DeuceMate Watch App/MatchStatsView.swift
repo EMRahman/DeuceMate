@@ -12,6 +12,9 @@ struct MatchStatsView: View {
     let matchType: MatchType
     let matchFormat: MatchFormat
     let matchIsComplete: Bool
+    /// Read-only "vs Alex · League" caption; only the history drill-down passes it
+    /// (nothing is shown during live play).
+    let tagsLine: String?
     /// If non-nil, the in-progress match record this view is showing.
     let resumableRecord: MatchRecord?
     let setElapsedSeconds: [Int: TimeInterval]
@@ -32,6 +35,7 @@ struct MatchStatsView: View {
          matchType: MatchType = .singles,
          matchFormat: MatchFormat = .standard,
          matchIsComplete: Bool = false,
+         tagsLine: String? = nil,
          resumableRecord: MatchRecord? = nil,
          setElapsedSeconds: [Int: TimeInterval] = [:],
          currentSetSessionStart: Date? = nil,
@@ -43,6 +47,7 @@ struct MatchStatsView: View {
         self.matchType = matchType
         self.matchFormat = matchFormat
         self.matchIsComplete = matchIsComplete
+        self.tagsLine = tagsLine
         self.resumableRecord = resumableRecord
         self.setElapsedSeconds = setElapsedSeconds
         self.currentSetSessionStart = currentSetSessionStart
@@ -104,7 +109,17 @@ struct MatchStatsView: View {
                      + (matchType == .doubles ? " · Doubles" : " · Singles"))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
-                    .padding(.bottom, 2)
+                    .padding(.bottom, tagsLine == nil ? 2 : 0)
+
+                if let tagsLine {
+                    Text(tagsLine)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .padding(.bottom, 2)
+                        .accessibilityLabel("Match details: \(tagsLine)")
+                }
 
                 if let score = scoreDisplayString {
                     Text(styledScore(score, superSize: 8))
