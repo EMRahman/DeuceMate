@@ -152,6 +152,33 @@ final class MatchComparisonTests: XCTestCase {
         XCTAssertEqual(comparison.rows.first { $0.metric == .pointsWon }?.direction, .flat)
     }
 
+    func test_comparison_partialTracking_doesNotCountUntrackedServesAsFirstServes() {
+        // One tracked second-serve point followed by nine untracked service points.
+        let partial = F.points(1, won: 0, server: .me, outcome: .winner, secondServe: true)
+            + F.points(9, won: 5, server: .me, outcome: .uncategorized)
+        let comparison = MatchComparison(current: F.record(stats: partial), baseline: F.record(stats: partial))
+        let row = comparison.rows.first { $0.metric == .firstServeIn }
+        XCTAssertEqual(row?.current, TrendMetric.Ratio(numerator: 0, denominator: 1),
+                       "only the one categorized service point counts, never 9/10")
+        XCTAssertEqual(comparison.rows.first { $0.metric == .pointsWon }?.current,
+                       TrendMetric.Ratio(numerator: 5, denominator: 10), "points won still uses every point")
+        // Returns: untracked opponent service points are not first-serve returns.
+        let returns = F.points(1, won: 1, server: .opponent, outcome: .winner, secondServe: true)
+            + F.points(9, won: 0, server: .opponent, outcome: .uncategorized)
+        let r = MatchComparison(current: F.record(stats: returns), baseline: F.record(stats: returns))
+        XCTAssertNil(r.rows.first { $0.metric == .returnWinFirst }?.current)
+        XCTAssertEqual(r.rows.first { $0.metric == .returnWinSecond }?.current,
+                       TrendMetric.Ratio(numerator: 1, denominator: 1))
+    }
+
+    func test_comparison_fullyTracked_serveSplitUsesEveryPoint() {
+        let tracked = F.points(8, won: 6, server: .me, outcome: .winner)
+            + F.points(2, won: 1, server: .me, outcome: .winner, secondServe: true)
+        let comparison = MatchComparison(current: F.record(stats: tracked), baseline: F.record(stats: tracked))
+        XCTAssertEqual(comparison.rows.first { $0.metric == .firstServeIn }?.current,
+                       TrendMetric.Ratio(numerator: 8, denominator: 10))
+    }
+
     func test_comparison_partialCurrentMatch_hasNoInferredResult() {
         let live = F.record(start: 1_000, end: nil, iWon: nil, stats: F.points(4, won: 3),
                             setScores: [SetScore(gamesMe: 6, gamesOpponent: 3), SetScore()])
