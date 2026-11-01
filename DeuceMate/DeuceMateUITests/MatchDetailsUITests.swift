@@ -64,7 +64,7 @@ final class MatchDetailsUITests: XCTestCase {
         openMatch(second)
         app.buttons["match-info-row"].tap()
         XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
-        app.segmentedControls.buttons["Friendly"].tap()
+        app.buttons["competition-friendly"].tap()
         app.buttons["Add opponent"].tap()
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5))
@@ -138,7 +138,7 @@ final class MatchDetailsUITests: XCTestCase {
 
         app.buttons["match-info-row"].tap()
         XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
-        app.segmentedControls.buttons["Practice"].tap()
+        app.buttons["competition-practice"].tap()
         pick(.new(sam), slotButton: "Add partner")
         pick(.new(alex), slotButton: "Add opponent 1")
         pick(.new(jo), slotButton: "Add opponent 2")
@@ -303,7 +303,7 @@ final class MatchDetailsUITests: XCTestCase {
     }
 
     /// At an accessibility text size the editor still works: the competition
-    /// type becomes a menu instead of five cramped segments.
+    /// choices become full-width rows with readable labels.
     @MainActor
     func testLargeDynamicTypeEditorIsUsable() throws {
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL"]
@@ -315,11 +315,14 @@ final class MatchDetailsUITests: XCTestCase {
         for _ in 0..<6 where !row.isHittable { app.swipeUp() }
         row.tap()
         XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.segmentedControls.firstMatch.exists, "Segments give way to a menu at large sizes")
-        let menu = app.buttons["competition-type-picker"]
-        XCTAssertTrue(menu.waitForExistence(timeout: 5))
-        menu.tap()
-        app.buttons["League"].firstMatch.tap()
+        XCTAssertFalse(app.segmentedControls.firstMatch.exists, "Full-width choices at accessibility sizes")
+        let tournament = app.buttons["competition-tournament"]
+        XCTAssertTrue(tournament.waitForExistence(timeout: 5))
+        XCTAssertEqual(tournament.label, "Tournament")
+        let league = app.buttons["competition-league"]
+        XCTAssertEqual(tournament.frame.minX, league.frame.minX, accuracy: 1)
+        XCTAssertGreaterThan(tournament.frame.minY, league.frame.minY)
+        league.tap()
         pick(.new(rio), slotButton: "Add opponent")
         capture("18-editor-large-type")
         app.buttons["save-match-info"].tap()
@@ -327,6 +330,61 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertTrue(waitForLabel(row, contains: "vs \(rio) · League"))
         capture("19-detail-large-type")
         closeDetail()
+    }
+
+    /// Compact details remember both expansion states across launches. Recent
+    /// selection stays in the editor, reuses identity, and excludes doubles slots.
+    @MainActor
+    func testCompactDetailsAndRecentPlayers() throws {
+        launch()
+        let alex = "Alex \(token)"
+        let first = createMatch(complete: true)
+        openMatch(first)
+        editMatchInfo(competition: "Tournament", opponents: [.new(alex)])
+        let disclosure = app.buttons["match-info-disclosure"]
+        XCTAssertTrue(disclosure.label.contains("Tournament"))
+        disclosure.tap()
+        XCTAssertEqual(disclosure.value as? String, "Collapsed")
+        XCTAssertFalse(app.buttons["match-info-row"].exists)
+        XCTAssertFalse(app.buttons["match-notes-row"].exists)
+        capture("20-compact-match-info")
+        closeDetail()
+        app.terminate()
+        launch()
+        revealRow(first).tap()
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 5))
+        XCTAssertEqual(disclosure.value as? String, "Collapsed")
+        disclosure.tap()
+        closeDetail()
+        app.terminate()
+        launch()
+        revealRow(first).tap()
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 5))
+        XCTAssertEqual(disclosure.value as? String, "Expanded")
+        closeDetail()
+
+        let second = createMatch(complete: true, doubles: true)
+        openMatch(second)
+        app.buttons["match-info-row"].tap()
+        let recentPartner = app.buttons["recent-partner-\(alex)"]
+        XCTAssertTrue(recentPartner.waitForExistence(timeout: 5))
+        recentPartner.tap()
+        XCTAssertTrue(app.navigationBars["Match Info"].exists, "Quick selection stays on the first screen")
+        XCTAssertFalse(app.buttons["recent-opponent-0-\(alex)"].exists)
+        XCTAssertFalse(app.buttons["recent-opponent-1-\(alex)"].exists)
+        app.buttons["Remove \(alex)"].tap()
+        let recentOpponent = app.buttons["recent-opponent-0-\(alex)"]
+        for _ in 0..<4 where !recentOpponent.isHittable { app.swipeUp() }
+        recentOpponent.tap()
+        XCTAssertFalse(app.buttons["recent-opponent-1-\(alex)"].exists)
+        XCTAssertFalse(app.buttons["recent-partner-\(alex)"].exists)
+        capture("21-recent-player-selected")
+        app.buttons["save-match-info"].tap()
+        XCTAssertTrue(matchInfoRow(contains: "vs \(alex)"))
+        closeDetail()
+        openPlayers()
+        XCTAssertTrue(app.buttons["player-row-\(alex)"].label.contains("2 matches"), "Recent selection reuses identity")
+        closeSettings()
     }
 
     // MARK: - Helpers: archive
@@ -398,7 +456,10 @@ final class MatchDetailsUITests: XCTestCase {
         let row = revealRow(identifier)
         XCTAssertTrue(row.isHittable, "Row \(identifier)")
         row.tap()
-        XCTAssertTrue(app.buttons["match-info-row"].waitForExistence(timeout: 8))
+        let disclosure = app.buttons["match-info-disclosure"]
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 8))
+        if disclosure.value as? String == "Collapsed" { disclosure.tap() }
+        XCTAssertTrue(app.buttons["match-info-row"].waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -464,7 +525,7 @@ final class MatchDetailsUITests: XCTestCase {
         for _ in 0..<6 where !row.isHittable { app.swipeUp() }
         row.tap()
         XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
-        if let competition { app.segmentedControls.buttons[competition].tap() }
+        if let competition { app.buttons["competition-\(competition.lowercased())"].tap() }
         for (index, choice) in opponents.enumerated() {
             pick(choice, slotButton: opponents.count > 1 ? "Add opponent \(index + 1)" : "Add opponent")
         }

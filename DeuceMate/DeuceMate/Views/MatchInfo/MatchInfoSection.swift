@@ -20,17 +20,46 @@ struct MatchInfoSection: View {
 
     @EnvironmentObject private var store: PhoneStatsStore
     @ObservedObject private var notesStore: MatchNotesStore = .shared
+    /// Phone-local presentation preference, shared across matches.
+    @AppStorage("matchInfoExpanded") private var isExpanded = false
 
     var body: some View {
         Section {
-            matchInfoRow
-            notesRow
-            NavigationLink {
-                MatchComparisonView(currentID: record.id)
+            Button {
+                isExpanded.toggle()
             } label: {
-                Label("Compare with Previous Match", systemImage: "arrow.left.arrow.right")
+                HStack(spacing: 12) {
+                    Text(record.tags?.displayLine ?? "Add match details")
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if notesStore.note(for: record.id) != nil {
+                        Image(systemName: "note.text")
+                            .foregroundStyle(.secondary)
+                    }
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
             }
-            .accessibilityIdentifier("compare-previous-match")
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel("Match Info, \(record.tags?.displayLine ?? "Add match details")\(notesStore.note(for: record.id) != nil ? ", private note saved" : "")")
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(isExpanded ? "Hide match details" : "Show editing, notes and comparison")
+            .accessibilityIdentifier("match-info-disclosure")
+
+            if isExpanded {
+                matchInfoRow
+                notesRow
+                NavigationLink {
+                    MatchComparisonView(currentID: record.id)
+                } label: {
+                    Label("Compare with Previous Match", systemImage: "arrow.left.arrow.right")
+                }
+                .accessibilityIdentifier("compare-previous-match")
+            }
         } header: {
             Text("Match Info")
         } footer: {

@@ -451,7 +451,10 @@ final class MatchExportsUITests: XCTestCase {
         let row = revealRow(identifier)
         XCTAssertTrue(row.isHittable, "Row \(identifier)")
         row.tap()
-        XCTAssertTrue(app.buttons["match-info-row"].waitForExistence(timeout: 8))
+        let disclosure = app.buttons["match-info-disclosure"]
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 8))
+        if disclosure.value as? String == "Collapsed" { disclosure.tap() }
+        XCTAssertTrue(app.buttons["match-info-row"].waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -516,7 +519,7 @@ final class MatchExportsUITests: XCTestCase {
         for _ in 0..<6 where !row.isHittable { app.swipeUp() }
         row.tap()
         XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
-        app.segmentedControls.buttons[competition].tap()
+        app.buttons["competition-\(competition.lowercased())"].tap()
     }
 
     @MainActor
