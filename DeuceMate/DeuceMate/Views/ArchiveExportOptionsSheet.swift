@@ -94,6 +94,6 @@ struct ArchiveExportOptionsSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
     }
 }

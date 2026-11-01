@@ -53,7 +53,7 @@ struct NotesExportReviewSheet: View {
                     Text("DeuceMate has no server and never receives it. The note stays on this iPhone; only the copy you share leaves.")
                 }
             }
-            .navigationTitle("Include Private Note?")
+            .navigationTitle("Private Note")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -66,6 +66,6 @@ struct NotesExportReviewSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
     }
 }

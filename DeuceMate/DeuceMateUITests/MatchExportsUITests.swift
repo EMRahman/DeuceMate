@@ -159,6 +159,14 @@ final class MatchExportsUITests: XCTestCase {
         XCTAssertTrue(withNote.contains("> \(note)"), withNote)
         XCTAssertTrue(withNote.contains(alex))
 
+        // Reopening the detail resets both choices to their defaults (names ON,
+        // note OFF): opt-ins are never remembered between visits.
+        openExportMenu()
+        XCTAssertEqual(menuToggleValue("Include private note"), "0", "The note opt-in does not persist")
+        app.buttons["Include private note"].tap()
+        XCTAssertTrue(app.buttons["confirm-include-note"].waitForExistence(timeout: 5))
+        app.buttons["confirm-include-note"].tap()
+
         // Names OFF + note ON: the alert adds the "may still contain names" warning.
         openExportMenu()
         app.buttons["Include player names"].tap()
@@ -302,7 +310,7 @@ final class MatchExportsUITests: XCTestCase {
     private func menuToggleValue(_ title: String) -> String? {
         let item = app.buttons[title]
         XCTAssertTrue(item.waitForExistence(timeout: 5), title)
-        return (item.value as? String) ?? (item.isSelected ? "1" : "0")
+        return item.isSelected ? "1" : "0"
     }
 
     @MainActor
@@ -322,8 +330,9 @@ final class MatchExportsUITests: XCTestCase {
     /// to the tagged match.
     @MainActor
     private func copyAndRead(tagged: String, scratch: String) -> String {
-        let copy = app.buttons["Copy"].firstMatch
-        for _ in 0..<4 where !copy.exists { app.otherElements["ActivityListView"].swipeLeft() }
+        capture("share-sheet-\(Int(Date().timeIntervalSince1970) % 100000)")
+        let copy = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Copy'")).firstMatch
+        for _ in 0..<3 where !copy.exists { app.swipeUp() }
         XCTAssertTrue(copy.waitForExistence(timeout: 5), "Copy action in the share sheet")
         copy.tap()
         closeDetail()
