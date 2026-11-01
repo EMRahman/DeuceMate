@@ -161,6 +161,15 @@ public enum ManualMatchArchiveBackup {
         )
     }
 
+    /// The note entries an opted-in export writes for `records`: one revision
+    /// per exported match, INCLUDING explicit clears. A clear must travel so
+    /// importing on a phone that still holds the older note empties it; dropping
+    /// it would let the stale note survive the transfer. Orphans are excluded.
+    public static func exportableNotes(_ notes: [MatchNote], for records: [MatchRecord]) -> [MatchNote] {
+        let ids = Set(records.map(\.id))
+        return MatchNotesPolicy.merge(notes.filter { ids.contains($0.matchID) }, into: [])
+    }
+
     /// The notes an import may restore into the backup-excluded sidecar: only
     /// entries addressed to a match the file itself carries (an orphan entry
     /// cannot create a note for a match that does not exist), one revision per

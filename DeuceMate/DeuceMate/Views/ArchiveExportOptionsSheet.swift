@@ -17,6 +17,10 @@ struct ArchiveExportOptionsSheet: View {
     let baseMessage: String
     /// Every non-empty note that belongs to a match in the archive.
     let notes: [NoteLine]
+    /// Explicit clears also written when notes are included, so the other
+    /// iPhone empties a note you deleted here. Carry no text.
+    var clearedCount: Int = 0
+    private var hasEntries: Bool { !notes.isEmpty || clearedCount > 0 }
     let onExport: (_ includeNotes: Bool) -> Void
     let onCancel: () -> Void
 
@@ -40,7 +44,7 @@ struct ArchiveExportOptionsSheet: View {
                 }
 
                 Section {
-                    if notes.isEmpty {
+                    if !hasEntries {
                         Text("You have no private notes on archived matches.")
                             .foregroundStyle(.secondary)
                     } else {
@@ -50,14 +54,14 @@ struct ArchiveExportOptionsSheet: View {
                 } header: {
                     Text("Private Notes")
                 } footer: {
-                    if !notes.isEmpty {
+                    if hasEntries {
                         Text(includeNotes
                              ? "Notes are written to the file in a separate section. Importing the file on another iPhone restores them to that iPhone's private notes."
                              : "Off by default. Private notes stay on this iPhone unless you include them.")
                     }
                 }
 
-                if includeNotes && !notes.isEmpty {
+                if includeNotes && hasEntries {
                     Section {
                         Label {
                             Text(MatchExportDisclosure.notesPersonalDataLine)
@@ -66,19 +70,28 @@ struct ArchiveExportOptionsSheet: View {
                         }
                         .accessibilityIdentifier("archive-notes-disclosure")
                     }
-                    Section {
-                        ForEach(notes) { line in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(Self.dateFormatter.string(from: line.matchDate))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text(MatchExportDetails.quoted(line.note.text))
-                                    .font(.footnote.monospaced())
-                            }
-                            .padding(.vertical, 2)
+                    if clearedCount > 0 {
+                        Section {
+                            Text("\(clearedCount == 1 ? "1 deleted note is" : "\(clearedCount) deleted notes are") also included as empty entries, so importing clears the older copy on the other iPhone.")
+                                .font(.footnote)
+                                .accessibilityIdentifier("archive-notes-cleared")
                         }
-                    } header: {
-                        Text("These \(notes.count == 1 ? "note" : "\(notes.count) notes") will be included")
+                    }
+                    if !notes.isEmpty {
+                        Section {
+                            ForEach(notes) { line in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(Self.dateFormatter.string(from: line.matchDate))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Text(MatchExportDetails.quoted(line.note.text))
+                                        .font(.footnote.monospaced())
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        } header: {
+                            Text("These \(notes.count == 1 ? "note" : "\(notes.count) notes") will be included")
+                        }
                     }
                 }
             }
@@ -89,7 +102,7 @@ struct ArchiveExportOptionsSheet: View {
                     Button("Cancel", action: onCancel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Export") { onExport(includeNotes && !notes.isEmpty) }
+                    Button("Export") { onExport(includeNotes && hasEntries) }
                         .accessibilityIdentifier("archive-export-confirm")
                 }
             }

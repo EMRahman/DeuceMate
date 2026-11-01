@@ -178,6 +178,7 @@ struct SettingsView: View {
             ArchiveExportOptionsSheet(
                 baseMessage: archiveExportDisclosureMessage,
                 notes: archiveExportNoteLines,
+                clearedCount: archiveExportNoteEntries.filter(\.isCleared).count,
                 onExport: { includeNotes in
                     showArchiveExportDisclosure = false
                     prepareManualArchiveExport(includeNotes: includeNotes)
@@ -718,11 +719,16 @@ struct SettingsView: View {
         return HealthExportConsent.disclosure(fields: fields, destination: .archiveFile).message
     }
 
-    /// Every non-empty private note on a match in the archive, newest match
-    /// first - exactly what "Include private notes" would write.
+    /// Every note entry (including explicit clears) on a match in the archive -
+    /// exactly what "Include private notes" would write.
+    private var archiveExportNoteEntries: [MatchNote] {
+        ManualMatchArchiveBackup.exportableNotes(MatchNotesStore.shared.allNotes(), for: store.history)
+    }
+
+    /// The non-empty entries, newest match first, for the exact-text preview.
     private var archiveExportNoteLines: [ArchiveExportOptionsSheet.NoteLine] {
         let notes = Dictionary(
-            MatchNotesStore.shared.allNotes().filter { !$0.isCleared }.map { ($0.matchID, $0) },
+            archiveExportNoteEntries.filter { !$0.isCleared }.map { ($0.matchID, $0) },
             uniquingKeysWith: { first, _ in first }
         )
         return store.history.compactMap { record in
@@ -735,7 +741,7 @@ struct SettingsView: View {
         let store = store
         // Resolved here (main actor) so the exact set the user reviewed is the
         // set written, even if a note changes while the file is prepared.
-        let notes = includeNotes ? archiveExportNoteLines.map(\.note) : nil
+        let notes = includeNotes ? archiveExportNoteEntries : nil
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let data = try store.exportManualArchiveData(notes: notes)
