@@ -310,4 +310,30 @@ struct MatchTagsSyncTests {
 
         #expect(h.service.watchMirror.allSatisfy { !($0.tags?.playerIDs.contains(alex.id) ?? false) })
     }
+
+    @Test func importedForgottenPlayerIsScrubbedFromTheCachedWatchMirror() async throws {
+        let h = Harness()
+        defer { h.remove() }
+        let alex = TaggedPlayer(name: "Alex")
+        var watchOnly = match()
+        watchOnly.tags = MatchTags(opponents: [alex], updatedAt: Date())
+        h.service.handle([.watchManifest([watchOnly.id])])
+        await drainMain()
+        h.service.handle([.history([watchOnly])])
+        await drainMain()
+        #expect(h.service.watchMirror.contains { $0.tags?.playerIDs.contains(alex.id) ?? false })
+
+        // Replace the archive with a file that forgot Alex and excludes the
+        // cached watch-only match. No watch payload follows (unreachable).
+        let archive = try ManualMatchArchiveBackup.encode(
+            records: [match()],
+            forgottenPlayers: ForgottenPlayerLedger(playerIDs: [alex.id])
+        )
+        try h.store.importManualArchive(data: archive, mode: .replace)
+        await drainMain() // the store publishes the new ledger
+        await drainMain() // the mirror observation re-scrubs
+
+        #expect(h.store.forgottenPlayers.contains(alex.id))
+        #expect(h.service.watchMirror.allSatisfy { !($0.tags?.playerIDs.contains(alex.id) ?? false) })
+    }
 }

@@ -90,6 +90,9 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     // Strong reference — incoming WCSession data must never be silently dropped
     // due to a deallocated store.
     private var store: PhoneStatsStore?
+    /// Re-scrubs the watch mirror whenever the store's forgotten-player ledger
+    /// changes — a Forget, a manual archive import or an initial restore.
+    private var ledgerObservation: AnyCancellable?
     /// Injected so live score announcements are spoken when the watch sends a point update.
     var announcementService: LiveAnnouncementService?
 
@@ -125,6 +128,15 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         self.store = store
         // The cached mirror may predate a forget made in an earlier session.
         rescrubMirror()
+        // Any later ledger change — not only an explicit Forget — must reach
+        // a cached watch-only row, even while the watch is unreachable.
+        // `@Published` emits in `willSet`, so hop to the main queue to read the
+        // updated value; `dropFirst` skips the value scrubbed just above.
+        ledgerObservation = store.$forgottenPlayers
+            .dropFirst()
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.rescrubMirror() }
         beginSessionActivation()
     }
 
@@ -262,7 +274,8 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
 
     /// Re-applies the forgotten-player ledger to the watch mirror, so a cached
     /// watch-only row can never show a player the user just forgot (§3, §6.2).
-    /// Call on the main thread after a forget.
+    /// Runs at `start` and on every ledger change (`ledgerObservation`). Main
+    /// thread only.
     func rescrubMirror() {
         updateMirror { $0 }
     }

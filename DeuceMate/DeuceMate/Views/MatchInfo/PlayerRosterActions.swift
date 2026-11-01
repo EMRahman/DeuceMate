@@ -44,9 +44,8 @@ struct PlayerRosterActions {
     func forget(_ playerID: UUID, deletingNotesFor noteIDs: Set<UUID> = []) throws {
         let affected = try store.forgetPlayer(playerID)
         syncService.pushTagUpdates(forMatchIDs: affected)
-        // Publication of the new ledger is asynchronous; re-scrub the mirror
-        // once it has landed on the main queue.
-        DispatchQueue.main.async { syncService.rescrubMirror() }
+        // The watch mirror re-scrubs itself when the new ledger is published
+        // (`PhoneMatchSyncService.ledgerObservation`).
         guard !noteIDs.isEmpty else { return }
         do {
             try notesStore.removeNotes(for: noteIDs)
