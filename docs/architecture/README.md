@@ -60,9 +60,11 @@ flowchart TB
         PUI["Archive, stats, graphs,<br/>live scoreboard, settings"]
         TTS["Score announcer<br/>text-to-speech, foreground only"]
         EXPORT["Match exporter<br/>text, AI coach prompt,<br/>interactive HTML page"]
+        NOTES["Private match notes<br/>iPhone only, backup-excluded"]
         PSYNC --> PSTORE
         PSYNC --> TTS
         PSTORE --> PUI
+        NOTES --> PUI
         PUI --> EXPORT
     end
 
@@ -119,7 +121,10 @@ should be challenged in review:
    one deliberate exception is manual match entry: the phone builds the record,
    saves it straight into its own archive, and sends a copy to the watch so the
    match can be resumed and scored there. Outside that flow, the phone never
-   authors or edits a match result.
+   authors or edits a match result. Match *details* (opponent / partner names,
+   competition type) are phone-edited metadata, not a result: they merge by their
+   own clock, travel to the watch on a dedicated tags-only key, and never change
+   a score or complete a match. Private notes never leave the iPhone.
 2. **The phone is the permanent archive.** The watch keeps only its newest 25
    matches; the phone keeps everything it has ever received in an on-device
    store that the UI always reads from, with a background backup in the user's

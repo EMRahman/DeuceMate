@@ -37,7 +37,7 @@
   <nav class="crumbs"><a href="./">← Support &amp; Home</a></nav>
 
   <h1>Privacy Policy</h1>
-  <p class="meta"><strong>Effective Date:</strong> June 11, 2026 &nbsp;·&nbsp; <strong>Last Updated:</strong> July 16, 2026</p>
+  <p class="meta"><strong>Effective Date:</strong> June 11, 2026 &nbsp;·&nbsp; <strong>Last Updated:</strong> October 31, 2026</p>
 
   <h2>Overview</h2>
   <p>DeuceMate is committed to protecting your privacy. This privacy policy explains how DeuceMate ("the App") handles information.</p>
@@ -46,7 +46,7 @@
   <p><strong>The developer does not collect or receive personal information or user data from DeuceMate.</strong> DeuceMate has no developer-controlled backend, analytics, advertising, or tracking. The App does store data for you on your devices and, as described below, uses your personal iCloud Drive account and supports sharing that you explicitly initiate.</p>
   <p>Specifically, the App does NOT collect:</p>
   <ul>
-    <li>Personal identification information (name, email, phone number, etc.)</li>
+    <li>Personal identification information (name, email, phone number, etc.). Names you choose to type for opponents or partners stay in your own match archive and are never sent to the developer — see "Match Details, Player Names &amp; Private Notes" below.</li>
     <li>GPS location data or coordinates</li>
     <li>Usage analytics or statistics</li>
     <li>Device information</li>
@@ -91,12 +91,14 @@
     <li>Match history (completed and in-progress matches, including point-by-point statistics and, when HealthKit access is granted, heart-rate values recorded during the match)</li>
     <li>User preferences (haptic feedback settings, control preferences)</li>
     <li>Locked court bearing angle (only when Check Changeover is enabled; cleared on match reset)</li>
+    <li>Match details you choose to add on iPhone: names you choose to enter for opponents or partners, and a match's competition type (Friendly, League, Tournament or Practice)</li>
+    <li>Private match notes you choose to write on iPhone, which are kept separately and are <strong>not</strong> backed up (see "Match Details, Player Names &amp; Private Notes" below)</li>
   </ul>
   <p>This data:</p>
   <ul>
     <li>Is never sent to a developer-controlled server; DeuceMate has no such backend</li>
     <li>When iCloud Drive is available, the iPhone app stores a stripped backup copy of the match archive in your personal iCloud Drive account — see "iCloud Sync" below for details.</li>
-    <li>Non-health local data may also be included in your device's standard <strong>iCloud Backup</strong> if you have it enabled. DeuceMate marks its HealthKit-derived match files for exclusion, so automatic device restore is intentionally partial: matches, scores, and non-health statistics can return, but recorded heart rate, steps, distance, and calories do not.</li>
+    <li>Non-health local data may also be included in your device's standard <strong>iCloud Backup</strong> if you have it enabled. DeuceMate marks its HealthKit-derived match files and its private-notes file for exclusion, so automatic device restore is intentionally partial: matches, scores, non-health statistics, player names and competition types can return, but recorded heart rate, steps, distance, calories, and private notes do not.</li>
     <li>May leave your device when you deliberately export or share it, as described in "Sharing, Export &amp; AI Coaching" below</li>
     <li>Is removed from your device when you uninstall the App</li>
     <li>Can be cleared by resetting the match or reinstalling the App</li>
@@ -106,12 +108,30 @@
   <p>The iPhone app stores your match archive on your iPhone and automatically keeps a backup copy of it in <strong>iCloud Drive</strong> when your Apple ID is signed in and iCloud Drive is available on your device. This means:</p>
   <ul>
     <li>Your match archive always lives on your iPhone; a backup copy is kept in your personal <strong>iCloud Drive</strong> container so it can be restored if you reinstall the App or move to a new iPhone.</li>
-    <li>This automatic app-managed iCloud Drive copy <strong>excludes</strong> HealthKit-derived measurements (heart rate, steps, distance, and calories) to comply with App Store Review Guideline 5.1.3(ii). Match scores, point statistics, and all other match data are included.</li>
+    <li>This automatic app-managed iCloud Drive copy <strong>excludes</strong> HealthKit-derived measurements (heart rate, steps, distance, and calories) to comply with App Store Review Guideline 5.1.3(ii). Match scores, point statistics, player names and competition types you add, and the other match data are included. Private match notes are <strong>not</strong> included.</li>
     <li>A manual archive export is separate from the automatic iCloud Drive copy. When you explicitly create one, it may include HealthKit-derived match measurements and can be saved to a location you choose, including iCloud Drive.</li>
     <li>This data lives in <strong>your own Apple ID account</strong> — it is not accessible to the developer and is not shared with any third party.</li>
     <li>iCloud Drive is Apple's own service, governed by Apple's privacy policy and encrypted using your credentials.</li>
   </ul>
   <p>If iCloud is unavailable (e.g., you are signed out of iCloud or iCloud Drive is disabled in iOS Settings), the archive is stored locally on your iPhone only. You can prevent iCloud from being used by disabling iCloud Drive in your iPhone's Settings app.</p>
+
+  <h2>Match Details, Player Names &amp; Private Notes</h2>
+  <p>On iPhone you can optionally add details to a match — who you played (and, in doubles, your partner), its competition type, and a private note. Nothing is required, and DeuceMate never reads your contacts: names are only what you type. First names or nicknames are enough, which is worth keeping in mind for junior players.</p>
+  <p><strong>Player names and competition type:</strong></p>
+  <ul>
+    <li>Are saved with the match in your match archive on iPhone, and are sent to your paired Apple Watch over WatchConnectivity so it can show them in its match history.</li>
+    <li>Are included in DeuceMate's automatic iCloud Drive backup copy and may be included in your device's iCloud Backup, like other non-health match data. They are not health data.</li>
+    <li>Are included in a manual archive file when you create one in Settings → Backup &amp; Transfer.</li>
+    <li>Are not added to shared match reports or AI Coaching prompts in this version of the App, never appear in exported file names, and are never spoken aloud by live score announcements.</li>
+    <li>Can be renamed, merged, or forgotten in Settings → Players. <strong>Forget Player</strong> removes that person from every match on your iPhone, from your Apple Watch when it next syncs, and from DeuceMate's iCloud Drive backup copy after its next successful upload. So that an older copy (for example a stale Apple Watch copy, an older backup or an older archive file) cannot bring the name back, DeuceMate keeps a random identifier for each forgotten player — never the name — alongside your archive and its backups. Forgetting cannot change reports you have already shared, archive files you exported earlier, earlier device backups, or copies held by an older version of the App; and restoring only an archive file made before you forgot someone, on a device without that record, can bring the name back.</li>
+  </ul>
+  <p><strong>Private notes:</strong></p>
+  <ul>
+    <li>Are stored <strong>only on your iPhone</strong>, in a separate file that DeuceMate keeps out of its iCloud Drive backup and marks for exclusion from device backups (reapplied each time a note is saved). Notes can contain anything you type — including health information such as an injury — so they are handled more conservatively than other match data.</li>
+    <li>Are not synced to your Apple Watch, not included in manual archive files, and not added to shared reports or AI Coaching prompts.</li>
+    <li>Are therefore not recovered if you delete the App, restore your device, or move to a new iPhone.</li>
+    <li>Are deleted when you permanently delete their match. Forgetting a player does not edit note text that may mention them; when you forget a player, DeuceMate offers to delete the notes on that player's matches.</li>
+  </ul>
 
   <h2>iPhone Companion App &amp; WatchConnectivity</h2>
   <p>DeuceMate includes an iPhone companion app. When both the Apple Watch app and iPhone app are installed, match data is automatically synced between your Apple Watch and iPhone using <strong>Apple's WatchConnectivity framework</strong>.</p>
@@ -146,13 +166,13 @@
   <p>Core scoring, local match review, and WatchConnectivity operation do not require internet access. Internet access is needed for the optional automatic iCloud Drive archive and for any online destination or AI/LLM service that you choose when exporting or sharing.</p>
 
   <h2>Children's Privacy</h2>
-  <p>DeuceMate does not collect any data from anyone, including children under the age of 13. The App is suitable for users of all ages.</p>
+  <p>DeuceMate does not collect any data from anyone, including children under the age of 13. The App is suitable for users of all ages. If you record a junior player's name as an opponent or partner, it stays in your own match archive as described above; a first name or nickname is enough.</p>
 
   <h2>Changes to This Privacy Policy</h2>
   <p>We may update this Privacy Policy from time to time. Any changes will be reflected by updating the "Last Updated" date at the top of this policy.</p>
 
   <h2>Your Rights</h2>
-  <p>Because the developer does not collect or receive your data, the developer has no account record to access, modify, or delete. You manage DeuceMate's local data on your devices, automatic backups through Apple device settings, and any exports through the storage location or recipient you select. To migrate HealthKit-derived match values, create a manual archive in Settings → Backup &amp; Transfer before switching devices and import it on the new iPhone.</p>
+  <p>Because the developer does not collect or receive your data, the developer has no account record to access, modify, or delete. You manage DeuceMate's local data on your devices, automatic backups through Apple device settings, and any exports through the storage location or recipient you select. To migrate HealthKit-derived match values, create a manual archive in Settings → Backup &amp; Transfer before switching devices and import it on the new iPhone. To remove a person you named from your matches, use Forget Player in Settings → Players; private notes are removed by deleting the note or its match.</p>
 
   <h2>Contact</h2>
   <p>If you have any questions about this Privacy Policy, please contact:</p>
@@ -173,6 +193,7 @@
       <li>✅ Watch ↔ iPhone sync is on-device peer-to-peer only — no servers, no iCloud</li>
       <li>✅ iCloud Sync: match archive is automatically stored in your own iCloud Drive account when available — never accessible to the developer</li>
       <li>✅ DeuceMate's automatic iCloud Drive archive excludes HealthKit-derived measurements</li>
+      <li>✅ Opponent/partner names you type stay in your own archive and its backups; private notes stay on your iPhone only and are never backed up or shared automatically</li>
       <li>✅ Match, manual-backup, and AI/LLM exports are user-initiated and may include HealthKit-derived measurements; the selected recipient or service then governs that data</li>
     </ul>
   </div>
