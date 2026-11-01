@@ -442,6 +442,22 @@ When completing the App Privacy questionnaire in App Store Connect:
   prompt. This is the informed-consent step for HealthKit data sharing.
 - HealthKit apps must have a privacy policy — see `PRIVACY_POLICY.md`, which
   includes a dedicated Health & Fitness Data section.
+- **Match details (MATCH_TAGS_PLAN.md, first shipped by the iOS editor PR).**
+  Users can type names for opponents/partners and pick a competition type on
+  iPhone. These are third-party names the *user* enters; they live in the
+  user's own archive (on device, the paired watch via WatchConnectivity, the
+  user's private iCloud Drive backup copy, and manual archive files the user
+  creates) and are never sent to the developer. Private match notes stay in a
+  backup-excluded iPhone-only file, excluded from the iCloud Drive copy, watch
+  sync and manual archives. No Contacts access. On this basis "Data Not
+  Collected" still appears to match Apple's definition (the developer and any
+  integrated partner cannot access the data), but this is **not** a guarantee:
+  re-confirm the label at release against the shipped build — and again when
+  the follow-up export work (names in shared reports, opt-in names/notes in AI
+  prompts) ships, since a user-initiated hand-off alone is not a blanket
+  exemption (MATCH_TAGS_PLAN.md §8, S10). The published privacy policy
+  (`docs/website/privacy.html`, "Match Details, Player Names & Private Notes")
+  describes the storage, backup, forget-player and recovery limits.
 
 ---
 

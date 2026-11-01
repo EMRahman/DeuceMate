@@ -653,6 +653,10 @@ struct PastMatchesView: View {
     /// also on the watch, issue the watch-side delete so it can't re-sync back.
     private func performPermanentDelete(_ pending: PendingDelete) {
         store.deletePermanently(id: pending.record.id)
+        // Permanent deletion also removes the match's private note (§4.1). If
+        // the notes file is unreadable it is left untouched rather than
+        // rewritten; the orphaned entry is harmless and never displayed.
+        try? MatchNotesStore.shared.removeNotes(for: [pending.record.id])
         if pending.onWatch {
             syncService.sendDeleteMatchOnWatch(pending.record.id)
         }
@@ -680,6 +684,8 @@ struct PastMatchesView: View {
                     .font(.title3.weight(.bold).monospacedDigit())
                     .foregroundStyle(.primary)
             }
+
+            MatchTagsCaption(tags: record.tags, matchType: record.matchType)
 
             HStack(spacing: 8) {
                 if !record.isInProgress && record.iWon == nil {

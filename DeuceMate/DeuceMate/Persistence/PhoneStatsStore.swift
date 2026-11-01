@@ -20,6 +20,16 @@
 // archive: writes derived from a failed read are suppressed so they can't
 // clobber data.
 //
+// Match tags (opponent / partner names, competition type — MATCH_TAGS_PLAN.md)
+// ride on `MatchRecord` and therefore live in the canonical archive and its
+// iCloud copy. Every path that replaces a record carries its stored tags
+// forward by their own clock (`MatchRecord.mergingTags`). The forgotten-player
+// ledger (`forgottenPlayers.json`, player ids only, never names) is persisted
+// and backed up next to the tombstones, and every inbound path — watch merge,
+// "Sync to iPhone", manual import (both modes) and the initial iCloud restore
+// — scrubs forgotten players before anything is adopted. Private notes are NOT
+// here: they live in the separate backup-excluded `MatchNotesStore`.
+//
 // `archiveInitialized.json` means the local archive and iCloud backup have
 // been reconciled at least once. Only `syncICloudBackupOnQueue` writes it
 // (after a successful `initialRestore`). `adoptOnQueue` never writes it, so
@@ -39,6 +49,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// watch-mirror row for a match that was just permanently deleted (the watch
     /// delete may still be queued and the cached mirror not yet pruned).
     @Published private(set) var tombstoneIDs: Set<UUID> = []
+    /// Main-thread mirror of the forgotten-player ledger, so the roster and
+    /// watch-mirror rows can exclude forgotten players before display.
+    @Published private(set) var forgottenPlayers = ForgottenPlayerLedger()
     /// True while the first local setup is still pulling the archive out of the
     /// iCloud backup. Drives the "Restoring from iCloud…"
     /// status line; the list may be momentarily incomplete only in this state.
@@ -68,6 +81,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// IDs the user permanently deleted. Prevents re-import of deleted records
     /// during watch syncs and iCloud restores. `tombstoneIDs` mirrors it on main.
     private var tombstones: Set<UUID> = []
+    /// Forgotten player ids (MATCH_TAGS_PLAN.md §6.2). Persisted and backed up
+    /// with the tombstones; unioned, never shrunk, by every inbound path.
+    private var forgotten = ForgottenPlayerLedger()
     /// Set when a canonical file exists but could not be read at launch (I/O or
     /// protection error — distinct from "missing"). All disk writes and backup
     /// passes are then suppressed for the rest of the process so state derived
@@ -84,7 +100,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private var lastPushedIdentityToken: AnyHashable?
     /// Decoded backup data waiting for the user to confirm or decline a restore.
     /// Non-nil only between when the prompt is shown and when the user responds.
-    private var pendingRestoreDecoded: (records: [MatchRecord], tombstones: [UUID])?
+    private var pendingRestoreDecoded: (records: [MatchRecord], tombstones: [UUID], forgotten: ForgottenPlayerLedger?)?
 
     private var ubiquityObserver: NSObjectProtocol?
 
@@ -98,6 +114,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private static let tombstoneFilename = "deletedMatchIDs.json"
     private static let initializedFilename = "archiveInitialized.json"
     private static let healthFilename = "healthData.json"
+    private static let forgottenPlayersFilename = "forgottenPlayers.json"
 
     struct StorageConfiguration {
         let canonicalDirectoryURL: URL
@@ -144,6 +161,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private var healthSidecarURL: URL {
         canonicalDirectoryURL.appendingPathComponent(Self.healthFilename)
     }
+    private var canonicalForgottenPlayersURL: URL {
+        canonicalDirectoryURL.appendingPathComponent(Self.forgottenPlayersFilename)
+    }
 
     // MARK: - Init
 
@@ -153,13 +173,14 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     init(storageConfiguration: StorageConfiguration) {
         self.storageConfiguration = storageConfiguration
-        let initial = queue.sync { () -> ([MatchRecord], Set<UUID>, Bool) in
+        let initial = queue.sync { () -> ([MatchRecord], Set<UUID>, Bool, ForgottenPlayerLedger) in
             migrateLegacyDocumentsArchiveIfNeeded()
             loadCanonicalOnQueue()
-            return (records, tombstones, shouldAttemptInitialRestoreOnQueue)
+            return (records, tombstones, shouldAttemptInitialRestoreOnQueue, forgotten)
         }
         history = initial.0
         tombstoneIDs = initial.1
+        forgottenPlayers = initial.3
         // Fresh local archive setup with iCloud signed in: show "Restoring from
         // iCloud…" until the first restore attempt settles, so an initially
         // short list reads as in-progress rather than data loss.
@@ -189,17 +210,29 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         queue.sync { records }
     }
 
+    /// Replaces the archive. Stored tags for any id present on both sides are
+    /// carried forward by their own clock, so a caller holding a stale copy
+    /// can never erase a newer tag edit; forgotten players are scrubbed.
     func saveHistory(_ newRecords: [MatchRecord]) {
         queue.sync {
-            adoptOnQueue(records: newRecords, tombstones: tombstones)
+            let existingTags = Dictionary(records.map { ($0.id, $0.tags) }, uniquingKeysWith: { a, _ in a })
+            let now = Date()
+            let carried = newRecords.map { record in
+                forgotten.scrubbed(record.mergingTags(existingTags[record.id] ?? nil), now: now)
+            }
+            adoptOnQueue(records: carried, tombstones: tombstones)
         }
     }
 
+    /// Inserts or replaces one record by id (manual entry, End at Current
+    /// Score). Replacement keeps the stored tags by their own clock — the
+    /// caller's copy may predate a tag edit made while it was open.
     func appendMatch(_ record: MatchRecord) {
         queue.sync {
             var updated = records
+            let existingTags = updated.first(where: { $0.id == record.id })?.tags
             updated.removeAll { $0.id == record.id }
-            updated.append(record)
+            updated.append(forgotten.scrubbed(record.mergingTags(existingTags), now: Date()))
             adoptOnQueue(records: updated, tombstones: tombstones)
         }
     }
@@ -207,19 +240,21 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// Pull a watch-only match into the durable archive ("Sync to iPhone"). A
     /// permanently deleted match (tombstoned) is never resurrected: a stale
     /// watch-mirror row can surface it in the window before the queued watch
-    /// delete lands, so we keep the tombstone and skip the add.
+    /// delete lands, so we keep the tombstone and skip the add. A stale copy
+    /// can also carry a forgotten player, so it is scrubbed first.
     func syncToPhone(_ record: MatchRecord) {
         queue.sync {
             guard !tombstones.contains(record.id),
                   !records.contains(where: { $0.id == record.id }) else { return }
-            adoptOnQueue(records: records + [record], tombstones: tombstones)
+            adoptOnQueue(records: records + [forgotten.scrubbed(record, now: Date())], tombstones: tombstones)
         }
     }
 
     /// Permanently delete a match from the iPhone: drop the record and tombstone
     /// the id so neither a later watch sync nor an iCloud restore can re-import
     /// it. Callers separately issue a watch-side delete when the match is also
-    /// on the watch, so "permanent" means gone everywhere.
+    /// on the watch, so "permanent" means gone everywhere, and remove the
+    /// match's private notes from `MatchNotesStore`.
     func deletePermanently(id: UUID) {
         queue.sync {
             var updatedTombstones = tombstones
@@ -237,16 +272,179 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// via `PhoneMatchSyncService.sendDeleteMatchOnWatch(_:)`, not a store operation.
     func removeMatch(id: UUID) { deletePermanently(id: id) }
 
+    // MARK: - Match tags (MATCH_TAGS_PLAN.md §4–§6)
+
+    /// Why a user edit of match details or the player roster did not happen.
+    /// Shared by `updateTags` and the Players actions (rename, merge, forget).
+    enum TagEditError: LocalizedError, Equatable {
+        case matchNotFound
+        /// The canonical archive (or the forgotten-player ledger) could not be
+        /// written — storage failed, or writes are suspended after an
+        /// unreadable launch read. The edit was rolled back in memory, so
+        /// nothing changed and nothing may be pushed to the watch.
+        case notPersisted
+
+        var errorDescription: String? {
+            switch self {
+            case .matchNotFound:
+                return "This match is no longer in the iPhone archive."
+            case .notPersisted:
+                return "Your change couldn't be saved to this iPhone's storage, so nothing was changed. Try again, or restart DeuceMate if this keeps happening."
+            }
+        }
+    }
+
+    /// The user's edit of one match's details. `draft` is the editor's value;
+    /// the store stamps it on its queue against the CURRENT stored revision
+    /// (`revised(after:)`, or `cleared(after:)` when empty), so the clock is
+    /// strictly monotonic even if the device clock moved backwards, then
+    /// applies it with `mergingTags` — never touching score or completion.
+    /// Returns the saved revision for the watch push.
+    @discardableResult
+    func updateTags(id: UUID, tags draft: MatchTags, now: Date = Date()) throws -> MatchTags {
+        try queue.sync {
+            guard let index = records.firstIndex(where: { $0.id == id }) else {
+                throw TagEditError.matchNotFound
+            }
+            let previous = records[index].tags
+            let stamped = draft.sanitized().isEmpty
+                ? MatchTags.cleared(after: previous, now: now)
+                : draft.revised(after: previous, now: now)
+            // A player forgotten while the editor was open must not come back.
+            let revision = forgotten.scrubbed(stamped, now: now)
+            var updated = records
+            updated[index] = updated[index].mergingTags(revision)
+            let saved = updated[index].tags ?? revision
+            try commitUserEditOnQueue(records: updated)
+            return saved
+        }
+    }
+
+    /// Applies tags that arrived from a peer (`matchTagsUpdate`). Merged by the
+    /// tag clock and scrubbed of forgotten players; a record the phone does not
+    /// hold is ignored (tags never create a match). Returns the resulting
+    /// archive so the caller can reconcile the watch.
+    @discardableResult
+    func applyIncomingTags(_ update: MatchTagsUpdate, now: Date = Date()) -> [MatchRecord] {
+        queue.sync {
+            guard let index = records.firstIndex(where: { $0.id == update.matchID }) else { return records }
+            let merged = forgotten.scrubbed(records[index].mergingTags(update.tags), now: now)
+            guard merged != records[index] else { return records }
+            var updated = records
+            updated[index] = merged
+            adoptOnQueue(records: updated, tombstones: tombstones)
+            return records
+        }
+    }
+
+    /// Queue-consistent read of the ledger (the published `forgottenPlayers`
+    /// mirror updates on the next main-queue turn).
+    func forgottenPlayerLedger() -> ForgottenPlayerLedger {
+        queue.sync { forgotten }
+    }
+
+    /// Selectable players derived from the archive, most recent first,
+    /// excluding forgotten ids.
+    func rosterEntries() -> [RosterEntry] {
+        queue.sync { PlayerRoster.entries(from: records, forgotten: forgotten) }
+    }
+
+    /// Renames `playerID` in every match. Returns the ids of changed matches.
+    /// Throws `TagEditError.notPersisted` (with nothing changed) when the
+    /// archive could not be written — the caller must not push to the watch.
+    @discardableResult
+    func renamePlayer(_ playerID: UUID, to newName: String, now: Date = Date()) throws -> Set<UUID> {
+        try applyRosterMutation { PlayerRoster.renaming(playerID, to: newName, in: $0, now: now) }
+    }
+
+    /// Merges duplicate `duplicateID` into `keptID` in every match. Throws
+    /// like `renamePlayer`.
+    @discardableResult
+    func mergePlayers(_ duplicateID: UUID, into keptID: UUID, now: Date = Date()) throws -> Set<UUID> {
+        try applyRosterMutation { PlayerRoster.merging(duplicateID, into: keptID, in: $0, now: now) }
+    }
+
+    /// "Forget player": records the id in the ledger AND removes the player
+    /// from every role in every match, in one serialized mutation, so a stale
+    /// copy arriving later is scrubbed. Returns the changed match ids (the
+    /// caller pushes their tags to the watch) only once the ledger and the
+    /// archive are both on disk; otherwise throws `TagEditError.notPersisted`
+    /// with the in-memory archive and ledger unchanged, so the player still
+    /// shows — exactly what a relaunch would load.
+    @discardableResult
+    func forgetPlayer(_ playerID: UUID, now: Date = Date()) throws -> Set<UUID> {
+        try queue.sync {
+            let mutation = PlayerRoster.forgetting(playerID, in: records, now: now)
+            try commitUserEditOnQueue(
+                records: mutation.records,
+                forgotten: forgotten.forgetting(playerID)
+            )
+            return mutation.affectedMatchIDs
+        }
+    }
+
+    /// Match ids whose tags mention `playerID` in any role.
+    func matchIDs(mentioning playerID: UUID) -> Set<UUID> {
+        queue.sync {
+            Set(records.filter { $0.tags?.playerIDs.contains(playerID) ?? false }.map(\.id))
+        }
+    }
+
+    private func applyRosterMutation(_ mutate: ([MatchRecord]) -> RosterMutation) throws -> Set<UUID> {
+        try queue.sync {
+            let mutation = mutate(records)
+            guard !mutation.affectedMatchIDs.isEmpty else { return [] }
+            try commitUserEditOnQueue(records: mutation.records)
+            return mutation.affectedMatchIDs
+        }
+    }
+
+    /// Adopts a user-initiated edit all-or-nothing. Background paths (watch
+    /// merges, imports) keep their in-memory result when a write fails so the
+    /// session stays usable; an edit the user is waiting on must instead
+    /// report failure honestly. If the canonical files were not all written
+    /// (storage error, or writes suspended after an unreadable launch read),
+    /// the previous archive and ledger are restored and republished and
+    /// `TagEditError.notPersisted` is thrown, so the UI shows exactly what a
+    /// relaunch would load and the caller never pushes the edit to the watch.
+    /// (`writeCanonicalOnQueue` writes the ledger first, so a `forget` that
+    /// fails part-way may still take effect at the next launch — the safe
+    /// direction — but success is never reported for one that isn't durable.)
+    private func commitUserEditOnQueue(
+        records newRecords: [MatchRecord],
+        forgotten newForgotten: ForgottenPlayerLedger? = nil
+    ) throws {
+        let previousRecords = records
+        let previousForgotten = forgotten
+        guard adoptOnQueue(records: newRecords, tombstones: tombstones, forgotten: newForgotten) else {
+            records = previousRecords
+            forgotten = previousForgotten
+            publishOnQueue()
+            throw TagEditError.notPersisted
+        }
+    }
+
     // MARK: - Manual archive export/import
 
+    /// Full-fidelity archive (names included, private notes never) plus the
+    /// forgotten-player ledger, so a restore elsewhere keeps deletion intent.
     func exportManualArchiveData() throws -> Data {
         try queue.sync {
-            try ManualMatchArchiveBackup.encode(records: records)
+            try ManualMatchArchiveBackup.encode(
+                records: records,
+                forgottenPlayers: forgotten.isEmpty ? nil : forgotten
+            )
         }
     }
 
     func previewManualArchiveImport(data: Data) throws -> ManualMatchArchiveBackup.ImportPreview {
         try ManualMatchArchiveBackup.preview(data)
+    }
+
+    /// Ids of the records a manual archive file holds — used to plan what a
+    /// Replace would do to private notes before the user confirms.
+    func manualArchiveRecordIDs(data: Data) throws -> Set<UUID> {
+        Set(try ManualMatchArchiveBackup.decode(data).records.map(\.id))
     }
 
     @discardableResult
@@ -266,37 +464,58 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 importing: archive.records,
                 into: records,
                 tombstones: tombstones,
-                mode: mode
+                mode: mode,
+                currentForgottenPlayers: forgotten,
+                importedForgottenPlayers: archive.forgottenPlayers
             )
-            adoptOnQueue(records: snapshot.records, tombstones: snapshot.tombstones)
+            adoptOnQueue(
+                records: snapshot.records,
+                tombstones: snapshot.tombstones,
+                forgotten: snapshot.forgottenPlayers
+            )
         }
         return preview
     }
 
     // MARK: - Merge incoming records from WatchConnectivity
 
-    func mergeIncoming(_ incoming: [MatchRecord]) {
+    /// Merges watch records (tags by their own clock, forgotten players
+    /// scrubbed) and returns the resulting archive, which the sync service
+    /// feeds to §6.1 reconciliation (`MatchTags.pendingWatchUpdates`).
+    @discardableResult
+    func mergeIncoming(_ incoming: [MatchRecord]) -> [MatchRecord] {
         queue.sync {
             let merged = MatchMergePolicy.merge(
                 incoming: incoming,
                 into: records,
-                tombstones: tombstones
+                tombstones: tombstones,
+                forgottenPlayers: forgotten
             )
             adoptOnQueue(records: merged, tombstones: tombstones)
+            return records
         }
     }
 
-    func mergeIncoming(_ record: MatchRecord) {
+    @discardableResult
+    func mergeIncoming(_ record: MatchRecord) -> [MatchRecord] {
         mergeIncoming([record])
     }
 
     // MARK: - Canonical store (device-local source of truth)
 
     /// Adopt new state as the canonical archive: persist it, publish it, and
-    /// schedule a debounced iCloud backup sync. The single funnel for every mutation.
-    private func adoptOnQueue(records newRecords: [MatchRecord], tombstones newTombstones: Set<UUID>) {
+    /// schedule a debounced iCloud backup sync. The single funnel for every
+    /// mutation. `forgotten` nil keeps the current ledger (it only ever grows).
+    /// Returns whether the canonical files were written.
+    @discardableResult
+    private func adoptOnQueue(
+        records newRecords: [MatchRecord],
+        tombstones newTombstones: Set<UUID>,
+        forgotten newForgotten: ForgottenPlayerLedger? = nil
+    ) -> Bool {
         records = Self.sortedNewestFirst(newRecords)
         tombstones = newTombstones
+        if let newForgotten { forgotten = forgotten.union(newForgotten) }
         let didWrite = writeCanonicalOnQueue()
         publishOnQueue()
         guard didWrite else {
@@ -308,19 +527,24 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 pendingBackupSync?.cancel()
                 pendingBackupSync = nil
             }
-            return
+            return false
         }
         if storageConfiguration.startsICloudSync {
             scheduleICloudBackupSyncOnQueue(after: Self.backupPushDebounce, retriesRemaining: Self.backupRetryDelays.count)
         }
+        return true
     }
 
     private func publishOnQueue() {
         let recordsSnapshot = records
         let tombstoneSnapshot = tombstones
+        let forgottenSnapshot = forgotten
         DispatchQueue.main.async {
             self.history = recordsSnapshot
             self.tombstoneIDs = tombstoneSnapshot
+            if self.forgottenPlayers != forgottenSnapshot {
+                self.forgottenPlayers = forgottenSnapshot
+            }
         }
     }
 
@@ -332,6 +556,10 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             try FileManager.default.createDirectory(
                 at: canonicalDirectoryURL, withIntermediateDirectories: true
             )
+            // Deletion intent first: if the process dies before the archive is
+            // rewritten, the next launch still scrubs the forgotten player
+            // from the older archive (see `loadCanonicalOnQueue`).
+            try Self.write(forgotten, to: canonicalForgottenPlayersURL)
             try Self.write(split.health, to: healthSidecarURL)
             // Atomic writes replace the destination inode, so the exclusion
             // resource value must be reapplied after every sidecar write. If
@@ -367,6 +595,14 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         case .unreadable:
             canonicalWritesSuspended = true
         }
+        switch Self.readCanonicalFile(ForgottenPlayerLedger.self, at: canonicalForgottenPlayersURL) {
+        case .loaded(let ledger):
+            forgotten = ledger
+        case .missing, .corrupt:
+            break // pre-tags archive, or moved aside; the archive itself was scrubbed when each forget ran
+        case .unreadable:
+            canonicalWritesSuspended = true
+        }
         let loadedRecords: [MatchRecord]
         switch Self.readCanonicalFile([MatchRecord].self, at: canonicalHistoryURL) {
         case .loaded(let loaded):
@@ -396,14 +632,17 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         }
 
         let loadedHadHealth = !HealthSidecarPolicy.split(loadedRecords).health.isEmpty
-        records = Self.sortedNewestFirst(
-            HealthSidecarPolicy.merge(stripped: loadedRecords, health: health)
-        )
+        let merged = HealthSidecarPolicy.merge(stripped: loadedRecords, health: health)
+        // The ledger is written before the archive, so an interrupted forget
+        // can leave an older archive still naming the player; finish it here.
+        let scrubbed = forgotten.scrubbed(merged, now: Date())
+        let neededScrub = scrubbed != merged
+        records = Self.sortedNewestFirst(scrubbed)
 
         // The pre-sidecar canonical file was full-fidelity. Content detection is
         // the migration marker: once rewritten successfully, the main file has
         // no Health fields and this path never runs again.
-        if loadedHadHealth && !canonicalWritesSuspended {
+        if (loadedHadHealth || neededScrub) && !canonicalWritesSuspended {
             if writeCanonicalOnQueue() {
                 phoneStoreLogger.notice("Migrated canonical archive to the backup-excluded Health sidecar")
             }
@@ -611,9 +850,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
         let historyState = backupFileState(at: historyURL)
         let tombstoneState = backupFileState(at: tombstoneURL)
-        // Restore only when BOTH files are settled: folding records in while
-        // their tombstones are still downloading could resurrect a deleted match.
-        if historyState.isDownloading || tombstoneState.isDownloading {
+        let ledgerState = backupFileState(at: Self.backupLedgerURL(besides: historyURL))
+        // Restore only when ALL files are settled: folding records in while
+        // their tombstones (or the forgotten-player ledger) are still
+        // downloading could resurrect a deleted match or a forgotten name.
+        if historyState.isDownloading || tombstoneState.isDownloading || ledgerState.isDownloading {
             guard retriesRemaining > 0 else {
                 phoneStoreLogger.notice("iCloud backup still downloading; deferring to the next trigger")
                 finishRestoreIndicator()
@@ -626,7 +867,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
         let decodedRecords = decodeBackup([MatchRecord].self, from: historyState)
         let decodedTombstones = decodeBackup([UUID].self, from: tombstoneState)
-        guard decodedRecords.isUsable, decodedTombstones.isUsable else {
+        let decodedLedger = decodeBackup(ForgottenPlayerLedger.self, from: ledgerState)
+        guard decodedRecords.isUsable, decodedTombstones.isUsable, decodedLedger.isUsable else {
             phoneStoreLogger.error("Initial iCloud restore skipped because backup data is corrupt")
             finishRestoreIndicator()
             return
@@ -634,12 +876,16 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
         let backupRecords = decodedRecords.value ?? []
         let backupTombstones = decodedTombstones.value ?? []
+        // Missing (an older build's backup) is `nil`: it can never erase the
+        // local ledger — `initialRestore` unions it.
+        let backupLedger = decodedLedger.value
 
         if backupRecords.isEmpty {
             // Nothing to restore — reconcile silently and start pushing.
             performRestoreOnQueue(
                 backupRecords: backupRecords,
                 backupTombstones: backupTombstones,
+                backupLedger: backupLedger,
                 historyURL: historyURL,
                 tombstoneURL: tombstoneURL
             )
@@ -648,7 +894,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
         // Non-empty backup: show the restore prompt. Backup pushes stay paused
         // (marker absent) until the user responds so the old backup is preserved.
-        pendingRestoreDecoded = (backupRecords, backupTombstones)
+        pendingRestoreDecoded = (backupRecords, backupTombstones, backupLedger)
         let preview = ArchiveBackupPolicy.BackupPreview.from(records: backupRecords)
         DispatchQueue.main.async {
             self.pendingRestorePreview = preview
@@ -659,6 +905,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private func performRestoreOnQueue(
         backupRecords: [MatchRecord],
         backupTombstones: [UUID],
+        backupLedger: ForgottenPlayerLedger?,
         historyURL: URL,
         tombstoneURL: URL
     ) {
@@ -666,15 +913,20 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             localRecords: records,
             localTombstones: tombstones,
             backupRecords: backupRecords,
-            backupTombstones: Set(backupTombstones)
+            backupTombstones: Set(backupTombstones),
+            localForgottenPlayers: forgotten,
+            backupForgottenPlayers: backupLedger
         )
         let previousRecords = records
         let previousTombstones = tombstones
+        let previousForgotten = forgotten
         records = snapshot.records
         tombstones = snapshot.tombstones
+        forgotten = snapshot.forgottenPlayers
         guard writeCanonicalOnQueue(), markArchiveInitializedOnQueue() else {
             records = previousRecords
             tombstones = previousTombstones
+            forgotten = previousForgotten
             finishRestoreIndicator()
             return
         }
@@ -701,6 +953,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             performRestoreOnQueue(
                 backupRecords: decoded.records,
                 backupTombstones: decoded.tombstones,
+                backupLedger: decoded.forgotten,
                 historyURL: historyURL,
                 tombstoneURL: tombstoneURL
             )
@@ -715,9 +968,26 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// nothing needs to change in the store.
     func declineRestore() {}
 
+    /// The forgotten-player ledger's backup file sits next to the history file
+    /// in the ubiquity container (ids only, never names).
+    private static func backupLedgerURL(besides historyURL: URL) -> URL {
+        historyURL.deletingLastPathComponent().appendingPathComponent(forgottenPlayersFilename)
+    }
+
+    /// The exact content the next iCloud push writes: Health stripped, tags
+    /// (names, competition) kept, the forgotten-player ledger alongside.
+    /// Private notes are not part of `MatchRecord`, so they cannot be here.
+    func currentBackupSnapshot() -> ArchiveBackupPolicy.Snapshot {
+        queue.sync { backupSnapshotOnQueue() }
+    }
+
+    private func backupSnapshotOnQueue() -> ArchiveBackupPolicy.Snapshot {
+        ArchiveBackupPolicy.backupSnapshot(records: records, tombstones: tombstones, forgottenPlayers: forgotten)
+    }
+
     private func pushBackupOnQueue(historyURL: URL, tombstoneURL: URL) {
         let currentToken = FileManager.default.ubiquityIdentityToken as? AnyHashable
-        let snapshot = ArchiveBackupPolicy.backupSnapshot(records: records, tombstones: tombstones)
+        let snapshot = backupSnapshotOnQueue()
         guard snapshot != lastPushedSnapshot || currentToken != lastPushedIdentityToken else {
             // Content unchanged — still read the upload status so the indicator
             // stays current (the daemon may have finished uploading since last check).
@@ -725,6 +995,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             return
         }
         do {
+            // Deletion intent first, so a partially pushed backup never pairs
+            // the newer archive with an older ledger.
+            try coordinatedWriteBackup(snapshot.forgottenPlayers, to: Self.backupLedgerURL(besides: historyURL))
             try coordinatedWriteBackup(snapshot.records, to: historyURL)
             try coordinatedWriteBackup(Array(snapshot.tombstones), to: tombstoneURL)
             lastPushedSnapshot = snapshot

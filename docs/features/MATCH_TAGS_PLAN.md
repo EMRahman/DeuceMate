@@ -1,7 +1,7 @@
 <!--
 machine-readable summary (parse this block first)
 
-status: revised after owner-authorized review (2026-10-23; supersedes completed-only scope); PR 1 (Core) implemented 2026-10-31; PR 2 (Watch) implemented 2026-10-31 — PR 3/4 pending
+status: revised after owner-authorized review (2026-10-23; supersedes completed-only scope); PR 1 (Core) implemented 2026-10-31; PR 2 (Watch) implemented 2026-10-31; PR 3 (iOS editor, notes, comparison) implemented 2026-10-31 — PR 4 pending
 author: Claude, design session with the owner
 date: 2026-10-23
 feature: "Tag a completed or in-progress match with who was played (selectable roster) and its competition type (Friendly / League / Tournament / Practice); show the tags on the watch; compare with a previous match on iOS; add private local notes; feed selected context into AI Coach and shared reports."
@@ -699,6 +699,31 @@ otherwise the first watch sync deletes it (§3).
   starts writing them (not required for safety — PR 1 covers that).
 
 ### PR 3 — `[iOS] Edit match details, private notes and previous-match comparison`
+
+> **Status: implemented (2026-10-31, branch `feat/match-tags-ios`, stacked on
+> PR 1).** Store: `PhoneStatsStore.updateTags(id:tags:)` stamps the editor's
+> draft on the store queue against the stored revision (`revised(after:)` /
+> `cleared(after:)`), `applyIncomingTags`, `renamePlayer` / `mergePlayers` /
+> `forgetPlayer`; `appendMatch` and `saveHistory` (the two non-merge replace
+> paths) carry stored tags forward; `syncToPhone`, watch merge, both manual
+> import modes, incoming tag updates and the initial iCloud restore all union and
+> scrub with the persisted, backed-up ledger (`forgottenPlayers.json`, written
+> before the archive and re-applied on load). Sync: edit-time pushes only for
+> `onWatchIDs`; §6.1 reconciliation after every history/single-match merge and
+> for manifest `newlyHeldIDs`; incoming `.matchTagsUpdate` merged defensively and
+> answered when the phone is newer; watch mirror scrubbed. Notes:
+> `MatchNotesStore` in its own backup-excluded directory (directory flag
+> verified before writing, file flag reapplied after every atomic write; an
+> unreadable file suspends writes). UI: `Views/MatchInfo/` (Match Info row and
+> editor with roster picker, notes editor, comparison + baseline picker,
+> Settings → Players, archive caption); `MatchDetailView` re-resolves its record
+> by id and rebuilds the export snapshot when it changes. Wording helper:
+> Core `MatchComparisonFormat` (shared with PR 4's AI head-to-head). Privacy
+> policy, `APP_STORE_METADATA.md` and architecture docs updated. Not done here:
+> the iPhone browser replica (`docs/website/assets/phone-demo*.js`) parity —
+> follow-up; a manual "Include private notes" archive option and notes in
+> exports — PR 4.
+
 - `PhoneStatsStore.updateTags(id:tags:)`; edit-time push via `onWatchIDs`
   plus §6.1 reconciliation on history and manifest arrival.
 - Editor sheet + picker, detail row, archive subtitle,
