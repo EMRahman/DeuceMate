@@ -361,3 +361,65 @@ final class ArchiveBackupPolicyTests: XCTestCase {
         XCTAssertEqual(first.map(\.id), second.map(\.id))
     }
 }
+
+// MARK: - Tags (MATCH_TAGS_PLAN.md §3, §6.2)
+
+extension ArchiveBackupPolicyTests {
+
+    private typealias F = TagFixtures
+
+    func test_backupSnapshot_keepsTagsButStripsHealth() {
+        let tags = F.tags(opponents: [F.player("Alex")], competition: .league, at: 1)
+        var record = F.record(tags: tags)
+        record.totalSteps = 500
+        let ledger = ForgottenPlayerLedger(playerIDs: [F.uuid(9)])
+        let snapshot = ArchiveBackupPolicy.backupSnapshot(records: [record], tombstones: [], forgottenPlayers: ledger)
+        XCTAssertEqual(snapshot.records.first?.tags, tags, "names and competition are not health data")
+        XCTAssertNil(snapshot.records.first?.totalSteps)
+        XCTAssertEqual(snapshot.forgottenPlayers, ledger, "deletion intent is backed up with the archive")
+    }
+
+    func test_initialRestore_staleUntaggedBackupBody_cannotWipeLocalTags() {
+        let id = UUID()
+        let tags = F.tags(opponents: [F.player("Alex")], at: 10)
+        let local = F.record(id: id, end: 3_600, tags: tags)
+        let staleBackup = F.record(id: id, end: 3_600, tags: nil)
+        let snapshot = ArchiveBackupPolicy.initialRestore(
+            localRecords: [local], localTombstones: [],
+            backupRecords: [staleBackup], backupTombstones: []
+        )
+        XCTAssertEqual(snapshot.records.first?.tags, tags)
+    }
+
+    func test_initialRestore_backupWithNewerTags_winsTagsEvenWhenLocalBodyWins() {
+        let id = UUID()
+        let newer = F.tags(opponents: [F.player("Jo")], at: 20)
+        let local = F.record(id: id, end: 3_600, iWon: true, tags: F.tags(at: 10))
+        let olderBackupBody = F.record(id: id, end: 1_800, iWon: false, tags: newer)
+        let restored = ArchiveBackupPolicy.initialRestore(
+            localRecords: [local], localTombstones: [],
+            backupRecords: [olderBackupBody], backupTombstones: []
+        ).records.first
+        XCTAssertEqual(restored?.iWon, true, "body rule unchanged")
+        XCTAssertEqual(restored?.tags, newer)
+    }
+
+    func test_resolveBackup_mergesTagsOnEveryPath() {
+        let id = UUID()
+        let newer = F.tags(competition: .league, at: 20)
+        let older = F.tags(competition: .practice, at: 10)
+        let liveLocal = F.record(id: id, end: nil, iWon: nil, tags: newer)
+        let completedBackup = F.record(id: id, end: 3_600, iWon: true, tags: older)
+        // completed backup finalizes local checkpoint
+        XCTAssertEqual(ArchiveBackupPolicy.resolveBackup(backup: completedBackup, local: liveLocal).tags, newer)
+        // stale in-progress backup vs completed local
+        XCTAssertEqual(ArchiveBackupPolicy.resolveBackup(
+            backup: F.record(id: id, end: nil, iWon: nil, tags: newer),
+            local: F.record(id: id, tags: older)).tags, newer)
+        // both in progress
+        XCTAssertEqual(ArchiveBackupPolicy.resolveBackup(
+            backup: F.record(id: id, end: nil, iWon: nil, tags: older), local: liveLocal).tags, newer)
+        // backup-only record keeps its tags
+        XCTAssertEqual(ArchiveBackupPolicy.resolveBackup(backup: completedBackup, local: nil).tags, older)
+    }
+}

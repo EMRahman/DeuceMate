@@ -35,6 +35,13 @@ public enum MatchSyncKey {
     public static let userMaxHROverride = "userMaxHROverride"
     /// Raw value of the selected `AppTheme`, synced bidirectionally so the skin matches on both devices.
     public static let selectedTheme = "selectedTheme"
+    /// JSON-encoded `MatchTagsUpdate { matchID: UUID, tags: MatchTags }`. Bidirectional
+    /// (phone → watch in v1). Applied only to a record the receiver already
+    /// holds, merged by the tags' own clock — never through the `.singleMatch`
+    /// path, whose handler can complete a live match. Sent queued
+    /// (`transferUserInfo`) so it survives the peer being away. Not a setting:
+    /// no `UserDefaults` mirror. See MATCH_TAGS_PLAN.md §6.
+    public static let matchTagsUpdate = "matchTagsUpdate"
 
     // MARK: - Watch-only settings (phone → watch)
     /// Phone → watch point-outcome tracking switch (Bool).

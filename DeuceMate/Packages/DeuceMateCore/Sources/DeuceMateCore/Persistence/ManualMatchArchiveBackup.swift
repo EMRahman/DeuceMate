@@ -30,19 +30,25 @@ public enum ManualMatchArchiveBackup {
         public let exportedAt: Date
         public let includesHealthData: Bool
         public let records: [MatchRecord]
+        /// Forgotten-player deletion ledger (MATCH_TAGS_PLAN.md §6.2). Optional
+        /// and additive within schema 1: older builds ignore the key, and an
+        /// archive without it (`nil`) can never erase the importer's ledger.
+        public let forgottenPlayers: ForgottenPlayerLedger?
 
         public init(
             format: String = ManualMatchArchiveBackup.format,
             schemaVersion: Int = ManualMatchArchiveBackup.supportedSchemaVersion,
             exportedAt: Date = Date(),
             includesHealthData: Bool = true,
-            records: [MatchRecord]
+            records: [MatchRecord],
+            forgottenPlayers: ForgottenPlayerLedger? = nil
         ) {
             self.format = format
             self.schemaVersion = schemaVersion
             self.exportedAt = exportedAt
             self.includesHealthData = includesHealthData
             self.records = records
+            self.forgottenPlayers = forgottenPlayers
         }
     }
 
@@ -61,10 +67,17 @@ public enum ManualMatchArchiveBackup {
     public struct ImportSnapshot: Equatable, Sendable {
         public let records: [MatchRecord]
         public let tombstones: Set<UUID>
+        /// The importer's ledger unioned with the archive's (both modes).
+        public let forgottenPlayers: ForgottenPlayerLedger
 
-        public init(records: [MatchRecord], tombstones: Set<UUID>) {
+        public init(
+            records: [MatchRecord],
+            tombstones: Set<UUID>,
+            forgottenPlayers: ForgottenPlayerLedger = ForgottenPlayerLedger()
+        ) {
             self.records = records
             self.tombstones = tombstones
+            self.forgottenPlayers = forgottenPlayers
         }
     }
 
@@ -96,10 +109,15 @@ public enum ManualMatchArchiveBackup {
         }
     }
 
-    public static func encode(records: [MatchRecord], exportedAt: Date = Date()) throws -> Data {
+    public static func encode(
+        records: [MatchRecord],
+        exportedAt: Date = Date(),
+        forgottenPlayers: ForgottenPlayerLedger? = nil
+    ) throws -> Data {
         let archive = Archive(
             exportedAt: exportedAt,
-            records: ArchiveBackupPolicy.sortedNewestFirst(records)
+            records: ArchiveBackupPolicy.sortedNewestFirst(records),
+            forgottenPlayers: forgottenPlayers
         )
         return try makeEncoder().encode(archive)
     }
@@ -122,20 +140,30 @@ public enum ManualMatchArchiveBackup {
         )
     }
 
+    /// Builds the archive state after an import. Tags merge by their own
+    /// clock (via `MatchMergePolicy.resolve`) in `.merge` mode. In BOTH modes
+    /// the forgotten-player ledgers union — deletion intent survives even a
+    /// replace — and every resulting record is scrubbed of forgotten players,
+    /// so an old archive cannot restore a forgotten name (MATCH_TAGS_PLAN.md §6.2).
     public static func importSnapshot(
         importing incoming: [MatchRecord],
         into current: [MatchRecord],
         tombstones: Set<UUID>,
-        mode: ImportMode
+        mode: ImportMode,
+        currentForgottenPlayers: ForgottenPlayerLedger = ForgottenPlayerLedger(),
+        importedForgottenPlayers: ForgottenPlayerLedger? = nil,
+        now: Date = Date()
     ) -> ImportSnapshot {
         let incomingIDs = Set(incoming.map(\.id))
         let updatedTombstones = tombstones.subtracting(incomingIDs)
+        let forgotten = currentForgottenPlayers.union(importedForgottenPlayers)
 
         switch mode {
         case .replace:
             return ImportSnapshot(
-                records: ArchiveBackupPolicy.sortedNewestFirst(incoming),
-                tombstones: updatedTombstones
+                records: ArchiveBackupPolicy.sortedNewestFirst(forgotten.scrubbed(incoming, now: now)),
+                tombstones: updatedTombstones,
+                forgottenPlayers: forgotten
             )
 
         case .merge:
@@ -145,8 +173,9 @@ public enum ManualMatchArchiveBackup {
                 byID[record.id] = resolved.fillingMissingHealthData(from: record)
             }
             return ImportSnapshot(
-                records: ArchiveBackupPolicy.sortedNewestFirst(Array(byID.values)),
-                tombstones: updatedTombstones
+                records: ArchiveBackupPolicy.sortedNewestFirst(forgotten.scrubbed(Array(byID.values), now: now)),
+                tombstones: updatedTombstones,
+                forgottenPlayers: forgotten
             )
         }
     }

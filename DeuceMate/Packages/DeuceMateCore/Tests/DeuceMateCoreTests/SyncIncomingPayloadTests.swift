@@ -444,4 +444,30 @@ final class SyncIncomingPayloadTests: XCTestCase {
             XCTFail("expected watchManifest, got \(events)")
         }
     }
+
+    // MARK: - Match tags
+
+    func test_matchTagsUpdate_equality() {
+        let id = UUID()
+        let tags = MatchTags(competitionType: .league, updatedAt: Date(timeIntervalSince1970: 1))
+        var other = tags
+        other.competitionType = .practice
+        XCTAssertEqual(SyncIncomingEvent.matchTagsUpdate(matchID: id, tags: tags),
+                       .matchTagsUpdate(matchID: id, tags: tags))
+        XCTAssertNotEqual(SyncIncomingEvent.matchTagsUpdate(matchID: id, tags: tags),
+                          .matchTagsUpdate(matchID: id, tags: other))
+        XCTAssertNotEqual(SyncIncomingEvent.matchTagsUpdate(matchID: id, tags: tags),
+                          .matchTagsUpdate(matchID: UUID(), tags: tags))
+        XCTAssertNotEqual(SyncIncomingEvent.matchTagsUpdate(matchID: id, tags: tags), .ping)
+    }
+
+    func test_matchTagsUpdate_decodesAlongsideOtherKeys() throws {
+        let id = UUID()
+        let tags = MatchTags(competitionType: .friendly, updatedAt: Date(timeIntervalSince1970: 1))
+        var payload = try MatchSyncPayloadBuilder.matchTagsUpdate(matchID: id, tags: tags)
+        payload["ping"] = true
+        let events = SyncIncomingPayload.decode(payload)
+        XCTAssertTrue(events.contains(.ping))
+        XCTAssertTrue(events.contains(.matchTagsUpdate(matchID: id, tags: tags)))
+    }
 }

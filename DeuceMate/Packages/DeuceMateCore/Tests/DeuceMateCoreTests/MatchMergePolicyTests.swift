@@ -258,3 +258,104 @@ final class MatchMergePolicyTests: XCTestCase {
         )
     }
 }
+
+// MARK: - Tags merge independently of the body (MATCH_TAGS_PLAN.md §3)
+
+extension MatchMergePolicyTests {
+
+    private typealias F = TagFixtures
+
+    /// THE regression this feature must never reintroduce: the user tags a
+    /// finished match on the phone → the watch re-sends its history (Sync Now,
+    /// requestFullHistory, ping) with its untagged copy of the SAME match,
+    /// which has the same `endTime` → case 4's `>=` picks the incoming body →
+    /// the tag must survive.
+    func test_regression_equalEndTime_untaggedIncoming_keepsPhoneTags() {
+        let id = UUID()
+        let tags = F.tags(opponents: [F.player("Alex")], competition: .league, at: 10)
+        let phoneCopy = F.record(id: id, iWon: true, tags: tags)
+        let watchCopy = F.record(id: id, iWon: true, tags: nil)
+        XCTAssertEqual(phoneCopy.endTime, watchCopy.endTime)
+
+        let resolved = MatchMergePolicy.resolve(incoming: watchCopy, existing: phoneCopy)
+        XCTAssertEqual(resolved.tags, tags)
+
+        let merged = MatchMergePolicy.merge(incoming: [watchCopy], into: [phoneCopy])
+        XCTAssertEqual(merged.first?.tags, tags, "full-history merge path keeps tags too")
+    }
+
+    func test_tags_mergeOnEveryReturnPath() {
+        let id = UUID()
+        let older = F.tags(opponents: [F.player("Alex")], at: 10)
+        let newer = F.tags(opponents: [F.player("Jo")], at: 20)
+        let live = { (tags: MatchTags?, points: Int) in
+            F.record(id: id, end: nil, iWon: nil, tags: tags, stats: F.points(points, won: points))
+        }
+        let done = { (tags: MatchTags?, end: TimeInterval) in F.record(id: id, end: end, iWon: true, tags: tags) }
+
+        // Case 2: in-progress → completed. Completion body wins; newer local tags survive.
+        var r = MatchMergePolicy.resolve(incoming: done(older, 3_600), existing: live(newer, 3))
+        XCTAssertFalse(r.isInProgress)
+        XCTAssertEqual(r.tags, newer)
+        // Case 3: late checkpoint vs completed. Completed body kept; newer incoming tags adopted.
+        r = MatchMergePolicy.resolve(incoming: live(newer, 5), existing: done(older, 3_600))
+        XCTAssertFalse(r.isInProgress)
+        XCTAssertEqual(r.tags, newer)
+        // Case 4: both completed, existing body newer; incoming tags newer.
+        r = MatchMergePolicy.resolve(incoming: done(newer, 100), existing: done(older, 3_600))
+        XCTAssertEqual(r.endTime, F.base.addingTimeInterval(3_600))
+        XCTAssertEqual(r.tags, newer)
+        // Case 5: both in progress (an undo checkpoint with fewer points).
+        r = MatchMergePolicy.resolve(incoming: live(nil, 2), existing: live(newer, 3))
+        XCTAssertEqual(r.stats.count, 2, "undo checkpoint still accepted")
+        XCTAssertEqual(r.tags, newer, "the live checkpoint's missing tags don't wipe the archive's")
+    }
+
+    /// §12.1 "Metadata independence": tag a live checkpoint; score, undo and
+    /// completion updates arrive; metadata survives every one.
+    func test_scenario_taggedLiveMatch_survivesScoreUndoAndCompletion() {
+        let id = UUID()
+        let tags = F.tags(opponents: [F.player("Alex")], competition: .friendly, at: 10)
+        var phone = F.record(id: id, end: nil, iWon: nil, stats: F.points(3, won: 2)).mergingTags(tags)
+
+        for points in [4, 5, 4] {   // point, point, undo
+            let checkpoint = F.record(id: id, end: nil, iWon: nil, stats: F.points(points, won: 2))
+            phone = MatchMergePolicy.resolve(incoming: checkpoint, existing: phone)
+            XCTAssertEqual(phone.stats.count, points)
+            XCTAssertEqual(phone.tags, tags)
+        }
+        let completion = F.record(id: id, iWon: false, stats: F.points(6, won: 2))
+        phone = MatchMergePolicy.resolve(incoming: completion, existing: phone)
+        XCTAssertEqual(phone.iWon, false)
+        XCTAssertEqual(phone.tags, tags)
+    }
+
+    /// The watch's `.singleMatch` handler resolves through the same function:
+    /// a phone "Sync to Watch" of a tagged record lands with its tags, and an
+    /// older-tag phone push cannot regress the watch's newer tags.
+    func test_watchSingleMatchPath_usesTagClock() {
+        let id = UUID()
+        let newer = F.tags(competition: .league, at: 20)
+        let watchHeld = F.record(id: id, tags: newer)
+        let pushed = F.record(id: id, tags: F.tags(competition: .practice, at: 5))
+        XCTAssertEqual(MatchMergePolicy.resolve(incoming: pushed, existing: watchHeld).tags, newer)
+        XCTAssertEqual(MatchMergePolicy.resolve(incoming: watchHeld, existing: nil).tags, newer)
+    }
+
+    func test_tags_equalClockConflict_convergesInEitherArrivalOrder() {
+        let id = UUID()
+        let a = F.record(id: id, tags: F.tags(opponents: [F.player("Alex")], at: 5, revision: F.uuid(1)))
+        let b = F.record(id: id, tags: F.tags(opponents: [F.player("Jo")], at: 5, revision: F.uuid(2)))
+        XCTAssertEqual(MatchMergePolicy.resolve(incoming: a, existing: b).tags,
+                       MatchMergePolicy.resolve(incoming: b, existing: a).tags)
+    }
+
+    func test_tags_emptyClear_beatsOlderTagsFromWatch() {
+        let id = UUID()
+        let original = F.tags(opponents: [F.player("Alex")], at: 10)
+        let cleared = MatchTags.cleared(after: original, now: F.base.addingTimeInterval(20))
+        let phone = F.record(id: id, tags: cleared)
+        let staleWatch = F.record(id: id, tags: original)
+        XCTAssertEqual(MatchMergePolicy.resolve(incoming: staleWatch, existing: phone).tags, cleared)
+    }
+}

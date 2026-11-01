@@ -555,6 +555,11 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                 // only; the phone ignores any echo (matchID / action payloads are
                 // decoded but not actioned on this side).
                 break
+            case .matchTagsUpdate:
+                // Watch → phone tag edits are v2 (MATCH_TAGS_PLAN.md §9); v1
+                // watches never send this key. Applied via
+                // `PhoneStatsStore.updateTags` once the iOS editor ships (PR 3).
+                break
             case .decodeError(let key, let error):
                 logger.error("decode error for \(key, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }

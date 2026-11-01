@@ -57,6 +57,11 @@ public enum SyncIncomingEvent: Equatable {
     /// `statActionCancelOutcomeSelection`. `outcome` accompanies select;
     /// `endingShot` accompanies commit-ending-shot.
     case statAction(action: String, outcome: PointOutcome?, endingShot: EndingShot?)
+    /// One match's tags (`MatchSyncKey.matchTagsUpdate`), already sanitized.
+    /// Apply only to a record the receiver holds, via `MatchRecord.mergingTags`
+    /// — never as a record body: a tag-only update must not advance a score,
+    /// start a workout or complete a match.
+    case matchTagsUpdate(matchID: UUID, tags: MatchTags)
     /// Decoding error for one of the recognized keys. The associated key lets the
     /// delegate log/diagnose without losing the rest of the payload's events.
     case decodeError(key: String, error: Error)
@@ -89,6 +94,8 @@ extension SyncIncomingEvent {
         case (.clearPendingPoint, .clearPendingPoint): return true
         case (.statAction(let aa, let oa, let ea), .statAction(let ab, let ob, let eb)):
             return aa == ab && oa == ob && ea == eb
+        case (.matchTagsUpdate(let ia, let ta), .matchTagsUpdate(let ib, let tb)):
+            return ia == ib && ta == tb
         case (.decodeError(let ka, _), .decodeError(let kb, _)): return ka == kb
         default: return false
         }
@@ -214,6 +221,14 @@ public enum SyncIncomingPayload {
             let endingShot = (payload[MatchSyncKey.statActionEndingShot] as? String)
                 .flatMap(EndingShot.init(rawValue:))
             events.append(.statAction(action: action, outcome: outcome, endingShot: endingShot))
+        }
+        if let data = payload[MatchSyncKey.matchTagsUpdate] as? Data {
+            do {
+                let update = try JSONDecoder().decode(MatchTagsUpdate.self, from: data)
+                events.append(.matchTagsUpdate(matchID: update.matchID, tags: update.tags.sanitized()))
+            } catch {
+                events.append(.decodeError(key: MatchSyncKey.matchTagsUpdate, error: error))
+            }
         }
         if let data = payload[MatchSyncKey.matchHistory] as? Data {
             do {

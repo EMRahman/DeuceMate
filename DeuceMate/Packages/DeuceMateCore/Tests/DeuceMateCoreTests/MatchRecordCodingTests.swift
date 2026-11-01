@@ -348,6 +348,90 @@ final class MatchRecordCodingTests: XCTestCase {
     }
 }
 
+// MARK: - Match tags (MATCH_TAGS_PLAN.md §4, CLAUDE.md §4 recipe)
+
+extension MatchRecordCodingTests {
+
+    private var legacyRecordJSON: String {
+        """
+        "id": "66666666-7777-8888-9999-000000000000",
+        "startTime": 1700000000,
+        "endTime": 1700003600,
+        "iWon": true,
+        "setScores": [],
+        "stats": [],
+        "currentPointsMe": 0,
+        "currentPointsOpponent": 0,
+        "gameCount": 0,
+        "pointCountInTiebreak": 0
+        """
+    }
+
+    func test_tags_roundTrip() throws {
+        let tags = MatchTags(
+            opponents: [TaggedPlayer(name: "Alex"), TaggedPlayer(name: "Jo")],
+            partner: TaggedPlayer(name: "Sam"),
+            competitionType: .league,
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_500)
+        )
+        let record = MatchRecord(startTime: Date(timeIntervalSince1970: 1_700_000_000),
+                                 setScores: [], stats: [], matchType: .doubles, tags: tags)
+        let decoded = try JSONDecoder().decode(MatchRecord.self, from: JSONEncoder().encode(record))
+        XCTAssertEqual(decoded.tags, tags)
+        XCTAssertEqual(decoded, record)
+    }
+
+    func test_tags_absentInOldJSON_decodesAsNilNotEmpty() throws {
+        let decoded = try JSONDecoder().decode(MatchRecord.self, from: Data("{\(legacyRecordJSON)}".utf8))
+        XCTAssertNil(decoded.tags, "nil = no information; never an implicit clear")
+    }
+
+    func test_tags_untaggedRecordOmitsTheKey() throws {
+        let record = MatchRecord(startTime: Date(), setScores: [], stats: [])
+        let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(record)) as? [String: Any]
+        XCTAssertNil(object?["tags"], "an untagged record encodes exactly as it did before tags existed")
+    }
+
+    func test_tags_unknownCompetition_ladder_decodesAndReencodesRawUnchanged() throws {
+        let json = """
+        {\(legacyRecordJSON),
+         "tags": {"opponents": [{"id": "00000000-0000-0000-0000-000000000001", "name": "Alex"}],
+                  "competitionTypeRaw": "ladder", "updatedAt": 10,
+                  "revisionID": "00000000-0000-0000-0000-000000000002"}}
+        """
+        let decoded = try JSONDecoder().decode(MatchRecord.self, from: Data(json.utf8))
+        XCTAssertNil(decoded.tags?.competitionType)
+        XCTAssertEqual(decoded.tags?.competitionTypeRaw, "ladder")
+        XCTAssertEqual(decoded.tags?.opponents.map(\.name), ["Alex"])
+
+        let reencoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(decoded)) as? [String: Any]
+        let tags = reencoded?["tags"] as? [String: Any]
+        XCTAssertEqual(tags?["competitionTypeRaw"] as? String, "ladder")
+    }
+
+    /// One malformed tags value must not take down the whole archive
+    /// (both apps decode `[MatchRecord]` atomically — TECHNICAL_DEBT #18).
+    func test_tags_malformedValueDegradesToNil_andArchiveStillDecodes() throws {
+        let bad = "{\(legacyRecordJSON), \"tags\": \"not an object\"}"
+            .replacingOccurrences(of: "66666666-7777-8888-9999-000000000000",
+                                  with: "66666666-7777-8888-9999-000000000001")
+        let good = "{\(legacyRecordJSON), \"tags\": {\"competitionTypeRaw\": \"league\", \"updatedAt\": 1}}"
+        let archive = try JSONDecoder().decode([MatchRecord].self, from: Data("[\(bad), \(good)]".utf8))
+        XCTAssertEqual(archive.count, 2)
+        XCTAssertNil(archive[0].tags)
+        XCTAssertEqual(archive[1].tags?.competitionType, .league)
+    }
+
+    func test_tags_survivePrivacyAndHealthProjections() {
+        let tags = MatchTags(opponents: [TaggedPlayer(name: "Alex")], competitionType: .tournament,
+                             updatedAt: Date(timeIntervalSince1970: 1))
+        let record = MatchRecord(startTime: Date(), setScores: [], stats: [], totalSteps: 10, tags: tags)
+        XCTAssertEqual(record.strippingHealthData().tags, tags, "names are not health data; iCloud keeps them")
+        XCTAssertEqual(record.fillingMissingHealthData(from: record).tags, tags)
+        XCTAssertEqual(record.endingAtCurrentScore().tags, tags)
+    }
+}
+
 /// Wraps the static helpers on StatsStoring for testing.
 private enum StatsStore_Codec {
     static func encode(_ records: [MatchRecord]) throws -> Data {
