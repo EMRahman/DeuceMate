@@ -1596,8 +1596,11 @@ class ScoreViewModel: ObservableObject {
         workoutManager.startWorkout(startDate: matchStartTime ?? Date())
         // Signal HomeView to navigate to the score view.
         shouldOpenMatchView = true
-        // Drop from store; will be re-appended on next finalize.
-        statsStore.removeMatch(id: record.id)
+        // Drop from store; will be re-appended on next finalize. The sheet's
+        // snapshot can predate a phone tag update the store has since saved, so
+        // merge the stored copy's current tags in as it is removed.
+        let storedTags = statsStore.removeMatchReturningTags(id: record.id)
+        liveMatchTags = MatchTags.merged(liveMatchTags, storedTags)
         saveState()
     }
     

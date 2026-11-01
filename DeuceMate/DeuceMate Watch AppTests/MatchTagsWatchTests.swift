@@ -239,6 +239,48 @@ struct MatchTagsWatchTests {
     }
 
     @MainActor
+    @Test func resumingAStaleSnapshotKeepsTheNewerStoredTags() throws {
+        let store = StatsStore(fileURL: makeTempURL())
+        let stale = makeRecord(tags: tags("Old", at: 100))
+        store.saveHistory([stale])
+        // The phone's newer revision lands while the sheet still holds `stale`.
+        let newer = tags("Newer", at: 200)
+        _ = try #require(store.updateTags(id: stale.id, tags: newer))
+        let viewModel = ScoreViewModel(statsStore: store, stateFileURL: makeTempURL())
+        let sync = SyncSpy()
+        viewModel.syncService = sync
+        viewModel.statsTrackingEnabled = false
+
+        viewModel.resumeMatch(stale)
+        #expect(viewModel.liveMatchTags == newer)
+        viewModel.winPoint(player: .me)
+        #expect(sync.sent.last?.tags == newer)
+        viewModel.resetMatch()
+        #expect(store.loadHistory().first?.tags == newer)
+    }
+
+    @MainActor
+    @Test func resumingAStaleSnapshotKeepsAnExplicitClear() throws {
+        let store = StatsStore(fileURL: makeTempURL())
+        let old = tags("Old", at: 100)
+        let stale = makeRecord(tags: old)
+        store.saveHistory([stale])
+        let cleared = MatchTags.cleared(after: old, now: Date(timeIntervalSince1970: 200))
+        _ = try #require(store.updateTags(id: stale.id, tags: cleared))
+        let viewModel = ScoreViewModel(statsStore: store, stateFileURL: makeTempURL())
+        let sync = SyncSpy()
+        viewModel.syncService = sync
+        viewModel.statsTrackingEnabled = false
+
+        viewModel.resumeMatch(stale)
+        #expect(viewModel.liveMatchTags == cleared)
+        viewModel.winPoint(player: .me)
+        #expect(sync.sent.last?.tags == cleared)
+        viewModel.resetMatch()
+        #expect(store.loadHistory().first?.tags == cleared)
+    }
+
+    @MainActor
     @Test func aTagUpdateForTheLiveMatchIsCarriedWithoutChangingTheScore() throws {
         let store = StatsStore(fileURL: makeTempURL())
         let record = makeRecord()
