@@ -130,7 +130,7 @@ anything portable; no `.pbxproj` change needed — the package globs its sources
 | `Scoring/ScoringEngine.swift` | Pure scoring reducer — `pointWon(by:in:) -> ScoringResult` over value-type `ScoringState`; side-effects come back as typed `ScoringEvent`s. The watch `ScoreViewModel` delegates here. Its perspective-neutral `isRegularGameComplete` predicate is also shared by historical score reconciliation, and `leaderWhenStopped` resolves explicitly ended friendlies from sets, games, then points. **Change scoring rules here, with `ScoringEngineTests`.** |
 | `Sync/MatchSyncMessage.swift` | `MatchSyncKey` (all wire keys), `MatchSyncService` protocol, codec helpers. |
 | `Sync/MatchSyncPayloadBuilder.swift` | Pure construction of the `[String: Any]` WatchConnectivity payloads. **Build payloads here** (single source of the wire shape) rather than assembling dicts inline in the app/transport — keeps them round-trippable in package tests. |
-| `Sync/SyncIncomingPayload.swift`, `MatchSyncTransport.swift`, `MatchMergePolicy.swift` | Decode/route incoming payloads (incl. the sanitized `.matchTagsUpdate(matchID:tags:)` event — the phone currently ignores it, the watch's `default:` drops it until PR 2); merge policy decides watch-vs-phone **body** winner, then merges `tags` by their own clock on every return path (the equal-`endTime` untagged-watch-copy hazard, MATCH_TAGS_PLAN.md §3) and `merge(…forgottenPlayers:)` scrubs forgotten players. Any new merge site must do the same. |
+| `Sync/SyncIncomingPayload.swift`, `MatchSyncTransport.swift`, `MatchMergePolicy.swift` | Decode/route incoming payloads (incl. the sanitized `.matchTagsUpdate(matchID:tags:)` event — the phone currently ignores it, the watch applies it via `StatsStore.updateTags` and read-only captions in `MatchHistoryView`/`MatchStatsView`); merge policy decides watch-vs-phone **body** winner, then merges `tags` by their own clock on every return path (the equal-`endTime` untagged-watch-copy hazard, MATCH_TAGS_PLAN.md §3) and `merge(…forgottenPlayers:)` scrubs forgotten players. Any new merge site must do the same. |
 | `Sync/MatchStorageLocation.swift` | Pure derivation of where a match lives (`both` / `phoneOnly` / `watchOnly`) from the watch's reported id manifest vs the phone's store. Drives the iOS storage-location indicators. |
 | `Sync/WatchMirror.swift`, `WatchHistoryCap.swift` | Pure merge/prune rules for the phone's mirror of the watch's rolling history; `WatchHistory.cap` (25) lives here so the watch (enforces) and phone (explains) cite one number. |
 | `Sync/ArchiveBackupPolicy.swift` | Pure one-way iCloud backup policy: builds outbound snapshots from the phone archive (stripping the five HealthKit-derived fields to comply with App Store Review Guideline 5.1.3(ii)), handles the one-time initial restore before the local archive is initialized (using `isInProgress`, so completed draws remain final), and defines `BackupPreview` (record count + newest date, used for the restore prompt). Used by `PhoneStatsStore`. |
@@ -515,6 +515,15 @@ compiler does not connect** (see §5). To add one, keep them consistent:
   replace path must too. Merge sites must also merge tags: `MatchTags.merged`
   inside the body resolution. Any new phone inbound path must also scrub with
   the forgotten-player ledger.
+  **Enforced on the watch (PR 2):** `StatsStore.appendMatch` merges the stored
+  copy's tags forward; `ScoreViewModel.liveMatchTags` carries them across resume
+  (which removes the record from the store) and into every checkpoint/finalize
+  record and `appState.json`; `completeStoredMatch` copies the record so tags
+  survive; `StatsStore.updateTags` (reached only from `.matchTagsUpdate`) is
+  metadata-only and never creates a record. `MatchTagsWatchTests` pins all of it —
+  a new watch write path needs a case there. A phone tag push for the **live**
+  match can't reach the store (it isn't in history), so
+  `onMatchTagsReceived` → `applyIncomingMatchTags` merges it into `liveMatchTags`.
 - **Very large files** (`ScoreViewModel` ~2.0k, `PointsGraphView` ~1.9k,
   `MatchDetailView` ~1.3k, `ContentView`/`HomeView`/`PastMatchesView`
   ~0.7–1.0k). Don't load them whole. `PointsGraphView` and `MatchDetailView`
