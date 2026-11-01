@@ -4,8 +4,8 @@
 // Point tracking, Health access, and Pulse Coach calibration are all set once
 // and then invisible, yet they decide whether a finished match is rich or thin
 // — and none of them can be fixed after the fact. The strip states all three
-// before the first point, and taps through to Settings so the answer is one
-// tap from the fix. What each chip says comes from `MatchTrackingStatus` in
+// before the first point. Tapping a chip (or a Settings row) goes to the control
+// that changes it — see `MatchTrackingStatus.destination(access:)`. What each chip says comes from `MatchTrackingStatus` in
 // DeuceMateCore; this file only paints it.
 import SwiftUI
 import DeuceMateCore
@@ -28,7 +28,7 @@ extension TrackingReadiness {
 /// changes. Collapses Pulse Coach out when Health is off (OQ-1).
 struct LiveTrackingStatusStrip: View {
     @ObservedObject var viewModel: ScoreViewModel
-    let action: () -> Void
+    let action: (MatchTrackingStatus) -> Void
 
     var body: some View {
         TrackingStatusStrip(
@@ -42,31 +42,36 @@ struct LiveTrackingStatusStrip: View {
 /// `TrackingStatusRows`), same observation note as above.
 struct LiveTrackingStatusRows: View {
     @ObservedObject var viewModel: ScoreViewModel
+    let action: (MatchTrackingStatus) -> Void
 
     var body: some View {
-        TrackingStatusRows(statuses: viewModel.trackingStatuses)
+        TrackingStatusRows(
+            statuses: viewModel.trackingStatuses,
+            isActionable: { viewModel.isTrackingStatusActionable($0) },
+            action: action
+        )
     }
 }
 
 struct TrackingStatusStrip: View {
     let statuses: [MatchTrackingStatus]
-    let action: () -> Void
+    let action: (MatchTrackingStatus) -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                ForEach(statuses, id: \.facet) { status in
+        HStack(spacing: 5) {
+            ForEach(statuses, id: \.facet) { status in
+                Button {
+                    action(status)
+                } label: {
                     TrackingStatusChip(status: status)
                 }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(status.accessibilityDescription)
+                .accessibilityHint("Opens the setting")
+                .accessibilityAddTraits(.isButton)
             }
         }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            statuses.map(\.accessibilityDescription).joined(separator: " ")
-        )
-        .accessibilityHint("Opens Settings")
-        .accessibilityAddTraits(.isButton)
     }
 }
 
@@ -109,34 +114,57 @@ private struct TrackingStatusChip: View {
 /// (§4.3's mitigation: the complete picture stays one tap away).
 struct TrackingStatusRows: View {
     let statuses: [MatchTrackingStatus]
+    /// Whether tapping the row does anything. A row with no control on the watch
+    /// (Health already denied) stays plain text rather than a dead button.
+    var isActionable: (MatchTrackingStatus) -> Bool = { _ in false }
+    var action: (MatchTrackingStatus) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(statuses, id: \.facet) { status in
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: status.systemImage)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(status.readiness.tint)
-                        .frame(width: 14)
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
-                            Text(status.title)
-                            Spacer()
-                            Text(status.stateLabel)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(status.readiness.tint)
-                        }
-                        // LocalizedStringKey (not the plain-String initializer)
-                        // so the Pulse "Est." detail's **bold** clause renders —
-                        // Text(String) does not parse Markdown.
-                        Text(LocalizedStringKey(status.detail))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                if isActionable(status) {
+                    Button { action(status) } label: { row(status, showsChevron: true) }
+                        .buttonStyle(.plain)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(status.accessibilityDescription)
+                        .accessibilityAddTraits(.isButton)
+                } else {
+                    row(status, showsChevron: false)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(status.accessibilityDescription)
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(status.accessibilityDescription)
             }
         }
+    }
+
+    private func row(_ status: MatchTrackingStatus, showsChevron: Bool) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: status.systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(status.readiness.tint)
+                .frame(width: 14)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(status.title)
+                    Spacer()
+                    Text(status.stateLabel)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(status.readiness.tint)
+                }
+                // LocalizedStringKey (not the plain-String initializer)
+                // so the Pulse "Est." detail's **bold** clause renders —
+                // Text(String) does not parse Markdown.
+                Text(LocalizedStringKey(status.detail))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 3)
+            }
+        }
+        .contentShape(Rectangle())
     }
 }

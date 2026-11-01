@@ -292,6 +292,12 @@ private struct BirthYearPickerView: View {
     }
 }
 
+/// Scroll targets inside the Settings sheet that a tracking status can jump to.
+private enum SettingsAnchor: Hashable {
+    case pointTracking
+    case pulseCoach
+}
+
 struct HomeView: View {
     @EnvironmentObject var viewModel: ScoreViewModel
     @Environment(\.openURL) private var openURL
@@ -302,6 +308,9 @@ struct HomeView: View {
     @State private var walkthroughIsOffer = false
     @State private var guideWalkthroughRequested = false
     @State private var showSettings = false
+    /// Which part of Settings to scroll to when the sheet opens or a tracking row
+    /// is tapped. `nil` = top.
+    @State private var settingsScrollTarget: SettingsAnchor?
     @State private var showEndMatchConfirmation = false
     @State private var showMatchSetupSheet = false
     @State private var showTrickyRules = false
@@ -422,9 +431,9 @@ struct HomeView: View {
 
                     // What this match will actually record — stated before the
                     // first point, because none of it can be added afterwards.
-                    // Taps to Settings, same as the format row above it.
-                    LiveTrackingStatusStrip(viewModel: viewModel) {
-                        showSettings = true
+                    // Each chip opens Settings at the control that changes it.
+                    LiveTrackingStatusStrip(viewModel: viewModel) { status in
+                        openSettings(for: status)
                     }
                 }
 
@@ -454,6 +463,7 @@ struct HomeView: View {
                     }
 
                     Button {
+                        settingsScrollTarget = nil
                         showSettings = true
                     } label: {
                         Label("Settings", systemImage: "gearshape.fill")
@@ -541,6 +551,7 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showSettings) {
             NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
                     // Mirrors the start-screen strip, with room for the detail —
@@ -549,7 +560,12 @@ struct HomeView: View {
                     Text("What This Match Records")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    LiveTrackingStatusRows(viewModel: viewModel)
+                    // Tapping a row jumps to the control that changes it.
+                    LiveTrackingStatusRows(viewModel: viewModel) { status in
+                        handleTrackingTap(status) { target in
+                            withAnimation { proxy.scrollTo(target, anchor: .top) }
+                        }
+                    }
                     Divider().padding(.vertical, 4)
                     Toggle(isOn: $viewModel.statsTrackingEnabled) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -561,6 +577,7 @@ struct HomeView: View {
                     }
                     .toggleStyle(.switch)
                     .disabled(matchInProgress)
+                    .id(SettingsAnchor.pointTracking)
                     Toggle(isOn: $viewModel.checkChangeover) {
                         VStack(alignment: .leading, spacing: 2) {
                             (Text("Changeover Compass")
@@ -680,6 +697,7 @@ struct HomeView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .padding(.top, 2)
+                            .id(SettingsAnchor.pulseCoach)
 
                         HStack {
                             Text(viewModel.userBirthYear == 0 ? "Max HR (default)" : "Max HR (resolved)")
@@ -767,6 +785,14 @@ struct HomeView: View {
                 .font(.footnote)
                 .padding()
             }
+            .onAppear {
+                // Opened from a start-screen chip: land on that control.
+                guard let target = settingsScrollTarget else { return }
+                DispatchQueue.main.async {
+                    proxy.scrollTo(target, anchor: .top)
+                }
+            }
+            } // ScrollViewReader
             } // NavigationStack
         }
         .sheet(isPresented: $showInstructions, onDismiss: {
@@ -951,6 +977,38 @@ struct HomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .watchMatchHistoryDidChange)) { _ in
             hasPastMatches = !StatsStore.shared.loadHistory().isEmpty
+        }
+    }
+
+    /// Start-screen chip tap. Points/Pulse open Settings scrolled to their
+    /// control; Health asks for permission when it can, otherwise opens Settings
+    /// at the top, where the rows explain the iPhone-side fix.
+    private func openSettings(for status: MatchTrackingStatus) {
+        switch viewModel.trackingDestination(for: status) {
+        case .pointTrackingToggle:
+            settingsScrollTarget = .pointTracking
+            showSettings = true
+        case .pulseCoachSettings:
+            settingsScrollTarget = .pulseCoach
+            showSettings = true
+        case .requestHealthAccess:
+            viewModel.workoutManager.requestAuthorization { _ in }
+        case .none:
+            settingsScrollTarget = nil
+            showSettings = true
+        }
+    }
+
+    /// Settings-row tap: scroll in place (sheet already open) or prompt.
+    private func handleTrackingTap(
+        _ status: MatchTrackingStatus,
+        scroll: (SettingsAnchor) -> Void
+    ) {
+        switch viewModel.trackingDestination(for: status) {
+        case .pointTrackingToggle:   scroll(.pointTracking)
+        case .pulseCoachSettings:    scroll(.pulseCoach)
+        case .requestHealthAccess:   viewModel.workoutManager.requestAuthorization { _ in }
+        case .none:                  break
         }
     }
 

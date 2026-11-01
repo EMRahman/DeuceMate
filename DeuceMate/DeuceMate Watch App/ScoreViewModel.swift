@@ -700,6 +700,16 @@ class ScoreViewModel: ObservableObject {
         )
     }
 
+    /// What tapping `status` should do. Resolved against the live Health access
+    /// so it can't disagree with the chip's own state.
+    func trackingDestination(for status: MatchTrackingStatus) -> TrackingDestination {
+        status.destination(access: workoutManager.healthAccess)
+    }
+
+    func isTrackingStatusActionable(_ status: MatchTrackingStatus) -> Bool {
+        trackingDestination(for: status) != .none
+    }
+
     /// Called once the server is confirmed and the match is officially starting.
     /// Bootstraps the match identity (ID + timers) and pushes the initial
     /// in-progress record to the phone so it appears immediately without
