@@ -14,13 +14,16 @@ public enum MatchHTMLExporter {
     /// send the opponent (every side swapped, so it says they won when they
     /// did). Pass the pre-generated AI coaching prompts
     /// (`MatchExporter.aiPromptExport`) to surface the AI Coach card; omit them
-    /// for a prompt-free page.
+    /// for a prompt-free page. `details` carries the match context (competition,
+    /// names, private note) the caller chose to share; the default shares none.
     public nonisolated static func html(for record: MatchRecord, maxHR: Int = 190,
                                         perspective: Player = .me,
                                         aiPromptMe: String? = nil,
-                                        aiPromptOpponent: String? = nil) -> String {
+                                        aiPromptOpponent: String? = nil,
+                                        details: MatchExportDetails = .none) -> String {
         let vm = MatchWebViewModel.make(from: record, maxHR: maxHR, perspective: perspective,
-                                        aiPromptMe: aiPromptMe, aiPromptOpponent: aiPromptOpponent)
+                                        aiPromptMe: aiPromptMe, aiPromptOpponent: aiPromptOpponent,
+                                        details: details)
         let json = encode(vm)
         return MatchWebTemplate.page(jsonLiteral: json, fallbackHTML: staticFallback(vm))
     }

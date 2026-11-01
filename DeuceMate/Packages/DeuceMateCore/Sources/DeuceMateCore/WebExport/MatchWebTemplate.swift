@@ -289,13 +289,36 @@ public enum MatchWebTemplate {
           DATA.meta.perspectiveNote
             ? el("div", { class: "sub", style: "margin-top:6px", text: DATA.meta.perspectiveNote })
             : null,
+          detailsLine(),
           el("div", { class: "spread", style: "margin-top:10px" }, [
             el("div", { class: "score", text: p.scoreDisplay }),
             el("div", { class: "sub", text: "Points " + p.pointsWon + "–" + p.pointsLost + " · " + DATA.meta.durationDisplay })
           ]),
-          setLines()
+          setLines(),
+          privateNoteBlock()
         ]);
         return c;
+      }
+      // Match details (schema 13): the competition type and the reader-framed
+      // side names. Both arrive pre-framed from Swift; this only paints. Names
+      // are empty unless the sender opted in, and are set via textContent.
+      function detailsLine() {
+        const m = DATA.meta;
+        const mine = m.readerSideNames || [], theirs = m.otherSideNames || [];
+        const parts = [];
+        if (m.competitionTypeLabel) parts.push(m.competitionTypeLabel);
+        if (mine.length || theirs.length) parts.push(mine.join(" & ") + " vs " + theirs.join(" & "));
+        return parts.length ? el("div", { class: "sub", style: "margin-top:6px", text: parts.join(" \u00B7 ") }) : null;
+      }
+      // The recorder's private note, present only after the sender's separate
+      // opt-in. textContent + pre-wrap keeps it inert and keeps paragraph breaks.
+      function privateNoteBlock() {
+        const note = DATA.meta.privateNote;
+        if (!note) return null;
+        return el("div", { style: "margin-top:12px;padding-top:10px;border-top:1px solid var(--line)" }, [
+          el("div", { class: "sub", style: "font-weight:600", text: "Private note" }),
+          el("div", { class: "sub", style: "margin-top:4px;white-space:pre-wrap", text: note })
+        ]);
       }
       function setLines() {
         if (!DATA.meta.sets.length) return null;

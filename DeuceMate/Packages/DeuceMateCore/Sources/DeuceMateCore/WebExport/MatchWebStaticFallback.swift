@@ -50,15 +50,31 @@ extension MatchHTMLExporter {
         // Opponent's export only: says whose "Me" this is.
         let perspectiveNote = vm.meta.perspectiveNote
             .map { "<div class=\"sub\" style=\"margin-top:6px\">\(esc($0))</div>" } ?? ""
+        // Match details (schema 13), reader-framed in Swift like the viewer.
+        var detailParts: [String] = []
+        if let competition = vm.meta.competitionTypeLabel { detailParts.append(competition) }
+        if !vm.meta.readerSideNames.isEmpty || !vm.meta.otherSideNames.isEmpty {
+            detailParts.append(vm.meta.readerSideNames.joined(separator: " & ") + " vs "
+                + vm.meta.otherSideNames.joined(separator: " & "))
+        }
+        let detailsLine = detailParts.isEmpty ? ""
+            : "<div class=\"sub\" style=\"margin-top:6px\">\(esc(detailParts.joined(separator: " \u{00B7} ")))</div>"
+        // Opted-in private note only; escaped and pre-wrapped.
+        let noteBlock = vm.meta.privateNote.map {
+            "<div style=\"margin-top:12px;padding-top:10px;border-top:1px solid var(--line)\">"
+                + "<div class=\"sub\" style=\"font-weight:600\">Private note</div>"
+                + "<div class=\"sub\" style=\"margin-top:4px;white-space:pre-wrap\">\(esc($0))</div></div>"
+        } ?? ""
         html += """
         <div class="card">\
         <div class="spread"><div><h1>DeuceMate Match</h1>\
         <div class="sub">\(esc(vm.meta.dateDisplay)) · \(esc(vm.meta.formatLabel))</div></div>\
         <span class="badge \(me.result)">\(esc(resultLabel))</span></div>\
         \(perspectiveNote)\
+        \(detailsLine)\
         <div class="spread" style="margin-top:10px"><div class="score">\(esc(me.scoreDisplay))</div>\
         <div class="sub">Points \(me.pointsWon)–\(me.pointsLost) · \(esc(vm.meta.durationDisplay))</div></div>\
-        \(sets)</div>
+        \(sets)\(noteBlock)</div>
         """
 
         // Momentum charts (server-rendered SVG) — one per preset selection, each
@@ -444,5 +460,7 @@ extension MatchHTMLExporter {
          .replacingOccurrences(of: ">", with: "&gt;")
          .replacingOccurrences(of: "\"", with: "&quot;")
          .replacingOccurrences(of: "'", with: "&#39;")
+         .replacingOccurrences(of: "\u{2028}", with: "&#8232;")
+         .replacingOccurrences(of: "\u{2029}", with: "&#8233;")
     }
 }

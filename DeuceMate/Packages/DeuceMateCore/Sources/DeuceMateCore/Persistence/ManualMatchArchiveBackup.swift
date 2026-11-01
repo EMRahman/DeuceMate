@@ -34,6 +34,13 @@ public enum ManualMatchArchiveBackup {
         /// and additive within schema 1: older builds ignore the key, and an
         /// archive without it (`nil`) can never erase the importer's ledger.
         public let forgottenPlayers: ForgottenPlayerLedger?
+        /// Opt-in private notes (MATCH_TAGS_PLAN.md §4.1), a separate optional
+        /// section - never projected into the match JSON. `nil` (omitted) means
+        /// "no information": importing it can never clear or replace a note. An
+        /// included entry with empty text is an explicit clear and merges by
+        /// the note's own revision order. Exported only after the user's
+        /// "Include private notes" opt-in (default off).
+        public let notes: [MatchNote]?
 
         public init(
             format: String = ManualMatchArchiveBackup.format,
@@ -41,7 +48,8 @@ public enum ManualMatchArchiveBackup {
             exportedAt: Date = Date(),
             includesHealthData: Bool = true,
             records: [MatchRecord],
-            forgottenPlayers: ForgottenPlayerLedger? = nil
+            forgottenPlayers: ForgottenPlayerLedger? = nil,
+            notes: [MatchNote]? = nil
         ) {
             self.format = format
             self.schemaVersion = schemaVersion
@@ -49,6 +57,7 @@ public enum ManualMatchArchiveBackup {
             self.includesHealthData = includesHealthData
             self.records = records
             self.forgottenPlayers = forgottenPlayers
+            self.notes = notes
         }
     }
 
@@ -56,11 +65,15 @@ public enum ManualMatchArchiveBackup {
         public let recordCount: Int
         public let includesHealthData: Bool
         public let exportedAt: Date
+        /// How many non-empty private notes the file carries (0 when the file
+        /// has no notes section, which is the default export).
+        public let noteCount: Int
 
-        public init(recordCount: Int, includesHealthData: Bool, exportedAt: Date) {
+        public init(recordCount: Int, includesHealthData: Bool, exportedAt: Date, noteCount: Int = 0) {
             self.recordCount = recordCount
             self.includesHealthData = includesHealthData
             self.exportedAt = exportedAt
+            self.noteCount = noteCount
         }
     }
 
@@ -112,12 +125,19 @@ public enum ManualMatchArchiveBackup {
     public static func encode(
         records: [MatchRecord],
         exportedAt: Date = Date(),
-        forgottenPlayers: ForgottenPlayerLedger? = nil
+        forgottenPlayers: ForgottenPlayerLedger? = nil,
+        notes: [MatchNote]? = nil
     ) throws -> Data {
         let archive = Archive(
             exportedAt: exportedAt,
             records: ArchiveBackupPolicy.sortedNewestFirst(records),
-            forgottenPlayers: forgottenPlayers
+            forgottenPlayers: forgottenPlayers,
+            // Only notes for matches that are in this file, only when the
+            // caller opted in (`nil` = omit the section entirely).
+            notes: notes.map { exported in
+                let ids = Set(records.map(\.id))
+                return MatchNotesPolicy.merge(exported.filter { ids.contains($0.matchID) }, into: [])
+            }
         )
         return try makeEncoder().encode(archive)
     }
@@ -136,8 +156,21 @@ public enum ManualMatchArchiveBackup {
         return ImportPreview(
             recordCount: archive.records.count,
             includesHealthData: archive.includesHealthData,
-            exportedAt: archive.exportedAt
+            exportedAt: archive.exportedAt,
+            noteCount: archive.notes?.filter { !$0.isCleared }.count ?? 0
         )
+    }
+
+    /// The notes an import may restore into the backup-excluded sidecar: only
+    /// entries addressed to a match the file itself carries (an orphan entry
+    /// cannot create a note for a match that does not exist), one revision per
+    /// match. `nil`/absent section ⇒ nothing - "no information". The caller
+    /// merges the result with `MatchNotesPolicy.merge(_:into:)` so the notes'
+    /// own revision order decides, in both merge and replace modes.
+    public static func importableNotes(from archive: Archive) -> [MatchNote] {
+        guard let notes = archive.notes else { return [] }
+        let ids = Set(archive.records.map(\.id))
+        return MatchNotesPolicy.merge(notes.filter { ids.contains($0.matchID) }, into: [])
     }
 
     /// Builds the archive state after an import. Tags merge by their own

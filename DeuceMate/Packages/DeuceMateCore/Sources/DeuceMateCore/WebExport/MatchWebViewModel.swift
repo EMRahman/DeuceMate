@@ -36,8 +36,11 @@ public struct MatchWebViewModel: Encodable, Sendable {
     /// server-attributed scatter counts and serving legend metadata. v11 adds
     /// the top-level `perspective` + `meta.perspectiveNote` and makes every
     /// "me" field reader-framed (the opponent's export swaps sides). v12 adds
-    /// the `promo` block (App Store + website links).
-    public static let currentSchemaVersion = 12
+    /// the `promo` block (App Store + website links). v13 adds the optional
+    /// match-detail `meta` fields — `competitionTypeLabel`, reader-framed
+    /// `readerSideNames` / `otherSideNames` (empty unless the caller opted into
+    /// names) and `privateNote` (only after the separate notes opt-in).
+    public static let currentSchemaVersion = 13
 
     public let schemaVersion: Int
     public let generatedAt: String
@@ -87,6 +90,17 @@ public struct MatchWebViewModel: Encodable, Sendable {
         /// opponent's export ("Me" is the reader there, not the recorder).
         /// `nil` in the recorder's own export.
         public let perspectiveNote: String?
+        /// "League", "Friendly", ... - `nil` when the match has no competition
+        /// type. Carries no personal data, so it is present whenever tagged.
+        public let competitionTypeLabel: String?
+        /// Names on the READER's side / the other side, reader-framed in Swift
+        /// (the opponent's file swaps them). Empty unless the export opted into
+        /// names; the viewer paints "a & b vs c & d" and never derives sides.
+        public let readerSideNames: [String]
+        public let otherSideNames: [String]
+        /// The recorder's private note - `nil` unless the separate notes
+        /// opt-in was on. Painted with `textContent` / escaped, `pre-wrap`.
+        public let privateNote: String?
     }
 
     public struct SetVM: Encodable, Sendable {
@@ -361,11 +375,14 @@ public struct MatchWebViewModel: Encodable, Sendable {
     /// `aiPromptMe` / `aiPromptOpponent` are the pre-generated recorder- and
     /// opponent-perspective AI coaching prompts (from `MatchExporter`); supply
     /// them to surface the AI Coach card. The opponent's export offers only
-    /// `aiPromptOpponent`.
+    /// `aiPromptOpponent`. `details` carries the (already name- and
+    /// note-filtered) match context; the default `.none` emits nothing from the
+    /// record's tags.
     public nonisolated static func make(from record: MatchRecord, maxHR: Int = 190,
                                         perspective: Player = .me,
                                         aiPromptMe: String? = nil,
-                                        aiPromptOpponent: String? = nil) -> MatchWebViewModel {
+                                        aiPromptOpponent: String? = nil,
+                                        details: MatchExportDetails = .none) -> MatchWebViewModel {
         let reader = perspective
         let other: Player = reader == .me ? .opponent : .me
         let allStats = record.stats
@@ -397,7 +414,11 @@ public struct MatchWebViewModel: Encodable, Sendable {
             durationDisplay: durationSecs > 0 ? Self.minutesString(durationSecs) : "—",
             sets: Self.setRows(record, reader: reader),
             totals: Self.totals(record),
-            perspectiveNote: reader == .opponent ? Self.opponentPerspectiveNote : nil
+            perspectiveNote: reader == .opponent ? Self.opponentPerspectiveNote : nil,
+            competitionTypeLabel: details.competitionLabel,
+            readerSideNames: details.sideNames(reader: reader).reader,
+            otherSideNames: details.sideNames(reader: reader).other,
+            privateNote: details.note
         )
 
         // Perspectives — `me` is the reader, `opponent` the other side.
