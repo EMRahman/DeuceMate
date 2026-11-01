@@ -17,6 +17,13 @@ protocol WatchStatsStoring: StatsStoring {
     /// queue. Returns the saved record, or nil for an unreadable archive, a
     /// missing ID (never creates a record) or a failed write.
     func updateTags(id: UUID, tags: MatchTags) -> MatchRecord?
+
+    /// Remove a stored record and return the tags it holds at that moment, read
+    /// and removed on one serial-queue hop. Resuming a match uses this so a tag
+    /// revision saved after the history sheet captured its snapshot is not lost.
+    /// Returns nil (and removes nothing) for an unreadable archive, a missing ID
+    /// or an untagged record; a read failure is never treated as "no tags".
+    func removeMatchReturningTags(id: UUID) -> MatchTags?
 }
 
 /// JSON-backed `StatsStoring` implementation for the watch target. Persists to
@@ -95,6 +102,20 @@ final class StatsStore: WatchStatsStoring {
             records[index] = updated
             guard _writeUnsafe(records) else { return nil }
             return updated
+        }
+    }
+
+    func removeMatchReturningTags(id: UUID) -> MatchTags? {
+        queue.sync {
+            guard var records = _loadHistoryUnsafe() else {
+                statsStoreLogger.error("removeMatchReturningTags skipped: match history unreadable; refusing to overwrite")
+                return nil
+            }
+            guard let index = records.firstIndex(where: { $0.id == id }) else { return nil }
+            let tags = records[index].tags
+            records.remove(at: index)
+            _writeUnsafe(records)
+            return tags
         }
     }
 
