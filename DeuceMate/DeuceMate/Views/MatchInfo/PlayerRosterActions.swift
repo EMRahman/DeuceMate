@@ -30,9 +30,19 @@ struct PlayerRosterActions {
         syncService.pushTagUpdates(forMatchIDs: affected)
     }
 
-    /// Saves the profile before notifying the watch of the updated tags.
-    func updateDetails(_ playerID: UUID, age: Int?, sexRaw: String?) throws {
-        let affected = try store.updatePlayerDetails(playerID, age: age, sexRaw: sexRaw)
+    /// Saves the tennis profile before notifying the watch of the updated tags.
+    func updateDetails(
+        _ playerID: UUID,
+        handednessRaw: String?,
+        backhandRaw: String?,
+        playStyleRaw: String?
+    ) throws {
+        let affected = try store.updatePlayerDetails(
+            playerID,
+            handednessRaw: handednessRaw,
+            backhandRaw: backhandRaw,
+            playStyleRaw: playStyleRaw
+        )
         syncService.pushTagUpdates(forMatchIDs: affected)
     }
 

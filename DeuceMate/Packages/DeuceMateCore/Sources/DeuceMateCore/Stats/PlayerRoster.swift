@@ -79,20 +79,40 @@ public struct RosterEntry: Identifiable, Equatable, Sendable {
     public let id: UUID
     /// From the most recently updated tag revision that carries this id.
     public let name: String
-    public let age: Int?
-    public let sexRaw: String?
-    public var sex: PlayerSex? { sexRaw.flatMap(PlayerSex.init(rawValue:)) }
-    public var taggedPlayer: TaggedPlayer { TaggedPlayer(id: id, name: name, age: age, sexRaw: sexRaw) }
+    public let handednessRaw: String?
+    public let backhandRaw: String?
+    public let playStyleRaw: String?
+    public var handedness: PlayerHandedness? { handednessRaw.flatMap(PlayerHandedness.init(rawValue:)) }
+    public var backhand: PlayerBackhand? { backhandRaw.flatMap(PlayerBackhand.init(rawValue:)) }
+    public var playStyle: PlayerPlayStyle? { playStyleRaw.flatMap(PlayerPlayStyle.init(rawValue:)) }
+    public var taggedPlayer: TaggedPlayer {
+        TaggedPlayer(
+            id: id,
+            name: name,
+            handednessRaw: handednessRaw,
+            backhandRaw: backhandRaw,
+            playStyleRaw: playStyleRaw
+        )
+    }
     /// Distinct matches carrying this id in any role (opponent or partner).
     public let matchCount: Int
     /// Start time of the most recent such match.
     public let lastPlayed: Date
 
-    public init(id: UUID, name: String, matchCount: Int, lastPlayed: Date, age: Int? = nil, sexRaw: String? = nil) {
+    public init(
+        id: UUID,
+        name: String,
+        matchCount: Int,
+        lastPlayed: Date,
+        handednessRaw: String? = nil,
+        backhandRaw: String? = nil,
+        playStyleRaw: String? = nil
+    ) {
         self.id = id
         self.name = name
-        self.age = TaggedPlayer.sanitizedAge(age)
-        self.sexRaw = TaggedPlayer.sanitizedSexRaw(sexRaw)
+        self.handednessRaw = TaggedPlayer.sanitizedAttributeRaw(handednessRaw)
+        self.backhandRaw = TaggedPlayer.sanitizedAttributeRaw(backhandRaw)
+        self.playStyleRaw = TaggedPlayer.sanitizedAttributeRaw(playStyleRaw)
         self.matchCount = matchCount
         self.lastPlayed = lastPlayed
     }
@@ -148,9 +168,17 @@ public enum PlayerRoster {
             }
         }
         return byID
-            .map { RosterEntry(id: $0.key, name: $0.value.player.name,
-                               matchCount: $0.value.matchIDs.count, lastPlayed: $0.value.lastPlayed,
-                               age: $0.value.player.age, sexRaw: $0.value.player.sexRaw) }
+            .map {
+                RosterEntry(
+                    id: $0.key,
+                    name: $0.value.player.name,
+                    matchCount: $0.value.matchIDs.count,
+                    lastPlayed: $0.value.lastPlayed,
+                    handednessRaw: $0.value.player.handednessRaw,
+                    backhandRaw: $0.value.player.backhandRaw,
+                    playStyleRaw: $0.value.player.playStyleRaw
+                )
+            }
             .sorted { a, b in
                 if a.lastPlayed != b.lastPlayed { return a.lastPlayed > b.lastPlayed }
                 let byName = a.name.localizedCaseInsensitiveCompare(b.name)
@@ -198,9 +226,10 @@ public enum PlayerRoster {
 
     // MARK: Roster management (Settings → Players)
 
-    /// Renames `playerID` in every record carrying it (any role), re-stamping
-    /// each changed record's tags so the rename supersedes older copies.
-    /// An empty sanitized name is rejected (no change).
+    /// Renames `playerID` in every record carrying it (any role), preserving
+    /// their latest resolved playing profile and re-stamping each changed
+    /// record's tags so the rename supersedes older copies. An empty sanitized
+    /// name is rejected (no change).
     public static func renaming(
         _ playerID: UUID,
         to newName: String,
@@ -208,32 +237,48 @@ public enum PlayerRoster {
         now: Date = Date()
     ) -> RosterMutation {
         let name = MatchTags.sanitizedName(newName)
-        guard !name.isEmpty else { return RosterMutation(records: records, affectedMatchIDs: []) }
+        guard !name.isEmpty,
+              let current = entries(from: records).first(where: { $0.id == playerID }) else {
+            return RosterMutation(records: records, affectedMatchIDs: [])
+        }
+        let replacement = TaggedPlayer(
+            id: playerID,
+            name: name,
+            handednessRaw: current.handednessRaw,
+            backhandRaw: current.backhandRaw,
+            playStyleRaw: current.playStyleRaw
+        )
         return rewriting(records, now: now) { tags in
-            if tags.partner?.id == playerID { tags.partner?.name = name }
+            if tags.partner?.id == playerID { tags.partner = replacement }
             for i in tags.opponents.indices where tags.opponents[i].id == playerID {
-                tags.opponents[i].name = name
+                tags.opponents[i] = replacement
             }
         }
     }
 
-    /// Updates the profile in every role; nil deliberately clears a field.
+    /// Updates the playing profile in every role; nil deliberately clears a field.
     public static func updatingDetails(
-        _ playerID: UUID, age: Int?, sexRaw: String?, in records: [MatchRecord], now: Date = Date()
+        _ playerID: UUID,
+        handednessRaw: String?,
+        backhandRaw: String?,
+        playStyleRaw: String?,
+        in records: [MatchRecord],
+        now: Date = Date()
     ) -> RosterMutation {
         guard let current = entries(from: records).first(where: { $0.id == playerID }) else {
             return RosterMutation(records: records, affectedMatchIDs: [])
         }
+        let replacement = TaggedPlayer(
+            id: playerID,
+            name: current.name,
+            handednessRaw: handednessRaw,
+            backhandRaw: backhandRaw,
+            playStyleRaw: playStyleRaw
+        )
         return rewriting(records, now: now) { tags in
-            if tags.partner?.id == playerID {
-                tags.partner?.name = current.name
-                tags.partner?.age = age
-                tags.partner?.sexRaw = sexRaw
-            }
+            if tags.partner?.id == playerID { tags.partner = replacement }
             for i in tags.opponents.indices where tags.opponents[i].id == playerID {
-                tags.opponents[i].name = current.name
-                tags.opponents[i].age = age
-                tags.opponents[i].sexRaw = sexRaw
+                tags.opponents[i] = replacement
             }
         }
     }

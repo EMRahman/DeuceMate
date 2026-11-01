@@ -70,8 +70,9 @@ struct PlayerManageView: View {
     @ObservedObject private var notesStore: MatchNotesStore = .shared
 
     @State private var newName = ""
-    @State private var ageDraft = ""
-    @State private var sexDraft = ""
+    @State private var handednessDraft = ""
+    @State private var backhandDraft = ""
+    @State private var playStyleDraft = ""
     @State private var didInitializeDetailsDraft = false
     @State private var showMergePicker = false
     @State private var pendingMerge: RosterEntry?
@@ -137,32 +138,46 @@ struct PlayerManageView: View {
             }
 
             Section {
-                TextField("Age", text: $ageDraft)
-                    .keyboardType(.numberPad)
-                    .accessibilityIdentifier("player-age-field")
-                Picker("Sex", selection: $sexDraft) {
+                Picker("Handedness", selection: $handednessDraft) {
                     Text("Not specified").tag("")
-                    ForEach(PlayerSex.allCases, id: \.rawValue) { sex in
-                        Text(sex.displayLabel).tag(sex.rawValue)
+                    ForEach(PlayerHandedness.allCases) { option in
+                        Text(option.displayLabel).tag(option.rawValue)
                     }
-                    if let raw = entry.sexRaw, PlayerSex(rawValue: raw) == nil {
+                    if let raw = entry.handednessRaw, PlayerHandedness(rawValue: raw) == nil {
                         Text("Other (\(raw))").tag(raw)
                     }
                 }
-                .accessibilityIdentifier("player-sex-picker")
-                if !ageIsValid {
-                    Text("Enter an age from 0 to 120, or leave it blank.")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .accessibilityIdentifier("player-age-validation")
+                .accessibilityIdentifier("player-handedness-picker")
+
+                Picker("Backhand", selection: $backhandDraft) {
+                    Text("Not specified").tag("")
+                    ForEach(PlayerBackhand.allCases) { option in
+                        Text(option.displayLabel).tag(option.rawValue)
+                    }
+                    if let raw = entry.backhandRaw, PlayerBackhand(rawValue: raw) == nil {
+                        Text("Other (\(raw))").tag(raw)
+                    }
                 }
+                .accessibilityIdentifier("player-backhand-picker")
+
+                Picker("Play Style", selection: $playStyleDraft) {
+                    Text("Not specified").tag("")
+                    ForEach(PlayerPlayStyle.allCases) { option in
+                        Text(option.displayLabel).tag(option.rawValue)
+                    }
+                    if let raw = entry.playStyleRaw, PlayerPlayStyle(rawValue: raw) == nil {
+                        Text("Other (\(raw))").tag(raw)
+                    }
+                }
+                .accessibilityIdentifier("player-play-style-picker")
+
                 Button("Save Details") { saveDetails() }
-                    .disabled(!detailsChanged(entry) || !ageIsValid)
+                    .disabled(!detailsChanged(entry))
                     .accessibilityIdentifier("save-player-details")
             } header: {
-                Text("Optional Details")
+                Text("Playing Style")
             } footer: {
-                Text("Age as entered; update it when needed. Leave age blank to clear it.")
+                Text("Optional tennis profile shown on the opponent detail screen and included in AI Coach match context.")
             }
 
             Section {
@@ -183,8 +198,9 @@ struct PlayerManageView: View {
         .onAppear {
             if newName.isEmpty { newName = entry.name }
             if !didInitializeDetailsDraft {
-                ageDraft = entry.age.map(String.init) ?? ""
-                sexDraft = entry.sexRaw ?? ""
+                handednessDraft = entry.handednessRaw ?? ""
+                backhandDraft = entry.backhandRaw ?? ""
+                playStyleDraft = entry.playStyleRaw ?? ""
                 didInitializeDetailsDraft = true
             }
         }
@@ -273,24 +289,20 @@ struct PlayerManageView: View {
         PlayerRosterActions(store: store, notesStore: notesStore, syncService: syncService)
     }
 
-    private var parsedAge: Int? {
-        let trimmed = ageDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : Int(trimmed)
-    }
-
-    private var ageIsValid: Bool {
-        let trimmed = ageDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty || (parsedAge.map { (0...120).contains($0) } ?? false)
-    }
-
     private func detailsChanged(_ entry: RosterEntry) -> Bool {
-        parsedAge != entry.age || (sexDraft.isEmpty ? nil : sexDraft) != entry.sexRaw
+        (handednessDraft.isEmpty ? nil : handednessDraft) != entry.handednessRaw
+            || (backhandDraft.isEmpty ? nil : backhandDraft) != entry.backhandRaw
+            || (playStyleDraft.isEmpty ? nil : playStyleDraft) != entry.playStyleRaw
     }
 
     private func saveDetails() {
-        guard ageIsValid else { return }
         do {
-            try actions.updateDetails(playerID, age: parsedAge, sexRaw: sexDraft.isEmpty ? nil : sexDraft)
+            try actions.updateDetails(
+                playerID,
+                handednessRaw: handednessDraft.isEmpty ? nil : handednessDraft,
+                backhandRaw: backhandDraft.isEmpty ? nil : backhandDraft,
+                playStyleRaw: playStyleDraft.isEmpty ? nil : playStyleDraft
+            )
         } catch {
             errorMessage = error.localizedDescription
         }

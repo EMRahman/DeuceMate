@@ -32,6 +32,10 @@ public struct MatchExportDetails: Equatable, Sendable {
     /// withheld)" without ever holding the name.
     public let taggedOpponentCount: Int
     public let hasTaggedPartner: Bool
+    /// Non-PII tennis playing profiles (e.g. "Left-handed · One-handed backhand")
+    /// aligned with the tagged opponents, regardless of `includesNames`.
+    public let opponentProfiles: [String?]
+    public let partnerProfile: String?
     /// "3–2 in 5 matches · last 3: W W L", from the recorder's side. `nil` when
     /// the match identity is incomplete. Carries no names.
     public let headToHead: String?
@@ -60,6 +64,8 @@ public struct MatchExportDetails: Equatable, Sendable {
         partnerName: String?,
         taggedOpponentCount: Int,
         hasTaggedPartner: Bool,
+        opponentProfiles: [String?] = [],
+        partnerProfile: String? = nil,
         headToHead: String?,
         headToHeadOpponentSide: String?,
         note: String?,
@@ -72,6 +78,8 @@ public struct MatchExportDetails: Equatable, Sendable {
         self.partnerName = partnerName
         self.taggedOpponentCount = taggedOpponentCount
         self.hasTaggedPartner = hasTaggedPartner
+        self.opponentProfiles = opponentProfiles
+        self.partnerProfile = partnerProfile
         self.headToHead = headToHead
         self.headToHeadOpponentSide = headToHeadOpponentSide
         self.note = note
@@ -100,6 +108,8 @@ public struct MatchExportDetails: Equatable, Sendable {
         self.competition = tags?.competitionType
         self.taggedOpponentCount = opponents.count
         self.hasTaggedPartner = tags?.partner != nil
+        self.opponentProfiles = opponents.map(\.profileSummary)
+        self.partnerProfile = tags?.partner?.profileSummary
         self.opponentNames = includeNames ? opponents.map(\.name) : []
         self.partnerName = includeNames ? tags?.partner?.name : nil
         // Same visibility rule as the on-screen Match Info line: nothing until
@@ -200,21 +210,62 @@ public struct MatchExportDetails: Equatable, Sendable {
             if taggedOpponentCount > 0 {
                 lines.append("- \(taggedOpponentCount == 1 ? "Opponent" : "Opponents"): "
                     + (includesNames ? Self.quotedNames(opponentNames) : Self.withheld(taggedOpponentCount == 1 ? "Opponent" : "Opponents")))
+                lines.append(contentsOf: aiProfileLines(
+                    profiles: opponentProfiles,
+                    names: opponentNames,
+                    singularLabel: "Opponent playing style",
+                    indexedLabel: { "Opponent \($0 + 1) playing style" },
+                    namedLabel: { "Opponent playing style (\"\($0)\")" }
+                ))
             }
             if hasTaggedPartner {
                 lines.append("- Partner: " + (partnerName.map { Self.quotedNames([$0]) } ?? Self.withheld("Partner")))
+                if let partnerProfile {
+                    lines.append("- Partner playing style: \(partnerProfile)")
+                }
             }
         case .opponent:
             // The prompt is for the person who was tagged as the opponent.
             if taggedOpponentCount > 0 {
                 lines.append("- Your side: "
                     + (includesNames ? Self.quotedNames(opponentNames) : Self.withheld(taggedOpponentCount == 1 ? "You" : "You and your partner")))
+                lines.append(contentsOf: aiProfileLines(
+                    profiles: opponentProfiles,
+                    names: opponentNames,
+                    singularLabel: "Your playing style",
+                    indexedLabel: { "Player \($0 + 1) playing style (your side)" },
+                    namedLabel: { "Your side playing style (\"\($0)\")" }
+                ))
             }
             if hasTaggedPartner {
                 lines.append("- The recorder's partner: " + (partnerName.map { Self.quotedNames([$0]) } ?? Self.withheld("Partner")))
+                if let partnerProfile {
+                    lines.append("- The recorder's partner playing style: \(partnerProfile)")
+                }
             }
         }
         return lines
+    }
+
+    private func aiProfileLines(
+        profiles: [String?],
+        names: [String],
+        singularLabel: String,
+        indexedLabel: (Int) -> String,
+        namedLabel: (String) -> String
+    ) -> [String] {
+        guard taggedOpponentCount > 0 else { return [] }
+        if taggedOpponentCount == 1 {
+            guard let profile = profiles.first ?? nil else { return [] }
+            return ["- \(singularLabel): \(profile)"]
+        }
+        return profiles.enumerated().compactMap { index, profile in
+            guard let profile else { return nil }
+            let label = (includesNames && index < names.count)
+                ? namedLabel(names[index])
+                : indexedLabel(index)
+            return "- \(label): \(profile)"
+        }
     }
 
     /// A one-line steer derived from the competition type alone (no names).

@@ -95,10 +95,17 @@ private struct OpponentDetailView: View {
         Group {
             if let opponent {
                 List {
-                    if opponent.age != nil || opponent.sex != nil {
-                        Section("Player Details") {
-                            if let age = opponent.age { LabeledContent("Age", value: "\(age)") }
-                            if let sex = opponent.sex { LabeledContent("Sex", value: sex.displayLabel) }
+                    if opponent.handedness != nil || opponent.backhand != nil || opponent.playStyle != nil {
+                        Section("Playing Style") {
+                            if let handedness = opponent.handedness {
+                                LabeledContent("Handedness", value: handedness.displayLabel)
+                            }
+                            if let backhand = opponent.backhand {
+                                LabeledContent("Backhand", value: backhand.displayLabel)
+                            }
+                            if let playStyle = opponent.playStyle {
+                                LabeledContent("Play Style", value: playStyle.displayLabel)
+                            }
                         }
                     }
 
