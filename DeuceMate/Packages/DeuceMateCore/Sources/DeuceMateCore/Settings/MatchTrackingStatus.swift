@@ -81,6 +81,16 @@ public enum TrackingFacet: String, CaseIterable, Sendable {
     }
 }
 
+/// What tapping a tracking status does. `.none` means the watch has no control
+/// for it (e.g. Health already denied — only the iPhone can change that), so
+/// the UI should not present the status as tappable.
+public enum TrackingDestination: Sendable, Equatable {
+    case pointTrackingToggle
+    case pulseCoachSettings
+    case requestHealthAccess
+    case none
+}
+
 /// A resolved facet: what it is, whether it will record, and the one line that
 /// tells the user how to change it.
 public struct MatchTrackingStatus: Sendable, Equatable {
@@ -115,6 +125,30 @@ public struct MatchTrackingStatus: Sendable, Equatable {
     public var accessibilityDescription: String {
         let plainDetail = detail.replacingOccurrences(of: "**", with: "")
         return "\(title): \(stateLabel). \(plainDetail)"
+    }
+
+    // MARK: - Tap destination
+
+    /// Where tapping this status should take the user: the control that changes
+    /// it. Someone tapping "Point tracking: Off" almost certainly wants to turn
+    /// it on, so the answer is the toggle itself, not a description of it.
+    ///
+    /// - Parameter access: current Health access, which decides whether the
+    ///   Health and Pulse facets have anything the watch can change.
+    public func destination(access: HealthAccess) -> TrackingDestination {
+        switch facet {
+        case .pointTracking:
+            return .pointTrackingToggle
+        case .healthTracking:
+            // No in-app toggle exists; the only thing the watch can do is show
+            // the system prompt, and only while it has not been answered.
+            return access == .notDetermined ? .requestHealthAccess : .none
+        case .pulseCoach:
+            // Calibration (birth year / override) is only meaningful when heart
+            // rate can be recorded; otherwise the fix is Health, not calibration.
+            return (access == .authorized || access == .notDetermined)
+                ? .pulseCoachSettings : .none
+        }
     }
 
     // MARK: - Copy
