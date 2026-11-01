@@ -214,6 +214,13 @@
     return S.health === "denied" ? all.filter(function (t) { return t.facet !== "pulse"; }) : all;
   }
 
+  /* MatchTrackingStatus.destination(access:) — where tapping a status goes. */
+  function trackingDestination(t) {
+    if (t.facet === "points") return "points";
+    if (t.facet === "health") return S.health === "notDetermined" ? "requestHealth" : "none";
+    return (S.health === "authorized" || S.health === "notDetermined") ? "pulse" : "none";
+  }
+
   /* ---- Sheet stack ---------------------------------------------------------- */
   function push(entry) {
     var cur = S.top(), sc = shellEl.querySelector(".sheet-layer .app-scroll");
@@ -278,10 +285,14 @@
       var summary = (S.setup.type === "doubles" ? "Doubles" : "Singles") + " · " + f.short;
       col.appendChild(h("button", { type: "button", class: "setup-row", "aria-label": "Match setup: " + summary, onclick: function () { push({ id: "setup" }); } },
         h("span", { class: "sr-text", text: summary }), icon("down", 14)));
-      // What this match will actually record — taps through to Settings.
-      var chips = h("button", { type: "button", class: "strip", "aria-label": stripStatuses().map(function (t) { return t.title + ": " + t.label; }).join(". ") + ". Opens Settings", onclick: function () { push({ id: "settings" }); } });
+      // What this match will actually record — each chip opens Settings at its control.
+      var chips = h("div", { class: "strip" });
       stripStatuses().forEach(function (t) {
-        chips.appendChild(h("span", { class: "chip " + t.readiness }, icon(t.icon, 12), h("span", { text: t.label })));
+        chips.appendChild(h("button", { type: "button", class: "chip " + t.readiness, "aria-label": t.title + ": " + t.label + ". Opens the setting", onclick: function () {
+          var d = trackingDestination(t);
+          if (d === "requestHealth") { requestHealth(false); return; }
+          push({ id: "settings", scrollTo: d === "none" ? null : d });
+        } }, icon(t.icon, 12), h("span", { text: t.label })));
       });
       col.appendChild(chips);
     } else {
@@ -323,23 +334,33 @@
   /* ==========================================================================
      Settings sheet (+ Birth Year picker)
      ========================================================================== */
-  function settingsSheet() {
-    var s = S.settings, inProg = matchInProgress();
+  function settingsSheet(entry) {
+    var s = S.settings, inProg = matchInProgress(), anchors = {};
     var scroll = h("div", { class: "app-scroll pad settings" });
 
     scroll.appendChild(h("div", { class: "caption", text: "What This Match Records" }));
     var rows = h("div", { class: "trk-rows" });
     trackingStatuses().forEach(function (t) {
-      rows.appendChild(h("div", { class: "trk-row" },
+      var d = trackingDestination(t), go = d !== "none";
+      var body = [
         h("span", { class: "trk-ic " + t.readiness }, icon(t.icon, 13)),
         h("div", { class: "trk-body" },
           h("div", { class: "trk-head" }, h("span", { text: t.title }), h("span", { class: "trk-state " + t.readiness, text: t.label })),
-          h("div", { class: "cap" }, md(t.detail)))));
+          h("div", { class: "cap" }, md(t.detail))),
+        go ? icon("chevron", 10) : null];
+      // Tapping a row jumps to the control that changes it.
+      rows.appendChild(go
+        ? h.apply(null, ["button", { type: "button", class: "trk-row go", "aria-label": t.title + ": " + t.label, onclick: function () {
+            if (d === "requestHealth") { requestHealth(false); return; }
+            var el = anchors[d]; if (el && el.scrollIntoView) el.scrollIntoView({ block: "start", behavior: "smooth" });
+          } }].concat(body))
+        : h.apply(null, ["div", { class: "trk-row" }].concat(body)));
     });
     scroll.appendChild(rows);
     scroll.appendChild(h("hr", { class: "hr" }));
 
-    scroll.appendChild(toggleRow("Track point outcome", COPY.trackPointOutcome, s.track, function (v) { s.track = v; api.configure({ tracking: v }); render(); }, inProg));
+    anchors.points = toggleRow("Track point outcome", COPY.trackPointOutcome, s.track, function (v) { s.track = v; api.configure({ tracking: v }); render(); }, inProg);
+    scroll.appendChild(anchors.points);
     scroll.appendChild(toggleRow("Changeover Compass", COPY.changeoverCompass, s.compass, function (v) { s.compass = v; api.configure({ compass: v }); render(); }, false,
       h("span", { class: "exp", text: " · Experimental" })));
     scroll.appendChild(toggleRow("Announce scores aloud on iPhone", COPY.announceScores, s.announce, function (v) { s.announce = v; S.announceResult = null; render(); }));
@@ -370,7 +391,8 @@
     scroll.appendChild(h("hr", { class: "hr" }));
 
     // Pulse Coach
-    scroll.appendChild(h("div", { class: "caption", text: "Pulse Coach" }));
+    anchors.pulse = h("div", { class: "caption", text: "Pulse Coach" });
+    scroll.appendChild(anchors.pulse);
     var ov = s.override;
     scroll.appendChild(h("div", { class: "kv small" + (ov ? " dim" : "") }, h("span", { text: s.birthYear === 0 ? "Max HR (default)" : "Max HR (resolved)" }), h("span", { class: "v", text: resolvedMaxHR() + " bpm" })));
     if (s.birthYear === 0 && !ov) scroll.appendChild(h("div", { class: "cap", text: COPY.defaultMaxHRNote }));
@@ -387,6 +409,12 @@
           h("button", { type: "button", "aria-label": "Increase", disabled: s.overrideBpm >= 220, onclick: function () { step(1); }, text: "+" }))));
     }
     scroll.appendChild(h("div", { class: "cap", text: "When Override is on, birth year and resolved value are replaced by your manual entry. Heart-rate data syncs with your iPhone. DeuceMate's automatic iCloud Drive archive excludes it, but an iPhone export may include it." }));
+    // Opened from a start-screen chip: land on that control (once).
+    if (entry && entry.scrollTo && anchors[entry.scrollTo]) {
+      var target = anchors[entry.scrollTo];
+      entry.scrollTo = null;
+      setTimeout(function () { if (target.scrollIntoView) target.scrollIntoView({ block: "start" }); }, 0);
+    }
     return scroll;
   }
 
@@ -636,7 +664,7 @@
       var content = null;
       if (top.id === "match") content = matchSheet();
       else if (top.id === "setup") content = setupSheet();
-      else if (top.id === "settings") content = settingsSheet();
+      else if (top.id === "settings") content = settingsSheet(top);
       else if (top.id === "birthyear") content = birthYearSheet();
       else if (top.id === "health") content = healthSheet(top);
       else if (top.id === "guide") content = guideSheet();
