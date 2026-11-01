@@ -37,7 +37,8 @@ struct MatchDetailView: View {
     @State private var exportAIOpp: String = ""
     /// Temp-file URLs of the self-contained interactive HTML exports, shared as
     /// files: one framed for me, one framed for the opponent (their "Me", so it
-    /// says they won when they did). Built once in `.task`.
+    /// says they won when they did). Built in `.task`, each build in its own
+    /// `ExportStaging` generation directory so builds never share a path.
     @State private var htmlExportURL: URL?
     @State private var htmlExportURLOpp: URL?
     @State private var showAICoachSheet: Bool = false
@@ -48,6 +49,9 @@ struct MatchDetailView: View {
     /// The export currently presented in the system share sheet (set directly for
     /// health-free exports, or after the user confirms the disclosure).
     @State private var activeShare: ShareRequest?
+    /// Retired export generations whose files the open share sheet is still
+    /// handing out; deleted when that sheet closes (`releaseHeldExports`).
+    @State private var exportGenerationsHeldByShare: Set<ExportStaging.Generation> = []
     @State private var showEndAtCurrentScoreConfirmation = false
     @State private var showMatchInfoEditor = false
     @State private var showNotesEditor = false
@@ -55,7 +59,8 @@ struct MatchDetailView: View {
     private enum Tab { case stats, points }
 
     /// Everything the prebuilt export snapshot depends on. A change to any of
-    /// these restarts the export task (PR 4 adds the names/notes toggles here).
+    /// these restarts the export task (PR 4 adds the names/notes toggles here),
+    /// whose staged files then live in a fresh `ExportStaging` generation.
     private struct ExportInputs: Equatable {
         let record: MatchRecord
         let maxHR: Int
@@ -355,7 +360,11 @@ struct MatchDetailView: View {
     /// Perform a disclosed action once the user confirms.
     private func confirmDisclosure(_ disclosure: PendingHealthDisclosure) {
         switch disclosure {
-        case .share(let request): activeShare = request
+        case .share(let request):
+            // The snapshot was rebuilt while the alert was up: its files are
+            // gone, and the share menu now offers the current ones instead.
+            guard request.stagedFilesExist else { return }
+            activeShare = request
         case .aiCoach:            showAICoachSheet = true
         }
     }
@@ -375,9 +384,10 @@ struct MatchDetailView: View {
         return "deuce_mate_\(f.string(from: record.startTime))\(suffix).txt"
     }
 
-    /// Filename for the interactive HTML export framed for `perspective`.
-    /// Includes the match start time so same-day matches don't collide in the
-    /// temporary directory. POSIX locale keeps the format deterministic.
+    /// Filename for the interactive HTML export framed for `perspective` — the
+    /// name the recipient sees. Paths are kept apart by the per-build
+    /// `ExportStaging` directory, not by this name. POSIX locale keeps the
+    /// format deterministic.
     private func htmlExportFilename(for perspective: Player) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
@@ -386,24 +396,43 @@ struct MatchDetailView: View {
         return "deuce_mate_\(f.string(from: record.startTime))\(suffix).html"
     }
 
+    /// A published export generation stops being current (newer inputs, or the
+    /// screen went away). A pending "Share health data?" for its files is
+    /// dropped — it would share a superseded report — and its files are
+    /// deleted, unless the share sheet is handing them out right now, in which
+    /// case they go when that sheet closes.
+    private func retireExportGeneration(_ generation: ExportStaging.Generation) {
+        if case .share(let request)? = pendingDisclosure, request.references(generation) {
+            pendingDisclosure = nil
+        }
+        if let activeShare, activeShare.references(generation) {
+            exportGenerationsHeldByShare.insert(generation)
+        } else {
+            ExportStaging.shared.endGeneration(generation)
+        }
+    }
+
+    private func releaseHeldExports() {
+        for generation in exportGenerationsHeldByShare where !(activeShare?.references(generation) ?? false) {
+            ExportStaging.shared.endGeneration(generation)
+            exportGenerationsHeldByShare.remove(generation)
+        }
+    }
+
     /// Generate the interactive HTML framed for `perspective` and stage it in
-    /// the temporary directory. The page carries the full match record,
-    /// including HealthKit-derived values, so the staged file gets the same
-    /// data-at-rest class as the canonical archive. `nil` if the write fails.
+    /// this build's own `generation` directory, so a superseded build can never
+    /// overwrite the file a newer one published. The page carries the full
+    /// match record, including HealthKit-derived values, so the staged file
+    /// gets the same data-at-rest class as the canonical archive (see
+    /// `ExportStaging.write`). `nil` if the write fails.
     nonisolated private static func stageHTMLExport(
         record: MatchRecord, maxHR: Int, perspective: Player,
-        aiPromptMe: String, aiPromptOpponent: String?, filename: String
+        aiPromptMe: String, aiPromptOpponent: String?, filename: String,
+        generation: ExportStaging.Generation, staging: ExportStaging
     ) -> URL? {
         let html = MatchHTMLExporter.html(for: record, maxHR: maxHR, perspective: perspective,
                                           aiPromptMe: aiPromptMe, aiPromptOpponent: aiPromptOpponent)
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-        do {
-            try Data(html.utf8).write(
-                to: url,
-                options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
-            )
-            return url
-        } catch { return nil }
+        return try? staging.write(Data(html.utf8), named: filename, in: generation)
     }
 
     var body: some View {
@@ -672,6 +701,10 @@ struct MatchDetailView: View {
         // The share/AI exports are a prebuilt snapshot of `record`. Rebuild
         // them whenever the record (or an export input) changes, and clear the
         // old snapshot first so a stale copy can never be shared meanwhile.
+        // Each run owns one `ExportStaging` generation (its own directory) for
+        // the files it stages: a superseded run deletes its own files instead
+        // of publishing them, and a published run keeps its files only until
+        // SwiftUI cancels it (newer inputs, or the screen going away).
         .task(id: ExportInputs(record: record, maxHR: resolvedMaxHR, ntrp: playerNTRP)) {
             exportSummary = ""; exportFull = ""; exportSummaryOpp = ""; exportFullOpp = ""
             exportAI = ""; exportAIOpp = ""
@@ -681,6 +714,8 @@ struct MatchDetailView: View {
             let filename = htmlExportFilename(for: .me)
             let filenameOpp = htmlExportFilename(for: .opponent)
             let ntrp = playerNTRP
+            let staging = ExportStaging.shared
+            let generation = staging.beginGeneration()
             async let summary    = Task.detached { MatchExporter.summaryExport(for: record, maxHR: maxHR, focal: .me)       }.value
             async let full       = Task.detached { MatchExporter.fullExport(for: record,    maxHR: maxHR, focal: .me)       }.value
             async let summaryOpp = Task.detached { MatchExporter.summaryExport(for: record, maxHR: maxHR, focal: .opponent) }.value
@@ -691,25 +726,40 @@ struct MatchDetailView: View {
             // Coach sheet) are embedded so the shared page offers the same
             // one-tap coaching launch; the opponent's page offers only theirs.
             async let htmlURLs   = Task.detached { () -> (URL?, URL?) in
+                // Leftovers of builds that never ended (e.g. the app was killed).
+                staging.sweepInactive()
                 let aiMe  = MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .me, playerNTRP: ntrp)
                 let aiOpp = record.stats.isEmpty
                     ? nil
                     : MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .opponent, playerNTRP: ntrp)
                 let mine = Self.stageHTMLExport(record: record, maxHR: maxHR, perspective: .me,
-                                                aiPromptMe: aiMe, aiPromptOpponent: aiOpp, filename: filename)
+                                                aiPromptMe: aiMe, aiPromptOpponent: aiOpp, filename: filename,
+                                                generation: generation, staging: staging)
                 let theirs = Self.stageHTMLExport(record: record, maxHR: maxHR, perspective: .opponent,
-                                                  aiPromptMe: aiMe, aiPromptOpponent: aiOpp, filename: filenameOpp)
+                                                  aiPromptMe: aiMe, aiPromptOpponent: aiOpp, filename: filenameOpp,
+                                                  generation: generation, staging: staging)
                 return (mine, theirs)
             }.value
             async let ai    = Task.detached { MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .me,       playerNTRP: ntrp) }.value
             async let aiOpp = Task.detached { MatchExporter.aiPromptExport(for: record, maxHR: maxHR, focal: .opponent, playerNTRP: ntrp) }.value
+            // Awaiting the detached writer means its files are complete before
+            // either branch below can delete them.
             let (s, f, so, fo, urls) = await (summary, full, summaryOpp, fullOpp, htmlURLs)
             let (a, ao) = await (ai, aiOpp)
-            // A newer record superseded this build while it ran: drop it.
-            guard !Task.isCancelled else { return }
+            // A newer record superseded this build while it ran: drop it,
+            // files included — they were never published.
+            guard !Task.isCancelled else {
+                staging.endGeneration(generation)
+                return
+            }
             exportSummary = s; exportFull = f; exportSummaryOpp = so; exportFullOpp = fo
             (htmlExportURL, htmlExportURLOpp) = urls
             (exportAI, exportAIOpp) = (a, ao)
+            // Keep this generation's files exactly as long as they are the
+            // published snapshot. The next run clears the URLs before it
+            // starts, so deleting here never strands a shown share option.
+            await ExportStaging.waitUntilCancelled()
+            retireExportGeneration(generation)
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -817,7 +867,7 @@ struct MatchDetailView: View {
                 fields: disclosure.fields, destination: disclosure.destination
             ).message)
         }
-        .sheet(item: $activeShare) { request in
+        .sheet(item: $activeShare, onDismiss: releaseHeldExports) { request in
             ShareSheet(activityItems: request.items) { activeShare = nil }
         }
         .sheet(isPresented: $showMatchInfoEditor) {
@@ -1285,6 +1335,19 @@ private struct ShareRequest: Identifiable {
     let id = UUID()
     let items: [Any]
     let healthFields: [HealthExportField]
+
+    private var fileURLs: [URL] { items.compactMap { $0 as? URL }.filter(\.isFileURL) }
+
+    /// Whether this share hands out a file staged in `generation`.
+    func references(_ generation: ExportStaging.Generation) -> Bool {
+        fileURLs.contains(where: generation.contains)
+    }
+
+    /// False once a staged file it carries has been deleted (its generation
+    /// was retired while the request waited).
+    var stagedFilesExist: Bool {
+        fileURLs.allSatisfy { FileManager.default.fileExists(atPath: $0.path) }
+    }
 }
 
 /// A user action awaiting the per-export HealthKit disclosure: either a system
