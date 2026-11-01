@@ -95,7 +95,7 @@ struct PlayerPickerView: View {
 
     private func rosterRow(_ entry: RosterEntry) -> some View {
         Button {
-            onPick(TaggedPlayer(id: entry.id, name: entry.name))
+            onPick(entry.taggedPlayer)
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.name)

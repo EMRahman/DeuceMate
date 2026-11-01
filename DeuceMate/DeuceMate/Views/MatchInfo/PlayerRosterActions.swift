@@ -30,6 +30,12 @@ struct PlayerRosterActions {
         syncService.pushTagUpdates(forMatchIDs: affected)
     }
 
+    /// Saves the profile before notifying the watch of the updated tags.
+    func updateDetails(_ playerID: UUID, age: Int?, sexRaw: String?) throws {
+        let affected = try store.updatePlayerDetails(playerID, age: age, sexRaw: sexRaw)
+        syncService.pushTagUpdates(forMatchIDs: affected)
+    }
+
     /// Throws `PhoneStatsStore.TagEditError.notPersisted` with nothing changed.
     func merge(_ duplicateID: UUID, into keptID: UUID) throws {
         let affected = try store.mergePlayers(duplicateID, into: keptID)

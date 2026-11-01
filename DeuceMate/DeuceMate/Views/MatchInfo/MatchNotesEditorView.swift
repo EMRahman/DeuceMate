@@ -14,15 +14,19 @@ struct MatchNotesEditorView: View {
     @State private var draft: String
     @State private var saveError: String?
     @State private var showDeleteConfirmation = false
+    @State private var showDiscardConfirmation = false
+    @State private var originalText: String
     @FocusState private var isEditorFocused: Bool
 
     init(matchID: UUID) {
         self.matchID = matchID
-        _draft = State(initialValue: MatchNotesStore.shared.note(for: matchID)?.text ?? "")
+        let text = MatchNotesStore.shared.note(for: matchID)?.text ?? ""
+        _originalText = State(initialValue: text)
+        _draft = State(initialValue: text)
     }
 
     private var savedText: String { notesStore.note(for: matchID)?.text ?? "" }
-    private var hasChanges: Bool { MatchNotesPolicy.sanitizedText(draft) != savedText }
+    private var hasChanges: Bool { MatchNotesPolicy.sanitizedText(draft) != originalText }
     private var isUnavailable: Bool { notesStore.loadFailure != nil }
 
     var body: some View {
@@ -73,7 +77,7 @@ struct MatchNotesEditorView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") { cancel() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save(draft) }
@@ -108,6 +112,20 @@ struct MatchNotesEditorView: View {
                 if savedText.isEmpty && !isUnavailable { isEditorFocused = true }
             }
         }
+        .confirmationDialog(
+            "Discard unsaved changes?",
+            isPresented: $showDiscardConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Keep Editing", role: .cancel) {}
+            Button("Discard Changes", role: .destructive) { dismiss() }
+        } message: {
+            Text("Your private note hasn't been saved.")
+        }
+        .protectDraftDismissal(
+            isDirty: Binding(get: { self.hasChanges }, set: { _ in }),
+            isDiscardPromptPresented: $showDiscardConfirmation
+        )
     }
 
     private func save(_ text: String) {
@@ -117,6 +135,14 @@ struct MatchNotesEditorView: View {
         } catch {
             // Keep the draft open so nothing typed is lost.
             saveError = error.localizedDescription
+        }
+    }
+
+    private func cancel() {
+        if hasChanges {
+            showDiscardConfirmation = true
+        } else {
+            dismiss()
         }
     }
 }

@@ -8,6 +8,45 @@ final class MatchTagsTests: XCTestCase {
 
     private typealias F = TagFixtures
 
+    func test_playerDemographics_decodeSanitizeAndRoundTrip() throws {
+        let id = F.uuid(1)
+        let old = try JSONDecoder().decode(TaggedPlayer.self, from: Data("{\"id\":\"\(id)\",\"name\":\"Alex\"}".utf8))
+        XCTAssertNil(old.age)
+        XCTAssertNil(old.sexRaw)
+        let malformed = try JSONDecoder().decode(TaggedPlayer.self, from: Data("{\"id\":\"\(id)\",\"name\":\"Alex\",\"age\":\"bad\",\"sexRaw\":42}".utf8))
+        XCTAssertNil(malformed.age)
+        XCTAssertNil(malformed.sexRaw)
+        let player = TaggedPlayer(id: id, name: "Alex", age: 121, sexRaw: "future")
+        XCTAssertNil(player.age)
+        XCTAssertNil(player.sex)
+        XCTAssertEqual(try JSONDecoder().decode(TaggedPlayer.self, from: JSONEncoder().encode(player)).sexRaw, "future")
+        XCTAssertEqual(TaggedPlayer(name: "A", age: 0, sexRaw: String(repeating: "x", count: 100)).sexRaw?.count, 64)
+        var changed = player
+        changed.sex = .female
+        XCTAssertEqual(changed.sexRaw, "female")
+        changed.age = -1
+        XCTAssertNil(F.tags(opponents: [changed]).sanitized().opponents.first?.age)
+    }
+
+    func test_demographics_breakEqualClockTiesCommutatively() {
+        let a = F.tags(opponents: [TaggedPlayer(id: F.uuid(1), name: "Alex", age: 20)], at: 10)
+        var b = a
+        b.opponents[0].age = 21
+        XCTAssertEqual(MatchTags.merged(a, b), MatchTags.merged(b, a))
+        XCTAssertNotEqual(a.supersedes(b), b.supersedes(a))
+    }
+
+    func test_demographics_surviveWireAndManualArchive() throws {
+        let player = TaggedPlayer(id: F.uuid(1), name: "Alex", age: 42, sexRaw: "future")
+        let tags = F.tags(opponents: [player], at: 1)
+        let record = F.record(tags: tags)
+        let payload = try MatchSyncPayloadBuilder.matchTagsUpdate(matchID: record.id, tags: tags)
+        XCTAssertEqual(SyncIncomingPayload.decode(payload), [.matchTagsUpdate(matchID: record.id, tags: tags)])
+        let data = try ManualMatchArchiveBackup.encode(records: [record])
+        let restored = try ManualMatchArchiveBackup.decode(data)
+        XCTAssertEqual(restored.records.first?.tags?.opponents.first, player)
+    }
+
     // MARK: - Persisted identifiers
 
     /// The raw values reach every archive, backup and the wire. Renaming one

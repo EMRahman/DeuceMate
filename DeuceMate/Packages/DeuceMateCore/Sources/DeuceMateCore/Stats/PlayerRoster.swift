@@ -79,14 +79,20 @@ public struct RosterEntry: Identifiable, Equatable, Sendable {
     public let id: UUID
     /// From the most recently updated tag revision that carries this id.
     public let name: String
+    public let age: Int?
+    public let sexRaw: String?
+    public var sex: PlayerSex? { sexRaw.flatMap(PlayerSex.init(rawValue:)) }
+    public var taggedPlayer: TaggedPlayer { TaggedPlayer(id: id, name: name, age: age, sexRaw: sexRaw) }
     /// Distinct matches carrying this id in any role (opponent or partner).
     public let matchCount: Int
     /// Start time of the most recent such match.
     public let lastPlayed: Date
 
-    public init(id: UUID, name: String, matchCount: Int, lastPlayed: Date) {
+    public init(id: UUID, name: String, matchCount: Int, lastPlayed: Date, age: Int? = nil, sexRaw: String? = nil) {
         self.id = id
         self.name = name
+        self.age = TaggedPlayer.sanitizedAge(age)
+        self.sexRaw = TaggedPlayer.sanitizedSexRaw(sexRaw)
         self.matchCount = matchCount
         self.lastPlayed = lastPlayed
     }
@@ -116,7 +122,7 @@ public enum PlayerRoster {
         forgotten: ForgottenPlayerLedger = ForgottenPlayerLedger()
     ) -> [RosterEntry] {
         struct Accumulator {
-            var name: String
+            var player: TaggedPlayer
             var nameRevision: MatchTags
             var matchIDs: Set<UUID>
             var lastPlayed: Date
@@ -129,21 +135,22 @@ public enum PlayerRoster {
                     acc.matchIDs.insert(record.id)
                     acc.lastPlayed = max(acc.lastPlayed, record.startTime)
                     if tags.supersedes(acc.nameRevision) {
-                        acc.name = player.name
+                        acc.player = player
                         acc.nameRevision = tags
                     }
                     byID[player.id] = acc
                 } else {
                     byID[player.id] = Accumulator(
-                        name: player.name, nameRevision: tags,
+                        player: player, nameRevision: tags,
                         matchIDs: [record.id], lastPlayed: record.startTime
                     )
                 }
             }
         }
         return byID
-            .map { RosterEntry(id: $0.key, name: $0.value.name,
-                               matchCount: $0.value.matchIDs.count, lastPlayed: $0.value.lastPlayed) }
+            .map { RosterEntry(id: $0.key, name: $0.value.player.name,
+                               matchCount: $0.value.matchIDs.count, lastPlayed: $0.value.lastPlayed,
+                               age: $0.value.player.age, sexRaw: $0.value.player.sexRaw) }
             .sorted { a, b in
                 if a.lastPlayed != b.lastPlayed { return a.lastPlayed > b.lastPlayed }
                 let byName = a.name.localizedCaseInsensitiveCompare(b.name)
@@ -210,6 +217,27 @@ public enum PlayerRoster {
         }
     }
 
+    /// Updates the profile in every role; nil deliberately clears a field.
+    public static func updatingDetails(
+        _ playerID: UUID, age: Int?, sexRaw: String?, in records: [MatchRecord], now: Date = Date()
+    ) -> RosterMutation {
+        guard let current = entries(from: records).first(where: { $0.id == playerID }) else {
+            return RosterMutation(records: records, affectedMatchIDs: [])
+        }
+        return rewriting(records, now: now) { tags in
+            if tags.partner?.id == playerID {
+                tags.partner?.name = current.name
+                tags.partner?.age = age
+                tags.partner?.sexRaw = sexRaw
+            }
+            for i in tags.opponents.indices where tags.opponents[i].id == playerID {
+                tags.opponents[i].name = current.name
+                tags.opponents[i].age = age
+                tags.opponents[i].sexRaw = sexRaw
+            }
+        }
+    }
+
     /// Merges duplicate `duplicateID` into `keptID`: every occurrence is
     /// rewritten to the kept id and the kept player's current roster name. A
     /// match that ends up naming the kept player twice is de-duplicated by
@@ -224,10 +252,11 @@ public enum PlayerRoster {
               let kept = entries(from: records).first(where: { $0.id == keptID }) else {
             return RosterMutation(records: records, affectedMatchIDs: [])
         }
-        let replacement = TaggedPlayer(id: keptID, name: kept.name)
+        let replacement = kept.taggedPlayer
         return rewriting(records, now: now) { tags in
-            if tags.partner?.id == duplicateID { tags.partner = replacement }
-            for i in tags.opponents.indices where tags.opponents[i].id == duplicateID {
+            guard tags.playerIDs.contains(duplicateID) else { return }
+            if tags.partner?.id == duplicateID || tags.partner?.id == keptID { tags.partner = replacement }
+            for i in tags.opponents.indices where tags.opponents[i].id == duplicateID || tags.opponents[i].id == keptID {
                 tags.opponents[i] = replacement
             }
         }

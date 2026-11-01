@@ -70,6 +70,9 @@ struct PlayerManageView: View {
     @ObservedObject private var notesStore: MatchNotesStore = .shared
 
     @State private var newName = ""
+    @State private var ageDraft = ""
+    @State private var sexDraft = ""
+    @State private var didInitializeDetailsDraft = false
     @State private var showMergePicker = false
     @State private var pendingMerge: RosterEntry?
     @State private var showForgetConfirmation = false
@@ -134,6 +137,35 @@ struct PlayerManageView: View {
             }
 
             Section {
+                TextField("Age", text: $ageDraft)
+                    .keyboardType(.numberPad)
+                    .accessibilityIdentifier("player-age-field")
+                Picker("Sex", selection: $sexDraft) {
+                    Text("Not specified").tag("")
+                    ForEach(PlayerSex.allCases, id: \.rawValue) { sex in
+                        Text(sex.displayLabel).tag(sex.rawValue)
+                    }
+                    if let raw = entry.sexRaw, PlayerSex(rawValue: raw) == nil {
+                        Text("Other (\(raw))").tag(raw)
+                    }
+                }
+                .accessibilityIdentifier("player-sex-picker")
+                if !ageIsValid {
+                    Text("Enter an age from 0 to 120, or leave it blank.")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier("player-age-validation")
+                }
+                Button("Save Details") { saveDetails() }
+                    .disabled(!detailsChanged(entry) || !ageIsValid)
+                    .accessibilityIdentifier("save-player-details")
+            } header: {
+                Text("Optional Details")
+            } footer: {
+                Text("Age as entered; update it when needed. Leave age blank to clear it.")
+            }
+
+            Section {
                 Button("Merge Duplicate Into…") { showMergePicker = true }
                     .disabled(entries.count < 2)
                     .accessibilityIdentifier("merge-player")
@@ -148,7 +180,14 @@ struct PlayerManageView: View {
                 Text("Removes \(entry.name) from every match on this iPhone and, when it holds those matches, your Apple Watch. Scores are kept.")
             }
         }
-        .onAppear { if newName.isEmpty { newName = entry.name } }
+        .onAppear {
+            if newName.isEmpty { newName = entry.name }
+            if !didInitializeDetailsDraft {
+                ageDraft = entry.age.map(String.init) ?? ""
+                sexDraft = entry.sexRaw ?? ""
+                didInitializeDetailsDraft = true
+            }
+        }
         .sheet(isPresented: $showMergePicker) {
             mergePicker(for: entry)
         }
@@ -232,6 +271,29 @@ struct PlayerManageView: View {
 
     private var actions: PlayerRosterActions {
         PlayerRosterActions(store: store, notesStore: notesStore, syncService: syncService)
+    }
+
+    private var parsedAge: Int? {
+        let trimmed = ageDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : Int(trimmed)
+    }
+
+    private var ageIsValid: Bool {
+        let trimmed = ageDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || (parsedAge.map { (0...120).contains($0) } ?? false)
+    }
+
+    private func detailsChanged(_ entry: RosterEntry) -> Bool {
+        parsedAge != entry.age || (sexDraft.isEmpty ? nil : sexDraft) != entry.sexRaw
+    }
+
+    private func saveDetails() {
+        guard ageIsValid else { return }
+        do {
+            try actions.updateDetails(playerID, age: parsedAge, sexRaw: sexDraft.isEmpty ? nil : sexDraft)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func rename(to name: String) {

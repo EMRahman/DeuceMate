@@ -1,5 +1,5 @@
 // MatchInfoSection.swift — the "Match Info" block under MatchDetailView's
-// header: who was played and the competition type, a private-notes preview,
+// header: who was played and the competition type, a private-note entry,
 // and the entry to "Compare with previous match". See MATCH_TAGS_PLAN.md §7.1.
 //
 // Editing is available for completed AND in-progress archived records and
@@ -130,8 +130,7 @@ struct MatchInfoSection: View {
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
                     if let note {
-                        Text(note.text)
-                            .lineLimit(3)
+                        Text("Private note saved")
                             .foregroundStyle(.primary)
                         Text("Private note · on this iPhone only")
                             .font(.footnote)
