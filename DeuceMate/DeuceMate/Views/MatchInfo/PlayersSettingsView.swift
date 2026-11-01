@@ -1,9 +1,11 @@
 // PlayersSettingsView.swift — Settings → Players: the roster derived from the
 // archive, with Rename, Merge duplicates and Forget player (MATCH_TAGS_PLAN.md
-// §5, §6.2). Each action is one serialized `PhoneStatsStore` mutation followed
-// by tag pushes for the affected matches the watch holds (§6.1 reconciliation
+// §5, §6.2). Each action (`PlayerRosterActions`) is one serialized
+// `PhoneStatsStore` mutation followed — only once it is on disk — by tag
+// pushes for the affected matches the watch holds (§6.1 reconciliation
 // catches any it misses). Forgetting also writes the forgotten-player ledger,
-// so stale watch copies, backups and archives can't bring the name back.
+// so stale watch copies, backups and archives can't bring the name back. A
+// failed save changes nothing: the screen stays open and shows an alert.
 import SwiftUI
 import DeuceMateCore
 
@@ -96,6 +98,16 @@ struct PlayerManageView: View {
         }
         .navigationTitle(entry?.name ?? "Player")
         .navigationBarTitleDisplayMode(.inline)
+        // On the Group, not the form: after a forget whose note deletion
+        // failed the form is already replaced by "Player Removed".
+        .alert(
+            "Something Went Wrong",
+            isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
 
     @ViewBuilder
@@ -167,14 +179,6 @@ struct PlayerManageView: View {
         } message: {
             Text(forgetMessage(for: entry))
         }
-        .alert(
-            "Something Went Wrong",
-            isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "")
-        }
     }
 
     private func forgetMessage(for entry: RosterEntry) -> String {
@@ -226,32 +230,38 @@ struct PlayerManageView: View {
 
     // MARK: - Actions
 
+    private var actions: PlayerRosterActions {
+        PlayerRosterActions(store: store, notesStore: notesStore, syncService: syncService)
+    }
+
     private func rename(to name: String) {
-        let affected = store.renamePlayer(playerID, to: name)
-        syncService.pushTagUpdates(forMatchIDs: affected)
+        do {
+            try actions.rename(playerID, to: name)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func merge(into kept: RosterEntry) {
-        let affected = store.mergePlayers(playerID, into: kept.id)
-        syncService.pushTagUpdates(forMatchIDs: affected)
         pendingMerge = nil
+        do {
+            try actions.merge(playerID, into: kept.id)
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
         dismiss()
     }
 
     private func forget(deletingNotes: Bool) {
-        let noteIDs = affectedNoteIDs
-        let affected = store.forgetPlayer(playerID)
-        syncService.pushTagUpdates(forMatchIDs: affected)
-        // Publication of the new ledger is asynchronous; re-scrub the mirror
-        // once it has landed on the main queue.
-        DispatchQueue.main.async { syncService.rescrubMirror() }
-        if deletingNotes {
-            do {
-                try notesStore.removeNotes(for: noteIDs)
-            } catch {
-                errorMessage = "The player was forgotten, but their matches' private notes couldn't be deleted: \(error.localizedDescription)"
-                return
-            }
+        do {
+            try actions.forget(playerID, deletingNotesFor: deletingNotes ? affectedNoteIDs : [])
+        } catch {
+            // Not saved ⇒ nothing changed and the player is still listed; a
+            // notes failure ⇒ the player is gone ("Player Removed" shows
+            // behind the alert). Either way, stay and say so.
+            errorMessage = error.localizedDescription
+            return
         }
         dismiss()
     }

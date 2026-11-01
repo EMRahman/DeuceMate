@@ -456,6 +456,11 @@ struct DeuceMate_Watch_AppTests {
             removeCallCount += 1
             records.removeAll { $0.id == id }
         }
+        func removeMatchReturningTags(id: UUID) -> MatchTags? {
+            let tags = records.first { $0.id == id }?.tags
+            removeMatch(id: id)
+            return tags
+        }
     }
 
     private func makeStatsViewModel(startingServer: ScoreViewModel.Player,

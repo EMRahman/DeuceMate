@@ -274,9 +274,14 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     // MARK: - Match tags (MATCH_TAGS_PLAN.md §4–§6)
 
+    /// Why a user edit of match details or the player roster did not happen.
+    /// Shared by `updateTags` and the Players actions (rename, merge, forget).
     enum TagEditError: LocalizedError, Equatable {
         case matchNotFound
-        /// Applied in memory but the canonical archive could not be written.
+        /// The canonical archive (or the forgotten-player ledger) could not be
+        /// written — storage failed, or writes are suspended after an
+        /// unreadable launch read. The edit was rolled back in memory, so
+        /// nothing changed and nothing may be pushed to the watch.
         case notPersisted
 
         var errorDescription: String? {
@@ -284,7 +289,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             case .matchNotFound:
                 return "This match is no longer in the iPhone archive."
             case .notPersisted:
-                return "Match details couldn't be saved to this iPhone's storage and may be lost when DeuceMate closes."
+                return "Your change couldn't be saved to this iPhone's storage, so nothing was changed. Try again, or restart DeuceMate if this keeps happening."
             }
         }
     }
@@ -310,9 +315,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             var updated = records
             updated[index] = updated[index].mergingTags(revision)
             let saved = updated[index].tags ?? revision
-            guard adoptOnQueue(records: updated, tombstones: tombstones) else {
-                throw TagEditError.notPersisted
-            }
+            try commitUserEditOnQueue(records: updated)
             return saved
         }
     }
@@ -347,28 +350,33 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     }
 
     /// Renames `playerID` in every match. Returns the ids of changed matches.
+    /// Throws `TagEditError.notPersisted` (with nothing changed) when the
+    /// archive could not be written — the caller must not push to the watch.
     @discardableResult
-    func renamePlayer(_ playerID: UUID, to newName: String, now: Date = Date()) -> Set<UUID> {
-        applyRosterMutation { PlayerRoster.renaming(playerID, to: newName, in: $0, now: now) }
+    func renamePlayer(_ playerID: UUID, to newName: String, now: Date = Date()) throws -> Set<UUID> {
+        try applyRosterMutation { PlayerRoster.renaming(playerID, to: newName, in: $0, now: now) }
     }
 
-    /// Merges duplicate `duplicateID` into `keptID` in every match.
+    /// Merges duplicate `duplicateID` into `keptID` in every match. Throws
+    /// like `renamePlayer`.
     @discardableResult
-    func mergePlayers(_ duplicateID: UUID, into keptID: UUID, now: Date = Date()) -> Set<UUID> {
-        applyRosterMutation { PlayerRoster.merging(duplicateID, into: keptID, in: $0, now: now) }
+    func mergePlayers(_ duplicateID: UUID, into keptID: UUID, now: Date = Date()) throws -> Set<UUID> {
+        try applyRosterMutation { PlayerRoster.merging(duplicateID, into: keptID, in: $0, now: now) }
     }
 
     /// "Forget player": records the id in the ledger AND removes the player
     /// from every role in every match, in one serialized mutation, so a stale
     /// copy arriving later is scrubbed. Returns the changed match ids (the
-    /// caller pushes their tags to the watch).
+    /// caller pushes their tags to the watch) only once the ledger and the
+    /// archive are both on disk; otherwise throws `TagEditError.notPersisted`
+    /// with the in-memory archive and ledger unchanged, so the player still
+    /// shows — exactly what a relaunch would load.
     @discardableResult
-    func forgetPlayer(_ playerID: UUID, now: Date = Date()) -> Set<UUID> {
-        queue.sync {
+    func forgetPlayer(_ playerID: UUID, now: Date = Date()) throws -> Set<UUID> {
+        try queue.sync {
             let mutation = PlayerRoster.forgetting(playerID, in: records, now: now)
-            adoptOnQueue(
+            try commitUserEditOnQueue(
                 records: mutation.records,
-                tombstones: tombstones,
                 forgotten: forgotten.forgetting(playerID)
             )
             return mutation.affectedMatchIDs
@@ -382,12 +390,37 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         }
     }
 
-    private func applyRosterMutation(_ mutate: ([MatchRecord]) -> RosterMutation) -> Set<UUID> {
-        queue.sync {
+    private func applyRosterMutation(_ mutate: ([MatchRecord]) -> RosterMutation) throws -> Set<UUID> {
+        try queue.sync {
             let mutation = mutate(records)
             guard !mutation.affectedMatchIDs.isEmpty else { return [] }
-            adoptOnQueue(records: mutation.records, tombstones: tombstones)
+            try commitUserEditOnQueue(records: mutation.records)
             return mutation.affectedMatchIDs
+        }
+    }
+
+    /// Adopts a user-initiated edit all-or-nothing. Background paths (watch
+    /// merges, imports) keep their in-memory result when a write fails so the
+    /// session stays usable; an edit the user is waiting on must instead
+    /// report failure honestly. If the canonical files were not all written
+    /// (storage error, or writes suspended after an unreadable launch read),
+    /// the previous archive and ledger are restored and republished and
+    /// `TagEditError.notPersisted` is thrown, so the UI shows exactly what a
+    /// relaunch would load and the caller never pushes the edit to the watch.
+    /// (`writeCanonicalOnQueue` writes the ledger first, so a `forget` that
+    /// fails part-way may still take effect at the next launch — the safe
+    /// direction — but success is never reported for one that isn't durable.)
+    private func commitUserEditOnQueue(
+        records newRecords: [MatchRecord],
+        forgotten newForgotten: ForgottenPlayerLedger? = nil
+    ) throws {
+        let previousRecords = records
+        let previousForgotten = forgotten
+        guard adoptOnQueue(records: newRecords, tombstones: tombstones, forgotten: newForgotten) else {
+            records = previousRecords
+            forgotten = previousForgotten
+            publishOnQueue()
+            throw TagEditError.notPersisted
         }
     }
 

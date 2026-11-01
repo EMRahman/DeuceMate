@@ -20,6 +20,20 @@ struct MatchTagsStoreTests {
 
         var historyURL: URL { canonical.appendingPathComponent("matchHistory.json") }
         var ledgerURL: URL { canonical.appendingPathComponent("forgottenPlayers.json") }
+        var tombstoneURL: URL { canonical.appendingPathComponent("deletedMatchIDs.json") }
+
+        /// Makes the ledger unwritable mid-session: a non-empty directory at
+        /// its path, which an atomic file write cannot replace. The ledger is
+        /// the first canonical file written, so every write then fails.
+        func blockCanonicalWrites() throws {
+            try? FileManager.default.removeItem(at: ledgerURL) // the current ledger file
+            try FileManager.default.createDirectory(at: ledgerURL, withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: ledgerURL.appendingPathComponent("blocker"))
+        }
+
+        func unblockCanonicalWrites() throws {
+            try FileManager.default.removeItem(at: ledgerURL)
+        }
 
         func makeStore() -> PhoneStatsStore {
             PhoneStatsStore(storageConfiguration: .init(
@@ -241,9 +255,9 @@ struct MatchTagsStoreTests {
         try store.updateTags(id: b.id, tags: draft(opponents: [alex]))
         try store.updateTags(id: c.id, tags: draft(opponents: [alexDuplicate]))
 
-        let renamed = store.renamePlayer(alex.id, to: "Alexandra")
+        let renamed = try store.renamePlayer(alex.id, to: "Alexandra")
         #expect(renamed == [a.id, b.id])
-        let merged = store.mergePlayers(alexDuplicate.id, into: alex.id)
+        let merged = try store.mergePlayers(alexDuplicate.id, into: alex.id)
         #expect(merged == [c.id])
 
         let roster = store.rosterEntries()
@@ -265,7 +279,7 @@ struct MatchTagsStoreTests {
         try store.updateTags(id: a.id, tags: draft(opponents: [alex], competition: .league))
         try store.updateTags(id: b.id, tags: draft(opponents: [sam, TaggedPlayer(name: "Jo")], partner: alex))
 
-        let affected = store.forgetPlayer(alex.id)
+        let affected = try store.forgetPlayer(alex.id)
 
         #expect(affected == [a.id, b.id])
         #expect(store.rosterEntries().map(\.name).contains("Alex Forgettable") == false)
@@ -284,6 +298,100 @@ struct MatchTagsStoreTests {
         #expect(reloaded.forgottenPlayers.contains(alex.id))
     }
 
+    // MARK: - Failed writes (nothing is reported as saved unless it is on disk)
+
+    /// The review scenario: the launch read failed, so canonical writes are
+    /// suspended. Forget must fail visibly, leave the player in the roster
+    /// (in memory AND after a relaunch), and write no ledger.
+    @Test func forgetWithSuspendedWritesThrowsAndThePlayerSurvivesRelaunch() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let alex = TaggedPlayer(name: "Alex")
+        let match = completed(tags: MatchTags(opponents: [alex], updatedAt: Self.base))
+        try JSONEncoder().encode([match]).write(to: fixture.historyURL)
+        // A directory at the tombstone URL is an unreadable (not missing) file.
+        try FileManager.default.createDirectory(at: fixture.tombstoneURL, withIntermediateDirectories: true)
+        let store = fixture.makeStore()
+        #expect(store.rosterEntries().map(\.name) == ["Alex"])
+
+        #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
+            try store.forgetPlayer(alex.id)
+        }
+
+        #expect(store.rosterEntries().map(\.name) == ["Alex"])
+        #expect(store.forgottenPlayerLedger().contains(alex.id) == false)
+        #expect(store.loadHistory().first?.tags?.playerIDs.contains(alex.id) == true)
+        #expect(FileManager.default.fileExists(atPath: fixture.ledgerURL.path) == false)
+        // Relaunch: the name is still there (what the user was told).
+        #expect(fixture.makeStore().rosterEntries().map(\.name) == ["Alex"])
+    }
+
+    @Test func forgetThatCannotBeWrittenRollsBackInMemoryAndOnDisk() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let alex = TaggedPlayer(name: "Alex")
+        let match = completed()
+        let store = fixture.makeStore()
+        store.saveHistory([match])
+        try store.updateTags(id: match.id, tags: draft(opponents: [alex]))
+        try fixture.blockCanonicalWrites()
+
+        #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
+            try store.forgetPlayer(alex.id)
+        }
+
+        #expect(store.forgottenPlayerLedger().isEmpty)
+        #expect(store.rosterEntries().map(\.name) == ["Alex"])
+        try fixture.unblockCanonicalWrites()
+        let reloaded = fixture.makeStore()
+        #expect(reloaded.forgottenPlayerLedger().isEmpty)
+        #expect(reloaded.rosterEntries().map(\.name) == ["Alex"])
+        // Retrying once storage is writable works.
+        #expect(try store.forgetPlayer(alex.id) == [match.id])
+        #expect(fixture.makeStore().forgottenPlayerLedger().contains(alex.id))
+    }
+
+    @Test func renameAndMergeThatCannotBeWrittenThrowAndChangeNothing() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let alex = TaggedPlayer(name: "Alex")
+        let alexDuplicate = TaggedPlayer(name: "alex")
+        let a = completed(start: 0), b = completed(start: 10_000)
+        let store = fixture.makeStore()
+        store.saveHistory([a, b])
+        try store.updateTags(id: a.id, tags: draft(opponents: [alex]))
+        try store.updateTags(id: b.id, tags: draft(opponents: [alexDuplicate]))
+        let before = store.loadHistory()
+        try fixture.blockCanonicalWrites()
+
+        #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
+            try store.renamePlayer(alex.id, to: "Alexandra")
+        }
+        #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
+            try store.mergePlayers(alexDuplicate.id, into: alex.id)
+        }
+
+        #expect(store.loadHistory() == before)
+        try fixture.unblockCanonicalWrites()
+        #expect(fixture.makeStore().loadHistory() == before)
+    }
+
+    @Test func updateTagsThatCannotBeWrittenThrowsAndKeepsTheStoredTags() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let match = completed()
+        let store = fixture.makeStore()
+        store.saveHistory([match])
+        let saved = try store.updateTags(id: match.id, tags: draft(competition: .league))
+        try fixture.blockCanonicalWrites()
+
+        #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
+            try store.updateTags(id: match.id, tags: draft(competition: .tournament))
+        }
+
+        #expect(store.loadHistory().first?.tags == saved)
+    }
+
     @Test func forgottenPlayerCannotReturnThroughAnyInboundPath() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -297,7 +405,7 @@ struct MatchTagsStoreTests {
         stale.tags = tagged
         let otherStale = completed(start: 50_000, tags: tagged) // a match the phone never held
         let oldArchive = try ManualMatchArchiveBackup.encode(records: [stale, otherStale])
-        store.forgetPlayer(alex.id)
+        try store.forgetPlayer(alex.id)
 
         // 1. Stale watch history (newer-looking clock even).
         let futureTags = MatchTags(opponents: [alex], updatedAt: Date().addingTimeInterval(86_400))
@@ -327,7 +435,7 @@ struct MatchTagsStoreTests {
         let store = fixture.makeStore()
         store.saveHistory([match])
         try store.updateTags(id: match.id, tags: draft(opponents: [alex]))
-        store.forgetPlayer(alex.id)
+        try store.forgetPlayer(alex.id)
 
         let exported = try ManualMatchArchiveBackup.decode(store.exportManualArchiveData())
         #expect(exported.forgottenPlayers?.contains(alex.id) == true)
@@ -352,7 +460,7 @@ struct MatchTagsStoreTests {
         store.saveHistory([match])
         try store.updateTags(id: match.id, tags: draft(opponents: [TaggedPlayer(name: "Alex")], competition: .league))
         let forgotten = TaggedPlayer(name: "Gone")
-        store.forgetPlayer(forgotten.id)
+        try store.forgetPlayer(forgotten.id)
         let secret = "knee felt sore — secret-note-marker-81723"
         try notes.save(text: secret, for: match.id)
 
