@@ -179,7 +179,8 @@ final class MatchTypeConversionTests: XCTestCase {
         let partner = TaggedPlayer(id: UUID(), name: "Sam")
         let op1 = TaggedPlayer(id: UUID(), name: "Alex")
         let op2 = TaggedPlayer(id: UUID(), name: "Jo")
-        let tags = MatchTags(opponents: [op1, op2], partner: partner, competitionType: .league, updatedAt: Date(timeIntervalSince1970: 100))
+        let tagRevID = UUID()
+        let tags = MatchTags(opponents: [op1, op2], partner: partner, competitionType: .league, updatedAt: Date(timeIntervalSince1970: 100), revisionID: tagRevID)
         let record = MatchRecord(
             startTime: Date(timeIntervalSince1970: 100),
             endTime: Date(timeIntervalSince1970: 200),
@@ -195,16 +196,27 @@ final class MatchTypeConversionTests: XCTestCase {
         let converted = record.convertingMatchType(to: .singles, at: revTime, revisionID: revID)
 
         XCTAssertEqual(converted.matchType, .singles)
-        XCTAssertNil(converted.tags?.partner)
-        XCTAssertEqual(converted.tags?.opponents.map(\.name), ["Alex"])
-        XCTAssertEqual(converted.tags?.competitionType, .league)
-        XCTAssertEqual(converted.tags?.updatedAt, revTime)
-        XCTAssertEqual(converted.tags?.revisionID, revID)
+        guard let convertedTags = converted.tags else {
+            XCTFail("Converted tags must not be nil")
+            return
+        }
+        XCTAssertNil(convertedTags.partner)
+        XCTAssertEqual(convertedTags.opponents.map(\.name), ["Alex"])
+        XCTAssertEqual(convertedTags.competitionType, .league)
+        // Clock is preserved so normalizing stale tags never promotes them over newer edits
+        XCTAssertEqual(convertedTags.updatedAt, Date(timeIntervalSince1970: 100))
+        XCTAssertEqual(convertedTags.revisionID, tagRevID)
+        // Normalized copy supersedes the untrimmed copy via allPlayers.count tiebreak
+        XCTAssertTrue(convertedTags.supersedes(tags))
+        XCTAssertFalse(tags.supersedes(convertedTags))
+        XCTAssertEqual(MatchTags.merged(tags, convertedTags), convertedTags)
+        XCTAssertEqual(MatchTags.merged(convertedTags, tags), convertedTags)
     }
 
     func test_tagNormalization_partnerOnly_becomesEmptyTagsWithNewerClock() {
         let partner = TaggedPlayer(id: UUID(), name: "Sam")
-        let tags = MatchTags(opponents: [], partner: partner, competitionType: nil, updatedAt: Date(timeIntervalSince1970: 100))
+        let tagRevID = UUID()
+        let tags = MatchTags(opponents: [], partner: partner, competitionType: nil, updatedAt: Date(timeIntervalSince1970: 100), revisionID: tagRevID)
         let record = MatchRecord(
             startTime: Date(timeIntervalSince1970: 100),
             endTime: Date(timeIntervalSince1970: 200),
@@ -227,12 +239,15 @@ final class MatchTypeConversionTests: XCTestCase {
         XCTAssertNil(convertedTags.partner)
         XCTAssertEqual(convertedTags.opponents, [])
         XCTAssertNil(convertedTags.competitionType)
-        XCTAssertEqual(convertedTags.updatedAt, revTime)
-        XCTAssertEqual(convertedTags.revisionID, revID)
+        // Preserves clock
+        XCTAssertEqual(convertedTags.updatedAt, Date(timeIntervalSince1970: 100))
+        XCTAssertEqual(convertedTags.revisionID, tagRevID)
 
-        // Verify that this empty newer tag revision beats an older tag with a partner on merge
-        let mergedTags = MatchTags.merged(tags, convertedTags)
-        XCTAssertEqual(mergedTags, convertedTags)
+        // Trimmed empty tags supersede source with partner via allPlayers.count tiebreak
+        XCTAssertTrue(convertedTags.supersedes(tags))
+        XCTAssertFalse(tags.supersedes(convertedTags))
+        XCTAssertEqual(MatchTags.merged(tags, convertedTags), convertedTags)
+        XCTAssertEqual(MatchTags.merged(convertedTags, tags), convertedTags)
     }
 
     func test_tagNormalization_singleOpponentAndNilPartner_leavesTagsUntouched() {
@@ -446,6 +461,134 @@ final class MatchTypeConversionTests: XCTestCase {
             let remerged = MatchMergePolicy.resolve(incoming: r1, existing: r1)
             XCTAssertEqual(remerged, r1, "Merge must be idempotent")
         }
+    }
+
+    func test_regression_offlineTagEditThenPeerConversion_preservesNewerTagEdit() {
+        let matchID = UUID()
+        let alex = TaggedPlayer(id: UUID(), name: "Alex")
+        let jo = TaggedPlayer(id: UUID(), name: "Jo")
+        let sam = TaggedPlayer(id: UUID(), name: "Sam")
+
+        // Both devices started with doubles tags at t=100 (friendly)
+        let initialTags = MatchTags(
+            opponents: [alex, jo],
+            partner: sam,
+            competitionType: .friendly,
+            updatedAt: Date(timeIntervalSince1970: 100),
+            revisionID: UUID()
+        )
+        let baseRecord = MatchRecord(
+            id: matchID,
+            startTime: Date(timeIntervalSince1970: 1_000),
+            endTime: Date(timeIntervalSince1970: 2_000),
+            setScores: [SetScore(gamesMe: 6, gamesOpponent: 3)],
+            stats: [],
+            iWon: true,
+            matchType: .doubles,
+            tags: initialTags
+        )
+
+        // 1. Phone edits tags at t=200 to .league (still doubles)
+        let phoneTagsAt200 = MatchTags(
+            opponents: [alex, jo],
+            partner: sam,
+            competitionType: .league,
+            updatedAt: Date(timeIntervalSince1970: 200),
+            revisionID: UUID()
+        )
+        var phoneRecord = baseRecord
+        phoneRecord.tags = phoneTagsAt200
+
+        // 2. Watch converts its stale t=100 copy to .singles at t=300
+        let watchRecord = baseRecord.convertingMatchType(
+            to: .singles,
+            at: Date(timeIntervalSince1970: 300),
+            revisionID: UUID()
+        )
+        // Watch's normalized tags should still have updatedAt=100, not 300
+        XCTAssertEqual(watchRecord.tags?.updatedAt, Date(timeIntervalSince1970: 100))
+
+        // MatchMergePolicy in both orders
+        let resolvedWatchPhone = MatchMergePolicy.resolve(incoming: watchRecord, existing: phoneRecord)
+        let resolvedPhoneWatch = MatchMergePolicy.resolve(incoming: phoneRecord, existing: watchRecord)
+
+        for resolved in [resolvedWatchPhone, resolvedPhoneWatch] {
+            XCTAssertEqual(resolved.matchType, .singles)
+            XCTAssertEqual(resolved.tags?.competitionType, .league, "Newer phone tag edit (.league) must win")
+            XCTAssertNil(resolved.tags?.partner)
+            XCTAssertEqual(resolved.tags?.opponents.map(\.name), ["Alex"])
+            XCTAssertEqual(resolved.tags?.updatedAt, Date(timeIntervalSince1970: 200))
+        }
+        XCTAssertEqual(resolvedWatchPhone, resolvedPhoneWatch)
+
+        // ArchiveBackupPolicy in both orders
+        let backup1 = ArchiveBackupPolicy.resolveBackup(backup: watchRecord, local: phoneRecord)
+        let backup2 = ArchiveBackupPolicy.resolveBackup(backup: phoneRecord, local: watchRecord)
+        for b in [backup1, backup2] {
+            XCTAssertEqual(b.matchType, .singles)
+            XCTAssertEqual(b.tags?.competitionType, .league)
+            XCTAssertNil(b.tags?.partner)
+            XCTAssertEqual(b.tags?.opponents.map(\.name), ["Alex"])
+            XCTAssertEqual(b.tags?.updatedAt, Date(timeIntervalSince1970: 200))
+        }
+
+        // WatchMirror
+        let mirrored = WatchMirror.merged(existing: [phoneRecord], incoming: [watchRecord], manifest: [matchID])
+        XCTAssertEqual(mirrored.first?.matchType, .singles)
+        XCTAssertEqual(mirrored.first?.tags?.competitionType, .league)
+        XCTAssertNil(mirrored.first?.tags?.partner)
+        XCTAssertEqual(mirrored.first?.tags?.opponents.map(\.name), ["Alex"])
+
+        // MatchTags.pendingWatchUpdates queues the normalized .league tags for the watch
+        let pending = MatchTags.pendingWatchUpdates(
+            archive: [resolvedWatchPhone],
+            watchCopies: [watchRecord],
+            newlyHeld: []
+        )
+        XCTAssertEqual(pending.count, 1)
+        XCTAssertEqual(pending.first?.matchID, matchID)
+        XCTAssertEqual(pending.first?.tags.competitionType, .league)
+        XCTAssertNil(pending.first?.tags.partner)
+        XCTAssertEqual(pending.first?.tags.opponents.map(\.name), ["Alex"])
+        XCTAssertEqual(pending.first?.tags.updatedAt, Date(timeIntervalSince1970: 200))
+    }
+
+    func test_regression_outOfOrderCommutativity_mergingTagsAndMatchTypeRevision() {
+        let alex = TaggedPlayer(id: UUID(), name: "Alex")
+        let jo = TaggedPlayer(id: UUID(), name: "Jo")
+        let sam = TaggedPlayer(id: UUID(), name: "Sam")
+
+        let base = MatchRecord(
+            startTime: Date(timeIntervalSince1970: 1_000),
+            endTime: Date(timeIntervalSince1970: 2_000),
+            setScores: [SetScore(gamesMe: 6, gamesOpponent: 3)],
+            stats: [],
+            iWon: true,
+            matchType: .doubles
+        )
+
+        let phoneTagsAt200 = MatchTags(
+            opponents: [alex, jo],
+            partner: sam,
+            competitionType: .league,
+            updatedAt: Date(timeIntervalSince1970: 200),
+            revisionID: UUID()
+        )
+        let watchSinglesAt300 = MatchTypeRevision(
+            matchType: .singles,
+            updatedAt: Date(timeIntervalSince1970: 300),
+            revisionID: UUID()
+        )
+
+        let orderA = base.mergingTags(phoneTagsAt200).mergingMatchTypeRevision(watchSinglesAt300)
+        let orderB = base.mergingMatchTypeRevision(watchSinglesAt300).mergingTags(phoneTagsAt200)
+
+        XCTAssertEqual(orderA, orderB)
+        XCTAssertEqual(orderA.matchType, .singles)
+        XCTAssertEqual(orderA.tags?.competitionType, .league)
+        XCTAssertNil(orderA.tags?.partner)
+        XCTAssertEqual(orderA.tags?.opponents.map(\.name), ["Alex"])
+        XCTAssertEqual(orderA.tags?.updatedAt, Date(timeIntervalSince1970: 200))
     }
 
     // MARK: - Guard test for legacy singles records

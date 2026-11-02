@@ -321,9 +321,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 return records[index]
             }
             let converted = forgotten.scrubbed(
-                records[index].convertingMatchType(to: newType, at: now),
+                records[index],
                 now: now
-            )
+            ).convertingMatchType(to: newType, at: now)
             var updated = records
             updated[index] = converted
             try commitUserEditOnQueue(records: updated)
@@ -390,9 +390,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             guard let index = records.firstIndex(where: { $0.id == update.matchID }),
                   !records[index].isInProgress else { return records }
             let merged = forgotten.scrubbed(
-                records[index].mergingMatchTypeRevision(update.revision),
+                records[index],
                 now: now
-            )
+            ).mergingMatchTypeRevision(update.revision)
             guard merged != records[index] else { return records }
             var updated = records
             updated[index] = merged

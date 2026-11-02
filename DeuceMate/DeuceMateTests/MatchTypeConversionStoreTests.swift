@@ -539,4 +539,74 @@ struct MatchTypeConversionStoreTests {
         #expect(stillSingles?.matchType == .singles)
         #expect(harness.session.matchTypeUpdates.contains { $0.matchID == match.id && $0.revision.matchType == .singles })
     }
+
+    @Test @MainActor func watchHistoryPushConvertedFromStaleDoublesCopyPreservesNewerPhoneTagEdit() async throws {
+        let harness = SyncHarness()
+        defer { harness.remove() }
+
+        let alex = TaggedPlayer(name: "Alex")
+        let jo = TaggedPlayer(name: "Jo")
+        let sam = TaggedPlayer(name: "Sam")
+        let matchID = UUID()
+
+        // Both devices started with doubles tags at t=100 (friendly)
+        let initialTags = MatchTags(
+            opponents: [alex, jo],
+            partner: sam,
+            competitionType: .friendly,
+            updatedAt: Date(timeIntervalSince1970: 100),
+            revisionID: UUID()
+        )
+        let match = makeCompletedMatch(id: matchID, start: 0, tags: initialTags, type: .doubles)
+        harness.store.saveHistory([match])
+
+        // 1. Phone edits tags at t=200 to .league
+        let phoneTagsAt200 = MatchTags(
+            opponents: [alex, jo],
+            partner: sam,
+            competitionType: .league,
+            updatedAt: Date(timeIntervalSince1970: 200),
+            revisionID: UUID()
+        )
+        try harness.store.updateTags(id: matchID, tags: phoneTagsAt200, now: Date(timeIntervalSince1970: 200))
+
+        // Mark as held on watch
+        harness.service.handle([.watchManifest([matchID])])
+        await drainMain()
+        harness.session.reset()
+
+        // 2. Watch converts its stale t=100 doubles copy to .singles at t=300
+        let watchSinglesRev = MatchTypeRevision(
+            matchType: .singles,
+            updatedAt: Date(timeIntervalSince1970: 300),
+            revisionID: UUID()
+        )
+        let watchCopy = makeCompletedMatch(
+            id: matchID,
+            start: 0,
+            tags: initialTags.normalizedForSingles(),
+            type: .singles,
+            revision: watchSinglesRev
+        )
+        harness.service.handle([.history([watchCopy])])
+        await drainMain()
+
+        // Phone archive becomes .singles with .league + [Alex] + partner == nil
+        let currentRecord = harness.store.loadHistory().first(where: { $0.id == matchID })
+        #expect(currentRecord?.matchType == .singles)
+        #expect(currentRecord?.tags?.competitionType == .league)
+        #expect(currentRecord?.tags?.partner == nil)
+        #expect(currentRecord?.tags?.opponents.count == 1)
+        #expect(currentRecord?.tags?.opponents.first?.name == "Alex")
+        #expect(currentRecord?.tags?.updatedAt == Date(timeIntervalSince1970: 200))
+
+        // And sends the normalized .league matchTagsUpdate back to the watch
+        #expect(harness.session.tagUpdates.contains {
+            $0.matchID == matchID &&
+            $0.tags.competitionType == .league &&
+            $0.tags.partner == nil &&
+            $0.tags.opponents.count == 1 &&
+            $0.tags.opponents.first?.name == "Alex"
+        })
+    }
 }

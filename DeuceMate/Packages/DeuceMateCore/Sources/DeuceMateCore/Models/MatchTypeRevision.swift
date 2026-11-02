@@ -123,17 +123,10 @@ public extension MatchRecord {
         copy.tiebreakStartDoublesIndex = 0
 
         // Deterministic singles tag normalization: ONLY when rev.matchType == .singles
-        // (never run when matchTypeRevision == nil!), if copy has tags that include a partner
-        // or more than 1 opponent.
-        if rev.matchType == .singles, let existingTags = copy.tags, (existingTags.partner != nil || existingTags.opponents.count > 1) {
-            var trimmed = existingTags
-            trimmed.partner = nil
-            trimmed.opponents = Array(existingTags.opponents.prefix(1))
-            copy.tags = trimmed.revised(
-                after: existingTags,
-                now: rev.updatedAt,
-                revisionID: rev.revisionID
-            )
+        // preserves (updatedAt, revisionID) so a stale doubles snapshot never promotes
+        // ahead of newer tag edits made on another peer.
+        if rev.matchType == .singles {
+            copy.tags = copy.tags?.normalizedForSingles()
         }
         return copy
     }
