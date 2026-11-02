@@ -56,9 +56,15 @@ extension MatchWebViewModel {
             sections.append(breakPointSection(categorized))
             sections.append(errorAnalysis(categorized, isReader: focal == reader))
             sections.append(opponentErrors(categorized, isReader: focal == reader))
-            if !categorized.recCoachInsights.isEmpty {
+            // Keep unclassified points for coverage/gap checks. Health-derived
+            // coaching belongs only to the recorder's own export/perspective.
+            let coaching = RecCoachInsights.generate(
+                stats: record.stats, focal: focal, setElapsedSeconds: record.setElapsedSeconds,
+                matchType: focal == .me && reader == .me ? record.matchType : nil
+            )
+            if !coaching.isEmpty {
                 sections.append(StatSection(title: "Coaching Insights", rows: [],
-                                            note: nil, bullets: categorized.recCoachInsights))
+                                            note: nil, bullets: coaching))
             }
             if !categorized.rallyDepth.isEmpty {
                 sections.append(rallyDepthSection(categorized))

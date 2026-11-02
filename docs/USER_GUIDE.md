@@ -237,18 +237,65 @@ All metrics are available filtered to an individual set or across the full match
 
 ### Automated coaching insights (RecCoach)
 
-After a match with sufficient outcome data (≥ 20 categorised points), the engine generates up to three prioritised plain-English observations, chosen from these eight rules:
+Coaching Insights shows **up to three compact observations**, with the match
+figures emphasized before a short suggestion. It requires at least **20 points
+with recorded outcomes** in the selected match or set. The engine ranks the
+qualifying findings by severity, sample size and specificity, then removes
+suggestions that overlap. Fewer than three observations may appear.
 
-1. **Self-inflicted loss share** — fires when ≥55% of points lost were unforced errors or double faults; calls out reliability as the primary lever
-2. **Per-set UE drift** — compares unforced-error rate between consecutive sets; surfaces fatigue-driven shot-selection changes
-3. **Double-fault leakage** — flags when double faults exceed 0.5 per service game, framing each one as a free point given away
-4. **Pressure-point drop** — detects a ≥20-percentage-point win-rate gap between normal points and "big" points (break / deuce / tiebreak) and recommends simplifying shot choice under pressure
-5. **Rally-length signal** — compares win rates at S+1 vs. extended rallies; recommends finishing points earlier when the gap is ≥15 percentage points
-6. **Second-serve vulnerability** — flags when the first-serve win rate is ≥20 percentage points above the second-serve win rate, suggesting a slower spin-heavy second serve
-7. **Return unforced errors** — fires when ≥40% of your return-game losses were return UEs, recommending a safer deep crosscourt return target
-8. **Set-duration energy decline** — detects a ≥15% win-rate drop in a set following one that lasted more than 30 minutes
+Most rate comparisons require at least **80% relevant tracking coverage**.
+Untracked points do not count as successful first serves. A percentage-point
+difference means subtraction: 60% versus 40% is a 20-percentage-point gap.
+The thresholds below are product heuristics, not universal performance targets.
 
-The insights respect the active set filter on the iPhone match detail — choose Set 1, Set 2, … to scope the engine to that set and to the transition into it, or All for the whole-match view.
+| Finding | When it qualifies | Suggested focus |
+|---|---|---|
+| Double faults on break point | At least one own double fault while facing break point; known tiebreak points are excluded. Still requires the 20-point minimum. | Practise your second-serve routine under pressure. Shows how many faults occurred on break points. |
+| Frequent double faults | At least 3 faults across at least 4 service games, averaging at least 0.5 per game. Known tiebreak faults and tiebreak service runs are excluded from this frequency. | Practise a repeatable second-serve routine. |
+| Low first-serve percentage | Below 50% in over at least 30 tracked service points. | If second-serve points won are below 45% over at least 8 opportunities, try slightly less pace or familiar spin. Otherwise test a larger target and compare service-point results. Second-serve opportunities here include double faults. |
+| Weaker second serves in play | At least 8 first-serve points and 8 second serves in play; the second-serve win rate is at least 20 percentage points lower. | Review spin, placement and next-shot preparation. This comparison excludes double faults. |
+| Serve/return imbalance | At least 20 serving and 20 receiving points; receiving win rate is at least 25 percentage points lower. | Review returns and following rallies. The gap alone does not explain the cause. |
+| Missed returns | At least 10 tracked return attempts, with at least 3 unforced misses accounting for at least 25% of attempts. | Review return position, split-step timing and preparation. Requires the point to end on the return shot; excludes serve endings and opponent double faults. |
+| Errors after the return | At least 10 receiving losses with known ending phases; at least 40% are unforced errors ending at Serve+1 or Rally. | Review recovery position, spacing and shot selection. These are distinct from missed return shots. |
+| High share of own errors | At least 25 classified points and 15 classified losses; at least 55% of losses are unforced errors or own double faults. | Review preparation, spacing and shot selection. This broader observation can be displaced by more specific advice. |
+| Pressure-point drop | Serving and receiving are compared separately. Requires at least 8 pressure and 15 ordinary points, and a win-rate drop of at least 20 percentage points. | Use your usual routine and a clear target. Pressure includes break points, deuce/advantage and tiebreak points; missing scores are not assumed ordinary. |
+| Better results at Serve+1 than in rallies | On your service points, at least 8 Serve+1 endings and 8 Rally endings, with a win-rate gap of at least 15 percentage points. | Review how rallies were lost before changing tactics. These are ending phases, not exact rally lengths. |
+| Decline between sets | Unforced-error share of classified losses rises at least 10 percentage points to at least 25%, with 12 classified losses per set; or point-win rate drops at least 15 percentage points after a set lasting at least 30 minutes, with 20 points per set and both durations recorded. | Review preparation, positioning and shot selection. If both findings qualify, they appear in one observation; the app does not diagnose fatigue from them. |
+
+**Serving after higher recorded effort**
+
+For the recorder's **singles matches**, the engine also compares the next service
+point after higher versus lower recorded effort. It uses the preceding point's
+heart rate or movement, with at least **10 usable observations in each group**.
+Groups are split at the match/set sample median, and must differ on average by
+at least **10 bpm or 5 steps**. It can highlight:
+
+- First-serve percentage falling by at least **15 percentage points**.
+- Double-fault rate rising by at least **10 percentage points**, with at least
+  **3 faults** in the higher-effort group.
+- Service-point win rate falling by at least **20 percentage points**.
+
+The suggestion is: **“Practise resetting your breathing and serve routine between
+points.”** At most one exertion observation appears. Eligible points must follow
+each other within the same regular service game, with usable score context and
+no timestamp gap above 90 seconds. Tiebreaks, game/set changes, missing records
+and reset step counts cannot join unrelated rallies.
+
+Steps include between-point movement, and heart rate is captured when points
+are logged rather than immediately before the next serve. These findings show
+an association; they do not establish that fatigue caused a decline or rallies
+were too long. Doubles exertion advice is suppressed because the saved serving
+side identifies the team, not the individual server. The app does not measure
+serve speed or spin, and never prescribes a kick serve specifically.
+
+The insights follow the active **All / Set 1 / Set 2 / …** filter. A selected set
+is compared with its predecessor for set-change advice; All evaluates adjacent
+set transitions and can select the strongest. Qualifying advice is not guaranteed
+to appear if a stronger or overlapping finding takes its place. PulseCoach below
+is a separate existing panel.
+
+See the [coaching rules reference](features/COACHING_INSIGHTS_PLAN.md) for exact
+advice wording, coverage exceptions, ranking and implementation details.
 
 ### PulseCoach insights (heart-rate gated)
 

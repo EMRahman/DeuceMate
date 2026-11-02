@@ -1,308 +1,268 @@
-// RecCoachInsights.swift — deterministic rule engine that surfaces
-// high-leverage observations for recreational players without requiring
-// heart-rate data. Complements PulseCoachInsights (HR-gated) so iPhone-only
-// users still get coaching.
-//
-// UE-rate convention: per-set unforced-error rate is computed as the share
-// of own losses that were unforced errors (setUEs / setFocalLostPoints),
-// not as a share of all points or all categorized points. This mirrors how
-// recreational players think about "errors as a fraction of points I gave
-// away," which is the metric the engine is meant to highlight.
-//
-// Set scoping: callers pass the full match's points plus a `SetScope`. With
-// `.all` the engine looks at the whole match; with `.set(i)` the single-set
-// rules are restricted to that set and the cross-set fatigue rules compare
-// the selected set against the one before it. This lets the same engine back
-// the "All / Set 1 / Set 2" filter shown above Coaching Insights.
+// Compact match coaching: rank supported observations, suppress overlapping
+// advice, then show at most three. Rates use classified points with >=80%
+// coverage of the relevant slice; an untracked default is not a first serve.
 import Foundation
 
 public enum RecCoachInsights {
-
-    /// Which slice of the match the insights should describe.
     public enum SetScope: Sendable, Hashable {
-        /// The whole match.
         case all
-        /// A single set, identified by its zero-based index.
         case set(Int)
     }
 
-    /// Returns up to three short coaching sentences derived from
-    /// point-level outcome data. Always returns an empty array when there is
-    /// insufficient data so callers can safely treat empty as "hide the
-    /// section." Insights are emitted in priority order:
-    ///   1. self-inflicted-loss share
-    ///   2. per-set UE drift (HR-free fatigue proxy)
-    ///   3. double-fault leakage
-    ///   4. pressure-point performance drop
-    ///   5. shorten-the-points (rally length)
-    ///   6. second-serve vulnerability
-    ///   7. return unforced errors
-    ///   8. set-duration energy decline
-    ///
-    /// - Parameters:
-    ///   - stats: the full match's points. The engine slices them itself
-    ///     based on `setScope`, so callers should not pre-filter.
-    ///   - setScope: `.all` for the whole match, or `.set(i)` to scope the
-    ///     single-set rules to set `i` and retarget the cross-set fatigue
-    ///     rules to the `i-1 → i` transition. Cross-set rules are suppressed
-    ///     for `.set(0)` since there is no preceding set.
+    // Scores are product heuristics (not predicted points recovered): severity
+    // times a capped sample, plus an actionable-specificity weight. Exact
+    // break-point losses get precedence over broad error summaries. Stable IDs
+    // break ties. Topics prevent different descriptions of the same issue.
+    struct Candidate {
+        let id: String
+        let score: Double
+        let topics: Set<String>
+        let line: String
+    }
+
+    /// Supply the FULL history, including unclassified points, so coverage and
+    /// consecutive-point checks remain valid. Health advice requires an explicit
+    /// singles match and the recorder's perspective; nil keeps health disabled.
     public static func generate(
         stats: [PointStat],
         focal: Player,
         setElapsedSeconds: [Int: TimeInterval] = [:],
-        setScope: SetScope = .all
+        setScope: SetScope = .all,
+        matchType: MatchType? = nil
     ) -> [String] {
-        let other: Player = focal == .me ? .opponent : .me
-
-        // Points in scope for the single-set rules.
-        let scopedStats: [PointStat]
-        // The pair of set indices the cross-set fatigue rules compare.
-        let earlierSet: Int
-        let laterSet: Int
-        // Cross-set rules need a preceding set to compare against.
-        let crossSetEnabled: Bool
+        let scoped: [PointStat]
         switch setScope {
-        case .all:
-            scopedStats = stats
-            earlierSet = 0
-            laterSet = 1
-            crossSetEnabled = true
-        case .set(let i):
-            scopedStats = stats.filter { $0.setIndex == i }
-            earlierSet = i - 1
-            laterSet = i
-            crossSetEnabled = i >= 1
+        case .all: scoped = stats
+        case .set(let index): scoped = stats.filter { $0.setIndex == index }
         }
-
-        let categorized = scopedStats.filter { $0.outcome != .uncategorized }
-        guard categorized.count >= 20 else { return [] }
-
-        // Cross-set rules always reason over the whole match so they can see
-        // both the earlier and later set regardless of the single-set scope.
-        let fullCategorized = stats.filter { $0.outcome != .uncategorized }
-
-        var insights: [String] = []
-
-        if let line = selfInflictedInsight(categorized: categorized, focal: focal, other: other) {
-            insights.append(line)
+        let cat = scoped.filter { $0.outcome != .uncategorized }
+        guard cat.count >= 20 else { return [] }
+        let serves = cat.filter { $0.server == focal }
+        let returns = cat.filter { $0.server != focal }
+        let serveCoverage = covered(serves, within: scoped.filter { $0.server == focal })
+        let returnCoverage = covered(returns, within: scoped.filter { $0.server != focal })
+        var candidates: [Candidate] = []
+        if let value = doubleFaults(scoped: scoped, cat: cat, focal: focal) { candidates.append(value) }
+        if serveCoverage {
+            if let value = firstServe(serves, focal: focal) { candidates.append(value) }
+            if let value = secondServe(serves, focal: focal) { candidates.append(value) }
         }
-        if crossSetEnabled,
-           let line = perSetUEDriftInsight(
-               categorized: fullCategorized,
-               focal: focal,
-               other: other,
-               earlierSet: earlierSet,
-               laterSet: laterSet
-           ) {
-            insights.append(line)
+        if serveCoverage && returnCoverage,
+           let value = serveReturn(serves: serves, returns: returns, focal: focal) { candidates.append(value) }
+        if returnCoverage { candidates += returnErrors(returns, focal: focal) }
+        if let value = ownErrors(scoped: scoped, cat: cat, focal: focal) { candidates.append(value) }
+        candidates += pressure(scoped: scoped, cat: cat, focal: focal)
+        if let value = rallies(scoped: scoped, cat: cat, focal: focal) { candidates.append(value) }
+        candidates += setChanges(stats, focal: focal, durations: setElapsedSeconds, scope: setScope)
+        if focal == .me && matchType == .singles {
+            candidates += exertion(scoped)
         }
-        if let line = doubleFaultInsight(stats: scopedStats, categorized: categorized, focal: focal) {
-            insights.append(line)
+        var topics: Set<String> = []
+        var result: [String] = []
+        for candidate in candidates.sorted(by: {
+            $0.score == $1.score ? $0.id < $1.id : $0.score > $1.score
+        }) where topics.isDisjoint(with: candidate.topics) {
+            result.append(candidate.line)
+            topics.formUnion(candidate.topics)
+            if result.count == 3 { break }
         }
-        if let line = pressurePointDropInsight(categorized: categorized, focal: focal) {
-            insights.append(line)
-        }
-        if let line = rallyLengthInsight(stats: scopedStats, focal: focal) {
-            insights.append(line)
-        }
-        if let line = secondServeVulnerabilityInsight(stats: scopedStats, focal: focal) {
-            insights.append(line)
-        }
-        if let line = returnUnforcedErrorInsight(categorized: categorized, focal: focal, other: other) {
-            insights.append(line)
-        }
-        if crossSetEnabled,
-           let line = setDurationDeclineInsight(
-               stats: stats,
-               focal: focal,
-               setElapsedSeconds: setElapsedSeconds,
-               earlierSet: earlierSet,
-               laterSet: laterSet
-           ) {
-            insights.append(line)
-        }
-
-        return Array(insights.prefix(3))
+        return result
     }
 
-    // MARK: - Rule 1: self-inflicted-loss share
-
-    private static func selfInflictedInsight(
-        categorized: [PointStat],
-        focal: Player,
-        other: Player
-    ) -> String? {
-        guard categorized.count >= 25 else { return nil }
-        let lost = categorized.filter { $0.winner == other }
-        guard lost.count >= 15 else { return nil }
-        let selfInflicted = lost.filter {
-            $0.outcome == .unforcedError ||
-            ($0.outcome == .doubleFault && $0.server == focal)
-        }.count
-        let share = Double(selfInflicted) / Double(lost.count)
-        guard share >= 0.55 else { return nil }
-        let pct = Int((share * 100).rounded())
-        return "\(pct)% of points you lost were unforced errors or double faults (\(selfInflicted)/\(lost.count)) — reliability is your biggest lever."
+    static func covered(_ known: [PointStat], within all: [PointStat]) -> Bool {
+        !all.isEmpty && Double(known.count) / Double(all.count) >= 0.8
+    }
+    static func rate(_ points: [PointStat], focal: Player) -> Double {
+        points.isEmpty ? 0 : Double(points.filter { $0.winner == focal }.count) / Double(points.count)
+    }
+    static func pct(_ value: Double) -> Int { Int((value * 100).rounded()) }
+    static func firstIn(_ point: PointStat) -> Bool {
+        !point.isSecondServe && point.outcome != .doubleFault
+    }
+    static func fraction(_ points: [PointStat], focal: Player) -> String {
+        "\(pct(rate(points, focal: focal)))% (\(points.filter { $0.winner == focal }.count)/\(points.count))"
     }
 
-    // MARK: - Rule 2: per-set UE drift
+    // MARK: - Double faults
 
-    private static func perSetUEDriftInsight(
-        categorized: [PointStat],
-        focal: Player,
-        other: Player,
-        earlierSet: Int,
-        laterSet: Int
-    ) -> String? {
-        let set1 = categorized.filter { $0.setIndex == earlierSet }
-        let set2 = categorized.filter { $0.setIndex == laterSet }
-        let set1Lost = set1.filter { $0.winner == other }
-        let set2Lost = set2.filter { $0.winner == other }
-        guard set1Lost.count >= 12, set2Lost.count >= 12 else { return nil }
-        let set1UE = set1Lost.filter { $0.outcome == .unforcedError }.count
-        let set2UE = set2Lost.filter { $0.outcome == .unforcedError }.count
-        let r1 = Double(set1UE) / Double(set1Lost.count)
-        let r2 = Double(set2UE) / Double(set2Lost.count)
-        guard r2 - r1 >= 0.10, r2 >= 0.25 else { return nil }
-        let p1 = Int((r1 * 100).rounded())
-        let p2 = Int((r2 * 100).rounded())
-        return "Your unforced-error rate climbed from \(p1)% in set \(earlierSet + 1) to \(p2)% in set \(laterSet + 1) — fatigue may be changing your shot selection."
-    }
-
-    // MARK: - Rule 3: double-fault leakage
-
-    private static func doubleFaultInsight(
-        stats: [PointStat],
-        categorized: [PointStat],
-        focal: Player
-    ) -> String? {
-        let dfs = categorized.filter { $0.server == focal && $0.outcome == .doubleFault }.count
-        guard dfs >= 3 else { return nil }
-        let games = focalServiceGames(stats: stats, focal: focal)
-        guard games >= 4 else { return nil }
-        let perGame = Double(dfs) / Double(games)
-        guard perGame >= 0.5 else { return nil }
-        return "\(dfs) double faults in \(games) service games — each one is a free point at the worst time."
-    }
-
-    // MARK: - Rule 4: pressure-point drop
-
-    private static func pressurePointDropInsight(
-        categorized: [PointStat],
-        focal: Player
-    ) -> String? {
-        let isBig: (PointStat) -> Bool = { pt in
-            if pt.isBreakPoint { return true }
-            guard let g = pt.gameScoreAtStart else { return false }
-            return g.isTiebreak || (g.server >= 3 && g.returner >= 3)
+    private static func doubleFaults(scoped: [PointStat], cat: [PointStat], focal: Player) -> Candidate? {
+        let faults = cat.filter { $0.server == focal && $0.winner != focal && $0.outcome == .doubleFault }
+        let count = faults.count
+        let breaks = faults.filter { $0.isBreakPoint && $0.gameScoreAtStart?.isTiebreak != true }.count
+        if breaks > 0 {
+            let context = count == 1 ? "1 double fault on break point"
+                : "\(count) double faults, including \(breaks) on break point\(breaks == 1 ? "" : "s")"
+            return Candidate(id: "doubleFaults", score: 32 + Double(min(breaks, 5)),
+                             topics: ["serveReliability", "errors", "pressureServe"],
+                             line: "\(context) — practise your second-serve routine under pressure.")
         }
-        let bigPts    = categorized.filter(isBig)
-        let normalPts = categorized.filter { !isBig($0) }
-        guard bigPts.count >= 8, normalPts.count >= 15 else { return nil }
-        let bigRate    = Double(bigPts.filter    { $0.winner == focal }.count) / Double(bigPts.count)
-        let normalRate = Double(normalPts.filter { $0.winner == focal }.count) / Double(normalPts.count)
-        guard normalRate - bigRate >= 0.20 else { return nil }
-        let bigPct    = Int((bigRate    * 100).rounded())
-        let normalPct = Int((normalRate * 100).rounded())
-        return "You won \(normalPct)% of normal points but only \(bigPct)% on big points (break/deuce/tiebreak) — try playing the same ball you'd hit at 0-0."
+        let serving = cat.filter { $0.server == focal }
+        guard covered(serving, within: scoped.filter { $0.server == focal }) else { return nil }
+        let games = serviceGames(scoped, focal: focal)
+        // Match the numerator to regular service games; tiebreak faults still
+        // belong in the total above, but cannot be attributed to those games.
+        let regularFaults = faults.filter { $0.gameScoreAtStart?.isTiebreak != true }.count
+        guard regularFaults >= 3, games >= 4, Double(regularFaults) / Double(games) >= 0.5 else { return nil }
+        return Candidate(id: "doubleFaults", score: 18 + Double(min(regularFaults, 12)),
+                         topics: ["serveReliability", "errors"],
+                         line: "\(regularFaults) double faults in \(games) service games — practise a repeatable second-serve routine.")
     }
 
-    // MARK: - Rule 5: rally-length / shorten-the-points
-
-    private static func rallyLengthInsight(
-        stats: [PointStat],
-        focal: Player
-    ) -> String? {
-        let withShot = stats.filter { $0.endingShot != nil }
-        let s1Pts = withShot.filter { $0.endingShot == .servePlusOne }
-        let rallyPts = withShot.filter { $0.endingShot == .rally }
-        guard s1Pts.count >= 8, rallyPts.count >= 8 else { return nil }
-        let s1Rate = Double(s1Pts.filter { $0.winner == focal }.count) / Double(s1Pts.count)
-        let rallyRate = Double(rallyPts.filter { $0.winner == focal }.count) / Double(rallyPts.count)
-        guard s1Rate - rallyRate >= 0.15 else { return nil }
-        let a = Int((s1Rate * 100).rounded())
-        let b = Int((rallyRate * 100).rounded())
-        return "You won \(a)% of points ending by Serve+1 but only \(b)% in long rallies — try to finish earlier."
-    }
-
-    // MARK: - Rule 6: second-serve vulnerability
-
-    private static func secondServeVulnerabilityInsight(
-        stats: [PointStat],
-        focal: Player
-    ) -> String? {
-        let focalServes  = stats.filter { $0.server == focal }
-        let firstSrvPts  = focalServes.filter { !$0.isSecondServe }
-        // Exclude double faults — the denominator should be second-serve points in play.
-        let secondSrvPts = focalServes.filter { $0.isSecondServe && $0.outcome != .doubleFault }
-        guard firstSrvPts.count >= 8, secondSrvPts.count >= 8 else { return nil }
-        let firstRate  = Double(firstSrvPts.filter  { $0.winner == focal }.count) / Double(firstSrvPts.count)
-        let secondRate = Double(secondSrvPts.filter { $0.winner == focal }.count) / Double(secondSrvPts.count)
-        guard firstRate - secondRate >= 0.20 else { return nil }
-        let firstPct  = Int((firstRate  * 100).rounded())
-        let secondPct = Int((secondRate * 100).rounded())
-        return "You won \(firstPct)% on 1st serve but only \(secondPct)% on 2nd serve (\(secondSrvPts.count) points) — a slower, spin-heavy 2nd serve keeps you in the point."
-    }
-
-    // MARK: - Rule 7: return unforced errors
-
-    private static func returnUnforcedErrorInsight(
-        categorized: [PointStat],
-        focal: Player,
-        other: Player
-    ) -> String? {
-        let returnLosses = categorized.filter { $0.server == other && $0.winner == other }
-        guard returnLosses.count >= 10 else { return nil }
-        let returnUEs = returnLosses.filter { $0.outcome == .unforcedError }.count
-        let share = Double(returnUEs) / Double(returnLosses.count)
-        guard share >= 0.40 else { return nil }
-        let pct = Int((share * 100).rounded())
-        return "\(pct)% of your return losses (\(returnUEs)/\(returnLosses.count)) were unforced errors — aim for a safe, deep crosscourt return instead of going for the lines."
-    }
-
-    // MARK: - Rule 8: set-duration energy decline
-
-    private static func setDurationDeclineInsight(
-        stats: [PointStat],
-        focal: Player,
-        setElapsedSeconds: [Int: TimeInterval],
-        earlierSet: Int,
-        laterSet: Int
-    ) -> String? {
-        guard let earlierDuration = setElapsedSeconds[earlierSet],
-              setElapsedSeconds[laterSet] != nil,
-              earlierDuration >= 30 * 60 else { return nil }
-        let set1 = stats.filter { $0.setIndex == earlierSet }
-        let set2 = stats.filter { $0.setIndex == laterSet }
-        guard set1.count >= 20, set2.count >= 20 else { return nil }
-        let r1 = Double(set1.filter { $0.winner == focal }.count) / Double(set1.count)
-        let r2 = Double(set2.filter { $0.winner == focal }.count) / Double(set2.count)
-        guard r1 - r2 >= 0.15 else { return nil }
-        let minutes = Int((earlierDuration / 60).rounded())
-        let p1 = Int((r1 * 100).rounded())
-        let p2 = Int((r2 * 100).rounded())
-        return "After a \(minutes)-minute set \(earlierSet + 1), your set \(laterSet + 1) win rate dropped from \(p1)% to \(p2)%."
-    }
-
-    // MARK: - Helpers
-
-    /// Count completed focal service games by walking points in time order and
-    /// incrementing each time the server changes from focal to other (i.e. the
-    /// previous focal service game ended). A trailing focal service game is
-    /// counted only if it had at least one point.
-    private static func focalServiceGames(stats: [PointStat], focal: Player) -> Int {
-        let sorted = stats.sorted { $0.timestamp < $1.timestamp }
+    private static func serviceGames(_ stats: [PointStat], focal: Player) -> Int {
         var games = 0
-        var inFocalGame = false
-        for pt in sorted {
-            if pt.server == focal {
-                if !inFocalGame { inFocalGame = true }
-            } else if inFocalGame {
+        var previous: PointStat?
+        for point in stats.sorted(by: { $0.timestamp < $1.timestamp }) {
+            defer { previous = point }
+            guard point.server == focal, point.gameScoreAtStart?.isTiebreak != true else { continue }
+            let startsGame = point.gameScoreAtStart.map { $0.server == 0 && $0.returner == 0 } ?? false
+            if previous == nil || previous?.server != focal || previous?.setIndex != point.setIndex || startsGame {
                 games += 1
-                inFocalGame = false
             }
         }
-        if inFocalGame { games += 1 }
         return games
+    }
+
+    // MARK: - First-serve consistency and second-serve effectiveness
+
+    private static func firstServe(_ serves: [PointStat], focal: Player) -> Candidate? {
+        guard serves.count >= 30 else { return nil }
+        let landed = serves.filter(firstIn).count
+        let inRate = Double(landed) / Double(serves.count)
+        guard inRate < 0.5 else { return nil } // provisional product threshold, not a universal target
+        let seconds = serves.filter { !firstIn($0) } // includes double faults
+        let weakSecond = seconds.count >= 8 && rate(seconds, focal: focal) < 0.45
+        let detail = weakSecond ? "; second-serve points won: \(fraction(seconds, focal: focal))" : ""
+        let advice = weakSecond ? "try slightly less pace or a familiar spin serve."
+            : "test a larger target and compare your service-point results."
+        return Candidate(id: "firstServe", score: 10 + (0.5 - inRate) * Double(min(serves.count, 30)) + (weakSecond ? 14 : 0),
+                         topics: weakSecond ? ["serveReliability", "secondServe"] : ["serveReliability"],
+                         line: "First serves in: \(pct(inRate))% (\(landed)/\(serves.count))\(detail) — \(advice)")
+    }
+
+    private static func secondServe(_ serves: [PointStat], focal: Player) -> Candidate? {
+        let first = serves.filter(firstIn)
+        let second = serves.filter { $0.isSecondServe && $0.outcome != .doubleFault }
+        let gap = rate(first, focal: focal) - rate(second, focal: focal)
+        guard first.count >= 8, second.count >= 8, gap >= 0.2 else { return nil }
+        return Candidate(id: "secondServe", score: 10 + gap * Double(min(first.count, second.count, 30)),
+                         topics: ["secondServe"],
+                         line: "Points won: \(fraction(first, focal: focal)) on first serve vs \(fraction(second, focal: focal)) on second serves in play — review spin, placement and next-shot preparation.")
+    }
+
+    // MARK: - Serve / return balance and return errors
+
+    private static func serveReturn(serves: [PointStat], returns: [PointStat], focal: Player) -> Candidate? {
+        let gap = rate(serves, focal: focal) - rate(returns, focal: focal)
+        guard serves.count >= 20, returns.count >= 20, gap >= 0.25 else { return nil }
+        return Candidate(id: "serveReturn", score: 8 + gap * Double(min(serves.count, returns.count, 30)),
+                         topics: ["returnPlay"],
+                         line: "Points won: \(fraction(serves, focal: focal)) serving vs \(fraction(returns, focal: focal)) receiving — review returns and following rallies; the gap alone does not explain why.")
+    }
+
+    private static func returnErrors(_ returns: [PointStat], focal: Player) -> [Candidate] {
+        let known = returns.filter { $0.endingShot != nil }
+        guard covered(known, within: returns) else { return [] }
+        var result: [Candidate] = []
+        // Aces and double faults are not return attempts. A missed return needs
+        // both its ending phase and the receiver's unforced-error loss.
+        let attempts = known.filter { $0.endingShot != .serve && $0.outcome != .doubleFault }
+        let misses = attempts.filter { $0.winner != focal && $0.outcome == .unforcedError && $0.endingShot == .return }.count
+        if attempts.count >= 10, misses >= 3, Double(misses) / Double(attempts.count) >= 0.25 {
+            result.append(Candidate(id: "missedReturns", score: 18 + Double(min(misses, 15)),
+                                    topics: ["returnPlay", "errors"],
+                                    line: "\(misses)/\(attempts.count) tracked return attempts ended in an unforced error — review return position, split-step timing and preparation."))
+        }
+        let losses = known.filter { $0.winner != focal }
+        let rallyErrors = losses.filter {
+            $0.outcome == .unforcedError && ($0.endingShot == .servePlusOne || $0.endingShot == .rally)
+        }.count
+        if losses.count >= 10, Double(rallyErrors) / Double(losses.count) >= 0.4 {
+            result.append(Candidate(id: "returnRallyErrors", score: 16 + Double(min(rallyErrors, 15)),
+                                    topics: ["returnPlay", "errors", "rally"],
+                                    line: "\(rallyErrors)/\(losses.count) tracked losses while receiving were unforced errors after the return — review recovery position, spacing and shot selection."))
+        }
+        return result
+    }
+
+    // MARK: - General errors, pressure and rally phases
+
+    private static func ownErrors(scoped: [PointStat], cat: [PointStat], focal: Player) -> Candidate? {
+        let lost = cat.filter { $0.winner != focal }
+        let errors = lost.filter { $0.outcome == .unforcedError || ($0.outcome == .doubleFault && $0.server == focal) }.count
+        guard cat.count >= 25, lost.count >= 15,
+              covered(lost, within: scoped.filter { $0.winner != focal }),
+              Double(errors) / Double(lost.count) >= 0.55 else { return nil }
+        return Candidate(id: "ownErrors", score: 4 + Double(errors) / Double(lost.count) * 15,
+                         topics: ["errors", "rally"],
+                         line: "\(pct(Double(errors) / Double(lost.count)))% of classified losses were unforced errors or double faults (\(errors)/\(lost.count)) — review preparation, spacing and shot selection.")
+    }
+
+    private static func pressure(scoped: [PointStat], cat: [PointStat], focal: Player) -> [Candidate] {
+        [true, false].compactMap { serving in
+            let side = cat.filter { ($0.server == focal) == serving }
+            let known = side.filter { $0.isBreakPoint || $0.gameScoreAtStart != nil }
+            let allSide = scoped.filter { ($0.server == focal) == serving }
+            guard covered(known, within: allSide) else { return nil }
+            func isPressure(_ point: PointStat) -> Bool {
+                point.isBreakPoint || point.gameScoreAtStart.map { $0.isTiebreak || ($0.server >= 3 && $0.returner >= 3) } == true
+            }
+            let big = known.filter(isPressure)
+            let ordinary = known.filter { !isPressure($0) }
+            let gap = rate(ordinary, focal: focal) - rate(big, focal: focal)
+            guard big.count >= 8, ordinary.count >= 15, gap >= 0.2 else { return nil }
+            return Candidate(id: serving ? "pressureServe" : "pressureReturn", score: 10 + gap * Double(min(big.count, ordinary.count, 30)),
+                             topics: ["pressure", serving ? "pressureServe" : "returnPlay"],
+                             line: "\(serving ? "Serving" : "Receiving"): \(fraction(big, focal: focal)) points won under pressure vs \(fraction(ordinary, focal: focal)) otherwise — use your usual routine and a clear target.")
+        }
+    }
+
+    private static func rallies(scoped: [PointStat], cat: [PointStat], focal: Player) -> Candidate? {
+        let serves = scoped.filter { $0.server == focal }
+        let known = cat.filter { $0.server == focal && $0.endingShot != nil }
+        guard covered(known, within: serves) else { return nil }
+        let early = known.filter { $0.endingShot == .servePlusOne }
+        let later = known.filter { $0.endingShot == .rally }
+        let gap = rate(early, focal: focal) - rate(later, focal: focal)
+        guard early.count >= 8, later.count >= 8, gap >= 0.15 else { return nil }
+        return Candidate(id: "rallies", score: 6 + gap * Double(min(early.count, later.count, 25)),
+                         topics: ["rally"],
+                         line: "On serve, you won \(fraction(early, focal: focal)) points ending at Serve+1 vs \(fraction(later, focal: focal)) in the rally phase — review how rallies were lost before changing tactics.")
+    }
+
+    // MARK: - One observation per set transition, without a fatigue diagnosis
+
+    private static func setChanges(_ stats: [PointStat], focal: Player, durations: [Int: TimeInterval], scope: SetScope) -> [Candidate] {
+        let laterSets: [Int]
+        switch scope {
+        case .all: laterSets = Set(stats.map(\.setIndex)).filter { $0 > 0 }.sorted()
+        case .set(let index): laterSets = index > 0 ? [index] : []
+        }
+        return laterSets.compactMap { later in
+            let earlier = later - 1
+            let firstAll = stats.filter { $0.setIndex == earlier }
+            let secondAll = stats.filter { $0.setIndex == later }
+            let first = firstAll.filter { $0.outcome != .uncategorized }
+            let second = secondAll.filter { $0.outcome != .uncategorized }
+            let firstLost = first.filter { $0.winner != focal }
+            let secondLost = second.filter { $0.winner != focal }
+            let r1 = firstLost.isEmpty ? 0 : Double(firstLost.filter { $0.outcome == .unforcedError }.count) / Double(firstLost.count)
+            let r2 = secondLost.isEmpty ? 0 : Double(secondLost.filter { $0.outcome == .unforcedError }.count) / Double(secondLost.count)
+            let errorRise = firstLost.count >= 12 && secondLost.count >= 12 && r2 - r1 >= 0.1 && r2 >= 0.25
+                && covered(firstLost, within: firstAll.filter { $0.winner != focal })
+                && covered(secondLost, within: secondAll.filter { $0.winner != focal })
+            let winDrop = rate(firstAll, focal: focal) - rate(secondAll, focal: focal)
+            let duration = durations[earlier] ?? 0
+            let decline = duration >= 1800 && durations[later] != nil && firstAll.count >= 20 && secondAll.count >= 20 && winDrop >= 0.15
+            guard errorRise || decline else { return nil }
+            var facts: [String] = []
+            if errorRise { facts.append("Unforced errors rose from \(pct(r1))% in set \(earlier + 1) to \(pct(r2))% in set \(later + 1) as a share of classified losses") }
+            if decline {
+                let prefix = errorRise ? "points won fell" : "After a \(Int(duration / 60))-minute set \(earlier + 1), points won fell"
+                facts.append("\(prefix) from \(pct(rate(firstAll, focal: focal)))% to \(pct(rate(secondAll, focal: focal)))% in set \(later + 1)")
+            }
+            return Candidate(id: "setChange\(later)", score: 8 + max(errorRise ? r2 - r1 : 0, decline ? winDrop : 0) * 25,
+                             topics: errorRise ? ["setChange", "errors"] : ["setChange"],
+                             line: facts.joined(separator: "; ") + " — review preparation, positioning and shot selection.")
+        }
     }
 }

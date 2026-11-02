@@ -935,7 +935,13 @@ public enum MatchWebTemplate {
         const c = el("div", { class: "card" }, [el("h2", { text: sec.title })]);
         if (sec.note) c.appendChild(el("p", { class: "note", text: sec.note }));
         if (sec.bullets && sec.bullets.length) {
-          c.appendChild(el("ul", { class: "bul" }, sec.bullets.map(b => el("li", { text: b }))));
+          c.appendChild(el("ul", { class: "bul" }, sec.bullets.map(b => {
+            const separator = b.indexOf(" — ");
+            if (sec.title !== "Coaching Insights" || separator < 0) return el("li", { text: b });
+            const row = el("li", {}, [el("strong", { text: b.slice(0, separator) })]);
+            row.appendChild(document.createTextNode(b.slice(separator)));
+            return row;
+          })));
         }
         if (sec.rows && sec.rows.length) {
           const tbl = el("table");

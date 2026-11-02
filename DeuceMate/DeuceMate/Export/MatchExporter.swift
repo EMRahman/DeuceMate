@@ -130,8 +130,12 @@ nonisolated struct MatchExporter {
             sections.append(breakPointSection(summary: categorizedSummary))
             sections.append(errorAnalysis(summary: categorizedSummary, focal: focal))
             sections.append(opponentErrors(summary: categorizedSummary, focal: focal))
-            if !categorizedSummary.recCoachInsights.isEmpty {
-                sections.append(recCoachSection(summary: categorizedSummary))
+            let coaching = RecCoachInsights.generate(
+                stats: allStats, focal: focal, setElapsedSeconds: record.setElapsedSeconds,
+                matchType: focal == .me ? record.matchType : nil
+            )
+            if !coaching.isEmpty {
+                sections.append(recCoachSection(insights: coaching))
             }
             if !categorizedSummary.rallyDepth.isEmpty {
                 sections.append(rallyDepthSection(summary: categorizedSummary))
@@ -399,9 +403,9 @@ nonisolated struct MatchExporter {
         return lines.joined(separator: "\n")
     }
 
-    private static func recCoachSection(summary: MatchStatsSummary) -> String {
+    private static func recCoachSection(insights: [String]) -> String {
         var lines = ["## Coaching Insights"]
-        for insight in summary.recCoachInsights {
+        for insight in insights {
             lines.append("- \(insight)")
         }
         return lines.joined(separator: "\n")

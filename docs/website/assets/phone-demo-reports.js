@@ -567,7 +567,12 @@
       line.append(bar, el("strong", "pr-split-value pr-opp", count ? String(on) : percent(on, od))); row.append(line); return row;
     }
     function insightRows(lines, symbol) {
-      var rows = el("div", "pr-coach-lines"); lines.forEach(function (line) { var row = el("div", "pr-coach-line"); row.append(phone.icon(symbol), el("span", "", line)); rows.append(row); }); return rows;
+      var rows = el("div", "pr-coach-lines"); lines.forEach(function (line) {
+        var row = el("div", "pr-coach-line"), text = el("span"), separator = line.indexOf(" — ");
+        if (symbol === "tennis" && separator >= 0) text.append(el("strong", "", line.slice(0, separator)), document.createTextNode(line.slice(separator)));
+        else text.textContent = line;
+        row.append(phone.icon(symbol), text); rows.append(row);
+      }); return rows;
     }
     function pulseSection(scoped, maxHR) {
       var hr = scoped.filter(function (p) { return p.heartRateBPM > 0; }); if (!hr.length) return null;

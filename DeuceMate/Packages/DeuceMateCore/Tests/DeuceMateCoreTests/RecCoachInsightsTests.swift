@@ -54,7 +54,7 @@ final class RecCoachInsightsTests: XCTestCase {
         for i in 0..<10 { stats.append(point(i + 30, winner: .me, outcome: .winner)) }
         let insights = RecCoachInsights.generate(stats: stats, focal: .me)
         XCTAssertTrue(
-            insights.contains { $0.contains("reliability is your biggest lever") },
+            insights.contains { $0.contains("classified losses were unforced errors or double faults") },
             "Expected self-inflicted insight, got \(insights)"
         )
     }
@@ -66,7 +66,7 @@ final class RecCoachInsightsTests: XCTestCase {
         for i in 0..<18 { stats.append(point(i + 12, winner: .opponent, outcome: .forcedError)) }
         for i in 0..<10 { stats.append(point(i + 30, winner: .me, outcome: .winner)) }
         let insights = RecCoachInsights.generate(stats: stats, focal: .me)
-        XCTAssertFalse(insights.contains { $0.contains("reliability") })
+        XCTAssertFalse(insights.contains { $0.contains("classified losses were") })
     }
 
     // MARK: - Rule 2: per-set UE drift
@@ -125,6 +125,76 @@ final class RecCoachInsightsTests: XCTestCase {
             insights.contains { $0.contains("double faults in") && $0.contains("service games") },
             "Expected double-fault insight, got \(insights)"
         )
+        XCTAssertTrue(insights.contains("4 double faults in 5 service games — practise a repeatable second-serve routine."))
+        XCTAssertFalse(insights.contains { $0.contains("worst time") || $0.contains("break point") })
+    }
+
+    func test_singleBreakPointDoubleFaultIsReportedFromEitherPerspective() {
+        for focal: Player in [.me, .opponent] {
+            let other: Player = focal == .me ? .opponent : .me
+            var stats = (0..<19).map { point($0, server: other, winner: focal) }
+            stats.append(point(
+                19, server: focal, winner: other, outcome: .doubleFault,
+                isSecondServe: true, isBreakPoint: true,
+                gameScoreAtStart: GameScoreSnapshot(server: 1, returner: 3, isTiebreak: false)
+            ))
+
+            XCTAssertEqual(RecCoachInsights.generate(stats: stats, focal: focal), [
+                "1 double fault on break point — practise your second-serve routine under pressure."
+            ])
+            XCTAssertFalse(RecCoachInsights.generate(stats: stats, focal: other).contains {
+                $0.contains("double fault")
+            }, "An opponent's double fault must not become advice about the reader's serve")
+            XCTAssertTrue(RecCoachInsights.generate(stats: Array(stats.dropFirst()), focal: focal).isEmpty,
+                          "Break-point context must still respect the minimum tracked-point gate")
+        }
+    }
+
+    func test_doubleFaultInsightReportsOnlyTheBreakPointSubset() {
+        var stats = (0..<18).map { point($0, winner: .me) }
+        stats.append(point(18, winner: .opponent, outcome: .doubleFault, isSecondServe: true))
+        stats.append(point(
+            19, winner: .opponent, outcome: .doubleFault, isSecondServe: true, isBreakPoint: true
+        ))
+        XCTAssertEqual(RecCoachInsights.generate(stats: stats, focal: .me), [
+            "2 double faults, including 1 on break point — practise your second-serve routine under pressure."
+        ])
+
+        stats.append(point(
+            20, winner: .opponent, outcome: .doubleFault, isSecondServe: true, isBreakPoint: true
+        ))
+        XCTAssertEqual(RecCoachInsights.generate(stats: stats, focal: .me), [
+            "3 double faults, including 2 on break points — practise your second-serve routine under pressure."
+        ])
+    }
+
+    func test_doubleFaultDoesNotInferABreakFromMissingContextOrTiebreakScore() {
+        let ordinaryPoints = (0..<19).map { point($0, winner: .me) }
+        let doubleFaults = [
+            point(19, winner: .opponent, outcome: .doubleFault, isSecondServe: true),
+            point(19, winner: .opponent, outcome: .doubleFault, isSecondServe: true,
+                  gameScoreAtStart: GameScoreSnapshot(server: 3, returner: 3, isTiebreak: false)),
+            point(19, winner: .opponent, outcome: .doubleFault, isSecondServe: true,
+                  isBreakPoint: true,
+                  gameScoreAtStart: GameScoreSnapshot(server: 5, returner: 6, isTiebreak: true)),
+            point(19, winner: .me, outcome: .doubleFault, isSecondServe: true, isBreakPoint: true)
+        ]
+        for doubleFault in doubleFaults {
+            XCTAssertTrue(RecCoachInsights.generate(stats: ordinaryPoints + [doubleFault], focal: .me).isEmpty,
+                          "Only a recorded service loss on break point should bypass the frequency threshold")
+        }
+    }
+
+    func test_breakPointDoubleFaultStaysInItsSelectedSet() {
+        var stats = (0..<19).map { point($0, winner: .me) }
+        stats.append(point(
+            19, winner: .opponent, outcome: .doubleFault, isSecondServe: true, isBreakPoint: true
+        ))
+        stats += (20..<40).map { point($0, setIndex: 1, winner: .me) }
+        XCTAssertEqual(RecCoachInsights.generate(stats: stats, focal: .me, setScope: .set(0)), [
+            "1 double fault on break point — practise your second-serve routine under pressure."
+        ])
+        XCTAssertTrue(RecCoachInsights.generate(stats: stats, focal: .me, setScope: .set(1)).isEmpty)
     }
 
     // MARK: - Rule 4: pressure-point drop
@@ -138,12 +208,12 @@ final class RecCoachInsightsTests: XCTestCase {
         // Big point losses
         for i in 0..<9 { stats.append(point(i + 3, winner: .opponent, outcome: .unforcedError, isBreakPoint: true)) }
         // Normal point wins
-        for i in 0..<14 { stats.append(point(i + 12, winner: .me, outcome: .winner)) }
+        for i in 0..<14 { stats.append(point(i + 12, winner: .me, outcome: .winner, gameScoreAtStart: GameScoreSnapshot(server: 0, returner: 0, isTiebreak: false))) }
         // Normal point losses
-        for i in 0..<6  { stats.append(point(i + 26, winner: .opponent, outcome: .unforcedError)) }
+        for i in 0..<6  { stats.append(point(i + 26, winner: .opponent, outcome: .unforcedError, gameScoreAtStart: GameScoreSnapshot(server: 0, returner: 0, isTiebreak: false))) }
         let insights = RecCoachInsights.generate(stats: stats, focal: .me)
         XCTAssertTrue(
-            insights.contains { $0.contains("big points") && $0.contains("0-0") },
+            insights.contains { $0.contains("Serving:") && $0.contains("under pressure") },
             "Expected pressure-point drop insight, got \(insights)"
         )
     }
@@ -155,12 +225,12 @@ final class RecCoachInsightsTests: XCTestCase {
         var stats: [PointStat] = []
         for i in 0..<7  { stats.append(point(i, winner: .me, outcome: .winner, isBreakPoint: true)) }
         for i in 0..<5  { stats.append(point(i + 7, winner: .opponent, outcome: .unforcedError, isBreakPoint: true)) }
-        for i in 0..<14 { stats.append(point(i + 12, winner: .me, outcome: .winner)) }
-        for i in 0..<6  { stats.append(point(i + 26, winner: .opponent, outcome: .unforcedError)) }
+        for i in 0..<14 { stats.append(point(i + 12, winner: .me, outcome: .winner, gameScoreAtStart: GameScoreSnapshot(server: 0, returner: 0, isTiebreak: false))) }
+        for i in 0..<6  { stats.append(point(i + 26, winner: .opponent, outcome: .unforcedError, gameScoreAtStart: GameScoreSnapshot(server: 0, returner: 0, isTiebreak: false))) }
         // Big = 7/12 = 58%; Normal = 14/20 = 70%. Gap = 12pp — below 20pp threshold.
         let insights = RecCoachInsights.generate(stats: stats, focal: .me)
         XCTAssertFalse(
-            insights.contains { $0.contains("big points") },
+            insights.contains { $0.contains("under pressure vs") },
             "Pressure-point insight should be suppressed below 20pp gap, got \(insights)"
         )
     }
@@ -188,7 +258,7 @@ final class RecCoachInsightsTests: XCTestCase {
         }
         let insights = RecCoachInsights.generate(stats: stats, focal: .me)
         XCTAssertTrue(
-            insights.contains { $0.contains("1st serve") && $0.contains("2nd serve") && $0.contains("spin-heavy") },
+            insights.contains { $0.contains("on first serve") && $0.contains("on second serves in play") && $0.contains("placement") },
             "Expected second-serve vulnerability insight, got \(insights)"
         )
     }
@@ -207,7 +277,7 @@ final class RecCoachInsightsTests: XCTestCase {
         }
         let insights = RecCoachInsights.generate(stats: stats, focal: .me)
         XCTAssertFalse(
-            insights.contains { $0.contains("spin-heavy") },
+            insights.contains { $0.contains("on second serves in play") },
             "Second-serve insight should be suppressed with < 8 second-serve points, got \(insights)"
         )
     }
@@ -218,21 +288,21 @@ final class RecCoachInsightsTests: XCTestCase {
         // 12 return losses: 6 own UEs (50%) — above 40% threshold.
         var stats: [PointStat] = []
         for i in 0..<6 {
-            stats.append(point(i, server: .opponent, winner: .opponent, outcome: .unforcedError))
+            stats.append(point(i, server: .opponent, winner: .opponent, outcome: .unforcedError, endingShot: .return))
         }
         for i in 0..<6 {
-            stats.append(point(i + 6, server: .opponent, winner: .opponent, outcome: .forcedError))
+            stats.append(point(i + 6, server: .opponent, winner: .opponent, outcome: .forcedError, endingShot: .rally))
         }
         // Pad wins + own serve points to reach ≥20 categorized
         for i in 0..<10 {
-            stats.append(point(i + 12, server: .opponent, winner: .me, outcome: .winner))
+            stats.append(point(i + 12, server: .opponent, winner: .me, outcome: .winner, endingShot: .rally))
         }
         for i in 0..<4 {
-            stats.append(point(i + 22, server: .me, winner: .me, outcome: .winner))
+            stats.append(point(i + 22, server: .me, winner: .me, outcome: .winner, endingShot: .rally))
         }
         let insights = RecCoachInsights.generate(stats: stats, focal: .me)
         XCTAssertTrue(
-            insights.contains { $0.contains("return losses") && $0.contains("crosscourt") },
+            insights.contains { $0.contains("tracked return attempts") && $0.contains("split-step") },
             "Expected return UE insight, got \(insights)"
         )
     }
@@ -241,20 +311,20 @@ final class RecCoachInsightsTests: XCTestCase {
         // 12 return losses: only 4 own UEs (33%) — below 40% threshold.
         var stats: [PointStat] = []
         for i in 0..<4 {
-            stats.append(point(i, server: .opponent, winner: .opponent, outcome: .unforcedError))
+            stats.append(point(i, server: .opponent, winner: .opponent, outcome: .unforcedError, endingShot: .return))
         }
         for i in 0..<8 {
-            stats.append(point(i + 4, server: .opponent, winner: .opponent, outcome: .forcedError))
+            stats.append(point(i + 4, server: .opponent, winner: .opponent, outcome: .forcedError, endingShot: .rally))
         }
         for i in 0..<10 {
-            stats.append(point(i + 12, server: .opponent, winner: .me, outcome: .winner))
+            stats.append(point(i + 12, server: .opponent, winner: .me, outcome: .winner, endingShot: .rally))
         }
         for i in 0..<4 {
-            stats.append(point(i + 22, server: .me, winner: .me, outcome: .winner))
+            stats.append(point(i + 22, server: .me, winner: .me, outcome: .winner, endingShot: .rally))
         }
         let insights = RecCoachInsights.generate(stats: stats, focal: .me)
         XCTAssertFalse(
-            insights.contains { $0.contains("crosscourt") },
+            insights.contains { $0.contains("tracked return attempts") },
             "Return UE insight should be suppressed below 40% share, got \(insights)"
         )
     }
@@ -274,7 +344,7 @@ final class RecCoachInsightsTests: XCTestCase {
         }
         let insights = RecCoachInsights.generate(stats: stats, focal: .me)
         XCTAssertTrue(
-            insights.contains { $0.contains("Serve+1") && $0.contains("long rallies") },
+            insights.contains { $0.contains("Serve+1") && $0.contains("rally phase") },
             "Expected rally-length insight, got \(insights)"
         )
     }
@@ -317,8 +387,8 @@ final class RecCoachInsightsTests: XCTestCase {
         XCTAssertLessThanOrEqual(insights.count, 3)
     }
 
-    func test_priorityOrderingFavorsSelfInflictedFirst() {
-        // Trigger both self-inflicted (≥55% UE+DF share of losses) and UE drift.
+    func test_priorityOrderingFavorsSpecificSetChangeOverGeneralErrors() {
+        // Both qualify, but the specific set change replaces the overlapping general error advice.
         // Set 0 lost=15 (4 UE + 11 FE), set 1 lost=16 (14 UE + 2 FE).
         // Self-inflicted share: 18 / 31 ≈ 58%. UE drift: 27% → 88%.
         var stats: [PointStat] = []
@@ -331,8 +401,8 @@ final class RecCoachInsightsTests: XCTestCase {
         let insights = RecCoachInsights.generate(stats: stats, focal: .me)
         XCTAssertFalse(insights.isEmpty)
         XCTAssertTrue(
-            insights[0].contains("reliability"),
-            "Expected self-inflicted to lead, got \(insights)"
+            insights[0].contains("Unforced errors rose from 27% in set 1 to 88% in set 2"),
+            "Expected the stronger set-change observation to lead, got \(insights)"
         )
     }
 
@@ -373,11 +443,11 @@ final class RecCoachInsightsTests: XCTestCase {
 
         let insights = RecCoachInsights.generate(stats: stats, focal: .me, setScope: .set(0))
         XCTAssertTrue(
-            insights.contains { $0.contains("reliability") },
+            insights.contains { $0.contains("classified losses were") },
             "Expected self-inflicted insight for set 1, got \(insights)"
         )
         XCTAssertFalse(
-            insights.contains { $0.contains("climbed") },
+            insights.contains { $0.contains("Unforced errors rose") },
             "Cross-set drift must be suppressed for the first set, got \(insights)"
         )
     }
@@ -395,13 +465,13 @@ final class RecCoachInsightsTests: XCTestCase {
 
         let scoped = RecCoachInsights.generate(stats: stats, focal: .me, setScope: .set(1))
         XCTAssertFalse(
-            scoped.contains { $0.contains("reliability") },
+            scoped.contains { $0.contains("classified losses were") },
             "Set 2 scope must not surface set 1's self-inflicted pattern, got \(scoped)"
         )
 
         let whole = RecCoachInsights.generate(stats: stats, focal: .me, setScope: .all)
         XCTAssertTrue(
-            whole.contains { $0.contains("reliability") },
+            whole.contains { $0.contains("classified losses were") },
             "Whole-match scope should still surface the self-inflicted pattern, got \(whole)"
         )
     }
