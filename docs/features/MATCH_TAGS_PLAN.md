@@ -206,9 +206,9 @@ the automatic iCloud snapshot, the HTML model or an AI prompt implicitly.
   unreadable sidecar must never be treated as empty and overwritten.
 - The editor allows multiline text up to 4,000 characters, preserves paragraph
   breaks, and strips nonprinting control characters. It autosaves after a pause
-  in typing and on Done, swipe-down and backgrounding, with no Save or Cancel.
-  While saves are failing, swipe-down is blocked and Done offers Keep Editing or
-  Discard Changes. Tag edits and notes edits persist independently.
+  in typing and on Done and backgrounding, with no Save or Cancel. Swipe-down is
+  blocked while any text is unsaved, and if a save fails Done offers Keep Editing
+  or Discard Changes. Tag edits and notes edits persist independently.
 - A watch refresh, tag change, match completion, health backfill, or ordinary
   archive import must preserve existing notes for the same UUID. Permanent
   match deletion removes its notes. Replacing an archive requires an explicit

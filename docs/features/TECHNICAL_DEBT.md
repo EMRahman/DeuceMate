@@ -888,13 +888,9 @@ Watch it for flakiness.
 4. Make `headerScoreLabel()` read the score from a stable accessibility
    identifier rather than matching on a hyphen.
 
-**Related gaps left by the autosave change:**
-
-- If the first failed note save happens when the sheet is swiped away during
-  the one-second typing pause, that last text is lost. Swipe-down is only blocked
-  once a save has already failed.
-- If saving a player's name fails as the screen closes, no error is shown because
-  the screen has gone.
+**Related gap:** `PlayerManageView` saves a typed name on Back and stays open if
+that fails. If its parent closes it instead, such as Match Info being swiped away
+because of this bug, a failed save shows no error because the screen has gone.
 
 **Verification:**
 

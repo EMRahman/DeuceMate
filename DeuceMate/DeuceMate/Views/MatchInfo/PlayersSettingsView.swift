@@ -81,12 +81,19 @@ struct PlayerManageView: View {
     @State private var pendingMerge: RosterEntry?
     @State private var showForgetConfirmation = false
     @State private var errorMessage: String?
+    @State private var nameSaveFailure: String?
 
     private var entries: [RosterEntry] {
         PlayerRoster.entries(from: store.history, forgotten: store.forgottenPlayers)
     }
 
     private var entry: RosterEntry? { entries.first { $0.id == playerID } }
+
+    private var hasUnsavedName: Bool {
+        guard let entry else { return false }
+        let sanitized = MatchTags.sanitizedName(newName)
+        return !sanitized.isEmpty && sanitized != entry.name
+    }
 
     /// Matches mentioning this player that carry a private note — notes can
     /// mention the person in prose, which forgetting cannot reliably remove.
@@ -115,8 +122,34 @@ struct PlayerManageView: View {
         } message: {
             Text(errorMessage ?? "")
         }
-        // A name still being typed is saved however the screen is left. The
-        // store ignores a player already merged away or forgotten.
+        // While a typed name is unsaved, this Back replaces the system one (which
+        // also turns off swipe-back) so a failed save can keep the screen open.
+        .navigationBarBackButtonHidden(hasUnsavedName)
+        .toolbar {
+            if hasUnsavedName {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button { saveNameAndLeave() } label: {
+                        Image(systemName: "chevron.backward")
+                    }
+                    .accessibilityLabel("Back")
+                    .accessibilityIdentifier("player-manage-back")
+                }
+            }
+        }
+        .alert(
+            "Couldn't Save Name",
+            isPresented: Binding(get: { nameSaveFailure != nil }, set: { if !$0 { nameSaveFailure = nil } })
+        ) {
+            Button("Keep Editing", role: .cancel) {}
+            Button("Discard Change", role: .destructive) {
+                if let entry { newName = entry.name }
+                dismiss()
+            }
+        } message: {
+            Text(nameSaveFailure ?? "")
+        }
+        // The fallback when a parent closes this screen, such as its sheet being
+        // dismissed. The store ignores a player already merged away or forgotten.
         .onDisappear { saveNameIfChanged() }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { saveNameIfChanged() }
@@ -328,9 +361,26 @@ struct PlayerManageView: View {
 
     /// Autosaves the name when editing ends rather than on each keystroke,
     /// because a rename rewrites every match with this player and notifies the
-    /// watch. A blank name isn't a rename, so the field returns to the current
-    /// one. A failed save keeps the typed text and retries when editing next ends.
+    /// watch. A failed save keeps the typed text and retries when editing next ends.
     private func saveNameIfChanged() {
+        do {
+            try persistName()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveNameAndLeave() {
+        do {
+            try persistName()
+            dismiss()
+        } catch {
+            nameSaveFailure = error.localizedDescription
+        }
+    }
+
+    /// A blank name isn't a rename, so the field returns to the current one.
+    private func persistName() throws {
         guard let entry else { return }
         let sanitized = MatchTags.sanitizedName(newName)
         guard !sanitized.isEmpty else {
@@ -338,12 +388,8 @@ struct PlayerManageView: View {
             return
         }
         guard sanitized != entry.name else { return }
-        do {
-            try actions.rename(playerID, to: sanitized)
-            newName = sanitized
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        try actions.rename(playerID, to: sanitized)
+        newName = sanitized
     }
 
     private func merge(into kept: RosterEntry) {

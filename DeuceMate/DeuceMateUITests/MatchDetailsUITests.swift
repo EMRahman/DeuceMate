@@ -378,6 +378,30 @@ final class MatchDetailsUITests: XCTestCase {
                       "The profile survives a relaunch without any explicit save")
     }
 
+    /// A typed name is saved by Back, with no need to press return first.
+    @MainActor
+    func testTypedPlayerNameSavesWhenGoingBack() throws {
+        launch()
+        let alex = "Alex \(token)", renamed = "Rival \(token)"
+        let match = createMatch(gamesMe: 2, complete: true)
+        openMatch(match)
+        editMatchInfo(competition: nil, opponents: [.new(alex)])
+
+        openManagedOpponent()
+        let field = app.textFields["rename-player-field"]
+        field.tap()
+        field.clearAndType(renamed)
+        let back = app.buttons["player-manage-back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        back.tap()
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+
+        app.terminate()
+        launch()
+        openMatch(match)
+        XCTAssertTrue(matchInfoRow(contains: "vs \(renamed)"), "The name survives a relaunch")
+    }
+
     /// A player not yet in the archive keeps the picked profile on the Match
     /// Info draft, and Match Info's Save writes it.
     @MainActor
@@ -638,7 +662,8 @@ final class MatchDetailsUITests: XCTestCase {
         editor.typeText(" more")
         XCTAssertEqual(editor.value as? String, "\(first) more")
 
-        // Swiping down straight after typing, before the pause-based save.
+        // Swipe-down works once the pause has saved the latest text.
+        Thread.sleep(forTimeInterval: 1)
         dragNavigationBarDown("Private Note")
         XCTAssertTrue(waitForNonExistence(bar, timeout: 5), "Swipe-down closes without a prompt")
         XCTAssertFalse(app.buttons["Keep Editing"].exists)

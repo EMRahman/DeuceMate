@@ -1,9 +1,9 @@
 // MatchNotesEditorView.swift — private notes for one match (MATCH_TAGS_PLAN.md
 // §4.1). Multiline, up to `MatchNotesPolicy.maxLength` characters, paragraph
 // breaks kept. Typing autosaves after a short pause, and any remaining text is
-// saved on Done, on swipe-down and when the app leaves the foreground. While
-// saves are failing the sheet can't be swiped away, and Done asks whether to
-// keep editing or discard. Notes are stored only on this iPhone, excluded from device and
+// saved on Done and when the app leaves the foreground. The sheet can't be
+// swiped away while any text is unsaved, and if a save fails Done asks whether
+// to keep editing or discard. Notes are stored only on this iPhone, excluded from device and
 // iCloud backups, and persist independently of match details (tags).
 import SwiftUI
 import DeuceMateCore
@@ -11,9 +11,9 @@ import DeuceMateCore
 struct MatchNotesEditorView: View {
     let matchID: UUID
 
-    /// The pause in typing before a save. Every way out of the editor saves
-    /// straight away, so this only limits how often the file is rewritten.
-    private static let autosaveDelay: Duration = .seconds(1)
+    /// The pause in typing before a save, and so also how long swipe-down
+    /// stays blocked after the last keystroke. Done saves straight away.
+    private static let autosaveDelay: Duration = .milliseconds(500)
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -32,6 +32,7 @@ struct MatchNotesEditorView: View {
 
     private var savedText: String { notesStore.note(for: matchID)?.text ?? "" }
     private var isUnavailable: Bool { notesStore.loadFailure != nil }
+    private var hasUnsavedText: Bool { MatchNotesPolicy.sanitizedText(draft) != savedText }
 
     var body: some View {
         NavigationStack {
@@ -136,9 +137,10 @@ struct MatchNotesEditorView: View {
         } message: {
             Text(saveError ?? "Your latest changes haven't been saved.")
         }
-        // Swipe-down saves through onDisappear. While saves are failing it is
-        // blocked, so the unsaved text can't be lost; Done offers the way out.
-        .interactiveDismissDisabled(saveError != nil)
+        // A save that first runs in onDisappear can't keep the sheet open if it
+        // fails, so swipe-down waits for the text to be saved. Done is always
+        // available, and it stays open with choices if its save fails.
+        .interactiveDismissDisabled(hasUnsavedText)
     }
 
     /// Writes the draft if it differs from the stored note (empty text clears
@@ -147,7 +149,7 @@ struct MatchNotesEditorView: View {
     @discardableResult
     private func saveIfNeeded() -> Bool {
         guard !isDiscarding, !isUnavailable else { return true }
-        guard MatchNotesPolicy.sanitizedText(draft) != savedText else {
+        guard hasUnsavedText else {
             saveError = nil
             return true
         }
