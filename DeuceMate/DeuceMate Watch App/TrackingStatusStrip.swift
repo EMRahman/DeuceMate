@@ -4,9 +4,11 @@
 // Point tracking, Health access, and Pulse Coach calibration are all set once
 // and then invisible, yet they decide whether a finished match is rich or thin
 // — and none of them can be fixed after the fact. The strip states all three
-// before the first point. Tapping a chip (or a Settings row) goes to the control
-// that changes it — see `MatchTrackingStatus.destination(access:)`. What each chip says comes from `MatchTrackingStatus` in
-// DeuceMateCore; this file only paints it.
+// before the first point. Tapping a chip opens Settings scrolled to its
+// corresponding row under "What This Match Records", where actionable rows have
+// shortcuts jumping to the control that changes them — see
+// `MatchTrackingStatus.destination(access:)`. What each chip says comes from
+// `MatchTrackingStatus` in DeuceMateCore; this file only paints it.
 import SwiftUI
 import DeuceMateCore
 
@@ -42,12 +44,14 @@ struct LiveTrackingStatusStrip: View {
 /// `TrackingStatusRows`), same observation note as above.
 struct LiveTrackingStatusRows: View {
     @ObservedObject var viewModel: ScoreViewModel
+    var rowID: ((MatchTrackingStatus) -> AnyHashable)? = nil
     let action: (MatchTrackingStatus) -> Void
 
     var body: some View {
         TrackingStatusRows(
             statuses: viewModel.trackingStatuses,
             isActionable: { viewModel.isTrackingStatusActionable($0) },
+            rowID: rowID,
             action: action
         )
     }
@@ -68,7 +72,7 @@ struct TrackingStatusStrip: View {
                 .buttonStyle(.plain)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(status.accessibilityDescription)
-                .accessibilityHint("Opens the setting")
+                .accessibilityHint("Opens tracking details in Settings")
                 .accessibilityAddTraits(.isButton)
             }
         }
@@ -117,23 +121,30 @@ struct TrackingStatusRows: View {
     /// Whether tapping the row does anything. A row with no control on the watch
     /// (Health already denied) stays plain text rather than a dead button.
     var isActionable: (MatchTrackingStatus) -> Bool = { _ in false }
+    var rowID: ((MatchTrackingStatus) -> AnyHashable)? = nil
     var action: (MatchTrackingStatus) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(statuses, id: \.facet) { status in
-                if isActionable(status) {
-                    Button { action(status) } label: { row(status, showsChevron: true) }
-                        .buttonStyle(.plain)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(status.accessibilityDescription)
-                        .accessibilityAddTraits(.isButton)
-                } else {
-                    row(status, showsChevron: false)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(status.accessibilityDescription)
-                }
+                rowView(for: status)
+                    .id(rowID?(status) ?? AnyHashable(status.facet))
             }
+        }
+    }
+
+    @ViewBuilder
+    private func rowView(for status: MatchTrackingStatus) -> some View {
+        if isActionable(status) {
+            Button { action(status) } label: { row(status, showsChevron: true) }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(status.accessibilityDescription)
+                .accessibilityAddTraits(.isButton)
+        } else {
+            row(status, showsChevron: false)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(status.accessibilityDescription)
         }
     }
 

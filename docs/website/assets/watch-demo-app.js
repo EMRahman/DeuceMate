@@ -285,13 +285,13 @@
       var summary = (S.setup.type === "doubles" ? "Doubles" : "Singles") + " · " + f.short;
       col.appendChild(h("button", { type: "button", class: "setup-row", "aria-label": "Match setup: " + summary, onclick: function () { push({ id: "setup" }); } },
         h("span", { class: "sr-text", text: summary }), icon("down", 14)));
-      // What this match will actually record — each chip opens Settings at its control.
+      // What this match will actually record — each chip opens Settings at its row under "What This Match Records".
       var chips = h("div", { class: "strip" });
       stripStatuses().forEach(function (t) {
-        chips.appendChild(h("button", { type: "button", class: "chip " + t.readiness, "aria-label": t.title + ": " + t.label + ". Opens the setting", onclick: function () {
+        chips.appendChild(h("button", { type: "button", class: "chip " + t.readiness, "aria-label": t.title + ": " + t.label + ". Opens tracking details in Settings", onclick: function () {
           var d = trackingDestination(t);
           if (d === "requestHealth") { requestHealth(false); return; }
-          push({ id: "settings", scrollTo: d === "none" ? null : d });
+          push({ id: "settings", scrollTo: "status_" + t.facet });
         } }, icon(t.icon, 12), h("span", { text: t.label })));
       });
       col.appendChild(chips);
@@ -349,12 +349,14 @@
           h("div", { class: "cap" }, md(t.detail))),
         go ? icon("chevron", 10) : null];
       // Tapping a row jumps to the control that changes it.
-      rows.appendChild(go
+      var rowEl = go
         ? h.apply(null, ["button", { type: "button", class: "trk-row go", "aria-label": t.title + ": " + t.label, onclick: function () {
             if (d === "requestHealth") { requestHealth(false); return; }
             var el = anchors[d]; if (el && el.scrollIntoView) el.scrollIntoView({ block: "start", behavior: "smooth" });
           } }].concat(body))
-        : h.apply(null, ["div", { class: "trk-row" }].concat(body)));
+        : h.apply(null, ["div", { class: "trk-row" }].concat(body));
+      anchors["status_" + t.facet] = rowEl;
+      rows.appendChild(rowEl);
     });
     scroll.appendChild(rows);
     scroll.appendChild(h("hr", { class: "hr" }));

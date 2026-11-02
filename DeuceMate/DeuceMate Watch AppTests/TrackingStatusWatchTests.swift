@@ -98,4 +98,24 @@ struct TrackingStatusWatchTests {
 
         #expect(fired == false)
     }
+
+    @Test func trackingStatus_destinationsAndShortcuts() throws {
+        let viewModel = makeViewModel()
+        let statuses = viewModel.trackingStatuses
+
+        guard let pointStatus = statuses.first(where: { $0.facet == .pointTracking }) else {
+            Issue.record("Missing point tracking status")
+            return
+        }
+        #expect(viewModel.trackingDestination(for: pointStatus) == .pointTrackingToggle)
+        #expect(viewModel.isTrackingStatusActionable(pointStatus) == true)
+
+        if let pulseStatus = statuses.first(where: { $0.facet == .pulseCoach }) {
+            let destination = viewModel.trackingDestination(for: pulseStatus)
+            let isActionable = viewModel.isTrackingStatusActionable(pulseStatus)
+            let expectedDestination = pulseStatus.destination(access: viewModel.workoutManager.healthAccess)
+            #expect(destination == expectedDestination)
+            #expect(isActionable == (expectedDestination != .none))
+        }
+    }
 }

@@ -294,6 +294,7 @@ private struct BirthYearPickerView: View {
 
 /// Scroll targets inside the Settings sheet that a tracking status can jump to.
 private enum SettingsAnchor: Hashable {
+    case trackingStatus(TrackingFacet)
     case pointTracking
     case pulseCoach
 }
@@ -431,7 +432,8 @@ struct HomeView: View {
 
                     // What this match will actually record — stated before the
                     // first point, because none of it can be added afterwards.
-                    // Each chip opens Settings at the control that changes it.
+                    // Each chip opens Settings at its corresponding row under
+                    // "What This Match Records".
                     LiveTrackingStatusStrip(viewModel: viewModel) { status in
                         openSettings(for: status)
                     }
@@ -561,7 +563,10 @@ struct HomeView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     // Tapping a row jumps to the control that changes it.
-                    LiveTrackingStatusRows(viewModel: viewModel) { status in
+                    LiveTrackingStatusRows(
+                        viewModel: viewModel,
+                        rowID: { SettingsAnchor.trackingStatus($0.facet) }
+                    ) { status in
                         handleTrackingTap(status) { target in
                             withAnimation { proxy.scrollTo(target, anchor: .top) }
                         }
@@ -980,23 +985,17 @@ struct HomeView: View {
         }
     }
 
-    /// Start-screen chip tap. Points/Pulse open Settings scrolled to their
-    /// control; Health asks for permission when it can, otherwise opens Settings
-    /// at the top, where the rows explain the iPhone-side fix.
+    /// Start-screen chip tap: open Settings scrolled to the corresponding
+    /// row in "What This Match Records" (which carries shortcuts to the
+    /// controls); Health asks for permission when it can, otherwise scrolls
+    /// to the Health status row explaining the iPhone-side fix.
     private func openSettings(for status: MatchTrackingStatus) {
-        switch viewModel.trackingDestination(for: status) {
-        case .pointTrackingToggle:
-            settingsScrollTarget = .pointTracking
-            showSettings = true
-        case .pulseCoachSettings:
-            settingsScrollTarget = .pulseCoach
-            showSettings = true
-        case .requestHealthAccess:
+        if viewModel.trackingDestination(for: status) == .requestHealthAccess {
             viewModel.workoutManager.requestAuthorization { _ in }
-        case .none:
-            settingsScrollTarget = nil
-            showSettings = true
+            return
         }
+        settingsScrollTarget = .trackingStatus(status.facet)
+        showSettings = true
     }
 
     /// Settings-row tap: scroll in place (sheet already open) or prompt.
