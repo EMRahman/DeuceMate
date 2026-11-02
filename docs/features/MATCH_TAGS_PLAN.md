@@ -208,7 +208,10 @@ the automatic iCloud snapshot, the HTML model or an AI prompt implicitly.
   breaks, and strips nonprinting control characters. It autosaves after a pause
   in typing and on Done and backgrounding, with no Save or Cancel. Swipe-down is
   blocked while any text is unsaved, and if a save fails Done offers Keep Editing
-  or Discard Changes. Tag edits and notes edits persist independently.
+  or Discard Changes. The input fills the available height, with its character
+  count directly below it and Delete Note at the bottom above the keyboard.
+  Keep the short storage summary visible; Privacy and storage opens the longer
+  explanation. Tag edits and notes edits persist independently.
 - A watch refresh, tag change, match completion, health backfill, or ordinary
   archive import must preserve existing notes for the same UUID. Permanent
   match deletion removes its notes. Replacing an archive requires an explicit
@@ -370,16 +373,19 @@ confirmation; otherwise direct the user to review those notes.
   `With Sam vs Alex & Jo · Tournament`), "Add match details" when empty,
   and a note icon when a private note exists. The phone-local
   `matchInfoExpanded` preference remembers expansion across matches and launches.
-  Expanding reveals the editing row, existing notes preview, and comparison.
+  Expanding reveals the editing row, a private-note saved indicator, and comparison.
   Editor sheets remain hosted by `MatchDetailView`, outside lazy List rows.
 - **Match Info editor:** Competition Type uses two columns of full-label choices
   (Friendly / League / Tournament / Practice), or full-width rows at accessibility
-  text sizes. Selection has a checkmark and a separate "Clear selection" action.
+  text sizes. Selection has a checkmark; tapping a selected choice unticks it.
   Unknown future types survive untouched edits; explicitly choosing or clearing
-  replaces them. Each empty Opponent / Partner slot previews up to three recent
+  replaces them. Each empty Opponent / Partner slot previews up to four recent
   roster players, excluding forgotten players and identities in other slots.
   Tapping a name fills that draft slot without navigation; Save commits it.
-  "Search or add player…" opens the full searchable roster. Doubles suggestions
+  Selected slots put the player-management info button before the name; remove
+  with x to choose another player. "Search or add player…" opens the full
+  searchable roster. Completed matches have a Singles/Doubles picker here,
+  without a duplicate conversion action in the detail summary. Doubles suggestions
   identify Partner / Opponent 1 / Opponent 2 explicitly. Completed and in-progress
   archived records remain editable without changing score or completion.
 - **PastMatchesView:** the same one-line subtitle in each row (cheap, already a
@@ -791,17 +797,18 @@ as an actionable checklist; none is part of the current implementation:
 - [ ] **Protect unsaved edits.** In both Match Info and Private Note editors,
   guard Cancel and swipe dismissal when the draft changed. Offer Keep Editing
   and Discard Changes; unchanged drafts should dismiss without friction.
-- [ ] **Reveal private-note text intentionally.** The collapsed summary only
-  indicates that a note exists, but expanding Match Info still reveals up to
-  three lines. Consider a "Private note saved" row that reveals text only when
-  deliberately opened, useful when showing another player the graph.
+- [x] **Reveal private-note text intentionally.** The collapsed summary and
+  expanded "Private note saved" row only indicate that a note exists. The text
+  appears when the editor is deliberately opened, useful when showing another
+  player the graph.
 - [ ] **Explain comparison before navigation.** Where a baseline exists, show
   "Compare with last match vs Alex" and its date. For watch-only records, offer
   syncing to iPhone before comparison instead of an unavailable destination.
   Preserve the existing exact-matchup and same-type fallback rules.
 - [ ] **Shorten editor guidance.** Keep "Stored on this iPhone. Not backed up
-  automatically." visible, move the longer explanation into About Private Notes,
-  and shorten player-name guidance without hiding storage/sharing implications.
+  automatically." is visible and the longer explanation opens from Privacy and
+  storage. Remaining: shorten player-name guidance without hiding storage/sharing
+  implications.
 - [ ] **Find matches by their tags.** Add archive search by player and filtering
   by competition. This is distinct from the planned Trends filters below.
 
