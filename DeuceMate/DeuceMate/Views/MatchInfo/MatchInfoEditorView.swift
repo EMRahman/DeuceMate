@@ -22,6 +22,7 @@ struct MatchInfoEditorView: View {
     @State private var partner: TaggedPlayer?
     @State private var opponents: [TaggedPlayer?]
     @State private var pickerSlot: Slot?
+    @State private var managedTarget: ManagedTarget?
     @State private var saveError: String?
     @State private var showClearConfirmation = false
     @State private var showDiscardConfirmation = false
@@ -35,6 +36,18 @@ struct MatchInfoEditorView: View {
             switch self {
             case .partner: return "partner"
             case .opponent(let i): return "opponent-\(i)"
+            }
+        }
+    }
+
+    private enum ManagedTarget: Hashable, Identifiable {
+        case roster(UUID)
+        case draftSlot(Slot)
+
+        var id: String {
+            switch self {
+            case .roster(let playerID): return "roster-\(playerID.uuidString)"
+            case .draftSlot(let slot): return "draft-\(slot.id)"
             }
         }
     }
@@ -140,10 +153,20 @@ struct MatchInfoEditorView: View {
             .navigationDestination(item: $pickerSlot) { slot in
                 PlayerPickerView(
                     title: pickerTitle(for: slot),
-                    excludedIDs: excludedIDs(for: slot)
+                    excludedIDs: excludedIDs(for: slot),
+                    onMerged: handleMerge
                 ) { picked in
                     assign(picked, to: slot)
                     pickerSlot = nil
+                }
+            }
+            .navigationDestination(item: $managedTarget) { target in
+                switch target {
+                case .roster(let playerID):
+                    PlayerManageView(playerID: playerID, onMerged: handleMerge)
+                        .environmentObject(syncService)
+                case .draftSlot(let slot):
+                    DraftPlayerManageView(player: slotBinding(for: slot))
                 }
             }
             .confirmationDialog(
@@ -181,6 +204,12 @@ struct MatchInfoEditorView: View {
             isDirty: Binding(get: { self.hasChanges }, set: { _ in }),
             isDiscardPromptPresented: $showDiscardConfirmation
         )
+        .onReceive(store.$history) { history in
+            reconcileWithStore(history: history, forgotten: store.forgottenPlayerLedger())
+        }
+        .onReceive(store.$forgottenPlayers) { forgotten in
+            reconcileWithStore(history: store.history, forgotten: forgotten)
+        }
     }
 
     // MARK: - Competition
@@ -258,6 +287,16 @@ struct MatchInfoEditorView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(player.name), change")
                 Button {
+                    manage(player, in: slot)
+                } label: {
+                    Image(systemName: "info.circle")
+                        .foregroundStyle(.tint)
+                        .imageScale(.large)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Manage \(player.name)")
+                .accessibilityIdentifier("manage-slot-\(slot.id)")
+                Button {
                     assign(nil, to: slot)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -295,6 +334,13 @@ struct MatchInfoEditorView: View {
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(.tint)
+                            .contextMenu {
+                                Button {
+                                    managedTarget = .roster(entry.id)
+                                } label: {
+                                    Label("Manage Player", systemImage: "person.crop.circle")
+                                }
+                            }
                             .accessibilityLabel("Use \(entry.name) as \(pickerTitle(for: slot).lowercased())")
                             .accessibilityIdentifier("recent-\(slot.id)-\(entry.name)")
                         }
@@ -340,6 +386,66 @@ struct MatchInfoEditorView: View {
         }
     }
 
+    private func slotBinding(for slot: Slot) -> Binding<TaggedPlayer?> {
+        Binding(
+            get: {
+                switch slot {
+                case .partner: return partner
+                case .opponent(let index): return opponents.indices.contains(index) ? opponents[index] : nil
+                }
+            },
+            set: { assign($0, to: slot) }
+        )
+    }
+
+    private func manage(_ player: TaggedPlayer, in slot: Slot) {
+        let isRosterPlayer = PlayerRoster
+            .entries(from: store.history, forgotten: store.forgottenPlayers)
+            .contains { $0.id == player.id }
+        managedTarget = isRosterPlayer ? .roster(player.id) : .draftSlot(slot)
+    }
+
+    private func handleMerge(_ duplicateID: UUID, _ kept: TaggedPlayer) {
+        reconcileWithStore(
+            history: store.loadHistory(),
+            forgotten: store.forgottenPlayerLedger(),
+            merged: (duplicateID, kept)
+        )
+    }
+
+    private func reconcileWithStore(
+        history: [MatchRecord],
+        forgotten: ForgottenPlayerLedger,
+        merged: (duplicateID: UUID, kept: TaggedPlayer)? = nil
+    ) {
+        let reconciledDraft = PlayerRoster.reconcilingEditorSlots(
+            partner: partner,
+            opponents: opponents,
+            in: history,
+            forgotten: forgotten,
+            merged: merged
+        )
+        partner = isDoubles ? reconciledDraft.partner : nil
+        opponents = reconciledDraft.opponents
+
+        if let original = originalTags {
+            let reconciledOriginal = PlayerRoster.reconcilingEditorSlots(
+                partner: original.partner,
+                opponents: original.opponents.map { Optional($0) },
+                in: history,
+                forgotten: forgotten,
+                merged: merged
+            )
+            originalTags = MatchTags(
+                opponents: reconciledOriginal.opponents.compactMap { $0 },
+                partner: isDoubles ? reconciledOriginal.partner : nil,
+                competitionTypeRaw: original.competitionTypeRaw,
+                updatedAt: original.updatedAt,
+                revisionID: original.revisionID
+            ).sanitized()
+        }
+    }
+
     // MARK: - Save
 
     private func save(_ tags: MatchTags) {
@@ -358,5 +464,87 @@ struct MatchInfoEditorView: View {
         } else {
             dismiss()
         }
+    }
+}
+
+private struct DraftPlayerManageView: View {
+    @Binding var player: TaggedPlayer?
+
+    @State private var nameDraft = ""
+    @State private var didInitialize = false
+
+    var body: some View {
+        Group {
+            if let current = player {
+                Form {
+                    Section {
+                        TextField("Name", text: $nameDraft)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .accessibilityIdentifier("rename-player-field")
+                            .onChange(of: nameDraft) { _, value in
+                                if value.count > MatchTags.maxNameLength {
+                                    nameDraft = String(value.prefix(MatchTags.maxNameLength))
+                                }
+                                let sanitized = MatchTags.sanitizedName(nameDraft)
+                                if !sanitized.isEmpty {
+                                    player?.name = sanitized
+                                }
+                            }
+                    } header: {
+                        Text("Name")
+                    }
+
+                    Section {
+                        Picker("Handedness", selection: Binding(
+                            get: { current.handednessRaw ?? "" },
+                            set: { player?.handednessRaw = $0.isEmpty ? nil : $0 }
+                        )) {
+                            Text("Not specified").tag("")
+                            ForEach(PlayerHandedness.allCases) { option in
+                                Text(option.displayLabel).tag(option.rawValue)
+                            }
+                        }
+                        .accessibilityIdentifier("player-handedness-picker")
+
+                        Picker("Backhand", selection: Binding(
+                            get: { current.backhandRaw ?? "" },
+                            set: { player?.backhandRaw = $0.isEmpty ? nil : $0 }
+                        )) {
+                            Text("Not specified").tag("")
+                            ForEach(PlayerBackhand.allCases) { option in
+                                Text(option.displayLabel).tag(option.rawValue)
+                            }
+                        }
+                        .accessibilityIdentifier("player-backhand-picker")
+
+                        Picker("Play Style", selection: Binding(
+                            get: { current.playStyleRaw ?? "" },
+                            set: { player?.playStyleRaw = $0.isEmpty ? nil : $0 }
+                        )) {
+                            Text("Not specified").tag("")
+                            ForEach(PlayerPlayStyle.allCases) { option in
+                                Text(option.displayLabel).tag(option.rawValue)
+                            }
+                        }
+                        .accessibilityIdentifier("player-play-style-picker")
+                    } header: {
+                        Text("Playing Style")
+                    } footer: {
+                        Text("Saved with this match when you tap Save in Match Info.")
+                    }
+                }
+                .onAppear {
+                    if !didInitialize {
+                        nameDraft = current.name
+                        didInitialize = true
+                    }
+                }
+            } else {
+                ContentUnavailableView("Player Removed", systemImage: "person.crop.circle.badge.xmark")
+            }
+        }
+        .navigationTitle(player?.name ?? "Player")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

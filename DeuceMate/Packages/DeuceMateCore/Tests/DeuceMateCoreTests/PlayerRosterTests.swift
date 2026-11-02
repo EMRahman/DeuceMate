@@ -201,6 +201,69 @@ final class PlayerRosterTests: XCTestCase {
         XCTAssertNil(PlayerRoster.entries(from: result.records).first { $0.id == alex.id })
     }
 
+    func test_reconcilingEditorSlots_refreshesRosterEdits_handlesMergeAndForget_andKeepsUnsavedDraftPlayers() {
+        let unsaved = TaggedPlayer(id: F.uuid(88), name: "Newbie", handednessRaw: "leftHanded")
+        let initialRecords = [
+            F.record(tags: F.tags(opponents: [alex], at: 1)),
+            F.record(tags: F.tags(opponents: [alex2], at: 2))
+        ]
+
+        // Rename + profile update on Alex refreshes occupied slot while preserving unsaved draft player and nil slot.
+        let renamed = PlayerRoster.renaming(alex.id, to: "Alexander", in: initialRecords).records
+        let styled = PlayerRoster.updatingDetails(
+            alex.id,
+            handednessRaw: "leftHanded",
+            backhandRaw: "oneHanded",
+            playStyleRaw: "serveAndVolley",
+            in: renamed
+        ).records
+        let afterStyle = PlayerRoster.reconcilingEditorSlots(
+            partner: unsaved,
+            opponents: [nil, alex],
+            in: styled
+        )
+        XCTAssertEqual(afterStyle.partner, unsaved, "unsaved draft player keeps its own identity and profile")
+        XCTAssertNil(afterStyle.opponents[0], "empty slot stays empty")
+        XCTAssertEqual(afterStyle.opponents[1]?.id, alex.id)
+        XCTAssertEqual(afterStyle.opponents[1]?.name, "Alexander")
+        XCTAssertEqual(afterStyle.opponents[1]?.handedness, .leftHanded)
+        XCTAssertEqual(afterStyle.opponents[1]?.backhand, .oneHanded)
+        XCTAssertEqual(afterStyle.opponents[1]?.playStyle, .serveAndVolley)
+
+        // Merging alex2 into alex rewrites duplicate slot and collapses when both were selected in the draft.
+        let mergedRecords = PlayerRoster.merging(alex2.id, into: alex.id, in: styled).records
+        let keptAlex = PlayerRoster.entries(from: mergedRecords).first { $0.id == alex.id }!.taggedPlayer
+        let rewritten = PlayerRoster.reconcilingEditorSlots(
+            partner: nil,
+            opponents: [alex2],
+            in: mergedRecords,
+            merged: (duplicateID: alex2.id, kept: keptAlex)
+        )
+        XCTAssertEqual(rewritten.opponents, [keptAlex])
+
+        let deduped = PlayerRoster.reconcilingEditorSlots(
+            partner: alex,
+            opponents: [alex2, unsaved],
+            in: mergedRecords,
+            merged: (duplicateID: alex2.id, kept: keptAlex)
+        )
+        XCTAssertEqual(deduped.partner, keptAlex)
+        XCTAssertNil(deduped.opponents[0], "duplicate across partner and opponent collapses to nil")
+        XCTAssertEqual(deduped.opponents[1], unsaved)
+
+        // Forgetting clears forgotten slots without disturbing unsaved players.
+        let forgotten = ForgottenPlayerLedger().forgetting(alex.id)
+        let scrubbedRecords = PlayerRoster.forgetting(alex.id, in: mergedRecords).records
+        let afterForget = PlayerRoster.reconcilingEditorSlots(
+            partner: keptAlex,
+            opponents: [unsaved],
+            in: scrubbedRecords,
+            forgotten: forgotten
+        )
+        XCTAssertNil(afterForget.partner)
+        XCTAssertEqual(afterForget.opponents, [unsaved])
+    }
+
     // MARK: - Head-to-head
 
     func test_headToHead_singles_completedOnly_excludingCurrent() {

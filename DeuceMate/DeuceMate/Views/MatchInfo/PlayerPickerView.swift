@@ -12,10 +12,17 @@ struct PlayerPickerView: View {
     let title: String
     /// Players already placed elsewhere in this match.
     let excludedIDs: Set<UUID>
+    var onMerged: ((_ duplicateID: UUID, _ kept: TaggedPlayer) -> Void)? = nil
     let onPick: (TaggedPlayer) -> Void
 
+    private struct ManagedPlayer: Identifiable, Hashable {
+        let id: UUID
+    }
+
     @EnvironmentObject private var store: PhoneStatsStore
+    @EnvironmentObject private var syncService: PhoneMatchSyncService
     @State private var query = ""
+    @State private var managedPlayer: ManagedPlayer?
 
     private static let lastPlayedFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -91,23 +98,50 @@ struct PlayerPickerView: View {
                 query = String(newValue.prefix(MatchTags.maxNameLength))
             }
         }
+        .navigationDestination(item: $managedPlayer) { target in
+            PlayerManageView(playerID: target.id, onMerged: onMerged)
+                .environmentObject(syncService)
+        }
     }
 
     private func rosterRow(_ entry: RosterEntry) -> some View {
-        Button {
-            onPick(entry.taggedPlayer)
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.name)
-                    .foregroundStyle(.primary)
-                Text("\(entry.matchCount == 1 ? "1 match" : "\(entry.matchCount) matches") · last \(Self.lastPlayedFormatter.string(from: entry.lastPlayed))")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+        HStack(spacing: 12) {
+            Button {
+                onPick(entry.taggedPlayer)
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.name)
+                        .foregroundStyle(.primary)
+                    Text("\(entry.matchCount == 1 ? "1 match" : "\(entry.matchCount) matches") · last \(Self.lastPlayedFormatter.string(from: entry.lastPlayed))")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("roster-player-\(entry.name)")
+
+            Button {
+                managedPlayer = ManagedPlayer(id: entry.id)
+            } label: {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.tint)
+                    .imageScale(.large)
+                    .frame(minWidth: 36, minHeight: 36)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Manage \(entry.name)")
+            .accessibilityIdentifier("manage-player-\(entry.name)")
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("roster-player-\(entry.name)")
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button {
+                managedPlayer = ManagedPlayer(id: entry.id)
+            } label: {
+                Label("Manage", systemImage: "person.crop.circle")
+            }
+            .tint(.accentColor)
+        }
     }
 }

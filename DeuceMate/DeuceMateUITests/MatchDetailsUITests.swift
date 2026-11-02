@@ -136,11 +136,16 @@ final class MatchDetailsUITests: XCTestCase {
         row.tap()
         let detail = app.descendants(matching: .any)["opponent-detail"]
         XCTAssertTrue(detail.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Past Matches"].exists)
+        XCTAssertFalse(app.staticTexts["Pending Matches"].exists, "Pending Matches hides when none are in progress")
+        XCTAssertFalse(app.staticTexts["No pending matches"].exists)
         let record = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "1 win", "1 loss")
         ).firstMatch
         for _ in 0..<8 where !record.exists { app.swipeUp() }
         XCTAssertTrue(record.waitForExistence(timeout: 5), "Singles record shows one win and one loss")
+        XCTAssertFalse(app.staticTexts["Head to Head · Doubles"].exists, "Doubles H2H hides when no doubles matchups exist")
+        XCTAssertFalse(app.staticTexts["No complete doubles team matchups recorded for this opponent."].exists)
 
         let manage = app.buttons["opponent-manage-player"]
         for _ in 0..<8 where !manage.isHittable { app.swipeUp() }
@@ -281,6 +286,79 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertFalse(app.buttons["End at Current Score"].exists)
         app.navigationBars.buttons["Done"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts["Past Matches"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Head to Head · Doubles"].exists)
+    }
+
+    /// Selecting an opponent in Match Info allows managing players directly
+    /// (merging duplicates, renaming, setting playing style) without leaving the flow.
+    @MainActor
+    func testManagePlayerWhileSelectingOpponentInMatchInfo() throws {
+        launch()
+        let alex = "Alex \(token)", duplicate = "Alexx \(token)", renamed = "Alexander \(token)"
+
+        let first = createMatch(gamesMe: 2, complete: true)
+        openMatch(first)
+        editMatchInfo(competition: nil, opponents: [.new(alex)])
+        closeDetail()
+
+        let second = createMatch(gamesMe: 1, complete: true)
+        openMatch(second)
+        editMatchInfo(competition: nil, opponents: [.new(duplicate)])
+        closeDetail()
+
+        let third = createMatch(gamesMe: 3, complete: true)
+        openMatch(third)
+        app.buttons["match-info-row"].tap()
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+        let addOpponent = app.buttons["Add opponent"]
+        for _ in 0..<4 where !addOpponent.isHittable { app.swipeUp() }
+        addOpponent.tap()
+        XCTAssertTrue(app.navigationBars["Opponent"].waitForExistence(timeout: 5))
+
+        // Merge duplicate into Alex directly from the opponent picker.
+        let manageDuplicate = app.buttons["manage-player-\(duplicate)"]
+        XCTAssertTrue(manageDuplicate.waitForExistence(timeout: 5))
+        manageDuplicate.tap()
+        XCTAssertTrue(app.navigationBars[duplicate].waitForExistence(timeout: 5))
+        app.buttons["merge-player"].tap()
+        app.buttons["merge-target-\(alex)"].tap()
+        let mergeConfirm = app.buttons["Merge"]
+        XCTAssertTrue(mergeConfirm.waitForExistence(timeout: 5))
+        mergeConfirm.tap()
+
+        XCTAssertTrue(app.navigationBars["Opponent"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["roster-player-\(duplicate)"].exists)
+        XCTAssertTrue(app.buttons["roster-player-\(alex)"].label.contains("2 matches"))
+
+        // Rename Alex and set playing style directly from the opponent picker, then select them.
+        app.buttons["manage-player-\(alex)"].tap()
+        let nameField = app.textFields["rename-player-field"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.tap()
+        nameField.clearAndType(renamed)
+        app.buttons["rename-player"].tap()
+        XCTAssertTrue(app.navigationBars[renamed].waitForExistence(timeout: 5))
+
+        let handednessPicker = app.buttons["player-handedness-picker"]
+        for _ in 0..<5 where !handednessPicker.isHittable { app.swipeUp() }
+        handednessPicker.tap()
+        app.buttons["Left-handed"].tap()
+        let saveDetails = app.buttons["save-player-details"]
+        for _ in 0..<5 where !saveDetails.isHittable { app.swipeUp() }
+        saveDetails.tap()
+
+        goBack(from: renamed)
+        XCTAssertTrue(app.navigationBars["Opponent"].waitForExistence(timeout: 5))
+        app.buttons["roster-player-\(renamed)"].tap()
+
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["manage-slot-opponent-0"].exists)
+        app.buttons["save-match-info"].tap()
+        XCTAssertTrue(matchInfoRow(contains: "vs \(renamed)"))
+        closeDetail()
+        XCTAssertTrue(archiveRow(first, contains: "vs \(renamed)"))
+        XCTAssertTrue(archiveRow(second, contains: "vs \(renamed)"))
+        XCTAssertTrue(archiveRow(third, contains: "vs \(renamed)"))
     }
 
     /// Doubles: partner plus two opponents; then clearing the details.
