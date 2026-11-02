@@ -496,6 +496,7 @@ struct MatchDetailView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Text(styledScore(score, superSize: 14))
                                 .font(.title.weight(.bold).monospacedDigit())
+                                .accessibilityIdentifier("match-header-score")
                             if !record.isInProgress && record.iWon == nil {
                                 Text("Draw")
                                     .font(.subheadline.weight(.semibold))
