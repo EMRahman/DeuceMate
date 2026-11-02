@@ -22,6 +22,7 @@ struct MatchNotesEditorView: View {
     @State private var saveError: String?
     @State private var showDeleteConfirmation = false
     @State private var showSaveFailedConfirmation = false
+    @State private var showStorageInfo = false
     @State private var isDiscarding = false
     @FocusState private var isEditorFocused: Bool
 
@@ -36,31 +37,35 @@ struct MatchNotesEditorView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            VStack(alignment: .leading, spacing: 12) {
                 if let failure = notesStore.loadFailure {
-                    Section {
-                        Label(failure, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                    }
+                    Label(failure, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
                 }
-                Section {
-                    TextEditor(text: $draft)
-                        .frame(minHeight: 180)
-                        .focused($isEditorFocused)
-                        .disabled(isUnavailable)
-                        .accessibilityIdentifier("match-notes-editor")
-                        .accessibilityLabel("Private note")
-                        .overlay(alignment: .topLeading) {
-                            if draft.isEmpty {
-                                Text("Tactics, how you felt, what to try next time…")
-                                    .foregroundStyle(.tertiary)
-                                    .padding(.top, 8)
-                                    .padding(.leading, 5)
-                                    .allowsHitTesting(false)
-                            }
+
+                // The editor takes the remaining height and shrinks above the
+                // keyboard, keeping the counter and bottom actions visible.
+                TextEditor(text: $draft)
+                    .focused($isEditorFocused)
+                    .disabled(isUnavailable)
+                    .accessibilityIdentifier("match-notes-editor")
+                    .accessibilityLabel("Private note")
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.background, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(alignment: .topLeading) {
+                        if draft.isEmpty {
+                            Text("Tactics, how you felt, what to try next time…")
+                                .foregroundStyle(.tertiary)
+                                .padding(.top, 16)
+                                .padding(.horizontal, 13)
+                                .allowsHitTesting(false)
                         }
-                } footer: {
-                    VStack(alignment: .leading, spacing: 6) {
+                    }
+
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading) {
                         if let saveError {
                             Label(saveError, systemImage: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.orange)
@@ -68,23 +73,45 @@ struct MatchNotesEditorView: View {
                         } else if !isUnavailable {
                             Text("Changes save automatically.")
                         }
-                        Text("Stored on this iPhone. Not backed up automatically.")
-                            .fontWeight(.semibold)
-                        Text("Private notes aren't synced to Apple Watch and aren't in the iCloud or device backup. They are never added to a shared report, AI Coach prompt or exported archive unless you choose Include Private Note when sharing. If you delete the app or move to a new iPhone, they don't come back.")
-                        Text("\(draft.count) / \(MatchNotesPolicy.maxLength)")
-                            .monospacedDigit()
                     }
+                    Spacer(minLength: 8)
+                    Text("\(draft.count) / \(MatchNotesPolicy.maxLength.formatted())")
+                        .monospacedDigit()
+                        .fixedSize()
+                        .accessibilityIdentifier("match-note-character-count")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Stored on this iPhone. Not backed up automatically.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        showStorageInfo = true
+                    } label: {
+                        Label("Privacy and storage", systemImage: "info.circle")
+                            .font(.footnote)
+                    }
+                    .accessibilityIdentifier("private-note-storage")
                 }
 
                 if !savedText.isEmpty && !isUnavailable {
-                    Section {
-                        Button("Delete Note", role: .destructive) {
-                            showDeleteConfirmation = true
-                        }
-                        .accessibilityIdentifier("delete-match-note")
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Text("Delete Note")
+                            .frame(maxWidth: .infinity, minHeight: 44)
                     }
+                    .buttonStyle(.borderless)
+                    .padding(.vertical, 4)
+                    .background(.background, in: RoundedRectangle(cornerRadius: 12))
+                    .accessibilityIdentifier("delete-match-note")
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("Private Note")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -108,6 +135,11 @@ struct MatchNotesEditorView: View {
                 if phase != .active { saveIfNeeded() }
             }
             .onDisappear { saveIfNeeded() }
+            .alert("Privacy and storage", isPresented: $showStorageInfo) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Private notes aren't synced to Apple Watch and aren't in the iCloud or device backup. They are never added to a shared report, AI Coach prompt or exported archive unless you choose Include Private Note when sharing. If you delete the app or move to a new iPhone, they don't come back.")
+            }
             .confirmationDialog(
                 "Delete this note?",
                 isPresented: $showDeleteConfirmation,

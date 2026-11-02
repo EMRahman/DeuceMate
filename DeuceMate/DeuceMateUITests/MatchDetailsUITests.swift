@@ -554,6 +554,21 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         XCTAssertTrue((editor.value as? String)?.contains("Attack the backhand \(token)") == true,
                       "The full note is available after explicitly opening its editor")
+        let counter = app.staticTexts["match-note-character-count"]
+        let storage = app.buttons["private-note-storage"]
+        let delete = app.buttons["delete-match-note"]
+        XCTAssertTrue(counter.isHittable)
+        XCTAssertGreaterThan(editor.frame.height, app.frame.height * 0.4,
+                             "The note input uses the available screen height")
+        XCTAssertGreaterThanOrEqual(counter.frame.minY, editor.frame.maxY)
+        XCTAssertLessThan(counter.frame.maxY, storage.frame.minY)
+        XCTAssertTrue(delete.isHittable)
+        XCTAssertLessThan(app.frame.maxY - delete.frame.maxY, 100,
+                          "Delete stays near the bottom without a large unused gap")
+        XCTAssertFalse(anyElement(containing: "Private notes aren't synced").exists)
+        storage.tap()
+        XCTAssertTrue(anyElement(containing: "Private notes aren't synced").waitForExistence(timeout: 5))
+        app.alerts.buttons["OK"].tap()
         app.buttons["done-match-note"].tap()
 
         // Edit, then delete.
@@ -597,6 +612,32 @@ final class MatchDetailsUITests: XCTestCase {
         app.buttons["Discard Changes"].tap()
         XCTAssertTrue(app.buttons["match-info-row"].waitForExistence(timeout: 5))
         XCTAssertFalse(matchInfoRow(contains: "League"), "Discard leaves saved match info unchanged")
+        closeDetail()
+    }
+
+    /// Tapping a selected competition clears it, and Save persists that clear.
+    @MainActor
+    func testCompetitionCanBeUntickedAndSaved() throws {
+        launch()
+        let match = createMatch(complete: true)
+        openMatch(match)
+        editMatchInfo(competition: "League", opponents: [])
+        XCTAssertFalse(app.buttons["convert-match-type"].exists)
+        app.buttons["match-info-row"].tap()
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Clear selection"].exists)
+        let league = app.buttons["competition-league"]
+        XCTAssertTrue(league.isSelected || league.value as? String == "1")
+        league.tap()
+        XCTAssertFalse(league.isSelected || league.value as? String == "1")
+        app.buttons["save-match-info"].tap()
+        XCTAssertTrue(app.buttons["match-info-row"].waitForExistence(timeout: 5))
+        XCTAssertFalse(matchInfoRow(contains: "League"))
+        app.buttons["match-info-row"].tap()
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+        XCTAssertFalse(league.isSelected || league.value as? String == "1",
+                       "The unticked competition stays cleared after reopening")
+        app.navigationBars["Match Info"].buttons["Cancel"].tap()
         closeDetail()
     }
 
@@ -667,6 +708,10 @@ final class MatchDetailsUITests: XCTestCase {
         editor.typeText(first)
         XCTAssertTrue(app.buttons["delete-match-note"].waitForExistence(timeout: 5),
                       "A pause in typing saved the note")
+        XCTAssertTrue(app.buttons["delete-match-note"].isHittable,
+                      "Delete remains visible above the keyboard")
+        XCTAssertTrue(app.staticTexts["match-note-character-count"].isHittable,
+                      "The character count stays visible while typing")
         Thread.sleep(forTimeInterval: 1)
         editor.typeText(" more")
         XCTAssertEqual(editor.value as? String, "\(first) more")
@@ -827,13 +872,28 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertEqual(disclosure.value as? String, "Expanded")
         closeDetail()
 
+        // Add three more identities so every empty slot can show four recents.
+        let rosterMatch = createMatch(complete: true, doubles: true)
+        openMatch(rosterMatch)
+        app.buttons["match-info-row"].tap()
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+        pick(.new("Sam \(token)"), slotButton: "Add partner")
+        pick(.new("Jo \(token)"), slotButton: "Add opponent 1")
+        pick(.new("Pat \(token)"), slotButton: "Add opponent 2")
+        app.buttons["save-match-info"].tap()
+        XCTAssertTrue(app.buttons["match-info-row"].waitForExistence(timeout: 5))
+        closeDetail()
+
         let second = createMatch(complete: true, doubles: true)
         openMatch(second)
         app.buttons["match-info-row"].tap()
         let recentPartner = app.buttons["recent-partner-\(alex)"]
         XCTAssertTrue(recentPartner.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "recent-partner-")).count, 4)
         recentPartner.tap()
         XCTAssertTrue(app.navigationBars["Match Info"].exists, "Quick selection stays on the first screen")
+        XCTAssertLessThan(app.buttons["manage-slot-partner"].frame.maxX, app.staticTexts[alex].frame.minX)
+        XCTAssertFalse(app.buttons["\(alex), change"].exists)
         XCTAssertFalse(app.buttons["recent-opponent-0-\(alex)"].exists)
         XCTAssertFalse(app.buttons["recent-opponent-1-\(alex)"].exists)
         app.buttons["Remove \(alex)"].tap()

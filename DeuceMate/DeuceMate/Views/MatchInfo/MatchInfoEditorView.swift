@@ -264,7 +264,7 @@ struct MatchInfoEditorView: View {
                                      count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: 10) {
                 ForEach(CompetitionType.allCases) { type in
                     Button {
-                        competition = type
+                        competition = competition == type ? nil : type
                         unknownCompetitionRaw = nil
                     } label: {
                         HStack(spacing: 8) {
@@ -286,13 +286,6 @@ struct MatchInfoEditorView: View {
                     .accessibilityIdentifier("competition-\(type.rawValue)")
                 }
             }
-            if competition != nil || unknownCompetitionRaw != nil {
-                Button("Clear selection") {
-                    competition = nil
-                    unknownCompetitionRaw = nil
-                }
-                .accessibilityIdentifier("competition-not-set")
-            }
         } header: {
             Text("Competition Type")
         } footer: {
@@ -309,27 +302,6 @@ struct MatchInfoEditorView: View {
         if let player {
             HStack {
                 Button {
-                    pickerSlot = slot
-                } label: {
-                    // At accessibility sizes the name gets its own line rather
-                    // than wrapping beside the icon and "Change".
-                    let layout = dynamicTypeSize.isAccessibilitySize
-                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-                        : AnyLayout(HStackLayout())
-                    layout {
-                        Text(player.name)
-                            .foregroundStyle(.primary)
-                        if !dynamicTypeSize.isAccessibilitySize { Spacer() }
-                        Text("Change")
-                            .font(.subheadline)
-                            .foregroundStyle(.tint)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(player.name), change")
-                Button {
                     manage(player, in: slot)
                 } label: {
                     Image(systemName: "info.circle")
@@ -339,6 +311,9 @@ struct MatchInfoEditorView: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Manage \(player.name)")
                 .accessibilityIdentifier("manage-slot-\(slot.id)")
+                Text(player.name)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
                     assign(nil, to: slot)
                 } label: {
@@ -357,7 +332,7 @@ struct MatchInfoEditorView: View {
                 }
                 let recent = PlayerRoster.entries(from: store.history, forgotten: store.forgottenPlayers)
                     .filter { !excludedIDs(for: slot).contains($0.id) }
-                    .prefix(3)
+                    .prefix(4)
                 if !recent.isEmpty {
                     Text("Recent players")
                         .font(.caption)
