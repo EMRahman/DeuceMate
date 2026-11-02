@@ -44,7 +44,7 @@ final class MatchExportsUITests: XCTestCase {
         let alex = "Alex \(token)"
         _ = try seedTaggedPair(opponent: alex, note: note)
 
-        let aiButton = app.buttons["Open AI Coach"]
+        let aiButton = app.buttons["AI Coach"]
         XCTAssertTrue(aiButton.waitForExistence(timeout: 10))
         aiButton.tap()
         XCTAssertTrue(app.navigationBars["AI Coach"].waitForExistence(timeout: 5))
@@ -313,8 +313,8 @@ final class MatchExportsUITests: XCTestCase {
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         editor.tap()
         editor.typeText(note)
-        app.buttons["save-match-note"].tap()
-        XCTAssertTrue(waitForLabel(row, contains: "knee sore"))
+        app.buttons["done-match-note"].tap()
+        XCTAssertTrue(waitForLabel(row, contains: "Private note saved"))
         return second
     }
 
@@ -386,9 +386,22 @@ final class MatchExportsUITests: XCTestCase {
         let allow = app.buttons["Allow Paste"]
         if allow.waitForExistence(timeout: 2) { allow.tap() }
         let value = (editor.value as? String) ?? ""
-        app.navigationBars["Private Note"].buttons["Cancel"].tap()
-        let discard = app.buttons["Discard Changes"]
-        if discard.waitForExistence(timeout: 1) { discard.tap() }
+        // The note editor autosaves, so remove what was pasted to read it.
+        app.buttons["done-match-note"].tap()
+        XCTAssertTrue(editor.waitForNonExistence(timeout: 5))
+        if !value.isEmpty {
+            row.tap()
+            XCTAssertTrue(editor.waitForExistence(timeout: 5))
+            let delete = app.buttons["delete-match-note"]
+            for _ in 0..<4 where !delete.isHittable { app.swipeUp() }
+            delete.tap()
+            let confirm = app.sheets.buttons["Delete Note"].firstMatch.exists
+                ? app.sheets.buttons["Delete Note"].firstMatch
+                : app.buttons.matching(identifier: "Delete Note").element(boundBy: 1)
+            XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+            confirm.tap()
+            XCTAssertTrue(editor.waitForNonExistence(timeout: 5))
+        }
         closeDetail()
         openMatch(tagged)
         return value

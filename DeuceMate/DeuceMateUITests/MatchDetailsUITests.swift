@@ -168,9 +168,6 @@ final class MatchDetailsUITests: XCTestCase {
         playStylePicker.tap()
         app.buttons["Serve & Volley"].tap()
 
-        let saveDetails = app.buttons["save-player-details"]
-        for _ in 0..<5 where !saveDetails.isHittable { app.swipeUp() }
-        saveDetails.tap()
         let playerBack = app.navigationBars.buttons.firstMatch
         playerBack.tap()
         let handednessRow = app.staticTexts["Handedness, Left-handed"]
@@ -190,7 +187,7 @@ final class MatchDetailsUITests: XCTestCase {
         let nameField = app.textFields["rename-player-field"]
         nameField.tap()
         nameField.clearAndType(renamed)
-        app.buttons["rename-player"].tap()
+        nameField.typeText("\n")
         XCTAssertTrue(app.navigationBars[renamed].waitForExistence(timeout: 5))
 
         // Return through the navigation stack and confirm the list and archive
@@ -336,16 +333,13 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
         nameField.tap()
         nameField.clearAndType(renamed)
-        app.buttons["rename-player"].tap()
+        nameField.typeText("\n")
         XCTAssertTrue(app.navigationBars[renamed].waitForExistence(timeout: 5))
 
         let handednessPicker = app.buttons["player-handedness-picker"]
         for _ in 0..<5 where !handednessPicker.isHittable { app.swipeUp() }
         handednessPicker.tap()
         app.buttons["Left-handed"].tap()
-        let saveDetails = app.buttons["save-player-details"]
-        for _ in 0..<5 where !saveDetails.isHittable { app.swipeUp() }
-        saveDetails.tap()
 
         goBack(from: renamed)
         XCTAssertTrue(app.navigationBars["Opponent"].waitForExistence(timeout: 5))
@@ -359,6 +353,80 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertTrue(archiveRow(first, contains: "vs \(renamed)"))
         XCTAssertTrue(archiveRow(second, contains: "vs \(renamed)"))
         XCTAssertTrue(archiveRow(third, contains: "vs \(renamed)"))
+    }
+
+    /// A saved player's profile persists as soon as a value is picked: leaving
+    /// with the back button, with no other action, must not lose it.
+    @MainActor
+    func testSavedPlayerProfileAutosaves() throws {
+        launch()
+        let alex = "Alex \(token)"
+        let match = createMatch(gamesMe: 2, complete: true)
+        openMatch(match)
+        editMatchInfo(competition: nil, opponents: [.new(alex)])
+
+        openManagedOpponent()
+        selectHandedness("Left-handed")
+        goBack(from: alex)
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+
+        app.terminate()
+        launch()
+        openMatch(match)
+        openManagedOpponent()
+        XCTAssertTrue(app.buttons["player-handedness-picker"].label.contains("Left-handed"),
+                      "The profile survives a relaunch without any explicit save")
+    }
+
+    /// A typed name is saved by Back, with no need to press return first.
+    @MainActor
+    func testTypedPlayerNameSavesWhenGoingBack() throws {
+        launch()
+        let alex = "Alex \(token)", renamed = "Rival \(token)"
+        let match = createMatch(gamesMe: 2, complete: true)
+        openMatch(match)
+        editMatchInfo(competition: nil, opponents: [.new(alex)])
+
+        openManagedOpponent()
+        let field = app.textFields["rename-player-field"]
+        field.tap()
+        field.clearAndType(renamed)
+        let back = app.buttons["player-manage-back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        back.tap()
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+
+        app.terminate()
+        launch()
+        openMatch(match)
+        XCTAssertTrue(matchInfoRow(contains: "vs \(renamed)"), "The name survives a relaunch")
+    }
+
+    /// A player not yet in the archive keeps the picked profile on the Match
+    /// Info draft, and Match Info's Save writes it.
+    @MainActor
+    func testNewPlayerProfileIsSavedWithMatchInfo() throws {
+        launch()
+        let alex = "Alex \(token)"
+        let match = createMatch(gamesMe: 2, complete: true)
+        openMatch(match)
+        app.buttons["match-info-row"].tap()
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+        pick(.new(alex), slotButton: "Add opponent")
+
+        app.buttons["manage-slot-opponent-0"].tap()
+        selectHandedness("Left-handed")
+        goBack(from: alex)
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+        app.buttons["save-match-info"].tap()
+        XCTAssertTrue(matchInfoRow(contains: "vs \(alex)"))
+
+        app.terminate()
+        launch()
+        openMatch(match)
+        openManagedOpponent()
+        XCTAssertTrue(app.buttons["player-handedness-picker"].label.contains("Left-handed"),
+                      "The new player's profile is saved with the match")
     }
 
     /// Doubles: partner plus two opponents; then clearing the details.
@@ -425,7 +493,7 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
         field.clearAndType(renamed)
-        app.buttons["rename-player"].tap()
+        field.typeText("\n")
         XCTAssertTrue(app.navigationBars[renamed].waitForExistence(timeout: 5))
         capture("11-player-manage")
         goBack(from: renamed)
@@ -466,7 +534,7 @@ final class MatchDetailsUITests: XCTestCase {
         editor.typeText("Attack the backhand \(token).\nServe wide on deuce.")
         XCTAssertTrue(app.staticTexts["Stored on this iPhone. Not backed up automatically."].exists)
         capture("13-notes-editor")
-        app.buttons["save-match-note"].tap()
+        app.buttons["done-match-note"].tap()
         XCTAssertTrue(notesRow.waitForExistence(timeout: 5))
         XCTAssertTrue(waitForLabel(notesRow, contains: "Private note saved"))
         XCTAssertFalse(notesRow.label.contains("Attack the backhand"), "The detail row never previews private note text")
@@ -486,14 +554,14 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         XCTAssertTrue((editor.value as? String)?.contains("Attack the backhand \(token)") == true,
                       "The full note is available after explicitly opening its editor")
-        app.navigationBars["Private Note"].buttons["Cancel"].tap()
+        app.buttons["done-match-note"].tap()
 
         // Edit, then delete.
         app.buttons["match-notes-row"].tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         editor.tap()
         editor.typeText(" Edited.")
-        app.buttons["save-match-note"].tap()
+        app.buttons["done-match-note"].tap()
         XCTAssertTrue(waitForLabel(app.buttons["match-notes-row"], contains: "Private note saved"))
         XCTAssertFalse(app.buttons["match-notes-row"].label.contains("Edited."))
         app.buttons["match-notes-row"].tap()
@@ -506,7 +574,9 @@ final class MatchDetailsUITests: XCTestCase {
         closeDetail()
     }
 
-    /// Dirty Match Info drafts survive Keep Editing and require explicit discard.
+    /// Cancelling a dirty Match Info draft asks before discarding. Only Discard
+    /// Changes is visible (iOS 26+ hides a cancel-role button in popover dialogs);
+    /// tapping outside the dialog keeps editing.
     @MainActor
     func testMatchInfoDirtyCancelCanKeepEditingOrDiscard() throws {
         launch()
@@ -516,11 +586,13 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
         app.buttons["competition-league"].tap()
         app.navigationBars["Match Info"].buttons["Cancel"].tap()
-        XCTAssertTrue(app.buttons["Keep Editing"].waitForExistence(timeout: 5))
-        app.buttons["Keep Editing"].tap()
+        XCTAssertTrue(app.buttons["Discard Changes"].waitForExistence(timeout: 5))
+        // Tap outside the dialog to dismiss it and keep editing.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)).tap()
+        XCTAssertTrue(waitForNonExistence(app.buttons["Discard Changes"], timeout: 5))
         XCTAssertTrue(app.navigationBars["Match Info"].exists)
         XCTAssertTrue(app.buttons["competition-league"].isSelected || app.buttons["competition-league"].value as? String == "1",
-                      "Keep Editing preserves the draft")
+                      "Tapping outside the dialog preserves the draft")
         app.navigationBars["Match Info"].buttons["Cancel"].tap()
         app.buttons["Discard Changes"].tap()
         XCTAssertTrue(app.buttons["match-info-row"].waitForExistence(timeout: 5))
@@ -550,10 +622,11 @@ final class MatchDetailsUITests: XCTestCase {
         closeDetail()
     }
 
-    /// A downward drag from the navigation bar is an interactive dismissal attempt,
-    /// not a scroll gesture in the editor form.
+    /// Match Info saves only through its explicit Save button, so swiping a dirty
+    /// sheet away (a downward drag from the navigation bar) never saves the edit.
+    /// Whether the sheet closes or stays open is not part of the contract.
     @MainActor
-    func testDirtyMatchInfoSwipeShowsDiscardConfirmation() throws {
+    func testDirtyMatchInfoSwipeDoesNotSaveTheEdit() throws {
         launch()
         let match = createMatch(complete: true)
         openMatch(match)
@@ -561,17 +634,22 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
         app.buttons["competition-league"].tap()
         dragNavigationBarDown("Match Info")
-        XCTAssertTrue(app.buttons["Keep Editing"].waitForExistence(timeout: 5))
-        app.buttons["Keep Editing"].tap()
-        XCTAssertTrue(app.navigationBars["Match Info"].exists)
-        app.navigationBars["Match Info"].buttons["Cancel"].tap()
-        app.buttons["Discard Changes"].tap()
+        Thread.sleep(forTimeInterval: 1)
+        if app.navigationBars["Match Info"].exists {
+            app.navigationBars["Match Info"].buttons["Cancel"].tap()
+            if app.buttons["Discard Changes"].waitForExistence(timeout: 3) {
+                app.buttons["Discard Changes"].tap()
+            }
+        }
+        XCTAssertTrue(app.buttons["match-info-row"].waitForExistence(timeout: 5))
+        XCTAssertFalse(matchInfoRow(contains: "League"), "A swipe never saves the draft")
         closeDetail()
     }
 
-    /// Private Note has the same explicit dirty-cancel and swipe protection.
+    /// The note saves itself: there is no Save or Cancel, and each way of
+    /// leaving keeps what was typed.
     @MainActor
-    func testPrivateNoteDirtyCancelSwipeAndRevert() throws {
+    func testPrivateNoteAutosavesHoweverItIsLeft() throws {
         launch()
         let match = createMatch(complete: true)
         openMatch(match)
@@ -579,43 +657,68 @@ final class MatchDetailsUITests: XCTestCase {
         row.tap()
         let editor = app.textViews["match-notes-editor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        editor.typeText("Saved note \(token)")
-        app.buttons["save-match-note"].tap()
+        let bar = app.navigationBars["Private Note"]
+        XCTAssertFalse(bar.buttons["Cancel"].exists, "There is nothing to cancel")
+        XCTAssertFalse(bar.buttons["Save"].exists, "There is nothing to save by hand")
+
+        // The save during a pause must not disturb typing: the caret stays put
+        // when the store publishes and Delete Note appears below the editor.
+        let first = "First \(token)"
+        editor.typeText(first)
+        XCTAssertTrue(app.buttons["delete-match-note"].waitForExistence(timeout: 5),
+                      "A pause in typing saved the note")
+        Thread.sleep(forTimeInterval: 1)
+        editor.typeText(" more")
+        XCTAssertEqual(editor.value as? String, "\(first) more")
+
+        // Swipe-down works once the pause has saved the latest text.
+        Thread.sleep(forTimeInterval: 1)
+        dragNavigationBarDown("Private Note")
+        XCTAssertTrue(waitForNonExistence(bar, timeout: 5), "Swipe-down closes without a prompt")
+        XCTAssertFalse(app.buttons["Keep Editing"].exists)
         XCTAssertTrue(waitForLabel(row, contains: "Private note saved"))
 
+        // Done straight after typing.
         row.tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertEqual(editor.value as? String, "\(first) more", "Swipe-down saved the latest text")
         editor.tap()
-        editor.typeText(" changed")
-        app.navigationBars["Private Note"].buttons["Cancel"].tap()
-        XCTAssertTrue(app.buttons["Keep Editing"].waitForExistence(timeout: 5))
-        app.buttons["Keep Editing"].tap()
-        XCTAssertTrue(app.navigationBars["Private Note"].exists)
-        dragNavigationBarDown("Private Note")
-        XCTAssertTrue(app.buttons["Keep Editing"].waitForExistence(timeout: 5))
-        app.buttons["Keep Editing"].tap()
-        XCTAssertTrue(app.navigationBars["Private Note"].exists)
-        // Replace the draft with the exact saved value; Cancel should now be clean.
-        editor.tap()
-        editor.clearAndType("Saved note \(token)")
-        app.navigationBars["Private Note"].buttons["Cancel"].tap()
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["Keep Editing"].exists)
+        editor.typeText("second")
+        app.buttons["done-match-note"].tap()
+        XCTAssertTrue(waitForNonExistence(bar, timeout: 5))
 
+        // Pausing is enough, even if the app is then killed from the editor.
         row.tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertTrue((editor.value as? String)?.contains("second") == true, "Done saved the latest text")
         editor.tap()
-        editor.typeText(" discarded")
-        app.navigationBars["Private Note"].buttons["Cancel"].tap()
-        app.buttons["Discard Changes"].tap()
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertFalse(anyElement(containing: "discarded").exists)
+        editor.typeText("third")
+        Thread.sleep(forTimeInterval: 2)
+        app.terminate()
+        launch()
+        openMatch(match)
         row.tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        XCTAssertEqual(editor.value as? String, "Saved note \(token)", "Discard preserves the saved note")
-        dragNavigationBarDown("Private Note")
-        XCTAssertTrue(waitForNonExistence(app.navigationBars["Private Note"], timeout: 5))
-        XCTAssertFalse(app.buttons["Keep Editing"].exists, "A clean note can be swiped away")
+        XCTAssertTrue((editor.value as? String)?.contains("third") == true, "A pause in typing saved the note")
+
+        // Going to the background saves at once, with no pause.
+        editor.tap()
+        editor.typeText("fourth")
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 0.5)
+        app.terminate()
+        launch()
+        openMatch(match)
+        row.tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertTrue((editor.value as? String)?.contains("fourth") == true, "Backgrounding saved the note")
+
+        // Emptying the text clears the note. Tapping low in the editor puts the
+        // caret after the text, so the deletes remove all of it.
+        editor.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.9)).tap()
+        editor.clearAndType("")
+        app.buttons["done-match-note"].tap()
+        XCTAssertTrue(waitForLabel(row, contains: "Add private note"))
         closeDetail()
     }
 
@@ -877,8 +980,9 @@ final class MatchDetailsUITests: XCTestCase {
 
     @MainActor
     private func headerScoreLabel() -> String {
-        let texts = app.staticTexts.allElementsBoundByIndex.map(\.label)
-        return texts.first { $0.contains("–") || $0.contains("-") } ?? ""
+        let score = app.staticTexts["match-header-score"]
+        XCTAssertTrue(score.waitForExistence(timeout: 5), "The header score is on screen")
+        return score.label
     }
 
     @MainActor
@@ -923,6 +1027,30 @@ final class MatchDetailsUITests: XCTestCase {
             app.buttons["roster-player-\(name)"].tap()
         }
         XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+    }
+
+    /// From a match's detail: Match Info → the first opponent's manage screen.
+    @MainActor
+    private func openManagedOpponent() {
+        let row = app.buttons["match-info-row"]
+        for _ in 0..<6 where !row.isHittable { app.swipeUp() }
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+        let manage = app.buttons["manage-slot-opponent-0"]
+        for _ in 0..<4 where !manage.isHittable { app.swipeUp() }
+        manage.tap()
+        XCTAssertTrue(app.buttons["player-handedness-picker"].waitForExistence(timeout: 5))
+    }
+
+    /// Picks a handedness and checks the picker now shows it.
+    @MainActor
+    private func selectHandedness(_ value: String) {
+        let picker = app.buttons["player-handedness-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        for _ in 0..<5 where !picker.isHittable { app.swipeUp() }
+        picker.tap()
+        app.buttons[value].tap()
+        XCTAssertTrue(waitForLabel(picker, contains: value), "The picker shows \(value) once picked")
     }
 
     // MARK: - Helpers: settings

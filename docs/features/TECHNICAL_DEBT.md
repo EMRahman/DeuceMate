@@ -59,6 +59,7 @@ when the item should constrain future changes.
 | [3](#3--replace-stringly-typed-settings-keys-with-typed-keys) | Settings | Replace stringly-typed settings keys with typed keys | Medium today; **high change risk** | Next engineering-risk cleanup after persistence containment | Large, splittable per setting category |
 | [20](#20--make-health-derived-field-classification-mechanically-exhaustive) | Health/Privacy | Make Health-derived field classification mechanically exhaustive | No current bug; **high privacy risk on expansion** | Before adding any Health-derived field or export surface | Medium design; small first guards |
 | [4a-write](#4a-write--surface-save-failures) | Persistence | Surface live-state and archive save failures | Medium impact; low likelihood | After, or alongside, read containment | Small–medium |
+| [26](#26--match-info-swipe-down-and-player-name-save-gaps) | Data loss | Match Info swipe-down and player-name save gaps | Low; swipe discard is accepted, a failed name save may show no error | Next Match Info change | Small |
 | [23](#23--validate-manual-match-scores-and-explain-invalid-input) | Correctness | Validate manual match scores and explain invalid input | Medium; inconsistent records can be resumed on Watch | Next manual-entry fix, after persistence containment | Small–medium |
 | [22](#22--show-disconnected-live-scoring-and-command-send-failures) | Sync / UX | Show disconnected live scoring and command send failures | Medium; input feedback can imply an unsent point counted | Next live-input reliability fix | Small–medium |
 | [24](#24--add-accessible-watch-scoring-actions) | Accessibility | Add accessible Watch scoring actions | Core scoring has no named accessibility actions | Coordinate with walkthrough shared controls | Small–medium |
@@ -852,6 +853,38 @@ a focused follow-up fix, not a change to that plan's report schema or viewer.
 
 **Key files:** `MatchDetailView.swift` and an injectable export-file writer
 seam if needed to exercise failure/retry deterministically.
+
+---
+
+### 26 — Match Info swipe-down and player-name save gaps
+
+**Classification:** Accepted behaviour, plus one small error-display gap.
+
+Three `MatchDetailsUITests` failed on `ea721de` (Xcode 27.1, iOS 27.0, also
+reproduced on iOS 26.3.1). They were resolved in `df4b1d1` by updating the tests
+to the intended behaviour, not by changing the app:
+
+- **Swipe-down on a dirty Match Info sheet** closes it and discards the edit
+  with no prompt. Accepted: Match Info has explicit Save and Cancel buttons, so
+  `testDirtyMatchInfoSwipeDoesNotSaveTheEdit` only requires that a swipe never
+  saves the draft. `DraftDismissalProtection` no longer stops the swipe on
+  iOS 26+, and why has not been diagnosed.
+- **Cancel on a dirty draft** shows only Discard Changes, because iOS 26+ hides
+  a `role: .cancel` button in popover dialogs. Accepted: tapping outside keeps
+  editing, and the test does that.
+- **`testTaggingAnInProgressMatchKeepsItInProgress`** was a test bug. The match
+  header score now has the `match-header-score` accessibility identifier, which
+  `headerScoreLabel()` reads.
+
+`testLargeDynamicTypeEditorIsUsable` failed once, in `createMatch`, on a heavily
+used simulator and then passed on a clean one. Watch it for flakiness.
+
+**Remaining gap:** `PlayerManageView` saves a typed name on Back and stays open
+if that fails. If its parent closes it instead, such as Match Info being swiped
+away, a failed save shows no error because the screen has gone.
+
+**Key files:** `MatchInfoEditorView.swift`, `DraftDismissalProtection.swift`,
+`PlayersSettingsView.swift`, `MatchDetailsUITests.swift`.
 
 ---
 

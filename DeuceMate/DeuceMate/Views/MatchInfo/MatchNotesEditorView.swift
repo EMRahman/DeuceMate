@@ -1,33 +1,38 @@
 // MatchNotesEditorView.swift — private notes for one match (MATCH_TAGS_PLAN.md
 // §4.1). Multiline, up to `MatchNotesPolicy.maxLength` characters, paragraph
-// breaks kept. Save and Cancel; a failed save keeps the draft open. Notes are
-// stored only on this iPhone, excluded from device and iCloud backups, and
-// persist independently of match details (tags).
+// breaks kept. Typing autosaves after a short pause, and any remaining text is
+// saved on Done and when the app leaves the foreground. The sheet can't be
+// swiped away while any text is unsaved, and if a save fails Done asks whether
+// to keep editing or discard. Notes are stored only on this iPhone, excluded from device and
+// iCloud backups, and persist independently of match details (tags).
 import SwiftUI
 import DeuceMateCore
 
 struct MatchNotesEditorView: View {
     let matchID: UUID
 
+    /// The pause in typing before a save, and so also how long swipe-down
+    /// stays blocked after the last keystroke. Done saves straight away.
+    private static let autosaveDelay: Duration = .milliseconds(500)
+
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var notesStore: MatchNotesStore = .shared
     @State private var draft: String
     @State private var saveError: String?
     @State private var showDeleteConfirmation = false
-    @State private var showDiscardConfirmation = false
-    @State private var originalText: String
+    @State private var showSaveFailedConfirmation = false
+    @State private var isDiscarding = false
     @FocusState private var isEditorFocused: Bool
 
     init(matchID: UUID) {
         self.matchID = matchID
-        let text = MatchNotesStore.shared.note(for: matchID)?.text ?? ""
-        _originalText = State(initialValue: text)
-        _draft = State(initialValue: text)
+        _draft = State(initialValue: MatchNotesStore.shared.note(for: matchID)?.text ?? "")
     }
 
     private var savedText: String { notesStore.note(for: matchID)?.text ?? "" }
-    private var hasChanges: Bool { MatchNotesPolicy.sanitizedText(draft) != originalText }
     private var isUnavailable: Bool { notesStore.loadFailure != nil }
+    private var hasUnsavedText: Bool { MatchNotesPolicy.sanitizedText(draft) != savedText }
 
     var body: some View {
         NavigationStack {
@@ -56,6 +61,13 @@ struct MatchNotesEditorView: View {
                         }
                 } footer: {
                     VStack(alignment: .leading, spacing: 6) {
+                        if let saveError {
+                            Label(saveError, systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                                .accessibilityIdentifier("match-note-save-error")
+                        } else if !isUnavailable {
+                            Text("Changes save automatically.")
+                        }
                         Text("Stored on this iPhone. Not backed up automatically.")
                             .fontWeight(.semibold)
                         Text("Private notes aren't synced to Apple Watch and aren't in the iCloud or device backup. They are never added to a shared report, AI Coach prompt or exported archive unless you choose Include Private Note when sharing. If you delete the app or move to a new iPhone, they don't come back.")
@@ -76,13 +88,9 @@ struct MatchNotesEditorView: View {
             .navigationTitle("Private Note")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { cancel() }
-                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save(draft) }
-                        .disabled(!hasChanges || isUnavailable)
-                        .accessibilityIdentifier("save-match-note")
+                    Button("Done") { finish() }
+                        .accessibilityIdentifier("done-match-note")
                 }
             }
             .onChange(of: draft) { _, newValue in
@@ -90,59 +98,87 @@ struct MatchNotesEditorView: View {
                     draft = String(newValue.prefix(MatchNotesPolicy.maxLength))
                 }
             }
+            // Restarts on each change, so it saves once typing pauses.
+            .task(id: draft) {
+                try? await Task.sleep(for: Self.autosaveDelay)
+                guard !Task.isCancelled else { return }
+                saveIfNeeded()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active { saveIfNeeded() }
+            }
+            .onDisappear { saveIfNeeded() }
             .confirmationDialog(
                 "Delete this note?",
                 isPresented: $showDeleteConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("Delete Note", role: .destructive) { save("") }
+                Button("Delete Note", role: .destructive) { deleteNote() }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("The note is removed from this iPhone. This can't be undone.")
-            }
-            .alert(
-                "Couldn't Save Note",
-                isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })
-            ) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(saveError ?? "")
             }
             .onAppear {
                 if savedText.isEmpty && !isUnavailable { isEditorFocused = true }
             }
         }
         .confirmationDialog(
-            "Discard unsaved changes?",
-            isPresented: $showDiscardConfirmation,
+            "Couldn't save your note",
+            isPresented: $showSaveFailedConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Keep Editing", role: .cancel) {}
-            Button("Discard Changes", role: .destructive) { dismiss() }
+            // Not `role: .cancel`: iOS 26+ hides a cancel button when this dialog
+            // shows as a popover, leaving Discard as the only visible choice.
+            Button("Keep Editing") {}
+            Button("Discard Changes", role: .destructive) {
+                isDiscarding = true
+                dismiss()
+            }
         } message: {
-            Text("Your private note hasn't been saved.")
+            Text(saveError ?? "Your latest changes haven't been saved.")
         }
-        .protectDraftDismissal(
-            isDirty: Binding(get: { self.hasChanges }, set: { _ in }),
-            isDiscardPromptPresented: $showDiscardConfirmation
-        )
+        // A save that first runs in onDisappear can't keep the sheet open if it
+        // fails, so swipe-down waits for the text to be saved. Done is always
+        // available, and it stays open with choices if its save fails.
+        .interactiveDismissDisabled(hasUnsavedText)
     }
 
-    private func save(_ text: String) {
+    /// Writes the draft if it differs from the stored note (empty text clears
+    /// it). Returns `false` only when a needed write failed; the draft stays on
+    /// screen and the footer shows why.
+    @discardableResult
+    private func saveIfNeeded() -> Bool {
+        guard !isDiscarding, !isUnavailable else { return true }
+        guard hasUnsavedText else {
+            saveError = nil
+            return true
+        }
         do {
-            try notesStore.save(text: text, for: matchID)
+            try notesStore.save(text: draft, for: matchID)
+            saveError = nil
+            return true
+        } catch {
+            saveError = error.localizedDescription
+            return false
+        }
+    }
+
+    private func finish() {
+        if saveIfNeeded() {
+            dismiss()
+        } else {
+            showSaveFailedConfirmation = true
+        }
+    }
+
+    private func deleteNote() {
+        do {
+            try notesStore.save(text: "", for: matchID)
+            draft = ""
+            saveError = nil
             dismiss()
         } catch {
-            // Keep the draft open so nothing typed is lost.
             saveError = error.localizedDescription
-        }
-    }
-
-    private func cancel() {
-        if hasChanges {
-            showDiscardConfirmation = true
-        } else {
-            dismiss()
         }
     }
 }

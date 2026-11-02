@@ -499,6 +499,7 @@ struct MatchDetailView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Text(styledScore(score, superSize: 14))
                                 .font(.title.weight(.bold).monospacedDigit())
+                                .accessibilityIdentifier("match-header-score")
                             if !record.isInProgress && record.iWon == nil {
                                 Text("Draw")
                                     .font(.subheadline.weight(.semibold))
@@ -822,7 +823,7 @@ struct MatchDetailView: View {
                         Label("AI Coach", systemImage: "sparkles")
                             .labelStyle(.titleAndIcon)
                     }
-                    .accessibilityLabel("Open AI Coach")
+                    .accessibilityLabel("AI Coach")
                 }
             }
             ToolbarItem(placement: .navigationBarTrailing) {
