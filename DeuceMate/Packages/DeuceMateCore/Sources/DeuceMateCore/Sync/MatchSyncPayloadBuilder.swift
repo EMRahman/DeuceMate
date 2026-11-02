@@ -105,4 +105,16 @@ public enum MatchSyncPayloadBuilder {
     public static func matchTagsUpdate(matchID: UUID, tags: MatchTags) throws -> [String: Any] {
         try matchTagsUpdate(MatchTagsUpdate(matchID: matchID, tags: tags))
     }
+
+    // MARK: - Match type updates
+
+    /// Post-completion match-type conversion (`Doubles ↔ Singles`).
+    public static func matchTypeUpdate(_ update: MatchTypeUpdate) throws -> [String: Any] {
+        [MatchSyncKey.matchTypeUpdate: try JSONEncoder().encode(update)]
+    }
+
+    /// Convenience for `matchTypeUpdate(MatchTypeUpdate(matchID:revision:))`.
+    public static func matchTypeUpdate(matchID: UUID, revision: MatchTypeRevision) throws -> [String: Any] {
+        try matchTypeUpdate(MatchTypeUpdate(matchID: matchID, revision: revision))
+    }
 }

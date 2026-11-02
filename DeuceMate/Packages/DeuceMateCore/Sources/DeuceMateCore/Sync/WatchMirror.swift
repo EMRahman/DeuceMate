@@ -46,7 +46,10 @@ public enum WatchMirror {
             uniquingKeysWith: { _, new in new }
         )
         for record in completed {
+            let prior = byID[record.id]
             byID[record.id] = record
+                .mergingTags(prior?.tags)
+                .mergingMatchTypeRevision(prior?.matchTypeRevision)
         }
         let keep = manifest.union(completed.map(\.id))
         return sortedByRecency(byID.values.filter { keep.contains($0.id) })

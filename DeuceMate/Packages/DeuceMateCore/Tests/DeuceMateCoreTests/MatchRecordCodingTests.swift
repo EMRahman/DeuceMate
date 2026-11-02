@@ -306,6 +306,8 @@ final class MatchRecordCodingTests: XCTestCase {
         XCTAssertNil(decoded.totalSteps)
         XCTAssertNil(decoded.totalDistanceMeters)
         XCTAssertNil(decoded.totalCaloriesKcal)
+        XCTAssertNil(decoded.tags)
+        XCTAssertNil(decoded.matchTypeRevision)
     }
 
     func test_matchRecord_decodeIgnoresRetiredKeys() throws {
@@ -429,6 +431,71 @@ extension MatchRecordCodingTests {
         XCTAssertEqual(record.strippingHealthData().tags, tags, "names are not health data; iCloud keeps them")
         XCTAssertEqual(record.fillingMissingHealthData(from: record).tags, tags)
         XCTAssertEqual(record.endingAtCurrentScore().tags, tags)
+    }
+}
+
+// MARK: - Match type revision (CLAUDE.md §4 recipe)
+
+extension MatchRecordCodingTests {
+
+    func test_matchTypeRevision_roundTrip() throws {
+        let rev = MatchTypeRevision(
+            matchType: .doubles,
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_600),
+            revisionID: UUID(uuidString: "11111111-2222-3333-4444-555555555555") ?? UUID()
+        )
+        let record = MatchRecord(
+            startTime: Date(timeIntervalSince1970: 1_700_000_000),
+            setScores: [],
+            stats: [],
+            matchType: .doubles,
+            matchTypeRevision: rev
+        )
+        let decoded = try JSONDecoder().decode(MatchRecord.self, from: JSONEncoder().encode(record))
+        XCTAssertEqual(decoded.matchTypeRevision, rev)
+        XCTAssertEqual(decoded.matchType, .doubles)
+        XCTAssertEqual(decoded, record)
+    }
+
+    func test_matchTypeRevision_absentInOldJSON_decodesAsNil() throws {
+        let decoded = try JSONDecoder().decode(MatchRecord.self, from: Data("{\(legacyRecordJSON)}".utf8))
+        XCTAssertNil(decoded.matchTypeRevision, "nil = never edited post-completion")
+    }
+
+    func test_matchTypeRevision_nilRevisionOmitsTheKey() throws {
+        let record = MatchRecord(startTime: Date(), setScores: [], stats: [])
+        let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(record)) as? [String: Any]
+        XCTAssertNil(object?["matchTypeRevision"], "a record without revision omits the key in JSON")
+    }
+
+    func test_matchTypeRevision_malformedValueDegradesToNil_andArchiveStillDecodes() throws {
+        let bad = "{\(legacyRecordJSON), \"matchTypeRevision\": \"bad\"}"
+            .replacingOccurrences(of: "66666666-7777-8888-9999-000000000000",
+                                  with: "66666666-7777-8888-9999-000000000001")
+        let good = "{\(legacyRecordJSON), \"matchTypeRevision\": {\"matchType\": \"doubles\", \"updatedAt\": 10}}"
+        let archive = try JSONDecoder().decode([MatchRecord].self, from: Data("[\(bad), \(good)]".utf8))
+        XCTAssertEqual(archive.count, 2)
+        XCTAssertNil(archive[0].matchTypeRevision)
+        XCTAssertEqual(archive[1].matchTypeRevision?.matchType, .doubles)
+    }
+
+    func test_matchTypeRevision_survivesPrivacyAndHealthProjections() {
+        let rev = MatchTypeRevision(
+            matchType: .singles,
+            updatedAt: Date(timeIntervalSince1970: 100),
+            revisionID: UUID()
+        )
+        let record = MatchRecord(
+            startTime: Date(),
+            setScores: [],
+            stats: [],
+            matchType: .singles,
+            totalSteps: 10,
+            matchTypeRevision: rev
+        )
+        XCTAssertEqual(record.strippingHealthData().matchTypeRevision, rev)
+        XCTAssertEqual(record.fillingMissingHealthData(from: record).matchTypeRevision, rev)
+        XCTAssertEqual(record.endingAtCurrentScore().matchTypeRevision, rev)
     }
 }
 

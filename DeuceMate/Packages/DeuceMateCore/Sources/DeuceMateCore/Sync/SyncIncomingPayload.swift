@@ -62,6 +62,10 @@ public enum SyncIncomingEvent: Equatable {
     /// — never as a record body: a tag-only update must not advance a score,
     /// start a workout or complete a match.
     case matchTagsUpdate(matchID: UUID, tags: MatchTags)
+    /// One match's post-completion match-type revision (`MatchSyncKey.matchTypeUpdate`).
+    /// Apply only to a completed record the receiver holds, via
+    /// `MatchRecord.mergingMatchTypeRevision`.
+    case matchTypeUpdate(matchID: UUID, revision: MatchTypeRevision)
     /// Decoding error for one of the recognized keys. The associated key lets the
     /// delegate log/diagnose without losing the rest of the payload's events.
     case decodeError(key: String, error: Error)
@@ -96,6 +100,8 @@ extension SyncIncomingEvent {
             return aa == ab && oa == ob && ea == eb
         case (.matchTagsUpdate(let ia, let ta), .matchTagsUpdate(let ib, let tb)):
             return ia == ib && ta == tb
+        case (.matchTypeUpdate(let ia, let ra), .matchTypeUpdate(let ib, let rb)):
+            return ia == ib && ra == rb
         case (.decodeError(let ka, _), .decodeError(let kb, _)): return ka == kb
         default: return false
         }
@@ -228,6 +234,14 @@ public enum SyncIncomingPayload {
                 events.append(.matchTagsUpdate(matchID: update.matchID, tags: update.tags.sanitized()))
             } catch {
                 events.append(.decodeError(key: MatchSyncKey.matchTagsUpdate, error: error))
+            }
+        }
+        if let data = payload[MatchSyncKey.matchTypeUpdate] as? Data {
+            do {
+                let update = try JSONDecoder().decode(MatchTypeUpdate.self, from: data)
+                events.append(.matchTypeUpdate(matchID: update.matchID, revision: update.revision))
+            } catch {
+                events.append(.decodeError(key: MatchSyncKey.matchTypeUpdate, error: error))
             }
         }
         if let data = payload[MatchSyncKey.matchHistory] as? Data {

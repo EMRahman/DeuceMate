@@ -42,6 +42,11 @@ public enum MatchSyncKey {
     /// (`transferUserInfo`) so it survives the peer being away. Not a setting:
     /// no `UserDefaults` mirror. See MATCH_TAGS_PLAN.md §6.
     public static let matchTagsUpdate = "matchTagsUpdate"
+    /// JSON-encoded `MatchTypeUpdate { matchID: UUID, revision: MatchTypeRevision }`.
+    /// Post-completion match-type conversion (`Doubles ↔ Singles`). Applied only to
+    /// completed records already held by the receiver, merged by the revision clock.
+    /// Not a setting: no `UserDefaults` mirror.
+    public static let matchTypeUpdate = "matchTypeUpdate"
 
     // MARK: - Watch-only settings (phone → watch)
     /// Phone → watch point-outcome tracking switch (Bool).
