@@ -126,7 +126,8 @@ anything portable; no `.pbxproj` change needed — the package globs its sources
 | File | What |
 |------|------|
 | `Models/ScoreTypes.swift` | `Player`, `MatchType`, `MatchFormat` + `MatchFormatConfig` (data-driven rules), `DoublesServer`, `SetScore`. **Add a match format here.** |
-| `Models/MatchRecord.swift` | The persisted match. Custom `init(from:)` for backward-compat decoding. **See §4 before adding fields.** Its optional `tags` decode with `try?` so a malformed value degrades to `nil` instead of failing the archive. |
+| `Models/MatchRecord.swift` | The persisted match. Custom `init(from:)` for backward-compat decoding. **See §4 before adding fields.** Its optional `tags` and `matchTypeRevision` decode with `try?` so malformed values degrade to `nil` instead of failing the archive. |
+| `Models/MatchTypeRevision.swift` | Post-completion `Doubles ↔ Singles` conversion (`MatchRecord.matchTypeRevision`): `MatchTypeRevision` (`matchType` + monotonic `updatedAt` + `revisionID` clock), commutative `merged`, `MatchRecord.convertingMatchType` / `mergingMatchTypeRevision` (completed matches only; clears resume-only doubles rotation fields and deterministically trims partner + >1 opponent tags when converted to `.singles`), `MatchTypeUpdate` (`matchTypeUpdate` wire body), and `pendingWatchUpdates`. |
 | `Models/MatchTags.swift` | Match details (`MatchRecord.tags`): `TaggedPlayer` (stable id + sanitized ≤40-char name + optional tennis playing profile stored as `handednessRaw`/`backhandRaw`/`playStyleRaw` for `PlayerHandedness`, `PlayerBackhand` and `PlayerPlayStyle` — deliberately not `Codable`, raw values pinned), `CompetitionType` (friendly/league/tournament/practice — raw values pinned; stored ONLY as `competitionTypeRaw`, deliberately not `Codable`, so a future case is "unknown" rather than an archive-killing decode error), and `MatchTags` with its own `updatedAt` + `revisionID` clock. **`tags == nil` means "no information", never "cleared"** — a clear is `MatchTags.cleared(after:)` (empty, newer). `MatchTags.merged` is commutative (equal clocks tie-break on `revisionID.uuidString`); every UI write goes through `revised(after:)` so the clock is strictly monotonic. `MatchRecord.mergingTags` applies a tag update without touching the body; `MatchTagsUpdate` is the `matchTagsUpdate` wire body; `pendingWatchUpdates(archive:watchCopies:newlyHeld:)` is the §6.1 resend rule (diff the manifest with `newlyHeldIDs` — never resend on every manifest). See `docs/features/MATCH_TAGS_PLAN.md`. |
 | `Models/PointStat.swift` | `PointOutcome`, `EndingShot`, shared `ServingPointCategory` graph matching, `GameScoreSnapshot`, `PendingPointInfo`, `PointStat`. The atom from which all stats derive. |
 | `Scoring/ScoringEngine.swift` | Pure scoring reducer — `pointWon(by:in:) -> ScoringResult` over value-type `ScoringState`; side-effects come back as typed `ScoringEvent`s. The watch `ScoreViewModel` delegates here. Its perspective-neutral `isRegularGameComplete` predicate is also shared by historical score reconciliation, and `leaderWhenStopped` resolves explicitly ended friendlies from sets, games, then points. **Change scoring rules here, with `ScoringEngineTests`.** |
@@ -508,15 +509,15 @@ compiler does not connect** (see §5). To add one, keep them consistent:
   it. See §4 "Retire a case in a persisted enum" and
   `docs/features/TECHNICAL_DEBT.md` #18. (`CompetitionType` is the exception by
   design: it is stored as a raw string and is not `Codable`.)
-- **Rebuilding a `MatchRecord` field-by-field drops its `tags`.** The watch's
+- **Rebuilding a `MatchRecord` field-by-field drops its `tags` (and `matchTypeRevision`).** The watch's
   `ScoreViewModel` constructs every live checkpoint/completion with the
-  memberwise init, which has no tags. That is safe on the *phone* (merges keep
-  the newer tags — `nil` is "no information"), but any store that **replaces**
+  memberwise init, which has no tags or `matchTypeRevision`. That is safe on the *phone* (merges keep
+  the newer metadata — `nil` is "no information"), but any store that **replaces**
   a record by id (watch `StatsStore.appendMatch`, phone `appendMatch` /
-  `saveHistory`, any new phone mutation) must carry the stored `tags` over
-  (`mergingTags`) or it silently erases them — the phone's two do, and a new
-  replace path must too. Merge sites must also merge tags: `MatchTags.merged`
-  inside the body resolution. Any new phone inbound path must also scrub with
+  `saveHistory`, any new phone mutation) must carry stored `tags` (`mergingTags`)
+  and `matchTypeRevision` (`mergingMatchTypeRevision`) over or it silently erases them — both stores do, and any new
+  replace path must too. Merge sites must also merge both clocks (`MatchTags.merged` then `MatchTypeRevision.merged`
+  inside the body resolution). Any new phone inbound path must also scrub with
   the forgotten-player ledger.
   **Enforced on the watch (PR 2):** `StatsStore.appendMatch` merges the stored
   copy's tags forward; `ScoreViewModel.liveMatchTags` carries them across resume
