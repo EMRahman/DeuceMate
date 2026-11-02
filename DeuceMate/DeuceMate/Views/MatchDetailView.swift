@@ -819,7 +819,7 @@ struct MatchDetailView: View {
                         Label("AI Coach", systemImage: "sparkles")
                             .labelStyle(.titleAndIcon)
                     }
-                    .accessibilityLabel("Open AI Coach")
+                    .accessibilityLabel("AI Coach")
                 }
             }
             ToolbarItem(placement: .navigationBarTrailing) {

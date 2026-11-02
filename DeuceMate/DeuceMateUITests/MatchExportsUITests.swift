@@ -44,7 +44,7 @@ final class MatchExportsUITests: XCTestCase {
         let alex = "Alex \(token)"
         _ = try seedTaggedPair(opponent: alex, note: note)
 
-        let aiButton = app.buttons["Open AI Coach"]
+        let aiButton = app.buttons["AI Coach"]
         XCTAssertTrue(aiButton.waitForExistence(timeout: 10))
         aiButton.tap()
         XCTAssertTrue(app.navigationBars["AI Coach"].waitForExistence(timeout: 5))
