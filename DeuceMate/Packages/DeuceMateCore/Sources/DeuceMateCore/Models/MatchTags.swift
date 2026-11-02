@@ -302,12 +302,14 @@ public struct MatchTags: Codable, Equatable, Sendable {
     }
 
     /// Strict total order over revisions: later `updatedAt`, then larger
-    /// `revisionID.uuidString`, then (only for two legacy/identical-clock
-    /// revisions with different contents) a canonical content key. `false`
-    /// for an identical value.
+    /// `revisionID.uuidString`, then fewer `allPlayers` (so a singles-normalized
+    /// copy supersedes its untrimmed source with the same clock), then (only for two
+    /// legacy/identical-clock revisions with different contents) a canonical content
+    /// key. `false` for an identical value.
     public func supersedes(_ other: MatchTags) -> Bool {
         if updatedAt != other.updatedAt { return updatedAt > other.updatedAt }
         if revisionID != other.revisionID { return revisionID.uuidString > other.revisionID.uuidString }
+        if allPlayers.count != other.allPlayers.count { return allPlayers.count < other.allPlayers.count }
         return canonicalContentKey > other.canonicalContentKey
     }
 
@@ -414,6 +416,18 @@ public struct MatchTags: Codable, Equatable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Returns a copy trimmed to singles shape (`partner = nil`, at most one
+    /// opponent) while preserving `(updatedAt, revisionID)` so normalizing a
+    /// stale doubles tag snapshot on one peer never promotes unrelated fields
+    /// ahead of newer tag edits made on another peer.
+    public func normalizedForSingles() -> MatchTags {
+        guard partner != nil || opponents.count > 1 else { return self }
+        var copy = self
+        copy.partner = nil
+        copy.opponents = Array(opponents.prefix(1))
+        return copy.sanitized()
+    }
+
     static func isLineBreak(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.value {
         case 0x0A, 0x0B, 0x0C, 0x0D, 0x85, 0x2028, 0x2029: return true
@@ -439,9 +453,16 @@ public extension MatchRecord {
     /// can never advance a score or complete a match. The watch's
     /// `StatsStore.updateTags` and the phone's `PhoneStatsStore.updateTags`
     /// apply a `matchTagsUpdate` with this.
+    ///
+    /// If this completed record already has a `.singles` `matchTypeRevision`,
+    /// the merged tags are trimmed to singles shape without advancing their clock.
     func mergingTags(_ incoming: MatchTags?) -> MatchRecord {
         var copy = self
-        copy.tags = MatchTags.merged(tags, incoming)
+        var merged = MatchTags.merged(tags, incoming)
+        if !copy.isInProgress, copy.matchTypeRevision?.matchType == .singles {
+            merged = merged?.normalizedForSingles()
+        }
+        copy.tags = merged
         return copy
     }
 }

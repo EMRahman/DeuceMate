@@ -51,6 +51,8 @@ struct MatchDetailView: View {
     /// handing out; deleted when that sheet closes (`releaseHeldExports`).
     @State private var exportGenerationsHeldByShare: Set<ExportStaging.Generation> = []
     @State private var showEndAtCurrentScoreConfirmation = false
+    @State private var showConvertMatchTypeConfirmation = false
+    @State private var convertMatchTypeError: String?
     @State private var showMatchInfoEditor = false
     @State private var showNotesEditor = false
     /// Share-menu choices for the TEXT and HTML reports (MATCH_TAGS_PLAN.md
@@ -547,7 +549,8 @@ struct MatchDetailView: View {
                 record: record,
                 isInArchive: store.history.contains { $0.id == record.id },
                 showEditor: $showMatchInfoEditor,
-                showNotesEditor: $showNotesEditor
+                showNotesEditor: $showNotesEditor,
+                showConvertMatchTypeConfirmation: $showConvertMatchTypeConfirmation
             )
 
             // Keep the graph route visible for manually entered matches. Its
@@ -900,6 +903,34 @@ struct MatchDetailView: View {
         } message: {
             Text("This marks the match completed and it can no longer be resumed. A tied score is saved as a draw.")
         }
+        .confirmationDialog(
+            record.matchType == .doubles ? "Change match to Singles?" : "Change match to Doubles?",
+            isPresented: $showConvertMatchTypeConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(record.matchType == .doubles ? "Change to Singles" : "Change to Doubles") {
+                convertMatchType()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if record.matchType == .doubles && !record.playersDroppedConvertingToSingles.isEmpty {
+                let names = record.playersDroppedConvertingToSingles.map(\.name).joined(separator: " and ")
+                Text("All set scores, point stats, durations and health data are kept. \(names) will be removed from Match Info because Singles matches have one opponent and no partner.")
+            } else {
+                Text("All set scores, point stats, durations and health data are kept. Trends and head-to-head records will count this as a \(record.matchType == .doubles ? "Singles" : "Doubles") match.")
+            }
+        }
+        .alert(
+            "Couldn't Update Match",
+            isPresented: Binding(
+                get: { convertMatchTypeError != nil },
+                set: { if !$0 { convertMatchTypeError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(convertMatchTypeError ?? "")
+        }
         // Per-export HealthKit disclosure (Blocker 4), shared by the export share
         // sheet and the AI Coach hand-off. Naming + the recipient clause come
         // from Core's single source; confirming proceeds full-fidelity.
@@ -1008,6 +1039,21 @@ struct MatchDetailView: View {
             syncService.sendMatchToWatch(completed)
         }
         dismiss()
+    }
+
+    private func convertMatchType() {
+        guard let targetType = record.convertibleTargetMatchType else { return }
+        let previousTags = record.tags
+        do {
+            let saved = try store.convertMatchType(id: record.id, to: targetType)
+            record = saved
+            syncService.pushMatchTypeUpdates(forMatchIDs: [record.id])
+            if saved.tags != previousTags {
+                syncService.pushTagUpdates(forMatchIDs: [record.id])
+            }
+        } catch {
+            convertMatchTypeError = error.localizedDescription
+        }
     }
 
     // MARK: - Points list

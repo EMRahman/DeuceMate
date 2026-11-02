@@ -22,13 +22,21 @@ public enum MatchMergePolicy {
     /// (`MatchTags.merged`), whichever body won. Without this, case 4's `>=`
     /// let the watch's untagged copy of a finished match (same `endTime`)
     /// silently wipe the phone's tags on the next history push
-    /// (MATCH_TAGS_PLAN.md §3). This is the single site the phone ← watch
-    /// sync, the manual-archive `.merge` import and the watch's `.singleMatch`
-    /// handler all go through.
+    /// (MATCH_TAGS_PLAN.md §3).
+    ///
+    /// **MatchTypeRevision** also merges by its own clock on every path.
+    /// Tags merge FIRST, then `mergingMatchTypeRevision` runs SECOND so if a
+    /// completed match was converted to `.singles`, any merged doubles
+    /// partner/2nd opponent from an offline peer is deterministically normalized.
+    /// This is the single site the phone ← watch sync, the manual-archive `.merge`
+    /// import and the watch's `.singleMatch` handler all go through.
     public static func resolve(incoming: MatchRecord, existing: MatchRecord?) -> MatchRecord {
-        guard let existing else { return incoming }
+        guard let existing else { return incoming.mergingMatchTypeRevision(incoming.matchTypeRevision) }
         var winner = resolveBody(incoming: incoming, existing: existing)
         winner.tags = MatchTags.merged(existing.tags, incoming.tags)
+        winner = winner.mergingMatchTypeRevision(
+            MatchTypeRevision.merged(existing.matchTypeRevision, incoming.matchTypeRevision)
+        )
         return winner
     }
 

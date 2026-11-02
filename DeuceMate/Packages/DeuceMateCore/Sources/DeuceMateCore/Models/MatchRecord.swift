@@ -53,6 +53,11 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
     /// own clock on every merge path (`MatchMergePolicy.resolve`,
     /// `ArchiveBackupPolicy`), independently of which body wins.
     public var tags: MatchTags?
+    /// Optional post-completion match-type edit revision (`Doubles ↔ Singles`).
+    /// `nil` means `matchType` has never been edited after completion. Merged by
+    /// its own clock on every completed-record merge path so an equal-`endTime`
+    /// watch history push cannot revert a conversion.
+    public var matchTypeRevision: MatchTypeRevision?
 
     public init(
         id: UUID = UUID(),
@@ -83,7 +88,8 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
         totalCaloriesKcal: Double? = nil,
         recentPoints: [Player] = [],
         momentumEnabled: Bool = true,
-        tags: MatchTags? = nil
+        tags: MatchTags? = nil,
+        matchTypeRevision: MatchTypeRevision? = nil
     ) {
         self.id = id
         self.startTime = startTime
@@ -114,6 +120,7 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
         self.recentPoints = recentPoints
         self.momentumEnabled = momentumEnabled
         self.tags = tags
+        self.matchTypeRevision = matchTypeRevision
     }
 
     public init(from decoder: Decoder) throws {
@@ -151,6 +158,7 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
         // instead of failing this record — and with it the whole archive
         // decode. `MatchTags.init(from:)` itself never throws on field contents.
         tags                     = try? c.decodeIfPresent(MatchTags.self, forKey: .tags)
+        matchTypeRevision        = try? c.decodeIfPresent(MatchTypeRevision.self, forKey: .matchTypeRevision)
     }
 
     /// Converts raw game point counters (0–4+) to a tennis score string,

@@ -18,6 +18,16 @@ protocol WatchStatsStoring: StatsStoring {
     /// missing ID (never creates a record) or a failed write.
     func updateTags(id: UUID, tags: MatchTags) -> MatchRecord?
 
+    /// Convert an already-completed stored match between singles and doubles on
+    /// the store's serial queue. Returns the saved history, or nil for an
+    /// unreadable archive, missing/in-progress ID, unchanged type, or failed write.
+    func convertStoredMatchType(id: UUID, to matchType: MatchType, at date: Date) -> [MatchRecord]?
+
+    /// Merge a peer match-type revision into an already-stored completed record
+    /// on the store's serial queue. Metadata-only: never creates a record and
+    /// ignores in-progress records. Returns the saved record, or nil on failure/no-op.
+    func updateMatchType(id: UUID, revision: MatchTypeRevision) -> MatchRecord?
+
     /// Remove a stored record and return the tags it holds at that moment, read
     /// and removed on one serial-queue hop. Resuming a match uses this so a tag
     /// revision saved after the history sheet captured its snapshot is not lost.
@@ -105,6 +115,30 @@ final class StatsStore: WatchStatsStoring {
         }
     }
 
+    func convertStoredMatchType(id: UUID, to matchType: MatchType, at date: Date) -> [MatchRecord]? {
+        queue.sync {
+            guard var records = _loadHistoryUnsafe(),
+                  let index = records.firstIndex(where: { $0.id == id }),
+                  !records[index].isInProgress,
+                  records[index].matchType != matchType else { return nil }
+            records[index] = records[index].convertingMatchType(to: matchType, at: date)
+            guard _writeUnsafe(records) else { return nil }
+            return records
+        }
+    }
+
+    func updateMatchType(id: UUID, revision: MatchTypeRevision) -> MatchRecord? {
+        queue.sync {
+            guard var records = _loadHistoryUnsafe(),
+                  let index = records.firstIndex(where: { $0.id == id }),
+                  !records[index].isInProgress else { return nil }
+            let updated = records[index].mergingMatchTypeRevision(revision)
+            records[index] = updated
+            guard _writeUnsafe(records) else { return nil }
+            return updated
+        }
+    }
+
     func removeMatchReturningTags(id: UUID) -> MatchTags? {
         queue.sync {
             guard var records = _loadHistoryUnsafe() else {
@@ -125,12 +159,14 @@ final class StatsStore: WatchStatsStoring {
                 statsStoreLogger.error("appendMatch skipped: match history unreadable; refusing to overwrite")
                 return
             }
-            // Tags are phone-authored metadata that live checkpoints never carry.
-            // Merge the stored copy's tags forward so replacing a record by id
-            // can't erase them (MATCH_TAGS_PLAN.md §3).
+            // Tags and matchTypeRevision are metadata that live checkpoints never carry.
+            // Merge the stored copy's tags and revision forward so replacing a record
+            // by id can't erase them (MATCH_TAGS_PLAN.md §3).
             var record = record
             if let stored = records.first(where: { $0.id == record.id }) {
-                record = record.mergingTags(stored.tags)
+                record = record
+                    .mergingTags(stored.tags)
+                    .mergingMatchTypeRevision(stored.matchTypeRevision)
             }
             records.removeAll { $0.id == record.id }
             records.append(record)

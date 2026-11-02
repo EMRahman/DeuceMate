@@ -54,6 +54,7 @@ flowchart RL
     P -- "manually entered or resumed match<br/>(handed to the watch to own)" --> W
     P -- "End at Current Score<br/>(completed archive checkpoint)" --> W
     P -- "match tags update — opponent / partner /<br/>competition only (never a whole record,<br/>never notes)" --> W
+    P -- "match type update — Singles ↔ Doubles<br/>on completed matches (metadata only)" --> W
 ```
 
 Two safety properties worth knowing as a reviewer:
@@ -165,18 +166,18 @@ When a match record arrives on the phone, `MatchMergePolicy` decides what to kee
    source of truth (this also makes undo work: the reverted state replaces the
    old one even though it has fewer points).
 
-**Match tags merge separately.** Those five rules pick the record *body*. The
-optional `tags` (opponent / partner / competition type, `MatchTags`) then merge by
-their own `updatedAt` + `revisionID` clock on **every** path, whichever body won
-(`MatchTags.merged`, called inside `MatchMergePolicy.resolve` and
+**Match tags and post-completion match-type conversions merge separately.** Those five rules pick the record *body*. The
+optional `tags` (opponent / partner / competition type, `MatchTags`) and optional `matchTypeRevision` (completed-match `Doubles ↔ Singles` conversions, `MatchTypeRevision`) then merge by
+their own `updatedAt` + `revisionID` clocks on **every** path, whichever body won
+(`MatchTags.merged` followed by `MatchTypeRevision.merged`, called inside `MatchMergePolicy.resolve` and
 `ArchiveBackupPolicy.resolveBackup`). This matters because a finished match has
 the same `endTime` on both devices: rule 4 picks the watch's copy, and without the
-separate tag merge its untagged body would silently wipe the phone's tags on the
+separate metadata clocks its untagged / unconverted body would silently wipe the phone's tags or revert a Singles ↔ Doubles conversion on the
 next history push. `tags == nil` means "this copy has no tag information" (an
-older build re-encoded it); a clear is an *empty* tags value with a newer clock.
-Tag edits travel phone → watch on their own `matchTagsUpdate` key (never as a
+older build re-encoded it); a clear is an *empty* tags value with a newer clock. Likewise, `matchTypeRevision == nil` means `matchType` was never edited post-completion; converting to Singles deterministically trims any partner or second opponent on `tags`.
+Tag and match-type edits travel phone → watch on their own `matchTagsUpdate` / `matchTypeUpdate` keys (never as a
 `.singleMatch` record, whose watch handler can complete a live match), and
-`MatchTags.pendingWatchUpdates` resends any tags the watch is behind on when its
+`MatchTags.pendingWatchUpdates` / `MatchTypeRevision.pendingWatchUpdates` resend any updates the watch is behind on when its
 history or a newly held manifest id arrives. Forgotten players
 (`ForgottenPlayerLedger`) are scrubbed from every inbound record — watch sync,
 initial iCloud restore, manual import — regardless of timestamps. Private notes

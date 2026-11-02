@@ -17,6 +17,8 @@ struct MatchStatsView: View {
     let tagsLine: String?
     /// If non-nil, the in-progress match record this view is showing.
     let resumableRecord: MatchRecord?
+    /// If non-nil, the completed match record this view is showing.
+    let completedRecord: MatchRecord?
     let setElapsedSeconds: [Int: TimeInterval]
     let currentSetSessionStart: Date?
     let totalSteps: Int?
@@ -28,6 +30,8 @@ struct MatchStatsView: View {
     @State private var showResumeConflictAlert = false
     @State private var showEndAtCurrentScoreConfirmation = false
     @State private var showEndAtCurrentScoreError = false
+    @State private var showConvertMatchTypeConfirmation = false
+    @State private var showConvertMatchTypeError = false
 
     init(stats: [PointStat],
          setScores: [SetScore],
@@ -37,6 +41,7 @@ struct MatchStatsView: View {
          matchIsComplete: Bool = false,
          tagsLine: String? = nil,
          resumableRecord: MatchRecord? = nil,
+         completedRecord: MatchRecord? = nil,
          setElapsedSeconds: [Int: TimeInterval] = [:],
          currentSetSessionStart: Date? = nil,
          totalSteps: Int? = nil,
@@ -49,6 +54,7 @@ struct MatchStatsView: View {
         self.matchIsComplete = matchIsComplete
         self.tagsLine = tagsLine
         self.resumableRecord = resumableRecord
+        self.completedRecord = completedRecord
         self.setElapsedSeconds = setElapsedSeconds
         self.currentSetSessionStart = currentSetSessionStart
         self.totalSteps = totalSteps
@@ -191,6 +197,26 @@ struct MatchStatsView: View {
                     MatchStatsContent(stats: filteredStats, matchType: matchType,
                                       setElapsedSeconds: setElapsedSeconds)
                 }
+
+                if let record = completedRecord,
+                   !record.isInProgress,
+                   let targetType = record.convertibleTargetMatchType {
+                    let targetLabel = targetType == .doubles ? "Doubles" : "Singles"
+                    Divider().padding(.vertical, 2)
+                    Button {
+                        showConvertMatchTypeConfirmation = true
+                    } label: {
+                        Label(
+                            "Change to \(targetLabel)",
+                            systemImage: targetType == .doubles ? "person.2.fill" : "person.fill"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("watch-convert-match-type")
+                }
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
@@ -228,6 +254,42 @@ struct MatchStatsView: View {
         } message: {
             Text("The saved match could not be updated. Reopen Match History and try again.")
         }
+        .confirmationDialog(
+            "Change to \(convertibleTargetTypeLabel)?",
+            isPresented: $showConvertMatchTypeConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Change to \(convertibleTargetTypeLabel)") {
+                if let record = completedRecord,
+                   let targetType = record.convertibleTargetMatchType,
+                   viewModel.convertStoredMatchType(record, to: targetType) {
+                    NotificationCenter.default.post(name: .watchMatchHistoryDidChange, object: nil)
+                    dismiss()
+                } else {
+                    showConvertMatchTypeError = true
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let record = completedRecord,
+               let targetType = record.convertibleTargetMatchType,
+               targetType == .singles,
+               !record.playersDroppedConvertingToSingles.isEmpty {
+                let droppedNames = record.playersDroppedConvertingToSingles.map(\.name).joined(separator: " & ")
+                Text("Scores and stats are kept. Removes \(droppedNames) from match details.")
+            } else {
+                Text("Scores, point stats and health data are kept.")
+            }
+        }
+        .alert("Unable to Update Match", isPresented: $showConvertMatchTypeError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The saved match could not be updated. Reopen Match History and try again.")
+        }
+    }
+
+    private var convertibleTargetTypeLabel: String {
+        completedRecord?.convertibleTargetMatchType == .doubles ? "Doubles" : "Singles"
     }
 
     private var setsForDuration: [Int] {

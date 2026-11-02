@@ -21,6 +21,7 @@ struct MatchInfoEditorView: View {
     @State private var unknownCompetitionRaw: String?
     @State private var partner: TaggedPlayer?
     @State private var opponents: [TaggedPlayer?]
+    @State private var selectedMatchType: MatchType
     @State private var pickerSlot: Slot?
     @State private var managedTarget: ManagedTarget?
     @State private var saveError: String?
@@ -54,6 +55,7 @@ struct MatchInfoEditorView: View {
 
     init(record: MatchRecord) {
         self.record = record
+        _selectedMatchType = State(initialValue: record.matchType)
         let tags = record.tags
         let opponentCount = record.matchType == .doubles ? 2 : 1
         let normalizedTags = tags?.sanitized()
@@ -67,21 +69,22 @@ struct MatchInfoEditorView: View {
         })
         _competition = State(initialValue: tags?.competitionType)
         _unknownCompetitionRaw = State(initialValue: tags?.competitionType == nil ? tags?.competitionTypeRaw : nil)
-        let slots = record.matchType == .doubles ? 2 : 1
-        var initial: [TaggedPlayer?] = Array(repeating: nil, count: slots)
-        for (index, player) in (tags?.opponents ?? []).prefix(slots).enumerated() {
-            initial[index] = player
+        var initial: [TaggedPlayer?] = [nil, nil]
+        if let opps = tags?.opponents {
+            for (index, player) in opps.prefix(2).enumerated() {
+                initial[index] = player
+            }
         }
         _opponents = State(initialValue: initial)
-        _partner = State(initialValue: record.matchType == .doubles ? tags?.partner : nil)
+        _partner = State(initialValue: tags?.partner)
     }
 
-    private var isDoubles: Bool { record.matchType == .doubles }
+    private var isDoubles: Bool { selectedMatchType == .doubles }
 
     /// The draft as tags (clock fields are stamped by the store on save).
     private var draft: MatchTags {
         MatchTags(
-            opponents: opponents.compactMap { $0 },
+            opponents: Array(opponents.prefix(isDoubles ? 2 : 1)).compactMap { $0 },
             partner: isDoubles ? partner : nil,
             competitionTypeRaw: competition?.rawValue ?? unknownCompetitionRaw,
             updatedAt: Date()
@@ -95,11 +98,36 @@ struct MatchInfoEditorView: View {
     private var hasStoredDetails: Bool { !(storedTags?.isEmpty ?? true) }
 
     private var hasChanges: Bool {
+        if !record.isInProgress && selectedMatchType != record.matchType {
+            return true
+        }
         let stored = originalTags ?? MatchTags(competitionTypeRaw: nil, updatedAt: .distantPast)
         let current = draft.sanitized()
         return current.opponents != stored.opponents
             || current.partner != stored.partner
             || current.competitionTypeRaw != stored.competitionTypeRaw
+    }
+
+    private var droppedDraftPlayers: [TaggedPlayer] {
+        var dropped: [TaggedPlayer] = []
+        if let partner {
+            dropped.append(partner)
+        }
+        if opponents.count > 1, let secondOpponent = opponents[1] {
+            dropped.append(secondOpponent)
+        }
+        return dropped
+    }
+
+    private var matchTypeFooterText: String {
+        if selectedMatchType == .singles {
+            let dropped = droppedDraftPlayers
+            if !dropped.isEmpty {
+                let names = dropped.map(\.name).joined(separator: " and ")
+                return "Saving as Singles keeps all scores and stats, and removes \(names) from Match Info."
+            }
+        }
+        return "Change between Singles and Doubles if the wrong match type was selected. Scores, point stats and health data are kept."
     }
 
     var body: some View {
@@ -114,7 +142,7 @@ struct MatchInfoEditorView: View {
                     }
                 }
                 Section {
-                    ForEach(opponents.indices, id: \.self) { index in
+                    ForEach(0..<(isDoubles ? 2 : 1), id: \.self) { index in
                         playerRow(
                             player: opponents[index],
                             slot: .opponent(index),
@@ -125,6 +153,21 @@ struct MatchInfoEditorView: View {
                     Text(isDoubles ? "Opponents" : "Opponent")
                 } footer: {
                     Text("First names or nicknames are enough — e.g. Alex. Names are saved with this match in your archive and its iCloud backup, and appear on your Apple Watch.")
+                }
+
+                if !record.isInProgress {
+                    Section {
+                        Picker("Match Type", selection: $selectedMatchType) {
+                            Text("Singles").tag(MatchType.singles)
+                            Text("Doubles").tag(MatchType.doubles)
+                        }
+                        .pickerStyle(.segmented)
+                        .accessibilityIdentifier("match-type-picker")
+                    } header: {
+                        Text("Match Type")
+                    } footer: {
+                        Text(matchTypeFooterText)
+                    }
                 }
 
                 if hasStoredDetails {
@@ -145,7 +188,7 @@ struct MatchInfoEditorView: View {
                     Button("Cancel") { cancel() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save(draft) }
+                    Button("Save") { saveDraft() }
                         .disabled(!hasChanges)
                         .accessibilityIdentifier("save-match-info")
                 }
@@ -175,7 +218,7 @@ struct MatchInfoEditorView: View {
                 titleVisibility: .visible
             ) {
                 Button("Clear Details", role: .destructive) {
-                    save(MatchTags(competitionTypeRaw: nil, updatedAt: Date()))
+                    clearDetails()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -368,21 +411,39 @@ struct MatchInfoEditorView: View {
 
     /// Players already placed in another slot can't be picked twice.
     private func excludedIDs(for slot: Slot) -> Set<UUID> {
-        var ids = Set(opponents.compactMap { $0?.id })
+        if !isDoubles {
+            // In singles, only opponent(0) is visible, so no other slot blocks it.
+            return []
+        }
+        var ids = Set(opponents.prefix(2).compactMap { $0?.id })
         if let partner { ids.insert(partner.id) }
         switch slot {
         case .partner:
             if let partner { ids.remove(partner.id) }
         case .opponent(let index):
-            if let current = opponents[index] { ids.remove(current.id) }
+            if opponents.indices.contains(index), let current = opponents[index] {
+                ids.remove(current.id)
+            }
         }
         return ids
     }
 
     private func assign(_ player: TaggedPlayer?, to slot: Slot) {
         switch slot {
-        case .partner: partner = player
-        case .opponent(let index): opponents[index] = player
+        case .partner:
+            partner = player
+        case .opponent(let index):
+            if opponents.indices.contains(index) {
+                opponents[index] = player
+            }
+            if !isDoubles, let playerID = player?.id {
+                if partner?.id == playerID {
+                    partner = nil
+                }
+                if opponents.count > 1, opponents[1]?.id == playerID {
+                    opponents[1] = nil
+                }
+            }
         }
     }
 
@@ -425,8 +486,12 @@ struct MatchInfoEditorView: View {
             forgotten: forgotten,
             merged: merged
         )
-        partner = isDoubles ? reconciledDraft.partner : nil
-        opponents = reconciledDraft.opponents
+        partner = reconciledDraft.partner
+        var reconciledOpponents = reconciledDraft.opponents
+        while reconciledOpponents.count < 2 {
+            reconciledOpponents.append(nil)
+        }
+        opponents = Array(reconciledOpponents.prefix(2))
 
         if let original = originalTags {
             let reconciledOriginal = PlayerRoster.reconcilingEditorSlots(
@@ -438,7 +503,7 @@ struct MatchInfoEditorView: View {
             )
             originalTags = MatchTags(
                 opponents: reconciledOriginal.opponents.compactMap { $0 },
-                partner: isDoubles ? reconciledOriginal.partner : nil,
+                partner: record.matchType == .doubles ? reconciledOriginal.partner : nil,
                 competitionTypeRaw: original.competitionTypeRaw,
                 updatedAt: original.updatedAt,
                 revisionID: original.revisionID
@@ -448,9 +513,32 @@ struct MatchInfoEditorView: View {
 
     // MARK: - Save
 
-    private func save(_ tags: MatchTags) {
+    private func saveDraft() {
+        let previousRecord = store.history.first(where: { $0.id == record.id }) ?? record
+        let typeChange: MatchType? = (!record.isInProgress && selectedMatchType != previousRecord.matchType)
+            ? selectedMatchType
+            : nil
         do {
-            try store.updateTags(id: record.id, tags: tags)
+            let saved = try store.updateMatchDetails(
+                id: record.id,
+                matchType: typeChange,
+                tags: draft
+            )
+            if saved.matchTypeRevision != previousRecord.matchTypeRevision {
+                syncService.pushMatchTypeUpdates(forMatchIDs: [record.id])
+            }
+            if saved.tags != previousRecord.tags {
+                syncService.pushTagUpdates(forMatchIDs: [record.id])
+            }
+            dismiss()
+        } catch {
+            saveError = error.localizedDescription
+        }
+    }
+
+    private func clearDetails() {
+        do {
+            try store.updateTags(id: record.id, tags: MatchTags(competitionTypeRaw: nil, updatedAt: Date()))
             syncService.pushTagUpdates(forMatchIDs: [record.id])
             dismiss()
         } catch {

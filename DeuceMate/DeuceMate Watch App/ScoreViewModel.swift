@@ -1454,6 +1454,25 @@ class ScoreViewModel: ObservableObject {
         return true
     }
 
+    /// Converts a completed history record between singles and doubles without
+    /// disturbing any live match. Pushes full history only when the storage
+    /// transaction succeeds; never recreates a missing ID.
+    @discardableResult
+    func convertStoredMatchType(_ record: MatchRecord, to newType: MatchType) -> Bool {
+        guard !record.isInProgress,
+              record.matchType != newType,
+              currentMatchID != record.id else { return false }
+        guard let savedHistory = statsStore.convertStoredMatchType(
+            id: record.id,
+            to: newType,
+            at: Date()
+        ) else {
+            return false
+        }
+        syncService?.sendFullHistory(savedHistory)
+        return true
+    }
+
     private func clearMatch(completeAtCurrentScore: Bool) {
         workoutManager.stopWorkout()
         finalizeCurrentMatchToStore(completeAtCurrentScore: completeAtCurrentScore)

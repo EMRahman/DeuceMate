@@ -210,29 +210,37 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         queue.sync { records }
     }
 
-    /// Replaces the archive. Stored tags for any id present on both sides are
-    /// carried forward by their own clock, so a caller holding a stale copy
-    /// can never erase a newer tag edit; forgotten players are scrubbed.
+    /// Replaces the archive. Stored tags and match-type revisions for any id
+    /// present on both sides are carried forward by their own clocks, so a
+    /// caller holding a stale copy can never erase a newer edit; forgotten
+    /// players are scrubbed.
     func saveHistory(_ newRecords: [MatchRecord]) {
         queue.sync {
-            let existingTags = Dictionary(records.map { ($0.id, $0.tags) }, uniquingKeysWith: { a, _ in a })
+            let existingByID = Dictionary(records.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
             let now = Date()
-            let carried = newRecords.map { record in
-                forgotten.scrubbed(record.mergingTags(existingTags[record.id] ?? nil), now: now)
+            let carried = newRecords.map { record -> MatchRecord in
+                let prior = existingByID[record.id]
+                let merged = record
+                    .mergingTags(prior?.tags)
+                    .mergingMatchTypeRevision(prior?.matchTypeRevision)
+                return forgotten.scrubbed(merged, now: now)
             }
             adoptOnQueue(records: carried, tombstones: tombstones)
         }
     }
 
     /// Inserts or replaces one record by id (manual entry, End at Current
-    /// Score). Replacement keeps the stored tags by their own clock — the
-    /// caller's copy may predate a tag edit made while it was open.
+    /// Score). Replacement keeps stored tags and match-type revision by their
+    /// own clocks — the caller's copy may predate an edit made while it was open.
     func appendMatch(_ record: MatchRecord) {
         queue.sync {
             var updated = records
-            let existingTags = updated.first(where: { $0.id == record.id })?.tags
+            let prior = updated.first(where: { $0.id == record.id })
             updated.removeAll { $0.id == record.id }
-            updated.append(forgotten.scrubbed(record.mergingTags(existingTags), now: Date()))
+            let merged = record
+                .mergingTags(prior?.tags)
+                .mergingMatchTypeRevision(prior?.matchTypeRevision)
+            updated.append(forgotten.scrubbed(merged, now: Date()))
             adoptOnQueue(records: updated, tombstones: tombstones)
         }
     }
@@ -278,6 +286,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// Shared by `updateTags` and the Players actions (rename, merge, forget).
     enum TagEditError: LocalizedError, Equatable {
         case matchNotFound
+        case matchInProgress
         /// The canonical archive (or the forgotten-player ledger) could not be
         /// written — storage failed, or writes are suspended after an
         /// unreadable launch read. The edit was rolled back in memory, so
@@ -288,9 +297,107 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             switch self {
             case .matchNotFound:
                 return "This match is no longer in the iPhone archive."
+            case .matchInProgress:
+                return "Only completed matches can be changed between Singles and Doubles."
             case .notPersisted:
                 return "Your change couldn't be saved to this iPhone's storage, so nothing was changed. Try again, or restart DeuceMate if this keeps happening."
             }
+        }
+    }
+
+    /// Converts a completed match between Singles and Doubles (`Doubles ↔ Singles`),
+    /// normalizing incompatible doubles tags if converting to Singles and scrubbing
+    /// forgotten players. All-or-nothing via `commitUserEditOnQueue`.
+    @discardableResult
+    func convertMatchType(id: UUID, to newType: MatchType, now: Date = Date()) throws -> MatchRecord {
+        try queue.sync {
+            guard let index = records.firstIndex(where: { $0.id == id }) else {
+                throw TagEditError.matchNotFound
+            }
+            guard !records[index].isInProgress else {
+                throw TagEditError.matchInProgress
+            }
+            guard records[index].matchType != newType else {
+                return records[index]
+            }
+            let converted = forgotten.scrubbed(
+                records[index],
+                now: now
+            ).convertingMatchType(to: newType, at: now)
+            var updated = records
+            updated[index] = converted
+            try commitUserEditOnQueue(records: updated)
+            return converted
+        }
+    }
+
+    /// Atomically updates a match's optional `matchType` (completed matches only)
+    /// and its `MatchTags` draft in a single `commitUserEditOnQueue` write.
+    /// Avoids writing a phantom empty `MatchTags` when an untagged match only
+    /// changes `matchType`.
+    @discardableResult
+    func updateMatchDetails(
+        id: UUID,
+        matchType newMatchType: MatchType?,
+        tags draft: MatchTags,
+        now: Date = Date()
+    ) throws -> MatchRecord {
+        try queue.sync {
+            guard let index = records.firstIndex(where: { $0.id == id }) else {
+                throw TagEditError.matchNotFound
+            }
+            var current = records[index]
+            if let newMatchType, newMatchType != current.matchType {
+                guard !current.isInProgress else {
+                    throw TagEditError.matchInProgress
+                }
+                current = current.convertingMatchType(to: newMatchType, at: now)
+            }
+            var normalizedDraft = draft.sanitized()
+            if current.matchType == .singles {
+                normalizedDraft.partner = nil
+                normalizedDraft.opponents = Array(normalizedDraft.opponents.prefix(1))
+            }
+            let existingClean = current.tags?.sanitized()
+            let tagsContentChanged: Bool = {
+                guard let existingClean else { return !normalizedDraft.isEmpty }
+                return existingClean.opponents != normalizedDraft.opponents
+                    || existingClean.partner != normalizedDraft.partner
+                    || existingClean.competitionTypeRaw != normalizedDraft.competitionTypeRaw
+            }()
+            if tagsContentChanged {
+                let stamped = normalizedDraft.isEmpty
+                    ? MatchTags.cleared(after: current.tags, now: now)
+                    : normalizedDraft.revised(after: current.tags, now: now)
+                let scrubbedRevision = forgotten.scrubbed(stamped, now: now)
+                current = current.mergingTags(scrubbedRevision)
+            } else {
+                current = forgotten.scrubbed(current, now: now)
+            }
+            guard current != records[index] else { return current }
+            var updated = records
+            updated[index] = current
+            try commitUserEditOnQueue(records: updated)
+            return current
+        }
+    }
+
+    /// Applies a post-completion match-type update (`matchTypeUpdate`) from a peer.
+    /// Ignored for unknown IDs and in-progress records.
+    @discardableResult
+    func applyIncomingMatchType(_ update: MatchTypeUpdate, now: Date = Date()) -> [MatchRecord] {
+        queue.sync {
+            guard let index = records.firstIndex(where: { $0.id == update.matchID }),
+                  !records[index].isInProgress else { return records }
+            let merged = forgotten.scrubbed(
+                records[index],
+                now: now
+            ).mergingMatchTypeRevision(update.revision)
+            guard merged != records[index] else { return records }
+            var updated = records
+            updated[index] = merged
+            adoptOnQueue(records: updated, tombstones: tombstones)
+            return records
         }
     }
 

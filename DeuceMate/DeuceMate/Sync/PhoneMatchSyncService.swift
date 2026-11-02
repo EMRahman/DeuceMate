@@ -256,6 +256,41 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         send(updates)
     }
 
+    /// Edit-time push of the archive's current match-type revisions for `matchIDs`,
+    /// sent only for matches the watch is known to hold (`onWatchIDs`). Queued on
+    /// failure so it survives the watch being away. Updates `watchMirror` on main
+    /// thread if any mirrored record's ID is in `matchIDs`. Call on the main thread.
+    func pushMatchTypeUpdates(forMatchIDs matchIDs: Set<UUID>) {
+        let held = matchIDs.intersection(onWatchIDs)
+        guard let store else { return }
+        let archive = store.loadHistory()
+        if !held.isEmpty {
+            let updates = archive.compactMap { record -> MatchTypeUpdate? in
+                guard held.contains(record.id), !record.isInProgress, let revision = record.matchTypeRevision else { return nil }
+                return MatchTypeUpdate(matchID: record.id, revision: revision)
+            }
+            send(updates)
+        }
+        let applyMirrorUpdate = {
+            let archiveByID = Dictionary(archive.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            if self.watchMirror.contains(where: { matchIDs.contains($0.id) }) {
+                self.updateMirror { mirror in
+                    mirror.map { mirrored in
+                        guard matchIDs.contains(mirrored.id), let saved = archiveByID[mirrored.id] else { return mirrored }
+                        return mirrored
+                            .mergingMatchTypeRevision(saved.matchTypeRevision)
+                            .mergingTags(saved.tags)
+                    }
+                }
+            }
+        }
+        if Thread.isMainThread {
+            applyMirrorUpdate()
+        } else {
+            DispatchQueue.main.async(execute: applyMirrorUpdate)
+        }
+    }
+
     /// Sends each update as a dedicated `matchTagsUpdate` payload — never as a
     /// whole record, which would route through the watch's `.singleMatch`
     /// handler and its completion side effect.
@@ -269,6 +304,21 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         }
         if !updates.isEmpty {
             logger.notice("sent \(updates.count, privacy: .public) match tag update(s) to the watch")
+        }
+    }
+
+    /// Sends each update as a dedicated `matchTypeUpdate` payload — never as a
+    /// whole record.
+    private func send(_ updates: [MatchTypeUpdate]) {
+        for update in updates {
+            guard let payload = try? MatchSyncPayloadBuilder.matchTypeUpdate(update) else {
+                logger.error("failed to encode matchTypeUpdate for \(update.matchID.uuidString, privacy: .public)")
+                continue
+            }
+            transport.sendControl(payload, queueOnFailure: true)
+        }
+        if !updates.isEmpty {
+            logger.notice("sent \(updates.count, privacy: .public) match type update(s) to the watch")
         }
     }
 
@@ -523,12 +573,17 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
             case .watchManifest(let ids):
                 DispatchQueue.main.async {
                     // §6.1 rule 2: ids newly held since the previous manifest
-                    // get any non-nil archive tags, including empty clears.
+                    // get any non-nil archive tags, including empty clears,
+                    // and pending match-type updates.
                     // Diffing matters — a manifest rides on every checkpoint.
                     let newlyHeld = MatchTags.newlyHeldIDs(previous: self.watchMatchIDs, current: ids)
                     if !newlyHeld.isEmpty, let store = self.store {
+                        let archive = store.loadHistory()
                         self.send(MatchTags.pendingWatchUpdates(
-                            archive: store.loadHistory(), watchCopies: [], newlyHeld: newlyHeld
+                            archive: archive, watchCopies: [], newlyHeld: newlyHeld
+                        ))
+                        self.send(MatchTypeRevision.pendingWatchUpdates(
+                            archive: archive, watchCopies: [], newlyHeld: newlyHeld
                         ))
                     }
                     self.watchMatchIDs = ids
@@ -632,6 +687,23 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                    phoneTags.supersedes(tags) {
                     send([MatchTagsUpdate(matchID: matchID, tags: phoneTags)])
                 }
+            case .matchTypeUpdate(let matchID, let revision):
+                guard let store else { break }
+                let previousTags = store.loadHistory().first(where: { $0.id == matchID })?.tags
+                let archive = store.applyIncomingMatchType(MatchTypeUpdate(matchID: matchID, revision: revision))
+                if let record = archive.first(where: { $0.id == matchID }) {
+                    if let phoneRev = record.matchTypeRevision, phoneRev.supersedes(revision) {
+                        send([MatchTypeUpdate(matchID: matchID, revision: phoneRev)])
+                    }
+                    if let phoneTags = record.tags, phoneTags != previousTags {
+                        // Normalizing a doubles match to singles trimmed tags; ensure watch converges.
+                        DispatchQueue.main.async {
+                            if self.onWatchIDs.contains(matchID) {
+                                self.send([MatchTagsUpdate(matchID: matchID, tags: phoneTags)])
+                            }
+                        }
+                    }
+                }
             case .decodeError(let key, let error):
                 logger.error("decode error for \(key, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
@@ -640,14 +712,15 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     }
 
     /// Merges watch record bodies, then applies §6.1 rule 1: any id whose
-    /// archive tags supersede the watch copy's (nil on the watch = oldest) is
-    /// resent. This is what heals a watch that missed an edit-time push or was
-    /// upgraded from a build that ignored `matchTagsUpdate`, and what returns a
-    /// forgotten-player scrub to a stale watch copy.
+    /// archive tags or match-type revision supersede the watch copy's (nil on
+    /// the watch = oldest) is resent. This is what heals a watch that missed an
+    /// edit-time push or was upgraded from a build that ignored updates, and
+    /// what returns a forgotten-player scrub to a stale watch copy.
     private func reconcileTags(afterMerging watchCopies: [MatchRecord]) {
         guard let store else { return }
         let archive = store.mergeIncoming(watchCopies)
         send(MatchTags.pendingWatchUpdates(archive: archive, watchCopies: watchCopies, newlyHeld: []))
+        send(MatchTypeRevision.pendingWatchUpdates(archive: archive, watchCopies: watchCopies, newlyHeld: []))
     }
 
     /// UserDefaults key for the cached watch manifest. Phone-local persistence —

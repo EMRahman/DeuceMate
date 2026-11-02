@@ -122,10 +122,15 @@ public enum ArchiveBackupPolicy {
     /// Chooses the body by the restore rules below, then merges tags by their
     /// own clock whichever body won (MATCH_TAGS_PLAN.md §3) — a stale backup
     /// body must neither drop newer local tags nor lose newer backup tags.
+    /// Tags merge FIRST, then `mergingMatchTypeRevision` runs SECOND so converted
+    /// matches deterministically normalize any merged tags.
     static func resolveBackup(backup: MatchRecord, local: MatchRecord?) -> MatchRecord {
-        guard let local else { return backup }
+        guard let local else { return backup.mergingMatchTypeRevision(backup.matchTypeRevision) }
         var winner = resolveBackupBody(backup: backup, local: local)
         winner.tags = MatchTags.merged(local.tags, backup.tags)
+        winner = winner.mergingMatchTypeRevision(
+            MatchTypeRevision.merged(local.matchTypeRevision, backup.matchTypeRevision)
+        )
         return winner
     }
 

@@ -17,6 +17,7 @@ struct MatchInfoSection: View {
     /// not reliably present.
     @Binding var showEditor: Bool
     @Binding var showNotesEditor: Bool
+    @Binding var showConvertMatchTypeConfirmation: Bool
 
     @EnvironmentObject private var store: PhoneStatsStore
     @ObservedObject private var notesStore: MatchNotesStore = .shared
@@ -59,6 +60,20 @@ struct MatchInfoSection: View {
                     Label("Compare with Previous Match", systemImage: "arrow.left.arrow.right")
                 }
                 .accessibilityIdentifier("compare-previous-match")
+
+                if let targetType = record.convertibleTargetMatchType {
+                    let targetLabel = targetType == .doubles ? "Doubles" : "Singles"
+                    Button {
+                        showConvertMatchTypeConfirmation = true
+                    } label: {
+                        Label(
+                            "Change to \(targetLabel)",
+                            systemImage: targetType == .doubles ? "person.2" : "person"
+                        )
+                    }
+                    .disabled(!isInArchive)
+                    .accessibilityIdentifier("convert-match-type")
+                }
             }
         } header: {
             Text("Match Info")
