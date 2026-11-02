@@ -62,6 +62,7 @@ struct MatchNotesEditorView: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .strokeBorder(isEditorFocused ? Color.accentColor : Color(uiColor: .separator), lineWidth: isEditorFocused ? 1.5 : 1)
+                            .allowsHitTesting(false)
                     )
                     .overlay(alignment: .topLeading) {
                         if draft.isEmpty {
