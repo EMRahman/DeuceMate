@@ -63,6 +63,7 @@ struct PlayersSettingsView: View {
 
 struct PlayerManageView: View {
     let playerID: UUID
+    var onMerged: ((_ duplicateID: UUID, _ kept: TaggedPlayer) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var syncService: PhoneMatchSyncService
@@ -324,6 +325,7 @@ struct PlayerManageView: View {
             errorMessage = error.localizedDescription
             return
         }
+        onMerged?(playerID, kept.taggedPlayer)
         dismiss()
     }
 

@@ -321,6 +321,42 @@ public enum PlayerRoster {
         }
     }
 
+    /// Reconciles an open Match Info editor's slot draft (`partner` and
+    /// fixed-length `opponents` slots) against the current archive and
+    /// forgotten-player ledger — plus an optional merge that just rewrote
+    /// `duplicateID` to `kept` — without disturbing unsaved new players.
+    public static func reconcilingEditorSlots(
+        partner: TaggedPlayer?,
+        opponents: [TaggedPlayer?],
+        in records: [MatchRecord],
+        forgotten: ForgottenPlayerLedger = ForgottenPlayerLedger(),
+        merged: (duplicateID: UUID, kept: TaggedPlayer)? = nil
+    ) -> (partner: TaggedPlayer?, opponents: [TaggedPlayer?]) {
+        let rosterByID = Dictionary(
+            uniqueKeysWithValues: entries(from: records, forgotten: forgotten).map { ($0.id, $0.taggedPlayer) }
+        )
+        func resolve(_ player: TaggedPlayer?) -> TaggedPlayer? {
+            guard let player else { return nil }
+            if forgotten.contains(player.id) { return nil }
+            if let merged, player.id == merged.duplicateID {
+                return forgotten.contains(merged.kept.id) ? nil : (rosterByID[merged.kept.id] ?? merged.kept)
+            }
+            return rosterByID[player.id] ?? player
+        }
+        var seen: Set<UUID> = []
+        let resolvedPartner: TaggedPlayer?
+        if let candidate = resolve(partner), seen.insert(candidate.id).inserted {
+            resolvedPartner = candidate
+        } else {
+            resolvedPartner = nil
+        }
+        let resolvedOpponents = opponents.map { slot -> TaggedPlayer? in
+            guard let candidate = resolve(slot), seen.insert(candidate.id).inserted else { return nil }
+            return candidate
+        }
+        return (resolvedPartner, resolvedOpponents)
+    }
+
     /// Applies `edit` to every tagged record; records whose sanitized tags
     /// changed get a fresh revision stamped after their previous one.
     private static func rewriting(

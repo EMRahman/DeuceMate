@@ -109,11 +109,8 @@ private struct OpponentDetailView: View {
                         }
                     }
 
-                    Section("Pending Matches") {
-                        if pendingMatches.isEmpty {
-                            Text("No pending matches")
-                                .foregroundStyle(.secondary)
-                        } else {
+                    if !pendingMatches.isEmpty {
+                        Section("Pending Matches") {
                             ForEach(pendingMatches) { record in matchRow(record) }
                         }
                     }
@@ -131,11 +128,8 @@ private struct OpponentDetailView: View {
                         headToHeadRow(HeadToHead.record(vs: opponentID, in: store.history, excluding: nil, matchType: .singles))
                     }
 
-                    Section {
-                        if doublesMatchups.isEmpty {
-                            Text("No complete doubles team matchups recorded for this opponent.")
-                                .foregroundStyle(.secondary)
-                        } else {
+                    if !doublesMatchups.isEmpty {
+                        Section {
                             ForEach(doublesMatchups, id: \.self) { matchup in
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(teamLabel(for: matchup))
@@ -144,11 +138,11 @@ private struct OpponentDetailView: View {
                                 }
                                 .padding(.vertical, 3)
                             }
+                        } header: {
+                            Text("Head to Head · Doubles")
+                        } footer: {
+                            Text("Each row uses the same partner and exact opponent pair. Matches with incomplete player tags are not grouped.")
                         }
-                    } header: {
-                        Text("Head to Head · Doubles")
-                    } footer: {
-                        Text("Each row uses the same partner and exact opponent pair. Matches with incomplete player tags are not grouped.")
                     }
 
                     if hasIncompleteDoublesTags {
