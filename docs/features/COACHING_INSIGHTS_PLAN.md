@@ -32,8 +32,9 @@ other sections.
 
 - **Double faults:** own serving losses only. Any recorded break-point double
   fault qualifies; known tiebreak scores cannot be called breaks. Otherwise at
-  least 3 double faults, 4 service games, and 0.5 faults/game. Tiebreak service runs
-  are excluded from game counts. No claim that nerves caused the errors.
+  least 3 double faults, 4 service games, and 0.5 faults/game. Known tiebreak faults and tiebreak service runs
+  are both excluded from the regular-service-game frequency calculation. Total
+  faults remain available to the break-point-context observation. No claim that nerves caused the errors.
 - **First serve:** fewer than 50% in over at least 30 classified service points.
   All double faults count as missed first serves, even on legacy records whose
   second-serve flag is false. If second-serve points won (including double faults)

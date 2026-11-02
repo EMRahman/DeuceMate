@@ -251,7 +251,7 @@ The thresholds below are product heuristics, not universal performance targets.
 | Finding | When it qualifies | Suggested focus |
 |---|---|---|
 | Double faults on break point | At least one own double fault while facing break point; known tiebreak points are excluded. Still requires the 20-point minimum. | Practise your second-serve routine under pressure. Shows how many faults occurred on break points. |
-| Frequent double faults | At least 3 faults across at least 4 service games, averaging at least 0.5 per game. | Practise a repeatable second-serve routine. |
+| Frequent double faults | At least 3 faults across at least 4 service games, averaging at least 0.5 per game. Known tiebreak faults and tiebreak service runs are excluded from this frequency. | Practise a repeatable second-serve routine. |
 | Low first-serve percentage | Below 50% in over at least 30 tracked service points. | If second-serve points won are below 45% over at least 8 opportunities, try slightly less pace or familiar spin. Otherwise test a larger target and compare service-point results. Second-serve opportunities here include double faults. |
 | Weaker second serves in play | At least 8 first-serve points and 8 second serves in play; the second-serve win rate is at least 20 percentage points lower. | Review spin, placement and next-shot preparation. This comparison excludes double faults. |
 | Serve/return imbalance | At least 20 serving and 20 receiving points; receiving win rate is at least 25 percentage points lower. | Review returns and following rallies. The gap alone does not explain the cause. |

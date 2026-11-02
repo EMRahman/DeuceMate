@@ -123,6 +123,27 @@ for (const options of [
   assert.equal(rec(ordinaryPoints.concat(df)).length, 0, "do not infer a service break without recorded evidence");
 }
 
+// Tiebreak double faults must not be attributed to regular service games.
+function withTiebreakFaults(regularFaults) {
+  const points = [];
+  for (let game = 0; game < 12; game++) {
+    const server = game % 2 === 0 ? focal : other, hasFault = server === focal && game / 2 < regularFaults;
+    let serverScore = 0, returnerScore = 0;
+    for (let j = 0; j < (hasFault ? 5 : 4); j++) {
+      const fault = hasFault && j === 0;
+      points.push(point(points.length, {server, winner: fault ? other : server,
+        isSecondServe: fault, outcome: fault ? "doubleFault" : "winner",
+        gameScoreAtStart: {server: serverScore, returner: returnerScore, isTiebreak: false}}));
+      if (fault) returnerScore++; else serverScore++;
+    }
+  }
+  for (let j = 0; j < 3; j++) points.push(point(points.length, {winner: other, outcome: "doubleFault", isSecondServe: true,
+    gameScoreAtStart: {server: 0, returner: j, isTiebreak: true}}));
+  return points;
+}
+assert.ok(rec(withTiebreakFaults(0)).every(line => !line.includes("double faults in")));
+assert.ok(rec(withTiebreakFaults(3)).includes("3 double faults in 6 service games — practise a repeatable second-serve routine."));
+
 // Rule 4: normal-point win rate leads pressure-point rate by 100pp.
 const pressure = [];
 for (let i = 0; i < 15; i++) pressure.push(point(i, { gameScoreAtStart: { server: 0, returner: 0, isTiebreak: false } }));
@@ -193,7 +214,7 @@ for (const label of ["General errors", "set transition", "Double faults", "press
 for (const label of ["zone delta", "break-point HR", "late-match decline"]) {
   assert.ok(pulseSource.toLowerCase().includes(label.toLowerCase()), `Core should retain Pulse Coach rule ${label}`);
 }
-for (const threshold of ["cat.count >= 20", "cat.count >= 25", "lost.count >= 15", "firstLost.count >= 12", "secondLost.count >= 12", "count >= 3", "games >= 4", "big.count >= 8", "ordinary.count >= 15", "early.count >= 8", "later.count >= 8", "first.count >= 8", "second.count >= 8", "losses.count >= 10", "duration >= 1800", "serves.count >= 30", "inRate < 0.5"]) {
+for (const threshold of ["cat.count >= 20", "cat.count >= 25", "lost.count >= 15", "firstLost.count >= 12", "secondLost.count >= 12", "regularFaults >= 3", "games >= 4", "big.count >= 8", "ordinary.count >= 15", "early.count >= 8", "later.count >= 8", "first.count >= 8", "second.count >= 8", "losses.count >= 10", "duration >= 1800", "serves.count >= 30", "inRate < 0.5"]) {
   assert.ok(recSource.includes(threshold), `Core Rec Coach threshold should remain explicit: ${threshold}`);
 }
 for (const threshold of ["hrPoints.count >= 10", "e.total >= 5", "bps.count >= 4", "above.count >= 2", "lossRate >= 0.6", "hrPoints.count >= 20", "secondAvgHR - firstAvgHR >= 10"]) {

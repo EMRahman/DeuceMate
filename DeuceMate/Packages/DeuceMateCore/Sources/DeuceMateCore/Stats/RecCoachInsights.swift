@@ -99,10 +99,13 @@ public enum RecCoachInsights {
         let serving = cat.filter { $0.server == focal }
         guard covered(serving, within: scoped.filter { $0.server == focal }) else { return nil }
         let games = serviceGames(scoped, focal: focal)
-        guard count >= 3, games >= 4, Double(count) / Double(games) >= 0.5 else { return nil }
-        return Candidate(id: "doubleFaults", score: 18 + Double(min(count, 12)),
+        // Match the numerator to regular service games; tiebreak faults still
+        // belong in the total above, but cannot be attributed to those games.
+        let regularFaults = faults.filter { $0.gameScoreAtStart?.isTiebreak != true }.count
+        guard regularFaults >= 3, games >= 4, Double(regularFaults) / Double(games) >= 0.5 else { return nil }
+        return Candidate(id: "doubleFaults", score: 18 + Double(min(regularFaults, 12)),
                          topics: ["serveReliability", "errors"],
-                         line: "\(count) double faults in \(games) service games — practise a repeatable second-serve routine.")
+                         line: "\(regularFaults) double faults in \(games) service games — practise a repeatable second-serve routine.")
     }
 
     private static func serviceGames(_ stats: [PointStat], focal: Player) -> Int {

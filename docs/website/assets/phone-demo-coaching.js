@@ -77,7 +77,8 @@
         if(p.server===me && !(g&&g.isTiebreak) && (!previous||previous.server!==me||previous.setIndex!==p.setIndex||(g&&g.server===0&&g.returner===0))) games++;
         previous=p;
       });
-      if(faults.length>=3&&games>=4&&faults.length/games>=0.5) add("doubleFaults",18+Math.min(faults.length,12),["serveReliability","errors"],faults.length+" double faults in "+games+" service games — practise a repeatable second-serve routine.");
+      var regularFaults=count(faults,p=>!(p.gameScoreAtStart&&p.gameScoreAtStart.isTiebreak));
+      if(regularFaults>=3&&games>=4&&regularFaults/games>=0.5) add("doubleFaults",18+Math.min(regularFaults,12),["serveReliability","errors"],regularFaults+" double faults in "+games+" service games — practise a repeatable second-serve routine.");
     }
     var first=serves.filter(firstIn),second=serves.filter(p=>p.isSecondServe&&p.outcome!=="doubleFault");
     if(serveCoverage) {

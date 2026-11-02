@@ -50,6 +50,39 @@ final class RecCoachRedesignTests: XCTestCase {
         RecCoachInsights.generate(stats: points, focal: focal, setScope: scope, matchType: type)
     }
 
+    private func tiebreakFaults(regularFaults: Int) -> [PointStat] {
+        var points: [PointStat] = []
+        for game in 0..<12 {
+            let server: Player = game.isMultiple(of: 2) ? .me : .opponent
+            let hasFault = server == .me && game / 2 < regularFaults
+            var serverScore = 0, returnerScore = 0
+            for j in 0..<(hasFault ? 5 : 4) {
+                let fault = hasFault && j == 0
+                points.append(p(points.count, server: server,
+                                won: fault ? false : server == .me, second: fault,
+                                outcome: fault ? .doubleFault : .winner,
+                                score: GameScoreSnapshot(server: serverScore, returner: returnerScore, isTiebreak: false)))
+                if fault { returnerScore += 1 } else { serverScore += 1 }
+            }
+        }
+        for j in 0..<3 {
+            points.append(p(points.count, won: false, second: true, outcome: .doubleFault,
+                            score: GameScoreSnapshot(server: 0, returner: j, isTiebreak: true)))
+        }
+        return points
+    }
+
+    func test_tiebreakFaultsCannotTriggerRegularServiceGameFrequency() {
+        XCTAssertFalse(lines(tiebreakFaults(regularFaults: 0)).contains { $0.contains("double faults in") })
+    }
+
+    func test_frequencyReportsOnlyFaultsInRegularServiceGames() {
+        XCTAssertTrue(lines(tiebreakFaults(regularFaults: 3)).contains(
+            "3 double faults in 6 service games — practise a repeatable second-serve routine."
+        ))
+        XCTAssertFalse(lines(tiebreakFaults(regularFaults: 3)).contains { $0.contains("6 double faults in") })
+    }
+
     func test_firstServeUsesThirtyAttemptsAndSecondServeResults() {
         XCTAssertTrue(lines(lowFirst()).contains {
             $0.contains("45% (18/40)") && $0.contains("32% (7/22)") && $0.contains("less pace or a familiar spin")
@@ -193,7 +226,7 @@ final class RecCoachRedesignTests: XCTestCase {
             let setFilter: Int?
         }
         var fixtures: [Fixture] = []
-        let cases = [("first", lowFirst()), ("balance", balance()), ("return", returnErrors(.return)),
+        let cases = [("tiebreakOnlyFaults", tiebreakFaults(regularFaults: 0)), ("mixedFaults", tiebreakFaults(regularFaults: 3)), ("first", lowFirst()), ("balance", balance()), ("return", returnErrors(.return)),
                      ("rallyErrors", returnErrors(.rally)), ("effort", effort()),
                      ("steps", effort(health: "steps")), ("hr", effort(health: "hr")), ("faultEffort", effort(mode: "fault")), ("winEffort", effort(mode: "win")),
                      ("gap", effort(longGaps: true)), ("missing", effort(brokenScores: true))]
