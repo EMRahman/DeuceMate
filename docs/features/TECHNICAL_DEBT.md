@@ -59,7 +59,7 @@ when the item should constrain future changes.
 | [3](#3--replace-stringly-typed-settings-keys-with-typed-keys) | Settings | Replace stringly-typed settings keys with typed keys | Medium today; **high change risk** | Next engineering-risk cleanup after persistence containment | Large, splittable per setting category |
 | [20](#20--make-health-derived-field-classification-mechanically-exhaustive) | Health/Privacy | Make Health-derived field classification mechanically exhaustive | No current bug; **high privacy risk on expansion** | Before adding any Health-derived field or export surface | Medium design; small first guards |
 | [4a-write](#4a-write--surface-save-failures) | Persistence | Surface live-state and archive save failures | Medium impact; low likelihood | After, or alongside, read containment | Small–medium |
-| [26](#26--restore-match-info-swipe-protection-and-fix-failing-ui-tests) | Data loss / Tests | Restore Match Info swipe protection on iOS 27 and fix three failing UI tests | Medium; swiping down silently loses unsaved Match Info edits | Next Match Info change | Small |
+| [26](#26--match-info-swipe-down-and-player-name-save-gaps) | Data loss | Match Info swipe-down and player-name save gaps | Low; swipe discard is accepted, a failed name save may show no error | Next Match Info change | Small |
 | [23](#23--validate-manual-match-scores-and-explain-invalid-input) | Correctness | Validate manual match scores and explain invalid input | Medium; inconsistent records can be resumed on Watch | Next manual-entry fix, after persistence containment | Small–medium |
 | [22](#22--show-disconnected-live-scoring-and-command-send-failures) | Sync / UX | Show disconnected live scoring and command send failures | Medium; input feedback can imply an unsent point counted | Next live-input reliability fix | Small–medium |
 | [24](#24--add-accessible-watch-scoring-actions) | Accessibility | Add accessible Watch scoring actions | Core scoring has no named accessibility actions | Coordinate with walkthrough shared controls | Small–medium |
@@ -856,57 +856,35 @@ seam if needed to exercise failure/retry deterministically.
 
 ---
 
-### 26 — Restore Match Info swipe protection and fix failing UI tests
+### 26 — Match Info swipe-down and player-name save gaps
 
-**Classification:** Existing-feature data-loss bug, plus failing UI tests.
+**Classification:** Accepted behaviour, plus one small error-display gap.
 
-**Verified 2 November 2026** on commit `ea721de`, before the note and player
-autosave change, using Xcode 27.1 and an iPhone 18 Pro simulator on iOS 27.0.
-Screen recordings from the result bundles were checked for the first two tests.
+Three `MatchDetailsUITests` failed on `ea721de` (Xcode 27.1, iOS 27.0, also
+reproduced on iOS 26.3.1). They were resolved in `df4b1d1` by updating the tests
+to the intended behaviour, not by changing the app:
 
-| Test (`MatchDetailsUITests`) | What fails | Cause |
-|---|---|---|
-| `testDirtyMatchInfoSwipeShowsDiscardConfirmation` | "Keep Editing" is not found after swiping down | **App bug.** The sheet closes with no prompt and the unsaved edit is lost. Why `DraftDismissalProtection` no longer stops the swipe has not been diagnosed |
-| `testMatchInfoDirtyCancelCanKeepEditingOrDiscard` | "Keep Editing" is not found after tapping Cancel | iOS 27 shows the dialog as a popover and hides its `role: .cancel` button. Only Discard Changes is visible; tapping outside keeps editing |
-| `testTaggingAnInProgressMatchKeepsItInProgress` | `XCTAssertEqual` compares "Head-to-head records" with "Add opponent names in Match Info to see head-to-head records here." | **Likely a test bug,** from reading the code; no fix tried. `headerScoreLabel()` returns the first static text containing "-" or "–", which here is the Opponents section rather than the score |
+- **Swipe-down on a dirty Match Info sheet** closes it and discards the edit
+  with no prompt. Accepted: Match Info has explicit Save and Cancel buttons, so
+  `testDirtyMatchInfoSwipeDoesNotSaveTheEdit` only requires that a swipe never
+  saves the draft. `DraftDismissalProtection` no longer stops the swipe on
+  iOS 26+, and why has not been diagnosed.
+- **Cancel on a dirty draft** shows only Discard Changes, because iOS 26+ hides
+  a `role: .cancel` button in popover dialogs. Accepted: tapping outside keeps
+  editing, and the test does that.
+- **`testTaggingAnInProgressMatchKeepsItInProgress`** was a test bug. The match
+  header score now has the `match-header-score` accessibility identifier, which
+  `headerScoreLabel()` reads.
 
-**Not counted as failing:** `testLargeDynamicTypeEditorIsUsable` failed once, in
-`createMatch`, on an iPhone 17 simulator that had already run many tests. It
-then passed on a clean iPhone 18 Pro simulator, on both the old and new code.
-Watch it for flakiness.
+`testLargeDynamicTypeEditorIsUsable` failed once, in `createMatch`, on a heavily
+used simulator and then passed on a clean one. Watch it for flakiness.
 
-**Proposed scope:**
-
-1. Add `.interactiveDismissDisabled(hasChanges)` to `MatchInfoEditorView`, as
-   `MatchNotesEditorView` does for failing saves. This has not been tried on
-   Match Info. Then remove `DraftDismissalProtection` if nothing else uses it.
-2. Remove `role: .cancel` from Match Info's Keep Editing button, so both choices
-   are visible on iOS 26 and later. `MatchNotesEditorView` already does this.
-3. Update the two Match Info tests to the resulting behaviour. Swipe-down would
-   stay on the sheet rather than show a prompt, so that test's expectation
-   changes on purpose.
-4. Make `headerScoreLabel()` read the score from a stable accessibility
-   identifier rather than matching on a hyphen.
-
-**Related gap:** `PlayerManageView` saves a typed name on Back and stays open if
-that fails. If its parent closes it instead, such as Match Info being swiped away
-because of this bug, a failed save shows no error because the screen has gone.
-
-**Verification:**
-
-```bash
-xcodebuild test -project DeuceMate/DeuceMate.xcodeproj -scheme DeuceMate \
-  -destination "platform=iOS Simulator,name=iPhone 18 Pro,OS=27.0" \
-  -parallel-testing-enabled NO \
-  -only-testing:DeuceMateUITests/MatchDetailsUITests/testDirtyMatchInfoSwipeShowsDiscardConfirmation \
-  -only-testing:DeuceMateUITests/MatchDetailsUITests/testMatchInfoDirtyCancelCanKeepEditingOrDiscard \
-  -only-testing:DeuceMateUITests/MatchDetailsUITests/testTaggingAnInProgressMatchKeepsItInProgress
-```
-
-Also confirm by hand that an edited Match Info sheet cannot be swiped away.
+**Remaining gap:** `PlayerManageView` saves a typed name on Back and stays open
+if that fails. If its parent closes it instead, such as Match Info being swiped
+away, a failed save shows no error because the screen has gone.
 
 **Key files:** `MatchInfoEditorView.swift`, `DraftDismissalProtection.swift`,
-`MatchDetailsUITests.swift`.
+`PlayersSettingsView.swift`, `MatchDetailsUITests.swift`.
 
 ---
 
