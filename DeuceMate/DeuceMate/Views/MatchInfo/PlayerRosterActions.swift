@@ -1,6 +1,6 @@
-// PlayerRosterActions.swift — what the Players screen's Rename, Merge and
-// Forget buttons do (MATCH_TAGS_PLAN.md §5, §6.2), kept out of the view so
-// tests drive exactly the same path a tap does.
+// PlayerRosterActions.swift — what the Players screen's name and profile
+// autosaves and its Merge and Forget buttons do (MATCH_TAGS_PLAN.md §5, §6.2),
+// kept out of the view so tests drive exactly the same path the screen does.
 //
 // Every action is store-first: the `PhoneStatsStore` mutation must be durable
 // (archive AND, for Forget, the forgotten-player ledger on disk) before any

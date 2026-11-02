@@ -66,10 +66,12 @@ struct PlayerManageView: View {
     var onMerged: ((_ duplicateID: UUID, _ kept: TaggedPlayer) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var syncService: PhoneMatchSyncService
     @ObservedObject private var store: PhoneStatsStore = .shared
     @ObservedObject private var notesStore: MatchNotesStore = .shared
 
+    @FocusState private var isNameFocused: Bool
     @State private var newName = ""
     @State private var handednessDraft = ""
     @State private var backhandDraft = ""
@@ -113,29 +115,37 @@ struct PlayerManageView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        // A name still being typed is saved however the screen is left. The
+        // store ignores a player already merged away or forgotten.
+        .onDisappear { saveNameIfChanged() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { saveNameIfChanged() }
+        }
     }
 
     @ViewBuilder
     private func form(for entry: RosterEntry) -> some View {
-        let sanitized = MatchTags.sanitizedName(newName)
         Form {
             Section {
                 TextField("Name", text: $newName)
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled()
                     .accessibilityIdentifier("rename-player-field")
+                    .submitLabel(.done)
+                    .focused($isNameFocused)
+                    .onSubmit { saveNameIfChanged() }
+                    .onChange(of: isNameFocused) { _, focused in
+                        if !focused { saveNameIfChanged() }
+                    }
                     .onChange(of: newName) { _, value in
                         if value.count > MatchTags.maxNameLength {
                             newName = String(value.prefix(MatchTags.maxNameLength))
                         }
                     }
-                Button("Rename") { rename(to: sanitized) }
-                    .disabled(sanitized.isEmpty || sanitized == entry.name)
-                    .accessibilityIdentifier("rename-player")
             } header: {
                 Text("Name")
             } footer: {
-                Text("Renaming updates all \(PlayersSettingsView.matchCount(entry.matchCount)) with this player.")
+                Text("Saves automatically and updates all \(PlayersSettingsView.matchCount(entry.matchCount)) with this player.")
             }
 
             Section {
@@ -171,14 +181,10 @@ struct PlayerManageView: View {
                     }
                 }
                 .accessibilityIdentifier("player-play-style-picker")
-
-                Button("Save Details") { saveDetails() }
-                    .disabled(!detailsChanged(entry))
-                    .accessibilityIdentifier("save-player-details")
             } header: {
                 Text("Playing Style")
             } footer: {
-                Text("Optional tennis profile shown on the opponent detail screen and included in AI Coach match context.")
+                Text("Saves automatically. Optional tennis profile shown on the opponent detail screen and included in AI Coach match context.")
             }
 
             Section {
@@ -199,12 +205,13 @@ struct PlayerManageView: View {
         .onAppear {
             if newName.isEmpty { newName = entry.name }
             if !didInitializeDetailsDraft {
-                handednessDraft = entry.handednessRaw ?? ""
-                backhandDraft = entry.backhandRaw ?? ""
-                playStyleDraft = entry.playStyleRaw ?? ""
+                loadDetailsDraft(from: entry)
                 didInitializeDetailsDraft = true
             }
         }
+        .onChange(of: handednessDraft) { saveDetailsIfChanged() }
+        .onChange(of: backhandDraft) { saveDetailsIfChanged() }
+        .onChange(of: playStyleDraft) { saveDetailsIfChanged() }
         .sheet(isPresented: $showMergePicker) {
             mergePicker(for: entry)
         }
@@ -296,7 +303,16 @@ struct PlayerManageView: View {
             || (playStyleDraft.isEmpty ? nil : playStyleDraft) != entry.playStyleRaw
     }
 
-    private func saveDetails() {
+    private func loadDetailsDraft(from entry: RosterEntry) {
+        handednessDraft = entry.handednessRaw ?? ""
+        backhandDraft = entry.backhandRaw ?? ""
+        playStyleDraft = entry.playStyleRaw ?? ""
+    }
+
+    /// Autosaves a picked value. A failed save puts the pickers back to what is
+    /// stored, so the screen never shows a value that wasn't saved.
+    private func saveDetailsIfChanged() {
+        guard didInitializeDetailsDraft, let entry, detailsChanged(entry) else { return }
         do {
             try actions.updateDetails(
                 playerID,
@@ -306,12 +322,25 @@ struct PlayerManageView: View {
             )
         } catch {
             errorMessage = error.localizedDescription
+            loadDetailsDraft(from: entry)
         }
     }
 
-    private func rename(to name: String) {
+    /// Autosaves the name when editing ends rather than on each keystroke,
+    /// because a rename rewrites every match with this player and notifies the
+    /// watch. A blank name isn't a rename, so the field returns to the current
+    /// one. A failed save keeps the typed text and retries when editing next ends.
+    private func saveNameIfChanged() {
+        guard let entry else { return }
+        let sanitized = MatchTags.sanitizedName(newName)
+        guard !sanitized.isEmpty else {
+            newName = entry.name
+            return
+        }
+        guard sanitized != entry.name else { return }
         do {
-            try actions.rename(playerID, to: name)
+            try actions.rename(playerID, to: sanitized)
+            newName = sanitized
         } catch {
             errorMessage = error.localizedDescription
         }
