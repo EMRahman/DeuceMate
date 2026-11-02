@@ -273,7 +273,7 @@ struct MatchDetailView: View {
     }
 
     /// Coaching Insights are generated from the whole match plus the selected
-    /// set scope so cross-set fatigue rules can still compare against the
+    /// set scope so set-change rules can still compare against the
     /// preceding set when a single set is chosen.
     private var coachSetScope: RecCoachInsights.SetScope {
         switch setFilter {
@@ -287,7 +287,8 @@ struct MatchDetailView: View {
             stats: record.stats,
             focal: .me,
             setElapsedSeconds: record.setElapsedSeconds,
-            setScope: coachSetScope
+            setScope: coachSetScope,
+            matchType: record.matchType
         )
     }
 

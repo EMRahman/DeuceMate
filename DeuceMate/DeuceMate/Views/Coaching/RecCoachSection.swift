@@ -1,4 +1,4 @@
-// RecCoachSection.swift — HR-independent coaching insights surfaced in
+// RecCoachSection.swift — compact ranked coaching insights surfaced in
 // MatchDetailView for recreational players. Sits immediately above the
 // PulseCoach section so both coaching panels group together just below
 // Duration. The insights are set-scoped: the caller regenerates them when the
@@ -37,7 +37,7 @@ struct RecCoachSection: View {
                             Image(systemName: "figure.tennis")
                                 .foregroundStyle(.tint)
                                 .font(.footnote)
-                            Text(line)
+                            insightText(line)
                                 .font(.subheadline)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -56,5 +56,10 @@ struct RecCoachSection: View {
                 .padding(.vertical, 2)
             }
         }
+    }
+
+    private func insightText(_ line: String) -> Text {
+        guard let separator = line.range(of: " — ") else { return Text(line) }
+        return Text("\(Text(String(line[..<separator.lowerBound])).bold())\(Text(String(line[separator.lowerBound...])))")
     }
 }
