@@ -97,6 +97,7 @@ struct MatchHistoryView: View {
                            matchIsComplete: !record.isInProgress,
                            tagsLine: record.tags?.displayLine,
                            resumableRecord: record.isInProgress ? record : nil,
+                           completedRecord: record.isInProgress ? nil : record,
                            setElapsedSeconds: record.setElapsedSeconds,
                            currentSetSessionStart: nil,
                            totalSteps: record.totalSteps,

@@ -429,7 +429,7 @@ struct DeuceMate_Watch_AppTests {
 
     /// In-memory mock so tests don't write to the real Documents directory
     /// (and don't pollute one another).
-    private final class MockStatsStore: WatchStatsStoring {
+    final class MockStatsStore: WatchStatsStoring {
         private(set) var records: [MatchRecord] = []
         var appendCallCount = 0
         var removeCallCount = 0
@@ -446,6 +446,20 @@ struct DeuceMate_Watch_AppTests {
             guard let index = records.firstIndex(where: { $0.id == id }) else { return nil }
             records[index] = records[index].mergingTags(tags)
             return records[index]
+        }
+        func convertStoredMatchType(id: UUID, to matchType: MatchType, at date: Date) -> [MatchRecord]? {
+            guard let index = records.firstIndex(where: { $0.id == id }),
+                  !records[index].isInProgress,
+                  records[index].matchType != matchType else { return nil }
+            records[index] = records[index].convertingMatchType(to: matchType, at: date)
+            return records
+        }
+        func updateMatchType(id: UUID, revision: MatchTypeRevision) -> MatchRecord? {
+            guard let index = records.firstIndex(where: { $0.id == id }),
+                  !records[index].isInProgress else { return nil }
+            let updated = records[index].mergingMatchTypeRevision(revision)
+            records[index] = updated
+            return updated
         }
         func appendMatch(_ record: MatchRecord) {
             appendCallCount += 1

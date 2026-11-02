@@ -295,6 +295,15 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
                         NotificationCenter.default.post(name: .watchMatchHistoryDidChange, object: nil)
                     }
                 }
+            case .matchTypeUpdate(let id, let revision):
+                // Metadata only on completed records the watch already holds; never
+                // creates a record or touches a live/in-progress match.
+                let saved = StatsStore.shared.updateMatchType(id: id, revision: revision)
+                if saved != nil {
+                    DispatchQueue.main.async {
+                        NotificationCenter.default.post(name: .watchMatchHistoryDidChange, object: nil)
+                    }
+                }
             case .decodeError(let key, let error):
                 logger.error("decode error for \(key, privacy: .public): \(error.localizedDescription, privacy: .public)")
             default:
