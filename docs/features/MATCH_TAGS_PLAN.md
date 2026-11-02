@@ -210,8 +210,7 @@ the automatic iCloud snapshot, the HTML model or an AI prompt implicitly.
   blocked while any text is unsaved, and if a save fails Done offers Keep Editing
   or Discard Changes. The input fills the available height, with its character
   count directly below it and Delete Note at the bottom above the keyboard.
-  Keep the short storage summary visible; Privacy and storage opens the longer
-  explanation. Tag edits and notes edits persist independently.
+  Privacy and storage opens the storage and backup explanation. Tag edits and notes edits persist independently.
 - A watch refresh, tag change, match completion, health backfill, or ordinary
   archive import must preserve existing notes for the same UUID. Permanent
   match deletion removes its notes. Replacing an archive requires an explicit
@@ -225,7 +224,7 @@ the automatic iCloud snapshot, the HTML model or an AI prompt implicitly.
   own revision order. Import preview states notes counts and merge/replace
   effects, and restores them only to the backup-excluded sidecar.
 - Notes do not return automatically after reinstall or migration. State this
-  below the editor: "Stored on this iPhone. Not backed up automatically."
+  in the Privacy and storage explanation: "Stored on this iPhone. Not backed up automatically."
   Offer the deliberate manual export route without promising cloud recovery.
 
 ## 5. The roster — "selectable in the future"
