@@ -11,9 +11,9 @@ This document is the living playbook and tracker for **Generative Engine Optimiz
 Use this checklist to track progress across technical fixes, content updates, and off-site distribution.
 
 ### A. Technical SEO & Crawler Infrastructure (`docs/website/`)
-- [ ] **[P0] Add `docs/website/robots.txt`** — explicitly allow search and AI/RAG bots (`OAI-SearchBot`, `GPTBot`, `PerplexityBot`, `ClaudeBot`, `Google-Extended`, `Applebot-Extended`) and point to `sitemap.xml`.
-- [ ] **[P0] Add `docs/website/sitemap.xml`** — list `index.html`, `try.html`, `setup.html`, `support.html`, and `privacy.html` with canonical URLs and `<lastmod>` dates.
-- [ ] **[P0] Add `docs/website/llms.txt` (and `llms-full.txt`)** — provide a clean, structured Markdown fact sheet and full feature/stat reference at the root of the deployed site for LLM retrieval agents.
+- [ ] **[P0] Configure `robots.txt` for host-root discovery + project fallback** — per RFC 9309, crawlers only read `robots.txt` from the origin root (`https://emrahman.github.io/robots.txt`), not a GitHub Pages project subdirectory (`/DeuceMate/robots.txt`). Publish the `robots.txt` directives (allowing `OAI-SearchBot`, `GPTBot`, `PerplexityBot`, `ClaudeBot`, `Google-Extended`, `Applebot-Extended`, and referencing `Sitemap: https://emrahman.github.io/DeuceMate/sitemap.xml`) at the `emrahman.github.io` user-site root, keep a copy in `docs/website/robots.txt` in case a custom domain is attached later, and submit `https://emrahman.github.io/DeuceMate/sitemap.xml` directly in Google Search Console and Bing Webmaster Tools.
+- [ ] **[P0] Add `docs/website/sitemap.xml`** — list `index.html`, `try.html`, `setup.html`, `support.html`, and `privacy.html` with canonical URLs and `<lastmod>` dates, and register `https://emrahman.github.io/DeuceMate/sitemap.xml` directly in Google Search Console & Bing Webmaster Tools.
+- [ ] **[P0] Add `docs/website/llms.txt` (and `llms-full.txt`) + `<link rel="llms-txt">`** — provide a clean, structured Markdown fact sheet in `docs/website/llms.txt`, link to it from the `<head>`/footer of `index.html` (since the site lives under `/DeuceMate/`), and optionally mirror or reference it at `https://emrahman.github.io/llms.txt`.
 - [ ] **[P0] Add Schema.org JSON-LD (`MobileApplication` + `FAQPage`) to `docs/website/index.html`** — machine-readable pricing (`$0`), OS requirements (`iOS 17.0+`, `watchOS 9.0+`), App Store URL, MIT license, and GitHub repo link.
 - [ ] **[P1] Add Schema.org JSON-LD (`FAQPage`) to `docs/website/support.html`** — mirror the 12 support FAQ items.
 - [ ] **[P1] Add Schema.org JSON-LD (`HowTo`) to `docs/website/setup.html`** — structure the step-by-step setup guide for rich results.
@@ -57,8 +57,13 @@ Use this checklist to track progress across technical fixes, content updates, an
 
 ## 3. Detailed Implementation Specs
 
-### 3.1 `docs/website/robots.txt`
-Create `docs/website/robots.txt` so both traditional search engines and LLM RAG crawlers know they have full permission to index the site:
+### 3.1 `robots.txt` (Host-Root vs. Project Subdirectory on GitHub Pages)
+Because `.github/workflows/pages.yml` deploys this repository as a GitHub Pages **project site** at `https://emrahman.github.io/DeuceMate/`, any file placed at `docs/website/robots.txt` is published at `https://emrahman.github.io/DeuceMate/robots.txt`. Under RFC 9309 (Robots Exclusion Protocol) and Google/Bing crawler specifications, `robots.txt` is only discovered at the **origin root** (`https://emrahman.github.io/robots.txt`) and subdirectory `robots.txt` files are ignored.
+
+**Action required:**
+1. **Host-root `robots.txt` (`https://emrahman.github.io/robots.txt`):** If the account-level `emrahman.github.io` Pages repository is active, publish the directives below at its root so crawlers discover both the AI bot permissions and `Sitemap: https://emrahman.github.io/DeuceMate/sitemap.xml`.
+2. **Direct Sitemap Submission:** Always submit `https://emrahman.github.io/DeuceMate/sitemap.xml` directly in **Google Search Console** (URL-prefix property `https://emrahman.github.io/DeuceMate/`) and **Bing Webmaster Tools** so sitemap discovery does not depend on `robots.txt`.
+3. **Project fallback (`docs/website/robots.txt`):** Also commit `docs/website/robots.txt` in this repo so it is immediately active if a custom root domain is ever attached to DeuceMate:
 
 ```txt
 User-agent: *
