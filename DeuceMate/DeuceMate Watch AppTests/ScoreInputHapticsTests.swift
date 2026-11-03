@@ -35,6 +35,24 @@ struct ScoreInputHapticsTests {
         #expect(ScoreInputHaptics.enabledKey == "swipeHapticsEnabled")
     }
 
+    @Test func settingKeyMatchesTheSyncWireKey() {
+        // One string for UserDefaults and the wire, so a phone toggle lands on
+        // the value the watch's @AppStorage reads.
+        #expect(ScoreInputHaptics.enabledKey == MatchSyncKey.swipeHapticsEnabled)
+    }
+
+    @Test func incomingPhoneValueIsPersistedUnderTheSettingKey() throws {
+        let suiteName = "scoreinputhaptics-incoming-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
+
+        #expect(defaults.object(forKey: ScoreInputHaptics.enabledKey) == nil)
+        ScoreInputHaptics.storeIncoming(true, defaults: defaults)
+        #expect(defaults.bool(forKey: ScoreInputHaptics.enabledKey) == true)
+        ScoreInputHaptics.storeIncoming(false, defaults: defaults)
+        #expect(defaults.bool(forKey: ScoreInputHaptics.enabledKey) == false)
+    }
+
     @Test func disabledSettingPlaysNothing() {
         for action in [ScoreInputAction.win, .lose, .undo, .stats] {
             #expect(played(action, isEnabled: false).isEmpty)

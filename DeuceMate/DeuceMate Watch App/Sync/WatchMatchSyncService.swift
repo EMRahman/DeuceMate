@@ -130,6 +130,11 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
         )
     }
 
+    /// Push the swipe-vibration toggle to the phone (bidirectional, last-write wins).
+    func pushSwipeHapticsEnabled(_ enabled: Bool) {
+        transport.sendControl([MatchSyncKey.swipeHapticsEnabled: enabled], queueOnFailure: true)
+    }
+
     func pushSharedAnnouncements(_ enabled: Bool) {
         transport.sendControl([MatchSyncKey.announcementsEnabled: enabled], queueOnFailure: true)
     }
@@ -248,6 +253,10 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
                 break
             case .checkChangeover(let v):
                 DispatchQueue.main.async { self.onChangeoverReceived?(v) }
+            case .swipeHapticsEnabled(let v):
+                // Written straight to UserDefaults: the views read it with
+                // @AppStorage, so they redraw, and no setter runs to echo it back.
+                DispatchQueue.main.async { ScoreInputHaptics.storeIncoming(v) }
             case .announcementsEnabled(let v):
                 DispatchQueue.main.async { self.onAnnouncementsReceived?(v) }
             case .iPhoneInputEnabled(let v):

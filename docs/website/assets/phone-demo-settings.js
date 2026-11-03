@@ -7,6 +7,7 @@
   var COPY = {
     track: "After each point, tag the winner and shot to build detailed stats.",
     compass: "Uses the watch compass to confirm your court end at changeovers.",
+    swipeVibration: "Taps your wrist when a swipe scores or undoes a point.",
     theme: "Sets the scoreboard color theme on both your iPhone and watch.",
     announce: "Speaks the score aloud through your iPhone speaker.",
     input: "Lets you swipe to score on the iPhone scoreboard.",
@@ -101,7 +102,8 @@
     var out = node("div", { class: "phone-settings" });
     out.appendChild(section("Apple Watch", [
       toggle("Track point outcome", COPY.track, s.track, function (v) { setRow(phone, "track", v); }),
-      toggle("Changeover Compass · Experimental", COPY.compass, s.compass, function (v) { setRow(phone, "compass", v); })
+      toggle("Changeover Compass · Experimental", COPY.compass, s.compass, function (v) { setRow(phone, "compass", v); }),
+      toggle("Swipe vibration", COPY.swipeVibration, s.swipeVibration, function (v) { setRow(phone, "swipeVibration", v); })
     ], "These settings apply to your Apple Watch. Changes on either device are synced in this demo; the last update wins."));
 
     var skins = node("div", { class: "phone-theme-grid", role: "group", "aria-label": "Theme" });

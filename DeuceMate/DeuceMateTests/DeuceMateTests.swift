@@ -129,6 +129,47 @@ struct DeuceMateTests {
     }
 
     @MainActor
+    @Test func swipeVibrationToggleIsPushedToTheWatchUnderItsWireKey() throws {
+        let session = FakePhoneSyncSession()
+        session.isActivated = true
+        let service = PhoneMatchSyncService(
+            isSessionSupported: { true },
+            activateSession: { _ in },
+            scheduleAfter: { _, _ in },
+            transport: MatchSyncTransport(session: session)
+        )
+
+        service.pushSwipeHapticsEnabled(true)
+
+        let message = try #require(session.sentMessages.first)
+        #expect(session.sentMessages.count == 1)
+        #expect(message[MatchSyncKey.swipeHapticsEnabled] as? Bool == true)
+    }
+
+    @MainActor
+    @Test func incomingSwipeVibrationIsStoredUnderTheSettingKey() async {
+        let key = MatchSyncKey.swipeHapticsEnabled
+        let previous = UserDefaults.standard.object(forKey: key)
+        defer {
+            if let previous { UserDefaults.standard.set(previous, forKey: key) }
+            else { UserDefaults.standard.removeObject(forKey: key) }
+        }
+        let service = PhoneMatchSyncService(
+            isSessionSupported: { true },
+            activateSession: { _ in },
+            scheduleAfter: { _, _ in }
+        )
+
+        service.handle([.swipeHapticsEnabled(true)])
+        await drainMainQueue()
+        #expect(UserDefaults.standard.bool(forKey: key) == true)
+
+        service.handle([.swipeHapticsEnabled(false)])
+        await drainMainQueue()
+        #expect(UserDefaults.standard.bool(forKey: key) == false)
+    }
+
+    @MainActor
     @Test func watchInstallationStateCanRefreshAfterActivation() {
         let service = PhoneMatchSyncService(
             isSessionSupported: { true },
