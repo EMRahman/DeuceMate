@@ -230,4 +230,21 @@ final class MatchTrendSampleTests: XCTestCase {
         XCTAssertTrue(s.rallyDepth.isEmpty)
         XCTAssertEqual(s.pointsWithEndingShot, 0)
     }
+
+    // MARK: - Match details carried for filtering
+
+    func test_sample_carriesCompetitionTypeAndOpponentIDs() {
+        let opp = TaggedPlayer(id: UUID(), name: "Alex")
+        var record = makeRecord(points: makeEligiblePoints())
+        record.tags = MatchTags(opponents: [opp], competitionType: .league, updatedAt: Date())
+        let sample = MatchTrendSample(record: record)
+        XCTAssertEqual(sample?.competitionTypeRaw, "league")
+        XCTAssertEqual(sample?.opponentIDs, [opp.id])
+    }
+
+    func test_sample_untaggedHasNoCompetitionOrOpponents() {
+        let sample = MatchTrendSample(record: makeRecord(points: makeEligiblePoints()))
+        XCTAssertNil(sample?.competitionTypeRaw)
+        XCTAssertTrue(sample?.opponentIDs.isEmpty ?? false)
+    }
 }

@@ -81,7 +81,7 @@ struct TrendsSection: View {
             if let needed = matchesNeeded {
                 if reachableViaInProgress {
                     NavigationLink {
-                        TrendsView(samples: samplesCache.samples)
+                        TrendsView(samples: samplesCache.samples, opponents: samplesCache.opponents)
                     } label: {
                         thinDataLabel(needed: needed)
                     }
@@ -96,7 +96,7 @@ struct TrendsSection: View {
                 // disclosure hint automatically for a NavigationLink row in
                 // a List, the same one the old text-only row already had.
                 NavigationLink {
-                    TrendsView(samples: samplesCache.samples)
+                    TrendsView(samples: samplesCache.samples, opponents: samplesCache.opponents)
                 } label: {
                     VStack(spacing: 6) {
                         ForEach(headline) { series in

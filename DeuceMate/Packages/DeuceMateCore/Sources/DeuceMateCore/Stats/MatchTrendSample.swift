@@ -34,6 +34,12 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     /// might still change should check this rather than inferring it from
     /// `recorderWon == nil` (which a completed draw also produces).
     public let isInProgress: Bool
+    /// `MatchTags.competitionTypeRaw` at build time. The raw string (not
+    /// `CompetitionType`) so a future/unknown case stays "tagged, but not
+    /// filterable" rather than being mistaken for untagged. `nil` = no info.
+    public let competitionTypeRaw: String?
+    /// Ids of the tagged opponents (never names). Empty = untagged.
+    public let opponentIDs: Set<UUID>
 
     // MARK: - Volume
 
@@ -195,7 +201,9 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         rallyDepthOnServe: [EndingShot: DepthCount] = [:],
         rallyDepthOnReturn: [EndingShot: DepthCount] = [:],
         pointsWithEndingShotOnServe: Int = 0, pointsWithEndingShotOnReturn: Int = 0,
-        setSlices: [SetSlice] = []
+        setSlices: [SetSlice] = [],
+        competitionTypeRaw: String? = nil,
+        opponentIDs: Set<UUID> = []
     ) {
         self.matchID = matchID
         self.startTime = startTime
@@ -242,6 +250,8 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         self.pointsWithEndingShotOnServe = pointsWithEndingShotOnServe
         self.pointsWithEndingShotOnReturn = pointsWithEndingShotOnReturn
         self.setSlices = setSlices
+        self.competitionTypeRaw = competitionTypeRaw
+        self.opponentIDs = opponentIDs
     }
 
     /// `nil` when the match is ineligible (§3.5): a format that disables
@@ -308,7 +318,9 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
             rallyDepthOnServe: serveDepth, rallyDepthOnReturn: returnDepth,
             pointsWithEndingShotOnServe: summary.rallyDepthOnServe.reduce(0) { $0 + $1.total },
             pointsWithEndingShotOnReturn: summary.rallyDepthOnReturn.reduce(0) { $0 + $1.total },
-            setSlices: Self.setSlices(record: record, summary: summary)
+            setSlices: Self.setSlices(record: record, summary: summary),
+            competitionTypeRaw: record.tags?.competitionTypeRaw,
+            opponentIDs: Set(record.tags?.opponents.map(\.id) ?? [])
         )
     }
 

@@ -11,6 +11,8 @@ struct TrendsView: View {
     /// Already-eligible samples for the whole archive (computed once by
     /// TrendsSection's TrendsSamples cache) — this view only filters/windows.
     let samples: [MatchTrendSample]
+    /// Opponents available to the player filter (TrendsSamples.opponents).
+    let opponents: [RosterEntry]
 
     // Phone-local UI state, not synced (no MatchSyncKey, no wire key — see
     // CLAUDE.md §0's settings-key exception list, which these four keys
@@ -18,6 +20,10 @@ struct TrendsView: View {
     @AppStorage("trendsWindow") private var windowRaw: String = "last10"
     @AppStorage("trendsMatchType") private var matchTypeRaw: String = "all"
     @AppStorage("trendsMatchFormat") private var matchFormatRaw: String = "all"
+    /// `CompetitionType` raw value, or "all".
+    @AppStorage("trendsCompetitionType") private var competitionRaw: String = "all"
+    /// Opponent UUID string, or "all".
+    @AppStorage("trendsOpponentID") private var opponentRaw: String = "all"
     /// Off by default — completed matches only. On blends the in-progress
     /// match's data into every chart alongside completed ones (an
     /// inclusion switch, not a dataset swap — see TrendFilter.includeInProgress).
@@ -37,6 +43,14 @@ struct TrendsView: View {
     /// neither enum has an "all" case.
     private var matchType: MatchType? { MatchType(rawValue: matchTypeRaw) }
     private var matchFormat: MatchFormat? { MatchFormat(rawValue: matchFormatRaw) }
+    private var competitionType: CompetitionType? { CompetitionType(rawValue: competitionRaw) }
+    /// A remembered opponent who has since been forgotten or removed falls
+    /// back to "all" — otherwise the screen would be empty with no visible
+    /// reason (the menu could only show a name it no longer has).
+    private var selectedOpponent: RosterEntry? {
+        guard let id = UUID(uuidString: opponentRaw) else { return nil }
+        return opponents.first { $0.id == id }
+    }
 
     /// `.perpetualPoints` is omitted from the format menu (below) since it
     /// can never contribute a sample (§3.5) — offering it would be a filter
@@ -58,7 +72,8 @@ struct TrendsView: View {
     private var scopedSamples: [MatchTrendSample] {
         PerformanceTrends.scoped(
             samples,
-            filter: TrendFilter(matchType: matchType, matchFormat: matchFormat, includeInProgress: includeInProgress),
+            filter: TrendFilter(matchType: matchType, matchFormat: matchFormat, includeInProgress: includeInProgress,
+                              competitionType: competitionType, opponentID: selectedOpponent?.id),
             window: window
         )
     }
@@ -123,6 +138,11 @@ struct TrendsView: View {
                     typePicker
                     Spacer()
                     formatMenu
+                }
+                HStack {
+                    competitionMenu
+                    Spacer()
+                    if !opponents.isEmpty { opponentMenu }
                 }
                 Toggle("Include In-Progress Matches", isOn: $includeInProgress)
                 Picker("Display", selection: $displayMode) {
@@ -219,6 +239,30 @@ struct TrendsView: View {
             }
         } label: {
             Label(matchFormat.map(formatDisplayName) ?? "All Formats", systemImage: "line.3.horizontal.decrease.circle")
+                .font(.subheadline)
+        }
+    }
+
+    private var competitionMenu: some View {
+        Menu {
+            Button("All Match Types") { competitionRaw = "all" }
+            ForEach(CompetitionType.allCases) { type in
+                Button(type.displayLabel) { competitionRaw = type.rawValue }
+            }
+        } label: {
+            Label(competitionType?.displayLabel ?? "All Match Types", systemImage: "trophy")
+                .font(.subheadline)
+        }
+    }
+
+    private var opponentMenu: some View {
+        Menu {
+            Button("All Opponents") { opponentRaw = "all" }
+            ForEach(opponents) { entry in
+                Button(entry.name) { opponentRaw = entry.id.uuidString }
+            }
+        } label: {
+            Label(selectedOpponent.map { "vs \($0.name)" } ?? "All Opponents", systemImage: "person.2")
                 .font(.subheadline)
         }
     }
