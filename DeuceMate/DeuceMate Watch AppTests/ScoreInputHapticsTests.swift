@@ -21,12 +21,9 @@ struct ScoreInputHapticsTests {
         return haptics
     }
 
-    private func makeViewModel() -> ScoreViewModel {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("scoreinputhaptics-\(UUID().uuidString).json")
-        let viewModel = ScoreViewModel(statsStore: StatsStore(fileURL: url))
-        viewModel.currentServer = .me
-        return viewModel
+    private func makeTempURL(_ prefix: String) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString).json")
     }
 
     @Test func settingIsOffByDefault() {
@@ -54,8 +51,24 @@ struct ScoreInputHapticsTests {
         #expect(played(.stats, isEnabled: true).isEmpty)
     }
 
-    @Test func undoReportsWhetherAPointWasReversed() {
-        let viewModel = makeViewModel()
+    @Test func undoReportsWhetherAPointWasReversed() throws {
+        let storeURL = makeTempURL("scoreinputhaptics-store")
+        let stateURL = makeTempURL("scoreinputhaptics-state")
+        let suiteName = "scoreinputhaptics-defaults-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer {
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: stateURL)
+            UserDefaults.standard.removePersistentDomain(forName: suiteName)
+        }
+
+        let viewModel = ScoreViewModel(
+            statsStore: StatsStore(fileURL: storeURL),
+            stateFileURL: stateURL,
+            userDefaults: defaults
+        )
+        viewModel.currentServer = .me
+
         #expect(viewModel.undo() == false)
 
         viewModel.winPoint(player: .me)

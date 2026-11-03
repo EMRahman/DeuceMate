@@ -183,7 +183,8 @@ failures, preserved bytes, and success-only sync through the real store.
 Watch tests: `DeuceMate Watch AppTests/` — includes `WalkthroughWatchTests`
 for launch/restore eligibility, local flags, production isolation and stale callbacks. `DeuceMate_Watch_AppTests.swift` (~1.3k lines, 45 tests) holds the
 high-level `ScoreViewModel` scenarios; `StatsStoreTests`,
-`MatchSetupDefaultsWatchTests` and `TrackingStatusWatchTests` cover the rest.
+`MatchSetupDefaultsWatchTests`, `TrackingStatusWatchTests`, `MatchTagsWatchTests`,
+`MatchTypeWatchTests` and `ScoreInputHapticsTests` cover the rest.
 All need `import DeuceMateCore` (see §0).
 
 **iPhone app — `DeuceMate/`:**
