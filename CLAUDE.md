@@ -331,14 +331,15 @@ decision — including one already closed in the archive.
 
 App Store working docs live in `docs/release/` — `APP_STORE_METADATA.md` (store
 copy, App Review notes) and `SUBMISSION_REVIEW.md` (pre-flight review, blockers,
-device evidence). Security reviews live in `docs/security/`.
+device evidence). Security reviews live in `docs/security/`. Marketing, SEO, and
+GEO plans/trackers live in `docs/marketing/`.
 
 ⚠️ **`docs/website/` — and only `docs/website/` — is the published GitHub Pages
 site.** It serves the App Store Marketing, Support, and Privacy URLs, so those
 URLs must not move. `.github/workflows/pages.yml` uploads that one folder as the
 Pages artifact; its `path:` **is** the publishing boundary. Everything else under
-`docs/` (architecture, audits, features, release, security, USER_GUIDE, the
-screenshot capture guide, app-store-screenshots) is unreachable by URL, with no
+`docs/` (architecture, audits, features, marketing, release, security, USER_GUIDE,
+the screenshot capture guide, app-store-screenshots) is unreachable by URL, with no
 exclude list to maintain.
 
 Practical consequences:
