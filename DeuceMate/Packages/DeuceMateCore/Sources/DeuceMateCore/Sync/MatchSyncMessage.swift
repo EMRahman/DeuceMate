@@ -55,6 +55,10 @@ public enum MatchSyncKey {
     public static let workoutSessionEnabled = "workoutSessionEnabled"
     /// Phone → watch changeover compass switch (Bool).
     public static let checkChangeover = "checkChangeover"
+    /// Swipe-vibration switch (Bool) — the wrist tap confirming an applied swipe.
+    /// Only the watch vibrates, but the iPhone can flip it, so it travels both ways
+    /// (last write wins). The wire key equals the `UserDefaults` key on both devices.
+    public static let swipeHapticsEnabled = "swipeHapticsEnabled"
 
     // MARK: - Shared settings (bidirectional, last-write wins)
     /// Whether scores should be announced aloud through the iPhone speaker; synced bidirectionally.

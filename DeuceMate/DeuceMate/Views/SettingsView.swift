@@ -112,6 +112,7 @@ struct SettingsView: View {
     // Watch-only settings (phone controls watch)
     @AppStorage("statsTrackingEnabled") private var statsTrackingEnabled: Bool = false
     @AppStorage("checkChangeover") private var checkChangeover: Bool = false
+    @AppStorage("swipeHapticsEnabled") private var swipeHapticsEnabled: Bool = false
 
     private enum PingStatus: Equatable {
         case inFlight
@@ -271,6 +272,15 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            }
+            Toggle(isOn: Binding(
+                get: { swipeHapticsEnabled },
+                set: { newValue in
+                    swipeHapticsEnabled = newValue
+                    syncService.pushSwipeHapticsEnabled(newValue)
+                }
+            )) {
+                settingLabel("Swipe vibration", .swipeVibration)
             }
         } header: {
             Text("Apple Watch")

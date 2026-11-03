@@ -594,7 +594,13 @@ struct HomeView: View {
                         }
                     }
                     .toggleStyle(.switch)
-                    Toggle(isOn: $swipeHapticsEnabled) {
+                    Toggle(isOn: Binding(
+                        get: { swipeHapticsEnabled },
+                        set: { newValue in
+                            swipeHapticsEnabled = newValue
+                            WatchMatchSyncService.shared.pushSwipeHapticsEnabled(newValue)
+                        }
+                    )) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Swipe vibration")
                             Text(SettingsCopy.swipeVibration.text)

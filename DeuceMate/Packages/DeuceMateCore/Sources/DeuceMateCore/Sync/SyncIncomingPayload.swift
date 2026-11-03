@@ -30,6 +30,7 @@ public enum SyncIncomingEvent: Equatable {
     case statsTrackingEnabled(Bool)
     case workoutSessionEnabled(Bool)
     case checkChangeover(Bool)
+    case swipeHapticsEnabled(Bool)
     // Shared settings (bidirectional)
     case announcementsEnabled(Bool)
     /// "iPhone Input" toggle, bidirectional.
@@ -89,6 +90,7 @@ extension SyncIncomingEvent {
         case (.statsTrackingEnabled(let a), .statsTrackingEnabled(let b)): return a == b
         case (.workoutSessionEnabled(let a), .workoutSessionEnabled(let b)): return a == b
         case (.checkChangeover(let a), .checkChangeover(let b)): return a == b
+        case (.swipeHapticsEnabled(let a), .swipeHapticsEnabled(let b)): return a == b
         case (.announcementsEnabled(let a), .announcementsEnabled(let b)): return a == b
         case (.iPhoneInputEnabled(let a), .iPhoneInputEnabled(let b)): return a == b
         case (.playerName(let a), .playerName(let b)): return a == b
@@ -191,6 +193,7 @@ public enum SyncIncomingPayload {
         if let v = payload[MatchSyncKey.statsTrackingEnabled] as? Bool { events.append(.statsTrackingEnabled(v)) }
         if let v = payload[MatchSyncKey.workoutSessionEnabled] as? Bool { events.append(.workoutSessionEnabled(v)) }
         if let v = payload[MatchSyncKey.checkChangeover] as? Bool { events.append(.checkChangeover(v)) }
+        if let v = payload[MatchSyncKey.swipeHapticsEnabled] as? Bool { events.append(.swipeHapticsEnabled(v)) }
         if let v = payload[MatchSyncKey.announcementsEnabled] as? Bool { events.append(.announcementsEnabled(v)) }
         if let v = payload[MatchSyncKey.iPhoneInputEnabled] as? Bool { events.append(.iPhoneInputEnabled(v)) }
         if let v = payload[MatchSyncKey.playerName] as? String {

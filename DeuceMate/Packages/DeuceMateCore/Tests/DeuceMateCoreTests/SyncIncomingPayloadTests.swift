@@ -41,6 +41,26 @@ final class SyncIncomingPayloadTests: XCTestCase {
         XCTAssertEqual(events, [.iPhoneInputEnabled(true)])
     }
 
+    func test_decode_swipeHapticsEnabled() {
+        XCTAssertEqual(
+            SyncIncomingPayload.decode([MatchSyncKey.swipeHapticsEnabled: true]),
+            [.swipeHapticsEnabled(true)])
+        XCTAssertEqual(
+            SyncIncomingPayload.decode([MatchSyncKey.swipeHapticsEnabled: false]),
+            [.swipeHapticsEnabled(false)])
+    }
+
+    func test_swipeHapticsEnabled_wireKeyIsPinnedAndEqualsTheLocalDefaultsKey() {
+        // The watch and phone persist this setting under the SAME string, so a
+        // rename here would silently reset the stored choice (CLAUDE.md §5 trap).
+        XCTAssertEqual(MatchSyncKey.swipeHapticsEnabled, "swipeHapticsEnabled")
+    }
+
+    func test_decode_swipeHapticsEnabled_ignoresNonBoolValue() {
+        let events = SyncIncomingPayload.decode([MatchSyncKey.swipeHapticsEnabled: "yes"])
+        XCTAssertEqual(events, [])
+    }
+
     func test_decode_playerName() {
         let events = SyncIncomingPayload.decode([MatchSyncKey.playerName: "Federer"])
         XCTAssertEqual(events, [.playerName("Federer")])
