@@ -127,6 +127,7 @@
     trackPointOutcome: "After each point, tag the winner and shot to build detailed stats.",
     workoutSession: "Runs an Apple Watch workout to log heart rate and calories.",
     changeoverCompass: "Uses the watch compass to confirm your court end at changeovers.",
+    swipeVibration: "Taps your wrist when a swipe scores or undoes a point.",
     appearanceTheme: "Sets the scoreboard color theme on both your iPhone and watch.",
     announceScores: "Speaks the score aloud through your iPhone speaker.",
     iPhoneInput: "Lets you swipe to score on the iPhone scoreboard.",
@@ -149,7 +150,7 @@
   var S = window.DeuceMateShell = {
     settings: {
       track: false,            // statsTrackingEnabled defaults to OFF on the real watch
-      compass: false, announce: false, name: "", iPhoneInput: false,
+      compass: false, swipeVibration: false, announce: false, name: "", iPhoneInput: false,
       theme: "default", birthYear: 0, override: false, overrideBpm: 180
     },
     setup: { type: "singles", format: "standard" },   // MatchSetupDefaults (remembered)
@@ -367,6 +368,7 @@
     scroll.appendChild(anchors.points);
     scroll.appendChild(toggleRow("Changeover Compass", COPY.changeoverCompass, s.compass, function (v) { s.compass = v; api.configure({ compass: v }); render(); }, false,
       h("span", { class: "exp", text: " · Experimental" })));
+    scroll.appendChild(toggleRow("Swipe vibration", COPY.swipeVibration, s.swipeVibration, function (v) { s.swipeVibration = v; render(); }));
     scroll.appendChild(toggleRow("Announce scores aloud on iPhone", COPY.announceScores, s.announce, function (v) { s.announce = v; S.announceResult = null; render(); }));
 
     if (s.announce) {

@@ -14,6 +14,7 @@ struct ContentView: View {
     /// before the finger lifts. nil = no preview.
     @State private var livePreviewTarget: ScoreViewModel.Player? = nil
     @AppStorage("hasCompletedFirstGame") private var hasCompletedFirstGame = false
+    @AppStorage(ScoreInputHaptics.enabledKey) private var swipeHapticsEnabled = ScoreInputHaptics.isEnabledByDefault
 
     @Environment(\.appTheme) private var theme
 
@@ -107,8 +108,9 @@ struct ContentView: View {
         guard !swipeScoringBlocked else { return }
         switch action {
         case .undo:
-            viewModel.undo()
+            let didUndo = viewModel.undo()
             if let last = viewModel.lastScoredPlayer { triggerHighlight(for: last) }
+            if didUndo { ScoreInputHaptics.confirm(action, isEnabled: swipeHapticsEnabled) }
         case .stats:
             if viewModel.statsTrackingEnabled
                 && (!viewModel.currentMatchStats.isEmpty || viewModel.matchStartTime != nil) {
@@ -120,6 +122,7 @@ struct ContentView: View {
             triggerHighlight(for: target)
             if target == .me { viewModel.winPoint(player: .me) }
             else { viewModel.losePoint(player: .me) }
+            ScoreInputHaptics.confirm(action, isEnabled: swipeHapticsEnabled)
         }
     }
 

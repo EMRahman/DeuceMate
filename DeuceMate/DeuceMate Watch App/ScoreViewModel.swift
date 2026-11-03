@@ -161,8 +161,10 @@ class ScoreViewModel: ObservableObject {
     /// `iPhoneInputEnabled` (defence in depth — the iPhone shouldn't send when
     /// disabled, but in-flight messages can arrive moments after the watch
     /// flips the flag off). Routes through the same `winPoint` / `losePoint` /
-    /// `undo` entry points the on-watch swipe handler uses, so haptics, stats
+    /// `undo` entry points the on-watch swipe handler uses, so stats
     /// categorisation, atomic file writes and phone-sync all run unchanged.
+    /// The optional swipe vibration lives in `ContentView`, so these commands
+    /// don't buzz the watch.
     ///
     /// `matchID` is the UUID of the match the iPhone was displaying when the
     /// swipe happened. The command is dropped unless this matches the watch's
@@ -1881,8 +1883,10 @@ class ScoreViewModel: ObservableObject {
     }
     
     
-    func undo() {
-        guard let last = history.popLast() else { return }
+    /// Returns whether a point was actually reversed (false when nothing to undo).
+    @discardableResult
+    func undo() -> Bool {
+        guard let last = history.popLast() else { return false }
 
         sets = last.sets
         currentPointsMe = last.currentPointsMe
@@ -1913,6 +1917,7 @@ class ScoreViewModel: ObservableObject {
         pendingChangeoverAck = nil
         saveState()
         syncHeadingMonitoring()
+        return true
     }
 
     var lastScoredPlayer: Player? {

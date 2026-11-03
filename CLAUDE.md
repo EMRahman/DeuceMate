@@ -57,6 +57,8 @@ frameworks only — this is a hard rule, do not add packages).
   `TrendChart`) — the Trends screen's filters are UI state, not a match
   setting, so they never sync to the watch either, see
   `docs/features/PERFORMANCE_TRENDS_PLAN.md` §6.4).
+  `swipeHapticsEnabled` is watch-local (`ScoreInputHaptics`): only the watch
+  vibrates, so the swipe-vibration preference never syncs.
   `matchInfoExpanded` is also phone-local: it remembers Match Info disclosure
   state across matches and launches and never syncs.
   The two walkthrough keys `walkthroughOfferSeenVersion` and
@@ -161,6 +163,7 @@ anything portable; no `.pbxproj` change needed — the package globs its sources
 |------|------:|------|
 | `ScoreViewModel.swift` | ~1960 | Live match state + synced settings; delegates scoring rules to Core's `ScoringEngine` (see §1); `resetMatch` parks the live match as resumable while `endStoredMatchAtCurrentScore` completes a chosen history checkpoint and `completeCurrentMatchIfMatching` reconciles the phone ending that same live identity; seeds/persists the remembered match setup (`applyRememberedSetupIfIdle()`/`persistMatchSetupDefaults()`, called from `loadState()`/`resetMatch()` tails and `HomeView`'s `commitServerSelection()` — never from `init`, which runs before either restore path); `trackingStatuses` resolves Core's `MatchTrackingStatus.all(...)` and forwards `WorkoutManager.$healthAccess` (not its whole `objectWillChange` — that would also fire on every live-match HR/calorie tick) into its own `objectWillChange` in `init`, so views watching only the view model still redraw on Health-access changes without extra redraws during play. ⚠️ Almost no `MARK:` anchors yet — `Grep` for the symbol and read a bounded range. |
 | `HomeView.swift` | ~1010 | Match setup / start screen: a pre-match card states the remembered Singles/Doubles + format setup (hidden mid-match) and taps through to a combined Match Setup sheet, so Start Match skips straight to who-serves-first; the same card carries the Points/Health/Pulse tracking strip, and the Settings sheet opens with the always-three row form. ⚠️ No `MARK:` anchors yet. |
+| `ScoreInputHaptics.swift` | ~40 | Optional wrist tap confirming an applied swipe (off by default, watch-local `swipeHapticsEnabled`). Called from `ContentView.performInput` after the score changes, so iPhone score commands don't buzz and a tap always means the input counted. |
 | `TrackingStatusStrip.swift` | ~140 | Paints Core's `MatchTrackingStatus`: the pre-match strip (single-line icon+state chips, each tapping to its corresponding row under "What This Match Records" in Settings, which in turn carries shortcuts to the actual controls via Core's `MatchTrackingStatus.destination(access:)`; Health prompts only while undetermined; Pulse collapsed out when Health is off) and the full-width Settings rows (always all three). |
 | `ContentView.swift` | ~953 | Live scoreboard + gesture handling. |
 | `MatchStatsView.swift` | ~290 | Production live/history stats wrapper, including resume, End at Current Score, and tracking controls; failed completion keeps the sheet open with an error; delegates its stat rows to value-based `Scoring/MatchStatsContent.swift`. |
@@ -180,7 +183,8 @@ failures, preserved bytes, and success-only sync through the real store.
 Watch tests: `DeuceMate Watch AppTests/` — includes `WalkthroughWatchTests`
 for launch/restore eligibility, local flags, production isolation and stale callbacks. `DeuceMate_Watch_AppTests.swift` (~1.3k lines, 45 tests) holds the
 high-level `ScoreViewModel` scenarios; `StatsStoreTests`,
-`MatchSetupDefaultsWatchTests` and `TrackingStatusWatchTests` cover the rest.
+`MatchSetupDefaultsWatchTests`, `TrackingStatusWatchTests`, `MatchTagsWatchTests`,
+`MatchTypeWatchTests` and `ScoreInputHapticsTests` cover the rest.
 All need `import DeuceMateCore` (see §0).
 
 **iPhone app — `DeuceMate/`:**
