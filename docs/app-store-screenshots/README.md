@@ -20,40 +20,65 @@ through. All ten are 1320 x 2868 with no alpha — a set must be one size.
 | 1 | `iphone-6.9-marketing/01-watch-and-iphone.png` | ad — Watch scorer + iPhone companion |
 | 2 | `iphone-6.9-marketing/02-match-analysis.png` | ad — momentum graph |
 | 3 | `iphone-6.9-marketing/03-ai-coach.png` | ad — AI coach hand-off |
-| 4 | `iphone-6.9/01-match-overview.png` | raw |
-| 5 | `iphone-6.9/02-points-momentum.png` | raw |
+| 4 | `iphone-6.9/01-match-overview.png` | raw — result, Match Info and graph |
+| 5 | `iphone-6.9/08-compare-previous-match.png` | raw — Compare with Previous Match |
 | 6 | `iphone-6.9/03-match-stats.png` | raw |
-| 7 | `iphone-6.9/04-coaching-insights.png` | raw |
-| 8 | `iphone-6.9/05-match-archive.png` | raw |
-| 9 | `iphone-6.9/06-trends-overview.png` | raw — Trends filters and Errors |
-| 10 | `iphone-6.9/07-trends-serve-return.png` | raw — Serve & Return and Attack |
+| 7 | `iphone-6.9/04-coaching-insights.png` | raw — ranked Coaching Insights |
+| 8 | `iphone-6.9/05-match-archive.png` | raw — Trends, Opponents and match history |
+| 9 | `iphone-6.9/09-opponent-head-to-head.png` | raw — opponent profile and head-to-head |
+| 10 | `iphone-6.9/06-trends-overview.png` | raw — Trends filters and Errors |
+
+### What changed for 1.3.0
+
+- **Replace in App Store Connect:** slots 1, 4, 7 and 8.
+- **New:** slots 5 and 9. They take the places of `02-points-momentum.png` (ad 02
+  already shows the graph) and `07-trends-serve-return.png` (the second Trends
+  shot), which stay in this folder but are no longer uploaded.
+- **Unchanged:** ads 02 and 03, `03-match-stats.png` and `06-trends-overview.png`.
+- **Ad 03 keeps its existing AI Coach capture on purpose.** Its new Prompt Contents
+  section only appears for a match with player details or a note, so the capture
+  is still accurate for other matches. The simulator cannot show installed AI
+  apps, so a retake needs a physical iPhone with those apps.
+
+Player names in the new captures are fictional. The source archive was copied
+with each real player replaced by a generic name and its notes and oldest
+matches removed. Never commit that archive or capture real names.
 
 Slot 1 exists because nothing in the previous all-iPhone gallery told a shopper
 browsing on an iPhone that this is an **Apple Watch** app — the single most
 important fact about the product.
 
-The Watch set keeps its four raw captures unchanged: Apple shows those in the
+The Watch set keeps its six raw captures unchanged: Apple shows those in the
 Watch section, where framing a Watch inside a drawn Watch adds nothing.
 
 ## iPhone 6.9-inch
 
 Directory: [`iphone-6.9/`](./iphone-6.9/)
 
-All seven PNGs are **1320 x 2868**, portrait, with no alpha. Items 1–4 were
+All nine PNGs are **1320 x 2868**, portrait, with no alpha. Items 2 and 3 were
 captured on the iPhone 17 Pro Max simulator using the point-tracked match
 `44ACB61B-BBF0-444C-86BC-2A0125E0DF6D` (5 August 2026, 3-6 1-6, 124 tracked
 points), from `deucemate_archive_2026-08-06.json`. Items 5–7 were captured in
 September 2026 from the supplied full-fidelity archive after excluding its five
 newest short-format matches (three Super Tiebreak and two Perpetual Points).
+Items 1, 4, 5, 8 and 9 were recaptured in November 2026 for 1.3.0 on the same
+simulator from a sanitized copy of the current archive; the overview, comparison
+and archive use the 2 November match and Coaching Insights the 15 October match.
 
-1. `01-match-overview.png` - completed score, result, points split, and graph
+1. `01-match-overview.png` - completed score, result, points split, Match Info,
+   and graph
 2. `02-points-momentum.png` - full-screen point momentum, authentic health
    overlays, and outcome filters
 3. `03-match-stats.png` - outcome and serve comparisons
-4. `04-coaching-insights.png` - match duration and data-driven coaching
-5. `05-match-archive.png` - Trends summary plus full match history
+4. `04-coaching-insights.png` - match duration and ranked coaching
+5. `05-match-archive.png` - Trends summary, Opponents, and match history with
+   player captions
 6. `06-trends-overview.png` - trend filters, Errors, and Serve & Return
-7. `07-trends-serve-return.png` - Serve & Return and Attack history
+7. `07-trends-serve-return.png` - Serve & Return and Attack history (not uploaded
+   since 1.3.0)
+8. `08-compare-previous-match.png` - this match next to the previous match against
+   the same opponent
+9. `09-opponent-head-to-head.png` - playing style, past matches, and head-to-head
 
 This one 6.9-inch set satisfies the iPhone screenshot-size requirement; do not
 mix in the older 6.3/6.5-inch files from `docs/website/screenshots/` for this
@@ -99,9 +124,7 @@ calories, and heart-rate samples alongside its score and point outcomes. Those
 real measurements are visible in the graph and Pulse Coach capture; no health
 values were generated or invented for the screenshots.
 
-The original August captures were uploaded to App Store Connect on 6 August
-2026. The September 1.2.0 replacements and additions — marketing frame 1 and
-raw iPhone items 5–7 — remain pending manual replacement/upload. The separate
+The 1.3.0 captures above still need uploading to App Store Connect. separate
 hardware demo/review video described in
 `docs/release/SUBMISSION_REVIEW.md` still needs to be recorded on the physical
 iPhone and

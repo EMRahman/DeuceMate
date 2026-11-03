@@ -324,6 +324,65 @@ An interactive timeline view on iPhone plots cumulative points for both players 
 
 ---
 
+## Match Info, opponents and private notes
+
+Match Info sits under the score on an iPhone match's detail screen. It starts
+collapsed and remembers whether you left it open.
+
+### Adding match details
+
+Tap the Match Info row to add opponents, a partner in doubles, and a competition
+type: friendly, league, tournament or practice. Tap the selected type again to
+clear it. Recent players are offered first, or use **Search or add player**.
+Nothing changes until you tap **Save**. Names then appear with the match in your
+archive and in your Apple Watch's Past Matches.
+
+The same screen changes a completed match between singles and doubles if it was
+started as the wrong type. You can also do this from a completed match's stats on
+Apple Watch. Scores and statistics are kept. Changing to singles keeps one
+opponent and removes the partner.
+
+### Opponents and head-to-head
+
+**Opponents → Head-to-head records** on the Matches screen lists everyone you have
+played. Each opponent's page shows their playing style, your past matches and your
+record, with singles and doubles counted separately. Doubles records need the same
+opponent pair and the same partner.
+
+The head-to-head line in Match Info counts your other matches against that
+opponent and leaves out the one you are viewing, so for a completed match it shows
+one match fewer than the opponent's page.
+
+### Managing players
+
+Handedness, backhand and game style are optional. They save as you pick them, and
+the name saves when you finish editing. In **Settings → Match Details → Players**
+you can rename a player, merge duplicates, or forget a player. Forgetting removes
+that player from every match and keeps them from returning through sync or a
+backup.
+
+### Compare with Previous Match
+
+This opens the match next to an earlier one of the same type. With an opponent
+added, it uses your last completed match against them. If you have not played them
+before, it asks you to choose a match. With no opponent added, it uses your most
+recent earlier match. **Choose Another Match** picks a different one at any time. A
+figure shows "Not recorded" when a match did not track it.
+
+### Private notes
+
+Add a note of up to 4,000 characters from Match Info. It saves automatically.
+Notes stay on your iPhone: they are not sent to your Watch or included in iCloud
+backups, so **they do not come back after a device restore** unless you included
+them in a manual archive. A note goes into a report, AI prompt or manual archive
+only if you turn on the include option for that export.
+
+### Names and notes in exports
+
+Reports include player names unless you turn off **Include player names** in the
+share menu. AI Coach prompts leave names and the note out unless you turn them on.
+Spoken announcements never say names.
+
 ## Sharing a match as an interactive web page
 
 From the match detail view's Share menu, **Interactive Web Page** exports the whole

@@ -81,6 +81,22 @@ Screenshots land in `DEUCEMATE_SCREENSHOT_OUTPUT_DIR` (defaults to a temp
 folder if unset) — copy the ones you want into `docs/website/screenshots/` under
 the names in the table above.
 
+### App Store Match Info shots
+
+`ScreenshotTests` also has opt-in `test_captureMatchInfoScreens` and
+`test_captureCoachingInsights` for the App Store set in
+[`docs/app-store-screenshots/`](../app-store-screenshots/README.md). Seed an
+archive as above, but first copy it and replace every player name with a generic
+one and remove its notes, because these screens show names. Set
+`TEST_RUNNER_DEUCEMATE_TARGET_MATCH_ID` to a singles rematch for the first and to
+a match with several insights for the second, and pass the same
+`TEST_RUNNER_DEUCEMATE_CAPTURE_SCREENSHOTS` and
+`TEST_RUNNER_DEUCEMATE_SCREENSHOT_OUTPUT_DIR` values. Override
+`status_bar` to 09:41 first (`xcrun simctl status_bar <udid> override --time 9:41`).
+`test_captureAICoachSheet` needs dark appearance and a physical device if the
+AI app rows must show, because the simulator has none installed. Rebuild the ads
+with `docs/app-store-screenshots/marketing/build.sh` after changing a source.
+
 ### AI-coach prompt shots (10, 11, 12)
 
 `AICoachSheet` never renders the prompt text on-screen (it only copies it to
