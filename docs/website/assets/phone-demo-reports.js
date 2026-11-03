@@ -315,7 +315,9 @@
       group.append(el("div","pr-share-group-title",side[0]),row("Share Summary","summary",function(){performExport(phone,record,side[1],"summary");}));
       if((record.stats||[]).length)group.append(row("Share Summary + Raw Points","table",function(){performExport(phone,record,side[1],"txt");}));
       main.append(group);
-    });menu.append(main);
+    });
+    var switches=window.DeuceMatePhoneMatchInfo&&window.DeuceMatePhoneMatchInfo.shareSwitches(phone,record,function(){});if(switches)main.append(switches);
+    menu.append(main);
     menu.addEventListener("keydown",function(event){
       if((event.key==="Escape"||event.key==="ArrowLeft")&&submenu){event.preventDefault();event.stopPropagation();closeSubmenu();}
       else if(event.key==="ArrowRight"&&event.target===interactive){event.preventDefault();interactive.click();}
@@ -348,6 +350,7 @@
       var endButton=phone.button("End at Current Score", function () { phone.endRecord(record); }, "phone-danger pr-end-match");endButton.setAttribute("aria-label","End at Current Score");top.appendChild(endButton);
     }
     var pwSlot=el("div","pr-pw-slot");top.appendChild(pwSlot);scroll.appendChild(top);
+    if (window.DeuceMatePhoneMatchInfo && record.id !== (phone.liveRecord()||{}).id) scroll.appendChild(window.DeuceMatePhoneMatchInfo.section(phone, record));
     var graphSection = el("section", "pr-section pr-native-graph"); graphSection.appendChild(el("h3", "pr-section-title", "Points Graph")); scroll.appendChild(graphSection);
     var tabbar = el("div", "pr-tabs"), statsTab = phone.button("Stats", null, "pr-tab active"), pointsTab = phone.button("Points", null, "pr-tab"); tabbar.appendChild(statsTab); tabbar.appendChild(pointsTab); if (pts.length) scroll.appendChild(tabbar);
     var content = el("div", "pr-content"); scroll.appendChild(content);

@@ -186,6 +186,7 @@
     }
     out.appendChild(section("Watch Sync", syncRows, "Match data is synced between your iPhone and Apple Watch using Apple's WatchConnectivity framework. This browser demo simulates the connection; it does not report a real Apple Watch."));
 
+    out.appendChild(section("Match Details", [buttonRow(phone, "people", "Players", function () { window.DeuceMatePhoneMatchInfo.playersSheet(phone); })], "Opponents and partners you have added to matches. Rename them, set their playing profile, or forget them everywhere."));
     var transfer = [buttonRow(phone, "share", "Export Match Archive", function () { exportArchive(phone); }), buttonRow(phone, "import", "Import Match Archive", function () { importArchive(phone); })];
     out.appendChild(section("Backup & Transfer", transfer, "Automatic iCloud and device restores keep scores and non-health stats, but not recorded heart rate, steps, distance, or calories. Before moving to a new iPhone, Export Match Archive here, then Import it on the new phone. Manual archive files are full-fidelity and may include those HealthKit-derived values. Browser exports are local JSON files; no cloud service is connected."));
     out.appendChild(section("About", [

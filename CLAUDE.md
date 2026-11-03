@@ -209,6 +209,10 @@ coaching and report data), `phone-demo-export.js` (native report data adapter an
 complete text/AI prompt builders), `phone-demo-native-export.js` (generated native
 viewer, stylesheet and coaching instructions),
 `phone-demo-trends.js` (native metric catalogue, coverage, pooling and UI),
+`phone-demo-matchinfo.js` (Match Info: players with playing profiles, competition,
+autosaved private note in its own storage key, previous-match comparison, head-to-head,
+completed-match Singles↔Doubles conversion; the Watch replica's `watch-demo-history.js`
+shows the same tags caption read-only and offers "Change to …"),
 and `phone-demo-coaching.js` (pure Rec Coach and Pulse Coach rule ports).
 Phone score commands go through the **existing watch instance**, gated by input,
 reachability and match identity. Do not introduce a second live scoring engine.
@@ -224,7 +228,7 @@ status. Run `node scripts/iphone-demo-model-qa.cjs` and
 `node scripts/iphone-demo-coaching-qa.cjs` for dependency-free model checks.
 Run `scripts/iphone-demo-qa.cjs`, `scripts/iphone-demo-extended-qa.cjs`,
 `scripts/iphone-demo-state-qa.cjs`, `scripts/iphone-demo-visual-qa.cjs` and
-`scripts/iphone-demo-popup-qa.cjs` and `scripts/iphone-demo-export-qa.cjs` with an externally installed Playwright
+`scripts/iphone-demo-popup-qa.cjs`, `scripts/iphone-demo-matchinfo-qa.cjs` and `scripts/iphone-demo-export-qa.cjs` with an externally installed Playwright
 package (`PLAYWRIGHT_MODULE=/path/to/playwright`). Set `PLAYWRIGHT_BROWSER=webkit`
 for Safari-engine checks; the default is Chromium. Extended QA saves screenshots
 under `/tmp/deucemate-iphone-qa`. Browser launch may need sandbox escalation on

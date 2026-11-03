@@ -464,3 +464,133 @@
 .pr-storage-cloud.warn .pr-storage-label { color:#ff9f0a; }
 .pr-storage-info .pr-storage-action { flex:0 0 auto; margin:0; min-height:32px; padding:5px 12px; border-radius:16px; font-size:13px; font-weight:600; background:transparent; border:1px solid currentColor; }
 .pr-storage-action.warn { color:#ff9f0a; }.pr-storage-action.good { color:#30d158; }
+
+/* Match Info (MatchInfoSection / editors / comparison) and archive-row caption */
+.phone-row-caption { display:flex; align-items:center; gap:5px; margin-top:2px; font-size:13px; color:#98989e; min-width:0; }
+.phone-row-caption .phone-icon { width:12px; height:12px; flex:none; }
+.phone-row-caption-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.phone-frame .mi-row.mi-tint .mi-row-title { color:#0a84ff; }
+.phone-frame .mi-opponents > .phone-icon:first-child { color:#34c759; }
+.phone-frame .mi-card { padding:0; }
+.phone-frame .mi-disclosure,.phone-frame .mi-row { display:flex; align-items:center; gap:12px; width:100%; min-height:44px; padding:10px 16px; border:0; border-bottom:1px solid #38383a; border-radius:0; background:transparent; color:#f5f5f7; font:inherit; text-align:left; cursor:pointer; }
+.phone-frame .mi-disclosure:last-child,.phone-frame .mi-row:last-child { border-bottom:0; }
+.phone-frame .mi-disclosure-text { flex:1; }
+.phone-frame .mi-disclosure .phone-icon,.phone-frame .mi-row .phone-icon { width:18px; height:18px; flex:none; color:#98989e; }
+.phone-frame .mi-row > .phone-icon:first-child { color:#0a84ff; width:22px; height:22px; }
+.phone-frame .mi-row-copy { flex:1; display:flex; flex-direction:column; gap:2px; }
+.phone-frame .mi-row-sub { font-size:13px; color:#98989e; white-space:pre-line; }
+.phone-frame .mi-row:disabled { opacity:.55; cursor:default; }
+.phone-frame .mi-convert { display:block; width:100%; padding:12px 16px; border:0; background:transparent; color:#0a84ff; font:inherit; text-align:left; }
+.phone-frame .mi-convert:disabled { opacity:.5; }
+.phone-frame .mi-footer { margin:6px 16px 0; }
+.mi-editor,.mi-note,.mi-compare { display:flex; flex-direction:column; gap:10px; padding:4px 0 16px; }
+.mi-heading { margin:8px 0 0; font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:#98989e; }
+.mi-choices { display:flex; flex-wrap:wrap; gap:8px; }
+.mi-grid .mi-choice { flex:1 1 calc(50% - 8px); }
+.mi-choice { padding:10px 12px; border:1px solid #525257; border-radius:10px; background:#2c2c2e; color:#f5f5f7; font:inherit; }
+.mi-choice.selected { border-color:#0a84ff; background:rgba(10,132,255,.2); }
+.mi-choice.selected::before { content:"✓ "; }
+.mi-player { display:flex; flex-direction:column; gap:8px; padding:10px; border-radius:12px; background:#2c2c2e; }
+.mi-profile { display:grid; grid-template-columns:1fr; gap:6px; }
+.mi-profile-group { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.mi-profile-title { font-size:13px; color:#98989e; }
+.mi-actions { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+.mi-note-text { min-height:200px; resize:none; font-size:16px; }
+.mi-note-count { text-align:right; margin:0; }
+.mi-compare-row { display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:8px; padding:8px 0; border-bottom:1px solid #38383a; font-size:14px; }
+.mi-compare-head { color:#98989e; font-size:12px; }
+.mi-compare-label { color:#98989e; }
+@media (prefers-color-scheme: light) {
+  .phone-row-caption,.mi-heading,.mi-profile-title,.mi-compare-head,.mi-compare-label,.phone-frame .mi-row-sub { color:#6c6c70; }
+  .phone-frame .mi-disclosure,.phone-frame .mi-row { color:#111; border-color:#d1d1d6; }
+  .mi-choice,.mi-player { background:#f2f2f7; color:#111; border-color:#c7c7cc; }
+}
+.phone-frame .mi-row-count { color:#98989e; font-variant-numeric:tabular-nums; }
+.mi-page { display:flex; flex-direction:column; gap:4px; padding-bottom:20px; }
+.mi-page .pr-native-section-title { margin:14px 16px 6px; }
+.mi-kv { display:flex; justify-content:space-between; gap:12px; padding:14px 16px; border-bottom:1px solid #38383a; }
+.mi-kv:last-child { border-bottom:0; } .mi-kv-k { color:inherit; } .mi-kv-v { color:#98989e; text-align:right; }
+.mi-kv-head { padding:14px 16px; font-weight:600; font-size:17px; border-bottom:1px solid #38383a; }
+.mi-kv-head:last-child { border-bottom:0; }
+.mi-link { color:#0a84ff !important; } .mi-link .mi-row-title { color:#0a84ff; }
+.mi-cols { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:12px 16px; border-bottom:1px solid #38383a; }
+.mi-cols small { display:block; font-size:12px; letter-spacing:.04em; color:#98989e; }
+.mi-cols strong { font-size:16px; } .mi-cols-row span { font-size:16px; }
+.mi-rate { border-bottom:1px solid #38383a; } .mi-rate:last-child { border-bottom:0; }
+.mi-rate-top { display:flex; justify-content:space-between; padding:12px 16px 0; } .mi-rate .mi-cols { border:0; padding-top:4px; }
+.mi-delta { font-size:14px; color:#98989e; } .mi-delta.up { color:#30d158; } .mi-delta.down { color:#0a84ff; }
+.mi-match-row { display:flex; align-items:center; width:100%; padding:12px 16px; border:0; border-bottom:1px solid #38383a; border-radius:0; background:transparent; color:inherit; font:inherit; text-align:left; }
+.mi-match-row:last-child { border-bottom:0; } .mi-match-copy { flex:1; display:flex; flex-direction:column; gap:2px; }
+.mi-match-date { font-size:13px; color:#98989e; } .mi-match-score { font-size:20px; }
+.mi-match-res { font-size:13px; color:#98989e; display:flex; gap:8px; } .mi-match-res strong { color:inherit; }
+.mi-h2h-main { padding:14px 16px 2px; font-size:19px; } .mi-h2h-sub { padding:0 16px 10px; font-size:14px; color:#98989e; }
+.mi-h2h { border-bottom:1px solid #38383a; } .mi-h2h:last-child { border-bottom:0; }
+.mi-chips { display:flex; flex-wrap:wrap; gap:6px; } .mi-chip { padding:6px 12px; border:0; border-radius:16px; background:#3a3a3c; color:inherit; font:inherit; font-size:14px; }
+.mi-quote { white-space:pre-wrap; padding:10px; border-radius:10px; background:#2c2c2e; font:14px/1.4 ui-monospace,monospace; }
+@media (prefers-color-scheme: light) { .mi-kv,.mi-kv-head,.mi-cols,.mi-rate,.mi-match-row,.mi-h2h { border-color:#e5e5ea; } .mi-chip,.mi-quote { background:#e5e5ea; color:#111; } .mi-kv-v,.mi-cols small,.mi-match-date,.mi-match-res,.mi-h2h-sub,.mi-delta { color:#6c6c70; } }
+
+/* Sheet-hosted pages (Compare, Opponent, editors, note, review) follow the sheet theme variables. */
+.phone-device-dialog .mi-page,.phone-device-dialog .mi-editor,.phone-device-dialog .mi-note { color:var(--sheet-text); }
+.phone-device-dialog .mi-section { margin:0 0 8px !important; }
+.phone-device-dialog .pr-native-card,.phone-device-dialog .mi-card { background:var(--sheet-card); color:var(--sheet-text); border-radius:20px; padding:0; }
+.phone-device-dialog .pr-native-section-title,.phone-device-dialog .mi-heading,.phone-device-dialog .mi-profile-title,.phone-device-dialog .mi-kv-v,.phone-device-dialog .mi-cols small,.phone-device-dialog .mi-match-date,.phone-device-dialog .mi-match-res,.phone-device-dialog .mi-h2h-sub,.phone-device-dialog .mi-delta,.phone-device-dialog .mi-row-sub { color:var(--sheet-secondary); }
+.phone-device-dialog .mi-delta.up { color:#30d158; } .phone-device-dialog .mi-delta.down { color:var(--sheet-tint); }
+.phone-device-dialog .mi-kv,.phone-device-dialog .mi-kv-head,.phone-device-dialog .mi-cols,.phone-device-dialog .mi-rate,.phone-device-dialog .mi-match-row,.phone-device-dialog .mi-h2h,.phone-device-dialog .mi-row { border-color:var(--sheet-separator); }
+.phone-device-dialog .mi-row,.phone-device-dialog .mi-match-row { background:transparent !important; color:var(--sheet-text); display:flex; align-items:center; gap:12px; width:100%; min-height:44px; padding:12px 16px; border:0; border-bottom:1px solid var(--sheet-separator); border-radius:0; font:inherit; text-align:left; }
+.phone-device-dialog .mi-row:last-child,.phone-device-dialog .mi-match-row:last-child { border-bottom:0; }
+.phone-device-dialog .mi-link,.phone-device-dialog .mi-link .mi-row-title { color:var(--sheet-tint); }
+.phone-device-dialog .mi-row .phone-icon { width:20px; height:20px; flex:none; }
+.phone-device-dialog .mi-row-copy { flex:1; display:flex; flex-direction:column; gap:2px; }
+.phone-device-dialog .mi-player,.phone-device-dialog .mi-quote,.phone-device-dialog .mi-choice { background:var(--sheet-card); color:var(--sheet-text); border-color:var(--sheet-separator); }
+.phone-device-dialog .mi-choice.selected { border-color:var(--sheet-tint); background:color-mix(in srgb,var(--sheet-tint) 18%,var(--sheet-card)); }
+.phone-device-dialog .mi-chip { background:var(--sheet-card); color:var(--sheet-text); }
+.phone-device-dialog .mi-note-text,.phone-device-dialog .mi-name,.phone-device-dialog .mi-player select { background:var(--sheet-bg); color:var(--sheet-text); border:1px solid var(--sheet-separator); }
+/* The marketing site's global `section` padding must not leak into sheet-hosted pages. */
+.phone-device-dialog section.mi-section { padding:0 !important; }
+.phone-row-caption .phone-icon { fill:currentColor; stroke-width:1; }
+
+/* Native-faithful editors (MatchInfoEditorView, PlayersSettingsView, MatchNotesEditorView) */
+.phone-device-dialog .mi-st { margin:14px 20px 6px; font-size:15px; font-weight:600; color:var(--sheet-secondary); }
+.phone-device-dialog .mi-footnote { margin:6px 20px 12px; font-size:13px; line-height:1.35; color:var(--sheet-secondary); }
+.phone-device-dialog .mi-tiles { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:12px; }
+.phone-device-dialog .mi-tile { display:flex; align-items:center; justify-content:space-between; min-height:48px; padding:0 14px; border:0; border-radius:12px; background:var(--sheet-bg); color:var(--sheet-text); font:inherit; }
+.phone-device-dialog .mi-tile.selected { background:color-mix(in srgb,var(--sheet-tint) 15%,var(--sheet-card)); color:var(--sheet-tint); }
+.phone-device-dialog .mi-radio { display:grid; place-items:center; width:22px; height:22px; border:2px solid var(--sheet-text); border-radius:50%; font-size:13px; color:#fff; }
+.phone-device-dialog .mi-radio.on { background:var(--sheet-tint); border-color:var(--sheet-tint); }
+.phone-device-dialog .mi-prow { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:12px 14px; border-bottom:1px solid var(--sheet-separator); }
+.phone-device-dialog .mi-prow:last-child { border-bottom:0; }
+.phone-device-dialog .mi-info,.phone-device-dialog .mi-clear { display:grid; place-items:center; width:30px; height:30px; padding:0; border:0; background:transparent !important; color:var(--sheet-tint); }
+.phone-device-dialog .mi-clear { color:color-mix(in srgb,var(--sheet-tint) 55%,var(--sheet-card)); margin-left:auto; }
+.phone-device-dialog .mi-info:disabled { opacity:.35; }
+.phone-device-dialog .mi-info svg,.phone-device-dialog .mi-clear svg { width:26px; height:26px; }
+.phone-device-dialog .mi-name-input { flex:1; min-width:0; border:0; background:transparent; color:var(--sheet-text); font:inherit; font-size:18px; outline:0; }
+.phone-device-dialog .mi-block { display:block; width:100%; box-sizing:border-box; padding:14px 16px; }
+.phone-device-dialog .mi-prow .mi-chips { flex-basis:100%; padding-left:40px; }
+.phone-device-dialog .mi-seg { display:grid; grid-template-columns:1fr 1fr; margin:12px; padding:3px; border-radius:10px; background:var(--sheet-bg); }
+.phone-device-dialog .mi-seg-b { min-height:36px; border:0; border-radius:8px; background:transparent; color:var(--sheet-text); font:inherit; }
+.phone-device-dialog .mi-seg-b.on { background:var(--sheet-card); box-shadow:0 1px 4px #0002; font-weight:600; }
+.phone-device-dialog .mi-destructive { color:#ff3b30 !important; }
+.phone-device-dialog .mi-picker { align-items:center; }
+.phone-device-dialog .mi-picker select { border:0; background:transparent; color:var(--sheet-secondary); font:inherit; text-align:right; padding:0; max-width:60%; }
+.phone-device-dialog .mi-save { font-weight:600; }
+.phone-device-dialog .mi-notepage { display:flex; flex-direction:column; gap:10px; padding:8px 14px 16px; height:100%; box-sizing:border-box; }
+.phone-device-dialog .mi-note-area { flex:1; min-height:320px; resize:none; padding:14px; border:2px solid var(--sheet-tint); border-radius:14px; background:var(--sheet-card); color:var(--sheet-text); font:inherit; font-size:18px; outline:0; }
+.phone-device-dialog .mi-note-foot { display:flex; justify-content:space-between; font-size:14px; color:var(--sheet-secondary); }
+.phone-device-dialog .mi-privacy { display:flex; align-items:center; gap:8px; width:auto; padding:0; border:0; background:transparent !important; color:var(--sheet-tint); font:inherit; }
+.phone-device-dialog .mi-privacy svg { width:18px; height:18px; }
+.phone-device-dialog .mi-delete-note { border:0; background:transparent !important; color:#ff3b30; font:inherit; }
+
+.phone-device-dialog .mi-info,.phone-device-dialog .mi-info svg,.phone-device-dialog .mi-privacy,.phone-device-dialog .mi-privacy svg { color:var(--sheet-tint) !important; }
+.phone-device-dialog .mi-clear,.phone-device-dialog .mi-clear svg { color:color-mix(in srgb,var(--sheet-tint) 50%,var(--sheet-card)) !important; }
+.phone-device-dialog .mi-delete-note { color:#ff3b30 !important; }
+
+.phone-device-dialog .mi-search { display:flex; align-items:center; gap:10px; padding:8px 14px; }
+.phone-device-dialog .mi-search-input { flex:1; min-height:40px; padding:0 14px; border:0; border-radius:20px; background:var(--sheet-card); color:var(--sheet-text); font:inherit; font-size:17px; outline:0; }
+.phone-device-dialog .mi-search-x { width:36px; height:36px; padding:0; border:0; border-radius:50%; background:var(--sheet-card) !important; color:var(--sheet-text); display:grid; place-items:center; }
+.phone-device-dialog .mi-search-x svg { width:22px; height:22px; }
+.phone-device-dialog .mi-pickrow { padding:0; }
+.phone-device-dialog .mi-pickmain { flex:1; display:flex; padding:12px 16px; border:0; background:transparent !important; color:inherit; font:inherit; text-align:left; }
+.phone-device-dialog .mi-name-btn { flex:1; justify-content:flex-start; text-align:left; border:0; background:transparent !important; color:var(--sheet-text); padding:0; font-size:18px; min-height:30px; }
+.phone-device-dialog .mi-name-btn.mi-empty { color:var(--sheet-secondary); }
+.phone-device-dialog .mi-back { display:grid; place-items:center; width:36px; height:36px; padding:0; border:0; border-radius:50%; background:var(--sheet-card) !important; color:var(--sheet-text); }
+.phone-device-dialog .mi-back svg { width:20px; height:20px; }

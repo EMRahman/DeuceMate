@@ -75,6 +75,16 @@
     var d = new Date(ms), p = function (n) { return (n < 10 ? "0" : "") + n; };
     return d.getFullYear() + "-" + MONTHS[d.getMonth()] + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
   }
+  // Phone-authored match details, read-only on the Watch (MatchTags.displayLine).
+  function tagsLine(rec) {
+    var t = rec.tags; if (!t) return null;
+    var comp = { friendly: "Friendly", league: "League", tournament: "Tournament", practice: "Practice" }[t.competition];
+    var who = [];
+    if (t.partner) who.push("With " + t.partner.name);
+    if ((t.opponents || []).length) who.push("vs " + t.opponents.map(function (p) { return p.name; }).join(" & "));
+    var parts = []; if (who.length) parts.push(who.join(" ")); if (comp) parts.push(comp);
+    return parts.length ? parts.join(" · ") : null;
+  }
   function formatLine(rec) { return S.formatInfo(rec.format).label + (rec.matchType === "doubles" ? " · Doubles" : " · Singles"); }
 
   /* ==========================================================================
@@ -153,6 +163,27 @@
       { seed: 9374, format: "standard", matchType: "doubles", track: true, bias: 0.49, daysAgo: 17 }
     ];
     S.history = seeds.map(simulate);
+    // Match details (phone-authored tags): a small cast so head-to-head records have something to show.
+    // Alice plays 4 matches, Ben 2, and the doubles pairing (Sam with Dan & Eve) 2; one match is left untagged.
+    var P = {
+      alice: { id: "demo-alice", name: "Alice Morgan", hand: "rightHanded", backhand: "oneHanded", style: "allCourt" },
+      ben: { id: "demo-ben", name: "Ben Carter", hand: "leftHanded", backhand: "twoHanded", style: "aggressiveBaseliner" },
+      dan: { id: "demo-dan", name: "Dan Ortiz", hand: "rightHanded", backhand: "twoHanded", style: "counterpuncher" },
+      eve: { id: "demo-eve", name: "Eve Park", hand: "rightHanded", backhand: "twoHanded", style: "serveAndVolley" },
+      sam: { id: "demo-sam", name: "Sam Reyes" }
+    };
+    function tag(seed, competition, opponents, partner) {
+      var r = recById("seed" + seed); if (!r) return;
+      r.tags = { competition: competition, opponents: opponents.map(function (o) { return Object.assign({}, o); }), partner: partner ? Object.assign({}, partner) : null };
+    }
+    tag(1177, "league", [P.alice]);
+    tag(9031, "tournament", [P.alice]);
+    tag(7152, "league", [P.alice]);
+    tag(8263, "friendly", [P.alice]);
+    tag(4410, "friendly", [P.ben]);
+    tag(5522, "practice", [P.ben]);
+    tag(6041, "league", [P.dan, P.eve], P.sam);
+    tag(9374, "friendly", [P.dan, P.eve], P.sam);
   };
 
   /* ==========================================================================
@@ -170,7 +201,7 @@
     var scoreEl = h("div", { class: "h-score" }); scoreEl.appendChild(styled(resultLabel(rec)));
     var row = h("button", { type: "button", class: "hist-row", "aria-label": dateLabel(rec.startTime) + ". " + resultLabel(rec) + ". " + formatLine(rec) },
       h("div", { class: "hr1" }, h("span", { text: dateLabel(rec.startTime) }), inProg ? icon("sync", 11) : null),
-      h("div", { class: "hr2" }, h("div", { class: "l" }, scoreEl, h("div", { class: "h-fmt", text: formatLine(rec) })), tag));
+      h("div", { class: "hr2" }, h("div", { class: "l" }, scoreEl, h("div", { class: "h-fmt", text: formatLine(rec) }), tagsLine(rec) ? h("div", { class: "h-fmt", text: tagsLine(rec) }) : null), tag));
 
     // swipe left to reveal Delete; a long swipe deletes (allowsFullSwipe)
     var startX = null, startY = 0, dx = 0, open = false, moved = false, DEL_W = 84;
@@ -265,6 +296,27 @@
     });
   }
 
+  // Completed-match Singles <-> Doubles conversion (MatchStatsView "Change to ..."). Scores,
+  // stats and health data are kept; converting to Singles trims the partner and 2nd opponent.
+  function convertMatchType(rec) {
+    var target = rec.matchType === "doubles" ? "singles" : "doubles", to = target === "doubles" ? "Doubles" : "Singles";
+    var dropped = target === "singles" && rec.tags ? (rec.tags.partner ? [rec.tags.partner] : []).concat((rec.tags.opponents || []).slice(1)) : [];
+    S.showAlert({ title: "Change to " + to + "?",
+      message: dropped.length ? "Scores and stats are kept. Removes " + dropped.map(function (p) { return p.name; }).join(" & ") + " from match details." : "Scores, point stats and health data are kept.",
+      buttons: [
+        { label: "Change to " + to, action: function () {
+          var tags = rec.tags;
+          if (target === "singles" && tags) { tags = Object.assign({}, tags, { partner: null, opponents: (tags.opponents || []).slice(0, 1) }); if (!tags.opponents.length && !tags.competition) tags = null; }
+          rec.matchType = target; rec.matchTypeRevision = Date.now();
+          if (tags) rec.tags = tags; else delete rec.tags;
+          if (rec.resume && rec.resume.state && target === "singles") delete rec.resume.state.doublesServer;
+          if (window.DeuceMatePhone && window.DeuceMatePhone.applyWatchMatchType) window.DeuceMatePhone.applyWatchMatchType(rec.id, target, tags || null);
+          S.pop();
+        } },
+        { label: "Cancel", role: "cancel" }]
+    });
+  }
+
   var filters = {};   // record id → selected set index | null
   S.screens.detail = function (entry) {
     var rec = recById(entry.recId);
@@ -274,6 +326,7 @@
     var title = inProg ? dateLabel(rec.startTime) : (hasStats ? "Match Stats" : "Score Only Match");
     scroll.appendChild(h("div", { class: "det-title", text: title }));
     scroll.appendChild(h("div", { class: "det-fmt", text: formatLine(rec) }));
+    if (tagsLine(rec)) scroll.appendChild(h("div", { class: "det-fmt det-tags", text: tagsLine(rec) }));
     var scoreStr = inProg ? inProgressScore(rec) : completedScore(rec);
     if (scoreStr && rec.sets.length) { var sc = h("div", { class: "det-score" }); sc.appendChild(styled(scoreStr)); scroll.appendChild(sc); }
 
@@ -327,6 +380,11 @@
       else UI.content(body, pts, rec.matchType);
     }
     scroll.appendChild(body);
+    if (!inProg) {
+      var targetLabel = rec.matchType === "doubles" ? "Singles" : "Doubles";
+      scroll.appendChild(UI.divider());
+      scroll.appendChild(h("button", { type: "button", class: "pbtn gray", "data-testid": "watch-convert-match-type", onclick: function () { convertMatchType(rec); } }, icon(rec.matchType === "doubles" ? "person" : "people", 13), "Change to " + targetLabel));
+    }
     return scroll;
   };
   function kv(a, b) {
