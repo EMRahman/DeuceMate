@@ -47,8 +47,8 @@ Before submission:
   same opponent on both → Compare → Opponents**.
 - [ ] Upload the iPhone screenshots in the order given in
   [`docs/app-store-screenshots/README.md`](../app-store-screenshots/README.md).
-- [ ] Replace the placeholder device line in App Review Information → Notes
-  with the exact iPhone/iOS, Watch/watchOS, and TestFlight `1.3.0 (11)` evidence.
+- [x] Add the tested devices to App Review Information → Notes: iPhone 16
+  (iOS 27.2) and Apple Watch Series 7 GPS (watchOS 26.6).
 - [ ] After release: tag the uploaded commit `v1.3.0`, then update the website
   copy, setup guide images and browser demo. `docs/website/` publishes on merge,
   so they deliberately wait until 1.3.0 is on the store.
