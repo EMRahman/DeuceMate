@@ -554,3 +554,32 @@ are the map; the strings are copied verbatim from `HomeView.swift`,
 ## Page modes (try.html)
 
 `try.html` is one watch with a three-way mode switch (`S.setMode` in `watch-demo-app.js`): **Score only** (Track point outcome off), **Score + stats** (on) and **Watch the guide** (opens the animated walkthrough). Intentionally skipped: Health (permission prompt and real sensors — HR, kcal, steps and compass are invented), the first-launch guide offer, and the iPhone side.
+
+## Phase 8 — Match Info + match-type conversion (2026-11-03)
+
+Brought the browser demo up to the 1.3.0 builds: `phone-demo-matchinfo.js` adds the detail
+screen's collapsible Match Info block (competition grid, opponent/partner editors with
+handedness/backhand/play-style, autosaved private note stored outside the record, Compare with
+Previous Match, head-to-head, "Change to Singles/Doubles" with the native confirmation copy),
+plus the tags caption on archive rows. The Watch replica shows the read-only caption and the
+conversion button on completed matches; conversions propagate to the phone copy, and
+`upsert` carries tags and a newer match-type revision forward. Settings gains Match Details → Players (rename, profile, forget) and the text/AI exports gain a
+`## Match Context` section (names and profiles, never the note). The share menu has the native "Include player names" (on) and "Include private note" (off, confirm-to-enable) switches,
+and the interactive page model is schema 13 (`competitionTypeLabel`, reader-framed `readerSideNames`/`otherSideNames`, `privateNote`).
+Open: the HTML page's switches only take effect on the next export (no live preview rebuild), and the
+Playwright pass (Chromium) is green: base, extended, state, export and the new `iphone-demo-matchinfo-qa.cjs`
+(editor, note, compare, conversion, schema 13 export, share switches, Players, Watch caption + conversion). Verified with the model QA
+scripts and node logic checks only — no Playwright/visual pass was run.
+
+Phase 8 addendum: archive gains the Opponents → Head-to-head records entry (per-opponent profile, past matches, singles/doubles head-to-head). The Match Info QA and the base/extended/state/export suites pass on Chromium and WebKit; the exported interactive page was loaded in a browser and shows the competition, names and opted-in note.
+
+Phase 8 follow-up: Compare (Overview/Rates, Choose Another Match picker) and the Opponent screen were rebuilt as grouped-card pages checked against `docs/app-store-screenshots/iphone-6.9/08` and `09`; the Match Info editor gained recent-player chips and a Discard-changes prompt; including a private note in an export goes through a review sheet showing the exact quoted text. Sheet-hosted pages use the sheet theme variables and must neutralise the site's global `section` padding.
+
+Phase 8 side-by-side review: compared against `iphone-6.9/01` (Match Info block), `05` (archive: Opponents card, row caption with person/people icon between score and result), `08` (Compare), `09` (Opponent) and `watch-17` (Watch history). Fixed: archive caption icon + placement, Opponents icon tint, tinted "Add private note", sheet padding. Remaining known differences: native pushes Compare/Opponent/editors as navigation screens while the demo presents them in the phone's sheet presenter; type scale is slightly smaller than the captures.
+
+Phase 8 native capture review: ran the real app's `MatchDetailsUITests` on an iPhone 18 Pro simulator (Xcode 27.1; five tests, all passing) and exported the XCTest attachments from the xcresult (the `DEUCEMATE_UI_SHOTS_DIR` build setting does not reach the runner; use `xcresulttool export attachments`). Compared the native Match Info editor, Players list, player detail, Private Note editor, Compare and chosen-match screens with the demo and rebuilt the demo editor (Cancel/Save header, competition tiles with radio marks, Partner before Opponents with info/clear controls, Match Type segmented control, Clear details), Players list/detail (Name, Playing Style pickers, Merge Duplicate Into…, red Forget Player, footers) and note editor (blue-bordered field, autosave caption, count, Privacy and storage) to match. Still different: the demo uses the phone's sheet presenter where native pushes some screens, Closed afterwards: the player picker now mirrors native (`PlayerPickerView`: search + close, Existing Player rows with match counts and an info button that opens the profile, "Add … as new player", tip footer); nested screens (picker, profile, player detail, opponent, choose-match) reopen their parent like a push/pop, and the editor draft survives them.
+
+Phase 8 dark-mode check: the new Match Info block, editor and Compare screens were rendered with a dark colour scheme in Chromium and read correctly via the sheet theme variables. Dynamic Type has no browser equivalent and was not mirrored.
+Dark-mode pass (Chromium + WebKit) also covered the Opponents list/detail and Players list/detail screens; fixed a '1 wins' plural in the doubles head-to-head.
+
+Seed cast (watch-demo-history.js `seedHistory`): Alice Morgan plays 4 matches, Ben Carter 2, and Dan Ortiz & Eve Park 2 doubles matches with partner Sam Reyes; the live in-progress match is left untagged. This gives the Opponents directory, head-to-head (singles and doubles) and the Compare rematch baseline real data. Saved browser state from before this change keeps its old archive; Reset demo restores the cast.

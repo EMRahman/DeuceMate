@@ -117,6 +117,12 @@
       summary: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 7h8M8 11h8M8 15h3m-3 3h3m4-3h1m-1 3h1"/>',
       table: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20M2 15h20M9 4v16m6-16v16"/>',
       chevron: '<path d="m9 5 7 7-7 7"/>',
+      chevronUp: '<path d="m5 15 7-7 7 7"/>',
+      chevronDown: '<path d="m5 9 7 7 7-7"/>',
+      person: '<circle cx="12" cy="7" r="4"/><path d="M4 21a8 8 0 0 1 16 0Z"/>',
+      people: '<circle cx="9" cy="8" r="3.5"/><path d="M2 20a7 7 0 0 1 14 0Zm13-9a3 3 0 1 0 0-6m2 15h5a6 6 0 0 0-5-6"/>',
+      note: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/>',
+      compare: '<path d="M7 4 3 8l4 4M3 8h14m0 4 4 4-4 4m4-4H7"/>',
       expand: '<path d="M9 3H3v6m0-6 7 7m5 11h6v-6m0 6-7-7"/>',
       signal: '<path d="M3 20v-4m6 4v-8m6 8V8m6 12V4" stroke-width="3"/>',
       wifi: '<path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0m-11 4a6 6 0 0 1 8 0m-4 4h0" stroke-width="2.5"/>',
@@ -131,6 +137,7 @@
       exclaimCircle: '<circle cx="12" cy="12" r="10"/><path d="M12 7v6m0 3h0"/>',
       closeCircle: '<circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="m8.5 8.5 7 7m0-7-7 7" stroke="#000" stroke-width="2.2"/>',
       hand: '<path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3Z"/>',
+      info: '<circle cx="12" cy="12" r="10"/><path d="M12 11v6m0-10h0" stroke-width="2.2"/>',
       help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7m0 3h0"/>',
       mail: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="m2 7 10 7 10-7"/>',
       warning: '<path d="m12 2 11 20H1L12 2Z"/><path d="M12 9v6m0 3h0"/>'
@@ -151,8 +158,34 @@
   function upsert(r) {
     if (!r || tombstones.has(r.id)) return;
     var i = archive.findIndex(function (a) { return a.id === r.id; });
-    if (i < 0) archive.unshift(copy(r)); else archive[i] = copy(r);
+    var prior = i < 0 ? null : archive[i], next = copy(r);
+    // Replacing a record by id must carry match details and a newer type conversion forward.
+    if (prior) {
+      if (prior.tags && !next.tags) next.tags = prior.tags;
+      if ((prior.matchTypeRevision || 0) > (next.matchTypeRevision || 0)) { next.matchType = prior.matchType; next.matchTypeRevision = prior.matchTypeRevision; next.tags = prior.tags; }
+    }
+    if (i < 0) archive.unshift(next); else archive[i] = next;
     sortRecords(archive);
+  }
+  // Metadata-only edit (tags, match type) applied to the archive copy and any watch copy.
+  function updateRecord(id, mutate) {
+    var rec = archive.find(function (a) { return a.id === id; });
+    if (!rec) return false;
+    mutate(rec);
+    var watchCopy = S.history.find(function (w) { return w.id === id; });
+    if (watchCopy) {
+      watchCopy.matchType = rec.matchType; watchCopy.matchTypeRevision = rec.matchTypeRevision;
+      if (rec.tags) watchCopy.tags = copy(rec.tags); else delete watchCopy.tags;
+      if (rec.matchType === "singles" && watchCopy.resume) delete watchCopy.resume.doublesServer;
+    }
+    persist(); S.render(); render(); return true;
+  }
+  // The Watch converted a completed match; the phone follows on its next sync.
+  function applyWatchMatchType(id, type, tags) {
+    var rec = archive.find(function (a) { return a.id === id; });
+    if (!rec) return;
+    rec.matchType = type; rec.matchTypeRevision = Date.now(); if (tags) rec.tags = tags; else if (type === "singles") rec.tags = rec.tags ? window.DeuceMatePhoneMatchInfo.convertedTags(rec.tags, type) || undefined : undefined;
+    persist(); render();
   }
   function withDemoHealth(record) {
     var r = copy(record);
@@ -299,7 +332,8 @@
     if (options.graph) dialog.classList.add("phone-graph-dialog");
     var header = h("div", { class: "phone-sheet-head" }, options.leading || h("span", { class: "phone-sheet-spacer", "aria-hidden": "true" }), h("h2", {}, title));
     if (options.variant === "delete") header.querySelector("h2").prepend(icon("warning"));
-    if (kind !== "alert" && kind !== "actions" && kind !== "popover" && options.variant !== "share") header.append(button("Done", closeSheet));
+    if (options.trailing) header.append(options.trailing);
+    else if (kind !== "alert" && kind !== "actions" && kind !== "popover" && options.variant !== "share") header.append(button("Done", closeSheet));
     if (kind === "sheet" || kind === "actions") {
       var origin = null, activePresentation = presentation;
       header.style.touchAction = "none";
@@ -402,6 +436,11 @@
     b.append(h("span", { class: "phone-row-top" }, h("span", { class: "phone-row-date" }, new Date(rec.startTime).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })), h("span", { class: "phone-row-badges" }, badge, connection.paired ? location : null)),
       h("strong", { class: "phone-row-score" }, window.DeuceMatePhoneReports.score(rec, "me")),
       h("span", { class: "phone-row-format" }, rec.endTime ? h("span", { class: "phone-result-badge " + (rec.iWon === true ? "won" : rec.iWon === false ? "lost" : "draw") }, rec.iWon === true ? "Won" : rec.iWon === false ? "Lost" : "Draw") : null, format(rec)));
+    var tagLine = window.DeuceMatePhoneMatchInfo.displayLine(rec.tags);
+    if (tagLine) {
+      var caption = h("span", { class: "phone-row-caption", "aria-label": tagLine }, icon(rec.matchType === "doubles" ? "people" : "person"), h("span", { class: "phone-row-caption-text" }, tagLine));
+      b.insertBefore(caption, b.querySelector(".phone-row-format"));
+    }
     var actions = button("•••", function () { recordActions(rec); }, "phone-row-menu");
     actions.dataset.focusKey = "phone-actions-" + rec.id;
     actions.setAttribute("aria-label", "Match actions: " + result(rec));
@@ -553,6 +592,7 @@
   function matches() {
     var out = h("div", {});
     out.append(window.DeuceMatePhoneTrends.headline(phone));
+    out.append(window.DeuceMatePhoneMatchInfo.opponentsSection(phone));
     if (connection.activation === "connecting") out.append(card(heading("Connecting to Apple Watch…"), note("Your iPhone archive stays available while Watch connectivity starts.")));
     else if (connection.activation === "unavailable") out.append(card(heading("Apple Watch Unavailable"), note("Watch connectivity couldn't be started. You can still create, review, and export matches on this iPhone.")));
     if (connection.syncing) out.append(card(note("Syncing with Apple Watch… Your saved iPhone matches remain available.")));
@@ -757,7 +797,7 @@
     cloudStatus: function () { return cloudState === "uploaded" ? "Backed up to iCloud (simulated)" : cloudState === "pending" ? "iCloud upload pending (simulated)" : "iCloud unavailable — stored on iPhone"; },
     records: function () { return copy(archive); }, openSelectedActions: function () { var r = archive.find(function (x) { return x.id === selected; }); if (r) recordActions(r); }, liveRecord: liveRecord, settings: settings,
     navigate: navigate, render: render, showSheet: showSheet, closeSheet: closeSheet, confirm: confirm, notify: notify,
-    setSetting: setSetting, addRecord: addRecord, replaceRecords: replaceRecords, sync: sync, syncNow: syncNow, download: download,
+    updateRecord: updateRecord, applyWatchMatchType: applyWatchMatchType, setSetting: setSetting, addRecord: addRecord, replaceRecords: replaceRecords, sync: sync, syncNow: syncNow, download: download,
     connection: connection };
 
   // Guide boot runs before this deferred script, so starter history exists.

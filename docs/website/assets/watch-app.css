@@ -493,3 +493,6 @@ button.trk-row { background: none; border: 0; padding: 0; width: 100%; text-alig
 .real-skipped strong { display: block; color: var(--ink); margin-bottom: 2px; }
 .real-skipped .skipped { border-color: rgba(255,206,74,.3); background: rgba(255,206,74,.08); }
 @media (max-width: 560px) { .real-skipped { grid-template-columns: 1fr; } }
+
+/* Match details caption sits directly under the format line (MatchStatsView tagsLine), one truncating line. */
+.det-fmt + .det-fmt.det-tags { margin-top:-3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
