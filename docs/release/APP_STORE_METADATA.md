@@ -553,10 +553,8 @@ App Review Information persists across versions in App Store Connect, so the
 previous submission's text is probably still sitting in the field — check it
 rather than assuming the field is empty.
 
-Use the following for the 1.3.0 submission. Replace the final devices-tested
-line with the exact physical-device / TestFlight evidence from this release
-candidate before pasting it into App Store Connect. It is comfortably under the
-4,000-character field limit before that replacement.
+Use the following for the 1.3.0 submission. It is comfortably under the 4,000-
+character field limit.
 
 ```
 This is an update to a previously approved app. No new
@@ -596,9 +594,7 @@ HealthKit (Watch at first launch; iPhone for per-point heart rate) and location
 usable with every prompt denied. No ATT, camera, mic, photos, contacts,
 calendar, notifications or Bluetooth.
 
-Devices tested: [replace with the exact iPhone model + iOS version, Apple Watch
-model + watchOS version, TestFlight build 1.3.0 (11), and unpaired-iPhone path
-verified for this release candidate].
+Devices tested: iPhone 16 (iOS 27.2) and Apple Watch Series 7 GPS (watchOS 26.6).
 ```
 
 The no-Watch paragraph is the one that earns its place: this is a Watch-first
