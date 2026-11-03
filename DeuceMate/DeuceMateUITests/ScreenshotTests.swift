@@ -113,4 +113,108 @@ final class ScreenshotTests: XCTestCase {
         saveScreenshot("03-match-stats")
 
     }
+
+    /// The screens that changed or arrived with Match Info. These show player
+    /// names, so seed an archive whose names are fictional, never a real
+    /// player's. Set DEUCEMATE_TARGET_MATCH_ID to a tagged rematch so Compare
+    /// has a same-opponent baseline, and DEUCEMATE_OPPONENT_NAME to that opponent.
+    @MainActor
+    func test_captureMatchInfoScreens() throws {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Matches"].waitForExistence(timeout: 20))
+        Thread.sleep(forTimeInterval: 1)
+        saveScreenshot("05-match-archive")
+
+        // --- Opponents directory, then one opponent's head-to-head ---
+        let opponentsLink = app.buttons["opponents-section-link"]
+        XCTAssertTrue(opponentsLink.waitForExistence(timeout: 10))
+        opponentsLink.tap()
+        let opponentName = ProcessInfo.processInfo.environment["DEUCEMATE_OPPONENT_NAME"] ?? "Alice Morgan"
+        let opponentRow = app.buttons
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'opponent-row-' AND label CONTAINS %@", opponentName))
+            .firstMatch
+        XCTAssertTrue(opponentRow.waitForExistence(timeout: 10))
+        opponentRow.tap()
+        Thread.sleep(forTimeInterval: 1)
+        saveScreenshot("09-opponent-head-to-head")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        Thread.sleep(forTimeInterval: 0.5)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        // --- Match detail with Match Info open ---
+        let matchRow = app.buttons["match-row-\(targetMatchID)"]
+        for _ in 0..<6 where !matchRow.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(matchRow.waitForExistence(timeout: 10))
+        matchRow.tap()
+        let disclosure = app.buttons["match-info-disclosure"]
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 10))
+        let compare = app.buttons["compare-previous-match"]
+        if !compare.waitForExistence(timeout: 1) {
+            disclosure.tap()
+        }
+        XCTAssertTrue(compare.waitForExistence(timeout: 5))
+        Thread.sleep(forTimeInterval: 0.5)
+        saveScreenshot("01-match-overview")
+
+        // --- Compare with Previous Match ---
+        compare.tap()
+        Thread.sleep(forTimeInterval: 1)
+        saveScreenshot("08-compare-previous-match")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 10))
+    }
+
+    /// Coaching Insights, from a match that earns several ranked observations.
+    /// Point DEUCEMATE_TARGET_MATCH_ID at that match for this run.
+    @MainActor
+    func test_captureCoachingInsights() throws {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Matches"].waitForExistence(timeout: 20))
+        let matchRow = app.buttons["match-row-\(targetMatchID)"]
+        for _ in 0..<12 where !matchRow.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(matchRow.waitForExistence(timeout: 10))
+        matchRow.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 10))
+        let coachingHeading = app.staticTexts
+            .matching(NSPredicate(format: "label BEGINSWITH 'Coaching Insights'"))
+            .firstMatch
+        for _ in 0..<6 where !coachingHeading.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(coachingHeading.waitForExistence(timeout: 10))
+        Thread.sleep(forTimeInterval: 0.5)
+        saveScreenshot("04-coaching-insights")
+    }
+
+    /// The AI Coach sheet the marketing frame composites. Run with the
+    /// simulator in dark appearance (`simctl ui <udid> appearance dark`).
+    @MainActor
+    func test_captureAICoachSheet() throws {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Matches"].waitForExistence(timeout: 20))
+        let matchRow = app.buttons["match-row-\(targetMatchID)"]
+        for _ in 0..<6 where !matchRow.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(matchRow.waitForExistence(timeout: 10))
+        matchRow.tap()
+        let aiCoach = app.buttons["AI Coach"]
+        XCTAssertTrue(aiCoach.waitForExistence(timeout: 10))
+        aiCoach.tap()
+        // A match with recorded health data asks for consent first.
+        let continueButton = app.alerts.buttons["Continue"]
+        if continueButton.waitForExistence(timeout: 3) {
+            continueButton.tap()
+        }
+        XCTAssertTrue(app.navigationBars["AI Coach"].waitForExistence(timeout: 10))
+        Thread.sleep(forTimeInterval: 1.5)
+        saveScreenshot("ai-coach-sheet")
+    }
 }

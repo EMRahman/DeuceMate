@@ -5,42 +5,53 @@ Current pre-flight review of DeuceMate against the
 focused on upload blockers, likely rejection reasons, and the manual work needed
 in App Store Connect.
 
-## Current release candidate — 1.2.1 (build 10), 22 September 2026
+## Current release candidate — 1.3.0 (build 11), 2 November 2026
 
 The iPhone app and embedded Apple Watch app are both configured as
-`MARKETING_VERSION = 1.2.1` and `CURRENT_PROJECT_VERSION = 10` in their Debug and
+`MARKETING_VERSION = 1.3.0` and `CURRENT_PROJECT_VERSION = 11` in their Debug and
 Release shipping configurations. The test targets remain at their non-shipping
 version/build values.
 
-This candidate adds the optional Watch **Animated guide** and includes clearer
-Watch score/stat presentation plus safer archive deletion and explicit
-completion of a parked match at its current score. It introduces no account,
-purchase, advertising, tracking, server, or permission change. The App Store
-Connect **What's New** and **App Review Information → Notes** to paste are in
+This candidate adds **Match Info** (players, competition type, private notes),
+**Opponents and head-to-head**, **Compare with Previous Match**, the
+opponent's-perspective web report, names and notes export switches, ranked
+Coaching Insights, match-type conversion and tappable Watch tracking chips. It
+introduces no account, purchase, advertising, tracking, server, entitlement, or
+permission change: no plist, entitlement or privacy manifest differs from
+`1.2.1 (10)`. It does add user-entered third-party names, so the App Privacy label
+must be re-confirmed below. The App Store Connect **What's New** and
+**App Review Information → Notes** to paste are in
 [`APP_STORE_METADATA.md`](APP_STORE_METADATA.md#whats-new-4000-characters-max)
 and [`APP_STORE_METADATA.md`](APP_STORE_METADATA.md#app-review-information--notes-version-updates).
 
 Before submission:
 
-- [ ] Confirm build `1.2.1 (10)` has not already been uploaded from a different
-  commit. If it has, increment both shipping targets together before archiving;
-  App Store Connect does not permit a replacement binary with the same build.
-- [ ] Archive the exact current `HEAD`, validate, upload, and install the
-  TestFlight build as an upgrade. Confirm iPhone and embedded Watch both report
-  `1.2.1 (10)`.
-- [ ] On physical hardware, run the Animated guide through its first and final
-  examples; dismiss it, reopen it from Guide while idle, and confirm it cannot
-  be opened during setup or an active match. Confirm it changes no real match,
-  history, settings, workout, or phone live score.
-- [ ] Verify the release-specific archive paths: delete a phone/archive match
-  only after its confirmation remains visible; park a Watch match, then use
-  **End at Current Score** from both Watch and iPhone in separate runs. Confirm
-  each completed result appears once, survives sync/relaunch, and is not
-  overwritten by an older checkpoint.
-- [ ] Re-run the unpaired-iPhone reviewer path: **Matches → pencil icon → Enter
-  a match manually → save → detail → statistics/Points Graph → export**.
+- [ ] Archive the exact release `HEAD`, validate, upload, and install the
+  TestFlight build as an upgrade over `1.2.1 (10)`. Confirm iPhone and embedded
+  Watch both report `1.3.0 (11)`, and that the existing archive is intact.
+- [ ] On physical hardware, add players and a competition type to a match and
+  confirm they reach the Watch's Past Matches. Add a note and confirm it does not
+  reach the Watch. Run Sync Now and relaunch, and confirm nothing is lost.
+- [ ] Rename, merge and forget a player, and confirm a forgotten name does not
+  return after a sync or an archive import.
+- [ ] Change a completed match between singles and doubles from both iPhone and
+  Watch, and confirm it survives sync and moves between Trends and head-to-head
+  buckets.
+- [ ] Export a report and an AI prompt with names and the note on and off, in both
+  perspectives. Confirm the review and disclosure alerts, and the exported text.
+- [ ] Re-confirm **Data Not Collected** against this build and Apple's current
+  wording. See the match details entries in
+  [`APP_STORE_METADATA.md`](APP_STORE_METADATA.md#app-privacy-nutrition-label-guidance).
+- [ ] Re-run the unpaired-iPhone reviewer path, including the new-feature steps
+  in the review notes: **Matches → pencil icon → enter two matches → Match Info →
+  same opponent on both → Compare → Opponents**.
+- [ ] Upload the iPhone screenshots in the order given in
+  [`docs/app-store-screenshots/README.md`](../app-store-screenshots/README.md).
 - [ ] Replace the placeholder device line in App Review Information → Notes
-  with the exact iPhone/iOS, Watch/watchOS, and TestFlight `1.2.1 (10)` evidence.
+  with the exact iPhone/iOS, Watch/watchOS, and TestFlight `1.3.0 (11)` evidence.
+- [ ] After release: tag the uploaded commit `v1.3.0`, then update the website
+  copy, setup guide images and browser demo. `docs/website/` publishes on merge,
+  so they deliberately wait until 1.3.0 is on the store.
 
 The historical review evidence below remains useful background; it is not proof
 that this new binary was archived or tested.
@@ -834,7 +845,7 @@ Non-blocking Release build warnings to clean up:
 - [x] `ITSAppUsesNonExemptEncryption = false` is declared on both targets.
 - [x] The iPhone target correctly omits `NSHealthUpdateUsageDescription`; it
   reads HealthKit but does not write workouts.
-- [~] Source configuration is currently `1.2.1` / `10` across both production
+- [~] Source configuration is currently `1.3.0` / `11` across both production
   targets in Debug and Release. Test targets remain non-shipping and are not
   included in the App Store bundle. The current-head archive still needs the
   validation listed in **Current release candidate** above.

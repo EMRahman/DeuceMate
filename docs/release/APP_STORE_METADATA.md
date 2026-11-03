@@ -24,24 +24,23 @@ statistics. The submission is the iOS app (`ehsan.DeuceMate`); the watchOS app
 ## Promotional Text (170 characters max)
 
 ```
-Score on Apple Watch, tag how every point ended, then hand the match to your favourite AI for real coaching. Free forever. No ads, no tracking.
+Now track who you play: head-to-head records, match comparisons and private notes, alongside Apple Watch scoring and AI coaching. Free forever. No ads, no tracking.
 ```
 
-**Character count:** 143 characters. Live on the store from the 1.1.0
-submission (19 August 2026); the previous line was "Score tennis on Apple
-Watch, then review live scores, spoken announcements, and full match stats on
-iPhone. Free forever. No ads."
+**Character count:** 164 characters. Proposed for the 1.3.0 submission; do
+not change it on the store until 1.3.0 is approved, because it describes 1.3.0
+features. Live until then (since the 1.1.0 submission, 19 August 2026): "Score on Apple Watch, tag how every point ended, then hand the match to your favourite AI for real coaching. Free forever. No ads, no tracking."
 
-Two deliberate choices here:
+Two deliberate choices carried over from the previous line:
 
-- **"your favourite AI"**, not "ChatGPT, Claude or Gemini". The Description
-  above uses the same generic phrasing, and promotional text renders directly
+- **"AI coaching"**, not "ChatGPT, Claude or Gemini". The Description
+  uses the same generic phrasing, and promotional text renders directly
   on top of it — naming the apps in one and not the other reads as an
   oversight. (Naming them is permissible; guideline 2.3.10 is about rival
   *platforms*. This is a consistency choice, not a compliance one.)
-- **"tag how every point ended"** — outcome tracking is opt-in and costs two
-  taps per point, so the copy says it is something the player does, not
-  something the app infers on its own.
+- **"track who you play"** — player details are something the user adds, so
+  the copy says it is something the player does, not something the app infers
+  on its own.
 
 Promotional text is the **only** App Store copy that can be changed without
 submitting a new version for review, so it is the right home for anything
@@ -53,13 +52,14 @@ file starts lying about what users actually see.
 ## Keywords (100 characters max)
 
 ```
-tennis,score,match,tiebreak,sports,watch,referee,umpire,deuce,padel,game,set,stats
+tennis,score,match,tiebreak,sports,watch,referee,umpire,deuce,padel,game,set,stats,opponent
 ```
 
 **Optimization Notes:**
 - Focus on tennis-specific terms (deuce, tiebreak, set)
 - Include "padel" for the international tennis variant
 - "stats" covers the iPhone statistics feature set
+- "opponent" covers the 1.3.0 head-to-head records
 - No spaces after commas to maximize character count
 
 ---
@@ -125,6 +125,13 @@ Turn point-by-point scoring into useful match analysis:
 Export a match summary, point-by-point data, or interactive web report. You can
 also generate a coaching prompt for an AI app you choose. Sharing is your choice.
 
+KNOW WHO YOU PLAYED
+
+• Add opponents, partners and competition type on iPhone
+• See head-to-head records against each opponent
+• Compare a match with your previous one
+• Keep private notes that stay on your iPhone
+
 UNDERSTAND TRENDS ACROSS MATCHES
 
 • See your game change across match history
@@ -169,11 +176,52 @@ REQUIREMENTS
 Built by a recreational tennis player for players who want dependable scorekeeping without losing focus on the game.
 ```
 
-**Character count:** 3,624 characters (including line breaks; under 4,000)
+**Character count:** 3,765 characters (including line breaks; under 4,000)
 
 ---
 
 ## What's New (4000 characters max)
+
+### Version 1.3.0 - Match Info, opponents, comparisons and private notes
+
+```
+See who you play, how you match up, and what changed since last time.
+
+NEW: MATCH INFO
+• Add opponents, partners and a competition type to any match on iPhone: friendly, league, tournament or practice.
+• Recent players are one tap away, and names appear with the match on your Apple Watch.
+
+NEW: OPPONENTS AND HEAD-TO-HEAD
+• Open Opponents from your match archive to see your record against each player, separately for singles and doubles.
+• Add a playing style for each player: handedness, backhand and game style.
+• Rename, merge or forget players at any time.
+
+NEW: COMPARE MATCHES
+• Put a match next to your previous one, your last match against that opponent, or another you choose.
+
+NEW: PRIVATE NOTES
+• Keep a note on any match. Notes save automatically and stay on your iPhone. They are left out of Watch sync and iCloud backup, and leave your iPhone only if you choose to include them in an export.
+
+IMPROVED
+• Coaching Insights now lead with the most useful distinct observations, with new serve, return and heart-rate findings.
+• Share the interactive web report from your opponent's perspective as well as your own.
+• Choose whether player names and your note go into reports and AI coaching prompts.
+• Started a match as singles when it was doubles? Change the type of a completed match on iPhone or Apple Watch.
+• On Apple Watch, tap the Points, Health or Pulse status on the start screen to see what it means and how to change it.
+
+No account, subscription, ads, or tracking — just your tennis, on your devices.
+```
+
+**Character count:** 1,526 characters (including line breaks; under 4,000)
+
+> **Scope.** The shipping targets are configured as version **1.3.0 (11)**.
+> This is a minor release because Match Info adds new user-entered data, new
+> iPhone screens and new export choices, the same reasoning as 1.2.0 and Trends.
+> The comparison baseline is the `1.2.1 (10)` archive built on 22 September
+> 2026, which predates the opponent's-perspective web export, so that export
+> ships for the first time here. App Store Connect has used build 10 and not 11.
+
+---
 
 ### Version 1.2.1 - Animated Watch guide and match-handling improvements
 
@@ -345,13 +393,9 @@ App Store Connect requires at least one set of iPhone screenshots. Provide the
   1260×2736, 1290×2796, or 1320×2868; 3–6 screenshots recommended
 - **6.5" display** (optional when 6.9" is supplied): 1–10 screenshots
 
-Suggested iPhone screenshot content (in order):
-1. Live scoreboard mirroring an in-progress match
-2. Match history list with the Trends summary visible
-3. Trends overview showing several match-by-match series
-4. Match statistics (serve / return / break points)
-5. Points timeline graph
-6. Settings showing the spoken-announcements toggle
+The set is full at 10 screenshots, so a new one must replace an old one. The
+upload order and what changed for 1.3.0 are in
+[`docs/app-store-screenshots/README.md`](../app-store-screenshots/README.md).
 
 ### Apple Watch screenshots (Required for the Watch app)
 
@@ -442,14 +486,15 @@ When completing the App Privacy questionnaire in App Store Connect:
   prompt. This is the informed-consent step for HealthKit data sharing.
 - HealthKit apps must have a privacy policy — see `PRIVACY_POLICY.md`, which
   includes a dedicated Health & Fitness Data section.
-- **Match details (MATCH_TAGS_PLAN.md, first shipped by the iOS editor PR).**
-  Users can type names for opponents/partners and pick a competition type on
-  iPhone. These are third-party names the *user* enters; they live in the
+- **Match details (MATCH_TAGS_PLAN.md, first shipping in 1.3.0).**
+  Users can type names for opponents/partners, pick a competition type, and
+  record a tennis playing style (handedness, backhand, game style) on iPhone. These are third-party names the *user* enters; they live in the
   user's own archive (on device, the paired watch via WatchConnectivity, the
   user's private iCloud Drive backup copy, and manual archive files the user
   creates) and are never sent to the developer. Private match notes stay in a
-  backup-excluded iPhone-only file, excluded from the iCloud Drive copy, watch
-  sync and manual archives. No Contacts access. On this basis "Data Not
+  backup-excluded iPhone-only file, excluded from the iCloud Drive copy and watch
+  sync, and from manual archives unless the user opts in for that export (see
+  the exports entry below). No Contacts access. On this basis "Data Not
   Collected" still appears to match Apple's definition (the developer and any
   integrated partner cannot access the data), but this is **not** a guarantee:
   re-confirm the label at release against the shipped build, since a
@@ -508,7 +553,7 @@ App Review Information persists across versions in App Store Connect, so the
 previous submission's text is probably still sitting in the field — check it
 rather than assuming the field is empty.
 
-Use the following for the 1.2.1 submission. Replace the final devices-tested
+Use the following for the 1.3.0 submission. Replace the final devices-tested
 line with the exact physical-device / TestFlight evidence from this release
 candidate before pasting it into App Store Connect. It is comfortably under the
 4,000-character field limit before that replacement.
@@ -517,22 +562,33 @@ candidate before pasting it into App Store Connect. It is comfortably under the
 This is an update to a previously approved app. No new
 permissions, no accounts, no in-app purchases, no ads, no tracking.
 
-WHAT CHANGED IN 1.2.1
-- Apple Watch: a new optional Animated guide demonstrates nine scoring
-  situations, including scoring and undoing points, second serves, errors,
-  live stats, games and changeovers. It is an in-memory demonstration only:
-  it does not score, save, sync, export, announce, start a workout, access
-  sensors, or change settings.
-- Watch scoring and live statistics use clearer, consistent score reporting.
-- A parked in-progress match can be explicitly completed at its current score
-  on iPhone or Apple Watch. The result is saved before it is sent to the other
-  device, and archive deletion confirmation is more reliable.
+WHAT CHANGED IN 1.3.0
+- iPhone: Match Info lets the user add opponent/partner names, a competition
+  type and a private note to a match. Names are typed by the user; the app does
+  not access Contacts. New screens show head-to-head records by opponent and
+  compare a match with an earlier one. Players can be renamed, merged or
+  forgotten in Settings.
+- All of this stays on the user's devices and their private iCloud Drive backup.
+  Private notes stay on the iPhone. A note leaves the device only if the user
+  turns on "Include private note" for a specific export and reviews it first.
+- Interactive web reports can be exported from either player's perspective, and
+  reports and AI prompts have switches for player names and the private note.
+- Coaching Insights are ranked with new observations.
+- A completed match can be changed between singles and doubles on iPhone or
+  Apple Watch.
+- Apple Watch: start-screen tracking chips now open their explanation in
+  Settings.
 
 REVIEWING WITHOUT AN APPLE WATCH
 The iPhone app is fully usable on its own. On an iPhone with no Watch paired,
 the Matches screen offers "Enter a match manually" (pencil icon, top left) —
 that creates a match you can open, review and export, exercising the archive,
 statistics, points timeline and export flows without any Watch involvement.
+
+To see the new features: enter two matches manually. Open one, expand Match Info,
+tap the Match Info row, add an opponent name and tap Save. Do the same on the
+other match using the same player. Then use "Compare with Previous Match" in
+Match Info, and Opponents > Head-to-head records on the Matches screen.
 
 PERMISSIONS
 HealthKit (Watch at first launch; iPhone for per-point heart rate) and location
@@ -541,7 +597,7 @@ usable with every prompt denied. No ATT, camera, mic, photos, contacts,
 calendar, notifications or Bluetooth.
 
 Devices tested: [replace with the exact iPhone model + iOS version, Apple Watch
-model + watchOS version, TestFlight build 1.2.1 (10), and unpaired-iPhone path
+model + watchOS version, TestFlight build 1.3.0 (11), and unpaired-iPhone path
 verified for this release candidate].
 ```
 
@@ -732,4 +788,4 @@ Center attachment limit.
 
 ---
 
-*Prepared for DeuceMate v1.2.1 (build 10) - 2026*
+*Prepared for DeuceMate v1.3.0 (build 11) - 2026*
