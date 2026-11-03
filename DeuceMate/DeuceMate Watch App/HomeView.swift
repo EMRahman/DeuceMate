@@ -301,6 +301,7 @@ private enum SettingsAnchor: Hashable {
 
 struct HomeView: View {
     @EnvironmentObject var viewModel: ScoreViewModel
+    @AppStorage(ScoreInputHaptics.enabledKey) private var swipeHapticsEnabled = ScoreInputHaptics.isEnabledByDefault
     @Environment(\.openURL) private var openURL
     @State private var showMatchView = false
     @State private var showInstructions = false
@@ -588,6 +589,15 @@ struct HomeView: View {
                             (Text("Changeover Compass")
                              + Text(" · Experimental").font(.caption2).foregroundColor(.secondary))
                             Text(SettingsCopy.changeoverCompass.text)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    Toggle(isOn: $swipeHapticsEnabled) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Swipe vibration")
+                            Text(SettingsCopy.swipeVibration.text)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }

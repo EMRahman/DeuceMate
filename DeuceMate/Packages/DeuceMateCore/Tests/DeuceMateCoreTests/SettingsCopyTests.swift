@@ -27,7 +27,7 @@ final class SettingsCopyTests: XCTestCase {
 
     func test_caseCount_matchesKnownSettings() {
         // Guards against a forgotten or accidentally duplicated case.
-        XCTAssertEqual(SettingsCopy.allCases.count, 10)
+        XCTAssertEqual(SettingsCopy.allCases.count, 11)
     }
 
     func test_defaultMaxHRNote_matchesSharedPulseCoachGuidance() {

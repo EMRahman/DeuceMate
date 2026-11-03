@@ -8,6 +8,7 @@ public enum SettingsCopy: CaseIterable, Sendable {
     case trackPointOutcome
     case workoutSession
     case changeoverCompass
+    case swipeVibration
     case appearanceTheme
     case announceScores
     case iPhoneInput
@@ -23,6 +24,7 @@ public enum SettingsCopy: CaseIterable, Sendable {
         case .trackPointOutcome:     return "After each point, tag the winner and shot to build detailed stats."
         case .workoutSession:        return "Runs an Apple Watch workout to log heart rate and calories."
         case .changeoverCompass:     return "Uses the watch compass to confirm your court end at changeovers."
+        case .swipeVibration:        return "Taps your wrist when a swipe scores or undoes a point."
         case .appearanceTheme:       return "Sets the scoreboard color theme on both your iPhone and watch."
         case .announceScores:        return "Speaks the score aloud through your iPhone speaker."
         case .iPhoneInput:           return "Lets you swipe to score on the iPhone scoreboard."

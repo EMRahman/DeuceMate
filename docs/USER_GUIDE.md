@@ -84,6 +84,8 @@ Supports both **singles** and **doubles** with full service-order management for
 
 **Point Confirm Highlight** — when you score on the watch, the point badge blinks twice so a registered point is unmissable. While your finger is still down, the row that will receive the point also lights up green (a win) or red (a loss) so a wrong-direction swipe is visible before you lift (watch and iPhone Input). Toggle in Settings.
 
+**Swipe vibration** — turn this on in watch Settings to feel a tap on your wrist when a swipe scores or undoes a point, with a different pattern for win, lose and undo. No tap means the swipe didn't count, which is useful when sweat or rain makes swipes unreliable. Off by default.
+
 **Momentum strip** — an optional 8-slot indicator above the scoreboard colours the last eight points by winner, giving a glanceable read of who is on a run. Mirrored on the iPhone live scoreboard; toggle in Settings.
 
 **Appearance themes** — five court-inspired colour skins (Classic, Clay Court, Grass Court, Hard Court, Hard Court Night) recolour both the watch and iPhone UI; the theme is synced between devices.
