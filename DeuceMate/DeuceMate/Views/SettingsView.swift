@@ -112,7 +112,7 @@ struct SettingsView: View {
     // Watch-only settings (phone controls watch)
     @AppStorage("statsTrackingEnabled") private var statsTrackingEnabled: Bool = false
     @AppStorage("checkChangeover") private var checkChangeover: Bool = false
-    @AppStorage("swipeHapticsEnabled") private var swipeHapticsEnabled: Bool = false
+    @AppStorage(MatchSyncKey.swipeHapticsEnabled) private var swipeHapticsEnabled: Bool = false
 
     private enum PingStatus: Equatable {
         case inFlight

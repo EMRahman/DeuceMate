@@ -652,7 +652,11 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
             case .checkChangeover(let v):
                 DispatchQueue.main.async { UserDefaults.standard.set(v, forKey: "checkChangeover") }
             case .swipeHapticsEnabled(let v):
-                DispatchQueue.main.async { UserDefaults.standard.set(v, forKey: "swipeHapticsEnabled") }
+                DispatchQueue.main.async {
+                    let defaults = UserDefaults.standard
+                    guard defaults.object(forKey: MatchSyncKey.swipeHapticsEnabled) as? Bool != v else { return }
+                    defaults.set(v, forKey: MatchSyncKey.swipeHapticsEnabled)
+                }
             case .iPhoneInputEnabled(let v):
                 DispatchQueue.main.async {
                     UserDefaults.standard.set(v, forKey: "iPhoneInputEnabled")
