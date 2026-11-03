@@ -5,12 +5,18 @@ Current pre-flight review of DeuceMate against the
 focused on upload blockers, likely rejection reasons, and the manual work needed
 in App Store Connect.
 
-## Current release candidate — 1.3.0 (build 11), 2 November 2026
+## Current release candidate — 1.3.0 (build 13), 3 November 2026
 
 The iPhone app and embedded Apple Watch app are both configured as
-`MARKETING_VERSION = 1.3.0` and `CURRENT_PROJECT_VERSION = 11` in their Debug and
+`MARKETING_VERSION = 1.3.0` and `CURRENT_PROJECT_VERSION = 13` in their Debug and
 Release shipping configurations. The test targets remain at their non-shipping
 version/build values.
+
+Build 13 was archived from the commit tagged `v1.3.0`, where the source still says
+build 11: Xcode raised the number at upload, so that archive still shows 11 in
+Organizer. Builds 11 and 12 were earlier uploads of the same commit and are not
+the submission build. The owner reported testing of build 13 as passed on
+3 November 2026. The boxes below were not confirmed one by one, so they stay open.
 
 This candidate adds **Match Info** (players, competition type, private notes),
 **Opponents and head-to-head**, **Compare with Previous Match**, the
@@ -28,7 +34,7 @@ Before submission:
 
 - [ ] Archive the exact release `HEAD`, validate, upload, and install the
   TestFlight build as an upgrade over `1.2.1 (10)`. Confirm iPhone and embedded
-  Watch both report `1.3.0 (11)`, and that the existing archive is intact.
+  Watch both report `1.3.0 (13)`, and that the existing archive is intact.
 - [ ] On physical hardware, add players and a competition type to a match and
   confirm they reach the Watch's Past Matches. Add a note and confirm it does not
   reach the Watch. Run Sync Now and relaunch, and confirm nothing is lost.
@@ -49,7 +55,8 @@ Before submission:
   [`docs/app-store-screenshots/README.md`](../app-store-screenshots/README.md).
 - [x] Add the tested devices to App Review Information → Notes: iPhone 16
   (iOS 27.2) and Apple Watch Series 7 GPS (watchOS 26.6).
-- [ ] After release: tag the uploaded commit `v1.3.0`, then update the website
+- [x] Tag the uploaded commit `v1.3.0`.
+- [ ] After release: update the website
   copy, setup guide images and browser demo. `docs/website/` publishes on merge,
   so they deliberately wait until 1.3.0 is on the store.
 
@@ -845,7 +852,7 @@ Non-blocking Release build warnings to clean up:
 - [x] `ITSAppUsesNonExemptEncryption = false` is declared on both targets.
 - [x] The iPhone target correctly omits `NSHealthUpdateUsageDescription`; it
   reads HealthKit but does not write workouts.
-- [~] Source configuration is currently `1.3.0` / `11` across both production
+- [~] Source configuration is currently `1.3.0` / `13` across both production
   targets in Debug and Release. Test targets remain non-shipping and are not
   included in the App Store bundle. The current-head archive still needs the
   validation listed in **Current release candidate** above.

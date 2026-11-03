@@ -214,12 +214,13 @@ No account, subscription, ads, or tracking — just your tennis, on your devices
 
 **Character count:** 1,526 characters (including line breaks; under 4,000)
 
-> **Scope.** The shipping targets are configured as version **1.3.0 (11)**.
+> **Scope.** The shipping targets are configured as version **1.3.0 (13)**.
 > This is a minor release because Match Info adds new user-entered data, new
 > iPhone screens and new export choices, the same reasoning as 1.2.0 and Trends.
 > The comparison baseline is the `1.2.1 (10)` archive built on 22 September
 > 2026, which predates the opponent's-perspective web export, so that export
-> ships for the first time here. App Store Connect has used build 10 and not 11.
+> ships for the first time here. Builds 11 and 12 were uploaded but are not the
+> submission build.
 
 ---
 
@@ -784,4 +785,4 @@ Center attachment limit.
 
 ---
 
-*Prepared for DeuceMate v1.3.0 (build 11) - 2026*
+*Prepared for DeuceMate v1.3.0 (build 13) - 2026*
