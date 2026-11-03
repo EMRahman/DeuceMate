@@ -13,6 +13,9 @@
   function h(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function label(list, key) { var f = list.find(function (x) { return x[0] === key; }); return f ? f[1] : null; }
   function clean(name) { return String(name || "").replace(/\s+/g, " ").trim().slice(0, 40); }
+  // Player identity is the stored id (names are only display/search); fall back to the name for id-less imports.
+  function pid(p) { return p && p.id ? String(p.id) : "n:" + clean(p && p.name).toLowerCase(); }
+  function samePlayer(a, b) { return !!a && !!b && pid(a) === pid(b); }
   function sameName(a, b) { return clean(a).toLowerCase() === clean(b).toLowerCase(); }
 
   // MARK: notes
@@ -63,7 +66,7 @@
     phone.records().forEach(function (r) {
       var t = r.tags; if (!t) return;
       (t.partner ? [t.partner] : []).concat(t.opponents || []).forEach(function (p) {
-        var k = clean(p.name).toLowerCase(); if (!k || seen[k]) return; seen[k] = true; out.push(p);
+        var k = pid(p); if (!clean(p.name) || seen[k]) return; seen[k] = true; out.push(p);
       });
     });
     return out;
@@ -72,8 +75,8 @@
   // MARK: head-to-head (completed-only, same matchup + type)
   function key(rec) {
     var t = rec.tags; if (!t || !(t.opponents || []).length) return null;
-    var opp = t.opponents.map(function (p) { return clean(p.name).toLowerCase(); }).sort().join("|");
-    if (rec.matchType === "doubles") { if (t.opponents.length < 2 || !t.partner) return null; return "d:" + opp + ":" + clean(t.partner.name).toLowerCase(); }
+    var opp = t.opponents.map(pid).sort().join("|");
+    if (rec.matchType === "doubles") { if (t.opponents.length < 2 || !t.partner) return null; return "d:" + opp + ":" + pid(t.partner); }
     return "s:" + opp;
   }
   function headToHead(phone, rec) {
@@ -134,20 +137,20 @@
   function sectionTitle(text) { return h("h3", "pr-native-section-title mi-st", text); }
   // Native PlayerPickerView: search field + close, Existing Player rows (info opens profile), Add as new player.
   function openPlayerPicker(phone, suggestions, exclude, onPick, onClose) {
-    var body = h("div", "mi-page"), bar = h("div", "mi-search"), field = h("input", "mi-search-input"), results = h("div", "");
+    var leaving = false, body = h("div", "mi-page"), bar = h("div", "mi-search"), field = h("input", "mi-search-input"), results = h("div", "");
     field.type = "search"; field.placeholder = "Search or add player"; field.maxLength = 40; field.setAttribute("aria-label", "Search players");
     var x = phone.button("", function () { phone.closeSheet(); }, "mi-search-x"); x.setAttribute("aria-label", "Close"); x.append(phone.icon("xCircle"));
     bar.append(field, x); body.append(bar, results);
-    function matchesFor(p) { return playerMatchCount(phone, p.name); }
+    function matchesFor(p) { return playerMatchCount(phone, p); }
     function line(p) { var ms = matchesFor(p), last = ms.reduce(function (m, r) { return Math.max(m, r.startTime); }, 0); return ms.length + " match" + (ms.length === 1 ? "" : "es") + (last ? " · last " + dateOnly(last) : ""); }
     function pickRow(p) {
       var wrap = h("div", "mi-row mi-pickrow"), main = phone.button("", function () { onPick(p); }, "mi-pickmain"), copy = h("span", "mi-row-copy");
       copy.append(h("span", "mi-row-title", p.name), h("span", "mi-row-sub", line(p))); main.append(copy);
-      var info = phone.button("", function () { profileSheet(phone, p, function () { openPlayerPicker(phone, suggestions, exclude, onPick, onClose); }); }, "mi-info"); info.setAttribute("aria-label", "Manage " + p.name); info.append(phone.icon("info"));
+      var info = phone.button("", function () { leaving = true; profileSheet(phone, p, function () { openPlayerPicker(phone, suggestions, exclude, onPick, onClose); }); }, "mi-info"); info.setAttribute("aria-label", "Manage " + p.name); info.append(phone.icon("info"));
       wrap.append(main, info); return wrap;
     }
     function paint() {
-      var q = clean(field.value), pool = suggestions.filter(function (p) { return !(exclude || []).some(function (e) { return sameName(e, p.name); }); });
+      var q = clean(field.value), pool = suggestions.filter(function (p) { return !(exclude || []).some(function (e) { return samePlayer(e, p); }); });
       results.replaceChildren();
       if (!q) {
         if (pool.length) results.append(sectionTitle("Recent Players"), group(null, pool.slice(0, 8).map(pickRow)));
@@ -163,18 +166,17 @@
       results.append(footnote("Tip: first names or nicknames are enough. Up to 40 characters."));
     }
     field.addEventListener("input", paint); paint();
-    phone.showSheet("", body, { detent: "large", cleanup: onClose, trailing: h("span", "phone-sheet-spacer") });
+    phone.showSheet("", body, { detent: "large", cleanup: function () { if (!leaving) onClose(); }, trailing: h("span", "phone-sheet-spacer") });
     setTimeout(function () { try { field.focus(); } catch (_) {} }, 0);
   }
   function playerRow(phone, rec, draft, slot, suggestions, rerender) {
     var player = slot === "partner" ? draft.partner : draft.opponents[slot];
     function setSlot(v) { if (slot === "partner") draft.partner = v; else if (v) draft.opponents[slot] = v; else draft.opponents.splice(slot, 1); }
-    function occupied() { var names = (draft.opponents || []).map(function (p) { return p.name; }).concat(draft.partner ? [draft.partner.name] : []); return player ? names.filter(function (n) { return !sameName(n, player.name); }) : names; }
+    function occupied() { var all = (draft.opponents || []).concat(draft.partner ? [draft.partner] : []); return player ? all.filter(function (q) { return !samePlayer(q, player); }) : all; }
     function choose() {
       var picked = false;
       openPlayerPicker(phone, suggestions, occupied(), function (p) {
-        picked = true; var known = suggestions.find(function (q) { return sameName(q.name, p.name); });
-        setSlot(Object.assign({}, known || {}, p)); rerender();
+        picked = true; setSlot(Object.assign({}, p)); rerender();
       }, function () { if (!picked) setTimeout(rerender, 0); });
     }
     var wrap = h("div", "mi-prow"), info = phone.button("", function () { if (player) profileSheet(phone, player, function () { rerender(); }); }, "mi-info");
@@ -185,7 +187,7 @@
     wrap.append(info, name, clear);
     if (!player && suggestions.length) {
       var chips = h("div", "mi-chips");
-      suggestions.filter(function (q) { return !occupied().some(function (n) { return sameName(n, q.name); }); }).slice(0, 4).forEach(function (q) { var c = h("button", "mi-chip", q.name); c.type = "button"; c.addEventListener("click", function () { setSlot(Object.assign({}, q)); rerender(); }); chips.append(c); });
+      suggestions.filter(function (q) { return !occupied().some(function (n) { return samePlayer(n, q); }); }).slice(0, 4).forEach(function (q) { var c = h("button", "mi-chip", q.name); c.type = "button"; c.addEventListener("click", function () { setSlot(Object.assign({}, q)); rerender(); }); chips.append(c); });
       if (chips.childNodes.length) wrap.append(chips);
     }
     return wrap;
@@ -349,10 +351,12 @@
   // MARK: export context (MatchExportDetails: names applied at construction, note never included here)
   function profileText(p) { return [label(HAND, p.hand), label(BACK, p.backhand) && label(BACK, p.backhand) + " backhand", label(STYLE, p.style)].filter(Boolean).join(", "); }
   // Share-menu switches (names default ON, private note default OFF and opt-in through a review).
-  var exportOptions = { names: true, note: false };
+  var exportOptions = { names: true, noteMatchId: null };
+  // Private-note consent belongs to the one match whose exact text was reviewed.
+  function noteConsent(rec) { return exportOptions.noteMatchId === rec.id; }
   function quoted(text) { return String(text).split("\n").map(function (l) { return "> " + l; }).join("\n"); }
   function contextText(rec, focal) {
-    var t = rec.tags, note = focal !== "opponent" && exportOptions.note ? getNote(rec.id).trim() : "";
+    var t = rec.tags, note = focal !== "opponent" && noteConsent(rec) ? getNote(rec.id).trim() : "";
     if (!t && !note) return null;
     var lines = ["## Match Context"], comp = t && label(COMPETITIONS, t.competition);
     if (comp) lines.push("Competition: " + comp);
@@ -373,7 +377,7 @@
     return reader === "me" ? { reader: ["Me"].concat(partner), other: opp.length ? opp : ["Opponent"] } : { reader: opp.length ? opp : ["Me"], other: ["Opponent"].concat(partner) };
   }
   function webMeta(rec, reader) {
-    var names = sideNames(rec, reader), t = rec.tags, note = reader === "me" && exportOptions.note ? getNote(rec.id).trim() : "";
+    var names = sideNames(rec, reader), t = rec.tags, note = reader === "me" && noteConsent(rec) ? getNote(rec.id).trim() : "";
     return { competitionTypeLabel: (t && label(COMPETITIONS, t.competition)) || null, readerSideNames: names.reader, otherSideNames: names.other, privateNote: note || null };
   }
   // NotesExportReviewSheet: the exact text, personal-data warning, then Cancel / Include Note.
@@ -391,14 +395,15 @@
     var box = h("div", "pr-share-group");
     box.append(h("div", "pr-share-group-title", "Match details"));
     function toggle(text, key, on) {
-      var lab = h("label", "pr-share-row mi-switch"), input = document.createElement("input"); input.type = "checkbox"; input.checked = exportOptions[key];
+      var lab = h("label", "pr-share-row mi-switch"), input = document.createElement("input"); input.type = "checkbox"; input.checked = key === "note" ? noteConsent(rec) : exportOptions[key];
       input.addEventListener("change", function () {
         if (key === "note" && input.checked) {
           input.checked = false;
-          noteReview(phone, rec, function () { exportOptions.note = true; rebuild(); });
+          noteReview(phone, rec, function () { exportOptions.noteMatchId = rec.id; rebuild(); });
           return;
         }
-        exportOptions[key] = input.checked; rebuild();
+        if (key === "note") exportOptions.noteMatchId = null; else exportOptions[key] = input.checked;
+        rebuild();
       });
       lab.append(input, h("span", "", text)); return lab;
     }
@@ -408,23 +413,23 @@
   }
 
   // MARK: Players settings (PlayersSettingsView: rename, profile, forget — across every match)
-  function mapPlayers(phone, matchName, fn) {
+  function mapPlayers(phone, who, fn) {
     phone.records().forEach(function (r) {
       var t = r.tags; if (!t) return;
       var touched = false;
-      function visit(p) { if (p && sameName(p.name, matchName)) { touched = true; return fn(p); } return p; }
+      function visit(p) { if (p && samePlayer(p, who)) { touched = true; return fn(p); } return p; }
       var next = JSON.parse(JSON.stringify(t));
       next.opponents = (next.opponents || []).map(visit).filter(Boolean);
       if (next.partner) next.partner = visit(next.partner) || null;
       if (touched) phone.updateRecord(r.id, function (rec) { rec.tags = (!next.opponents.length && !next.partner && !next.competition) ? undefined : next; });
     });
   }
-  function playerMatchCount(phone, name) { return phone.records().filter(function (r) { var t = r.tags; return t && (t.allPlayers || (t.partner ? [t.partner] : []).concat(t.opponents || [])).some(function (p) { return sameName(p.name, name); }); }); }
+  function playerMatchCount(phone, who) { return phone.records().filter(function (r) { var t = r.tags; return t && (t.partner ? [t.partner] : []).concat(t.opponents || []).some(function (p) { return samePlayer(p, who); }); }); }
   function playersSheet(phone) {
     var body = h("div", "mi-page"), list = roster(phone);
     if (!list.length) body.append(group(null, h("div", "mi-kv-head", "No players yet")));
     else body.append(group(null, list.map(function (p) {
-      var ms = playerMatchCount(phone, p.name), last = ms.reduce(function (m, r) { return Math.max(m, r.startTime); }, 0);
+      var ms = playerMatchCount(phone, p), last = ms.reduce(function (m, r) { return Math.max(m, r.startTime); }, 0);
       var b = phone.button("", function () { playerDetail(phone, p); }, "mi-row"), copy = h("span", "mi-row-copy");
       copy.append(h("span", "mi-row-title", p.name), h("span", "mi-row-sub", ms.length + " match" + (ms.length === 1 ? "" : "es") + " · last " + dateOnly(last)));
       b.append(copy, phone.icon("chevron")); return b;
@@ -433,18 +438,18 @@
     phone.showSheet("Players", body, { detent: "large" });
   }
   function playerDetail(phone, p) {
-    var body = h("div", "mi-page"), original = p.name, n = playerMatchCount(phone, original).length;
+    var body = h("div", "mi-page"), original = p.name, who = { id: p.id, name: p.name }, n = playerMatchCount(phone, who).length;
     var name = h("input", "mi-name-input mi-block"); name.value = p.name; name.maxLength = 40; name.setAttribute("aria-label", "Player name");
-    name.addEventListener("change", function () { var v = clean(name.value); if (!v) { name.value = original; return; } mapPlayers(phone, original, function (q) { q.name = v; return q; }); original = v; });
+    name.addEventListener("change", function () { var v = clean(name.value); if (!v) { name.value = original; return; } mapPlayers(phone, who, function (q) { q.name = v; return q; }); original = v; if (!who.id) who = { name: v }; });
     body.append(sectionTitle("Name"), group(null, name), footnote("Saves automatically and updates all " + n + " matches with this player."));
-    body.append(sectionTitle("Playing Style"), group(null, [["hand", HAND, "Handedness"], ["backhand", BACK, "Backhand"], ["style", STYLE, "Play Style"]].map(function (g) { return pickerRow(g[2], g[1], p[g[0]], function (v) { mapPlayers(phone, original, function (q) { q[g[0]] = v || null; return q; }); }); })), footnote("Saves automatically. Optional tennis profile shown on the opponent detail screen and included in AI Coach match context."));
-    var others = roster(phone).filter(function (q) { return !sameName(q.name, original); });
+    body.append(sectionTitle("Playing Style"), group(null, [["hand", HAND, "Handedness"], ["backhand", BACK, "Backhand"], ["style", STYLE, "Play Style"]].map(function (g) { return pickerRow(g[2], g[1], p[g[0]], function (v) { mapPlayers(phone, who, function (q) { q[g[0]] = v || null; return q; }); }); })), footnote("Saves automatically. Optional tennis profile shown on the opponent detail screen and included in AI Coach match context."));
+    var others = roster(phone).filter(function (q) { return !samePlayer(q, who); });
     var merge = phone.button("", function () {
-      var pick = h("div", "mi-page"); pick.append(group("Merge into", others.map(function (q) { var b = phone.button("", function () { phone.confirm("Merge " + original + " into " + q.name + "?", "Every match with " + original + " will use " + q.name + " instead.", "Merge", function () { mapPlayers(phone, original, function (x) { return Object.assign({}, x, { name: q.name, id: q.id || x.id }); }); playersSheet(phone); }); }, "mi-row"); b.append(h("span", "mi-row-title", q.name)); return b; })));
+      var pick = h("div", "mi-page"); pick.append(group("Merge into", others.map(function (q) { var b = phone.button("", function () { phone.confirm("Merge " + original + " into " + q.name + "?", "Every match with " + original + " will use " + q.name + " instead.", "Merge", function () { mapPlayers(phone, who, function (x) { return Object.assign({}, x, { name: q.name, id: q.id || x.id }); }); playersSheet(phone); }); }, "mi-row"); b.append(h("span", "mi-row-title", q.name)); return b; })));
       phone.showSheet("Merge Duplicate Into…", pick, { detent: "large" });
     }, "mi-row mi-tint"); merge.disabled = !others.length; merge.append(h("span", "mi-row-title", "Merge Duplicate Into…"));
     body.append(group(null, merge), footnote("If the same person was added twice, merge this entry into the other one. Every match then uses that player."));
-    var forget = phone.button("", function () { phone.confirm("Forget " + original + "?", "Removes " + original + " from every match on this iPhone and, when it holds those matches, your Apple Watch. Scores are kept.", "Forget Player", function () { mapPlayers(phone, original, function () { return null; }); playersSheet(phone); }); }, "mi-row"); forget.append(h("span", "mi-row-title mi-destructive", "Forget Player"));
+    var forget = phone.button("", function () { phone.confirm("Forget " + original + "?", "Removes " + original + " from every match on this iPhone and, when it holds those matches, your Apple Watch. Scores are kept.", "Forget Player", function () { mapPlayers(phone, who, function () { return null; }); playersSheet(phone); }); }, "mi-row"); forget.append(h("span", "mi-row-title mi-destructive", "Forget Player"));
     body.append(group(null, forget), footnote("Removes " + original + " from every match on this iPhone and, when it holds those matches, your Apple Watch. Scores are kept."));
     phone.showSheet(original, body, { detent: "large", leading: backButton(phone, function () { playersSheet(phone); }), trailing: h("span", "phone-sheet-spacer") });
   }
@@ -455,8 +460,8 @@
     phone.records().forEach(function (r) {
       var t = r.tags; if (!t) return;
       (t.opponents || []).forEach(function (p) {
-        var k = clean(p.name).toLowerCase(); if (!k) return;
-        var e = map[k] || (map[k] = { name: p.name, hand: p.hand, backhand: p.backhand, style: p.style, count: 0, last: 0 });
+        var k = pid(p); if (!clean(p.name)) return;
+        var e = map[k] || (map[k] = { id: p.id, name: p.name, hand: p.hand, backhand: p.backhand, style: p.style, count: 0, last: 0 });
         e.count++; e.last = Math.max(e.last, r.startTime);
       });
     });
@@ -465,7 +470,7 @@
   function resultWord(r) { return r.iWon === true ? "Won" : r.iWon === false ? "Lost" : "Draw"; }
   function opponentSheet(phone, entry) {
     var body = h("div", "mi-page");
-    var matches = phone.records().filter(function (r) { return r.tags && (r.tags.opponents || []).some(function (p) { return sameName(p.name, entry.name); }); }).sort(function (a, b) { return b.startTime - a.startTime; });
+    var matches = phone.records().filter(function (r) { return r.tags && (r.tags.opponents || []).some(function (p) { return samePlayer(p, entry); }); }).sort(function (a, b) { return b.startTime - a.startTime; });
     var style = [];
     if (label(HAND, entry.hand)) style.push(kvRow("Handedness", label(HAND, entry.hand)));
     if (label(BACK, entry.backhand)) style.push(kvRow("Backhand", label(BACK, entry.backhand)));

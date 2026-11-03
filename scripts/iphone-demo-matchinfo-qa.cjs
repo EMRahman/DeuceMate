@@ -55,7 +55,7 @@ const path = require("path"), { pathToFileURL } = require("url"), assert = requi
   await ph.getByRole("button", { name: "Share match" }).click();
   await ph.getByText("Include player names").waitFor(); await ph.getByText("Include private note").waitFor();
   await ph.getByText("Include private note").click(); await ph.getByText("This exact text will be included").waitFor(); await ph.getByRole("button", { name: "Include Note" }).click();
-  assert.equal(await page.evaluate(() => window.DeuceMatePhoneMatchInfo.exportOptions.note), true);
+  assert.equal(await page.evaluate(() => window.DeuceMatePhoneMatchInfo.exportOptions.noteMatchId), rec.id);
   // interactive page renders the details (schema 13 viewer), names + note opted in
   const html = await page.evaluate(id => { const r = window.DeuceMatePhone.records().find(r => r.id === id); return window.DeuceMatePhoneReports.standaloneHTML(r, r.stats || [], "me"); }, rec.id);
   const viewer = await b.newPage(); await viewer.setContent(html);
@@ -73,6 +73,29 @@ const path = require("path"), { pathToFileURL } = require("url"), assert = requi
   await page.evaluate(() => window.DeuceMatePhone.navigate("settings"));
   await ph.getByRole("button", { name: /Players/ }).click(); await ph.getByText("Players come from your matches").waitFor(); await page.screenshot({ path: "/tmp/mi-players-list.png" }); await ph.locator("button.mi-row", { hasText: "Alex" }).first().click(); await ph.getByText("Saves automatically and updates all").waitFor(); await ph.locator("button.mi-row", { hasText: "Forget Player" }).waitFor();
   await page.screenshot({ path: "/tmp/mi-players.png" });
+  // Review findings: consent is per match, picker->profile is not dismissal, identity is the player id.
+  await page.evaluate(() => window.DeuceMatePhone.closeSheet());
+  const other = await page.evaluate((id) => { const r = window.DeuceMatePhone.records().find(x => x.id !== id && x.endTime && x.tags); window.DeuceMatePhoneMatchInfo.setNote(r.id, "other private note"); return r.id; }, rec.id);
+  const leak = await page.evaluate((o) => { const r = window.DeuceMatePhone.records().find(x => x.id === o); return { text: window.DeuceMatePhoneMatchInfo.contextText(r, "me") || "", meta: window.DeuceMatePhoneMatchInfo.webMeta(r, "me").privateNote }; }, other);
+  assert(!/other private note/.test(leak.text) && !leak.meta, "reviewing one match's note must not authorize another's");
+  const twins = await page.evaluate(() => {
+    const P = window.DeuceMatePhone, M = window.DeuceMatePhoneMatchInfo, done = P.records().filter(r => r.endTime && r.matchType === "singles");
+    P.updateRecord(done[0].id, r => { r.tags = { competition: "friendly", opponents: [{ id: "twin-1", name: "Sam Twin" }] }; });
+    P.updateRecord(done[1].id, r => { r.tags = { competition: "friendly", opponents: [{ id: "twin-2", name: "Sam Twin" }] }; });
+    const a = P.records().find(r => r.id === done[0].id), c = P.records().find(r => r.id === done[1].id);
+    return { sameKey: M.key(a) === M.key(c), roster: M.roster(P).filter(p => p.name === "Sam Twin").length, h2h: M.headToHead(P, a) };
+  });
+  assert.equal(twins.sameKey, false, "same-name players with different ids are different matchups");
+  assert.equal(twins.roster, 2, "roster keeps both same-name players");
+  assert.equal(twins.h2h, null, "no head-to-head is shared between different people with one name");
+  // Picker -> player info opens the profile and stays there (not replaced by the editor).
+  await page.evaluate(() => { const P = window.DeuceMatePhone; P.navigate("detail", P.records().find(r => r.endTime && r.matchType === "singles" && r.tags)); });
+  await ph.locator("button.mi-row").first().click().catch(() => {});
+  if (!(await ph.getByText("Competition Type").count())) { const d = ph.locator("button.mi-disclosure"); if ((await d.getAttribute("aria-expanded")) !== "true") await d.click(); await ph.locator("button.mi-row").first().click(); }
+  await ph.getByRole("button", { name: /^Opponent/ }).click();
+  await ph.locator('button.mi-info[aria-label^="Manage"]').first().click();
+  await ph.getByText("Playing Style").waitFor(); await page.waitForTimeout(300);
+  assert.equal(await ph.getByText("Competition Type").count(), 0, "opening a profile from the picker must not reopen the editor");
   console.log("errors", errors);
   assert.equal(errors.length, 0); await b.close(); console.log("MI QA PASS");
   await watchQA();
