@@ -30,9 +30,17 @@ public struct TrendFilter: Hashable, Sendable {
     /// everywhere (owner request). `MatchTrendSample.isInProgress` is the
     /// field this checks.
     public var includeInProgress: Bool
+    /// Friendly / league / tournament / practice. `nil` = all.
+    public var competitionType: CompetitionType?
+    /// Only matches tagged with this opponent (doubles: either opponent).
+    /// `nil` = all.
+    public var opponentID: UUID?
 
     public init(matchType: MatchType? = nil, matchFormat: MatchFormat? = nil,
-                includeInProgress: Bool = false) {
+                includeInProgress: Bool = false,
+                competitionType: CompetitionType? = nil, opponentID: UUID? = nil) {
+        self.competitionType = competitionType
+        self.opponentID = opponentID
         self.matchType = matchType
         self.matchFormat = matchFormat
         self.includeInProgress = includeInProgress
@@ -47,6 +55,8 @@ public struct TrendFilter: Hashable, Sendable {
         if !includeInProgress && sample.isInProgress { return false }
         if let matchType, sample.matchType != matchType { return false }
         if let matchFormat, sample.matchFormat != matchFormat { return false }
+        if let competitionType, sample.competitionTypeRaw != competitionType.rawValue { return false }
+        if let opponentID, !sample.opponentIDs.contains(opponentID) { return false }
         return true
     }
 }

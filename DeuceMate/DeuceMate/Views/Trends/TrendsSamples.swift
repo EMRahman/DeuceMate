@@ -12,6 +12,11 @@ final class TrendsSamples: ObservableObject {
     /// both the ordering and the eligibility rule) — including the live
     /// match, once it clears the categorized-points threshold.
     @Published private(set) var samples: [MatchTrendSample] = []
+    /// Opponents seen in the archive (names resolved by `OpponentDirectory`),
+    /// for the Trends opponent filter. Derived in the same cache pass so it
+    /// shares the full-record-equality invalidation. Records are already
+    /// scrubbed of forgotten players on every inbound path.
+    @Published private(set) var opponents: [RosterEntry] = []
 
     /// Full record equality, not a hand-picked field subset. An earlier
     /// (id, endTime, iWon, statsCount) fingerprint missed a real case: a
@@ -37,5 +42,6 @@ final class TrendsSamples: ObservableObject {
         guard records != cachedRecords else { return }
         cachedRecords = records
         samples = PerformanceTrends.samples(from: records)
+        opponents = OpponentDirectory.entries(from: records)
     }
 }

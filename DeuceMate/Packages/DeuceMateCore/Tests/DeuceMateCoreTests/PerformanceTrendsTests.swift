@@ -11,7 +11,8 @@ final class PerformanceTrendsTests: XCTestCase {
     private func makeSample(
         id: UUID = UUID(), daysAgo: Int, matchType: MatchType = .singles, matchFormat: MatchFormat = .standard,
         winnersHit: Int = 5, unforcedErrorsHit: Int = 2,
-        doubleFaults: Int = 1, categorizedServicePoints: Int = 10, isInProgress: Bool = false
+        doubleFaults: Int = 1, categorizedServicePoints: Int = 10, isInProgress: Bool = false,
+        competitionTypeRaw: String? = nil, opponentIDs: Set<UUID> = []
     ) -> MatchTrendSample {
         MatchTrendSample(
             matchID: id, startTime: Date().addingTimeInterval(TimeInterval(-daysAgo * 86400)),
@@ -27,7 +28,8 @@ final class PerformanceTrendsTests: XCTestCase {
             forcedErrorsConceded: 1, forcedErrorsCaused: 1,
             breakPointOpps: 2, breakPointWins: 1, breakPointsFaced: 2, breakPointsLost: 1,
             bigPointTotal: 4, bigPointWins: 2,
-            rallyDepth: [.serve: .init(total: 6, wins: 3)], pointsWithEndingShot: 6
+            rallyDepth: [.serve: .init(total: 6, wins: 3)], pointsWithEndingShot: 6,
+            competitionTypeRaw: competitionTypeRaw, opponentIDs: opponentIDs
         )
     }
 
@@ -315,5 +317,38 @@ final class PerformanceTrendsTests: XCTestCase {
         let attackSeries = PerformanceTrends.series(for: .attack, in: samples)
         XCTAssertTrue(attackSeries.allSatisfy { $0.metric.group == .attack })
         XCTAssertFalse(attackSeries.isEmpty)
+    }
+
+    // MARK: - Competition type / opponent filters
+
+    func test_scoped_competitionTypeFilter() {
+        let league = makeSample(daysAgo: 3, competitionTypeRaw: "league")
+        let friendly = makeSample(daysAgo: 2, competitionTypeRaw: "friendly")
+        let untagged = makeSample(daysAgo: 1)
+        let out = PerformanceTrends.scoped(
+            [league, friendly, untagged],
+            filter: TrendFilter(competitionType: .league), window: .all)
+        XCTAssertEqual(out.map(\.matchID), [league.matchID])
+    }
+
+    func test_scoped_opponentFilter_matchesEitherDoublesOpponent_andFiltersBeforeWindow() {
+        let a = UUID(), b = UUID(), c = UUID()
+        let old = makeSample(daysAgo: 5, opponentIDs: [a, b])
+        let mid = makeSample(daysAgo: 4, opponentIDs: [c])
+        let recent = makeSample(daysAgo: 1, opponentIDs: [b])
+        let out = PerformanceTrends.scoped(
+            [old, mid, recent], filter: TrendFilter(opponentID: b), window: .last(2))
+        XCTAssertEqual(out.map(\.matchID), [old.matchID, recent.matchID])
+    }
+
+    func test_scoped_filtersCombine_andUnknownCompetitionNeverMatches() {
+        let p = UUID()
+        let hit = makeSample(daysAgo: 2, competitionTypeRaw: "tournament", opponentIDs: [p])
+        let wrongComp = makeSample(daysAgo: 1, competitionTypeRaw: "practice", opponentIDs: [p])
+        let unknown = makeSample(daysAgo: 3, competitionTypeRaw: "futureCase", opponentIDs: [p])
+        let out = PerformanceTrends.scoped(
+            [unknown, hit, wrongComp],
+            filter: TrendFilter(competitionType: .tournament, opponentID: p), window: .all)
+        XCTAssertEqual(out.map(\.matchID), [hit.matchID])
     }
 }
