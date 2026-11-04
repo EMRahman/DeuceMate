@@ -316,6 +316,25 @@ final class ScreenshotTests: XCTestCase {
         saveScreenshot("readme-compare")
     }
 
+    /// The full Trends screen with its filters. Run on a freshly seeded
+    /// simulator so the persisted filters are at their defaults, from an archive
+    /// with tagged matches so the opponent filter appears.
+    @MainActor
+    func test_captureTrendsOverview() throws {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Matches"].waitForExistence(timeout: 20))
+        let trends = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH 'Trends,'"))
+            .firstMatch
+        XCTAssertTrue(trends.waitForExistence(timeout: 10))
+        trends.tap()
+        XCTAssertTrue(app.navigationBars["Trends"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["All Opponents"].waitForExistence(timeout: 10))
+        Thread.sleep(forTimeInterval: 1.5)
+        saveScreenshot("06-trends-overview")
+    }
+
     /// The AI Coach sheet the marketing frame composites. Run with the
     /// simulator in dark appearance (`simctl ui <udid> appearance dark`).
     @MainActor
