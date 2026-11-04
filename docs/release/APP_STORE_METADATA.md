@@ -28,8 +28,8 @@ Now track who you play: head-to-head records, match comparisons and private note
 ```
 
 **Character count:** 164 characters. Proposed for the 1.3.0 submission. It held
-back until 1.3.0 was approved because it describes 1.3.0 features; 1.3.0 is now
-released, so check App Store Connect to confirm this text is live. The previous
+back until 1.3.0 was approved because it describes 1.3.0 features, and it went
+live with 1.3.0 on 4 November 2026. The previous
 text (since the 1.1.0 submission, 19 August 2026): "Score on Apple Watch, tag how every point ended, then hand the match to your favourite AI for real coaching. Free forever. No ads, no tracking."
 
 Two deliberate choices carried over from the previous line:

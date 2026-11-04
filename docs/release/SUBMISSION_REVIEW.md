@@ -50,7 +50,7 @@ Before submission:
 
 ## Released — 1.3.0 (build 13)
 
-The owner reported 1.3.0 as released on 4 November 2026. The checklist below is kept
+1.3.0 went live on 4 November 2026. The checklist below is kept
 as written at submission. Its open boxes were not confirmed one by one, so they do
 not show that those checks ran, except for the post-release item, which is still
 to do.
