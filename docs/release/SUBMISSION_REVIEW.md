@@ -10,7 +10,8 @@ in App Store Connect.
 The iPhone app and embedded Apple Watch app are both configured as
 `MARKETING_VERSION = 1.3.1` and `CURRENT_PROJECT_VERSION = 15` in their Debug and
 Release shipping configurations. The test targets remain at their non-shipping
-version/build values. This candidate has not been archived, uploaded or tested.
+version/build values. The owner reported testing it on the same iPhone and Apple Watch as 1.3.0 on
+4 November 2026. The boxes below were not confirmed one by one, so they stay open.
 
 The baseline is the released `v1.3.0` tag. So far this candidate adds **Trends
 filters for competition type and opponent**, optional **swipe vibration** on Apple
@@ -38,8 +39,9 @@ Before submission:
   submission in App Store Connect, replacing the old image in slot 10 of the iPhone
   6.9-inch set. It shows the new Trends filters. See
   [`docs/app-store-screenshots/README.md`](../app-store-screenshots/README.md).
-- [ ] Add the devices actually tested on this build to App Review Information →
-  Notes.
+- [x] Add the tested devices to App Review Information → Notes: iPhone 16
+  (iOS 27.2) and Apple Watch Series 7 GPS (watchOS 26.6). The owner reported
+  testing 1.3.1 on these devices on 4 November 2026.
 - [ ] Tag the uploaded commit `v1.3.1`.
 
 ## Released — 1.3.0 (build 13)

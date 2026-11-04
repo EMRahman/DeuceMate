@@ -613,8 +613,7 @@ HealthKit (Watch at first launch; iPhone for per-point heart rate) and location
 usable with every prompt denied. No ATT, camera, mic, photos, contacts,
 calendar, notifications or Bluetooth.
 
-Devices tested: [fill in after testing 1.3.1. 1.3.0 used iPhone 16 (iOS 27.2) and
-Apple Watch Series 7 GPS (watchOS 26.6).]
+Devices tested: iPhone 16 (iOS 27.2) and Apple Watch Series 7 GPS (watchOS 26.6).
 ```
 
 The no-Watch paragraph is the one that earns its place: this is a Watch-first
