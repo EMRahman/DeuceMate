@@ -136,14 +136,17 @@ final class MatchDetailsUITests: XCTestCase {
         row.tap()
         let detail = app.descendants(matching: .any)["opponent-detail"]
         XCTAssertTrue(detail.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars.buttons["opponent-manage-player"].isHittable,
+                      "Player management stays in the navigation bar above the match history")
         XCTAssertTrue(app.staticTexts["Past Matches"].exists)
         XCTAssertFalse(app.staticTexts["Pending Matches"].exists, "Pending Matches hides when none are in progress")
         XCTAssertFalse(app.staticTexts["No pending matches"].exists)
         let record = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "1 win", "1 loss")
         ).firstMatch
-        for _ in 0..<8 where !record.exists { app.swipeUp() }
         XCTAssertTrue(record.waitForExistence(timeout: 5), "Singles record shows one win and one loss")
+        XCTAssertTrue(record.isHittable, "Head to head is visible above the match history")
+        XCTAssertLessThan(record.frame.minY, app.staticTexts["Past Matches"].frame.minY)
         XCTAssertFalse(app.staticTexts["Head to Head · Doubles"].exists, "Doubles H2H hides when no doubles matchups exist")
         XCTAssertFalse(app.staticTexts["No complete doubles team matchups recorded for this opponent."].exists)
 

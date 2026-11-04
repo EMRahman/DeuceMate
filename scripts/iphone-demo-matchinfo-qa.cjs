@@ -64,10 +64,30 @@ const path = require("path"), { pathToFileURL } = require("url"), assert = requi
   assert(/League/.test(viewerText) && /Alex/.test(viewerText) && /tired legs/.test(viewerText), "HTML export must show details + opted-in note");
   await viewer.close();
   // row caption + opponents directory
+  // A long history must not bury the summary or player-management action.
+  await page.evaluate(id => {
+    const phone = window.DeuceMatePhone, records = phone.records(), original = records.find(r => r.id === id);
+    for (let i = 0; i < 30; i++) records.push({ ...structuredClone(original), id: "opponent-long-history-" + i, startTime: original.startTime - (i + 1) * 86400000 });
+    phone.replaceRecords(records);
+  }, rec.id);
   await page.evaluate(() => window.DeuceMatePhone.navigate("matches"));
   await ph.getByRole("button", { name: /Head-to-head records/ }).click();
   await ph.locator("button.mi-row", { hasText: "Alex" }).click();
-  await ph.getByText("Head to Head · Singles").waitFor(); await page.screenshot({ path: "/tmp/mi-opponent.png" }); await page.keyboard.press("Escape");
+  await ph.getByText("Head to Head · Singles").waitFor();
+  const headings = await ph.locator(".phone-sheet-content .pr-native-section-title").allTextContents();
+  assert.equal(headings[0], "Head to Head · Singles", "Head to head comes first");
+  assert.equal(headings[headings.length - 1], "Past Matches", "Past Matches is the final section");
+  const summary = await ph.getByText("Head to Head · Singles").boundingBox();
+  const sheetViewport = await ph.locator(".phone-sheet-content").boundingBox();
+  assert(summary.y >= sheetViewport.y && summary.y + summary.height <= sheetViewport.y + sheetViewport.height, "Head to head is visible without scrolling through matches");
+  await page.screenshot({ path: "/tmp/mi-opponent.png" });
+  await ph.locator(".phone-sheet-content").evaluate(el => { el.scrollTop = el.scrollHeight; });
+  const manage = ph.locator(".phone-sheet-head").getByRole("button", { name: "Rename or Manage Player" });
+  await manage.click();
+  assert.equal(await ph.getByRole("textbox", { name: "Player name", exact: true }).inputValue(), "Alex", "Manage opens this opponent directly");
+  await ph.locator(".phone-sheet-head").getByRole("button", { name: "Back", exact: true }).click();
+  await ph.getByText("Head to Head · Singles").waitFor();
+  await page.keyboard.press("Escape");
   console.log("caption", await ph.locator(".phone-row-caption").count());
   // players settings
   await page.evaluate(() => window.DeuceMatePhone.navigate("settings"));
