@@ -1,387 +1,354 @@
 ---
-title: Match Resume Markers and Export Context
+title: Multi-session Matches — Completion Dates and Resume Markers
 status: proposed
-document_type: implementation_plan
+document_type: feature_design
 created: 2026-07-14
-last_updated: 2026-07-14
+last_updated: 2026-11-04
 product: DeuceMate
-platforms:
-  - watchOS
-  - iOS
-  - interactive-html-export
-components:
-  - match-persistence
-  - watch-scoring
-  - points-graph
-  - text-export
-  - ai-coaching-export
-  - html-export
-schema_changes:
-  match_record: backward-compatible
-  watch_app_state: backward-compatible
-  manual_archive: no-change
-  web_export: 6-to-7
-decisions:
-  resume_definition: measured-break-both-paths
-  interruption_detail: marker-and-measured-duration
-  graph_anchor: derived-in-core-from-timestamps
-  export_scope: all-exports
-  infer_legacy_breaks: false
+platforms: [watchOS, iOS, interactive-html-export, browser-demo]
 ---
 
-# Match Resume Markers and Export Context
+# Multi-session Matches — Completion Dates and Resume Markers
 
-## Summary
+## 1. Problem and intended experience
 
-Persist every match interruption that the app actually **measured** — a park with
-a known wall-clock time, followed by a resume — and display it as a visible
-session boundary on the graph and in every export.
+A match can start on one day, be parked, and finish a week later. It remains one
+match, but its result belongs to the day it finished. Today, Trends and match
+history order it by its original start time, and the points graph does not
+explain the interruption.
 
-Two user paths produce a measured break, and **both** count:
+**Proposed behaviour:** date completed matches by completion in Trends, show the
+most recently finished matches first in history, and mark confirmed resumptions
+on the points graph. Preserve the original start date and the same match UUID.
 
-1. **Resume from history** — the match was ended-as-in-progress and later resumed
-   from the History screen (`ScoreViewModel.resumeMatch(_:)`).
-2. **Resume a live match after a gap** — the match sheet was dismissed, or the app
-   was backgrounded, and the user returned to the still-live match after a break
-   longer than `ResumeMarkers.minimumBreak`.
+Example (all times in the same local timezone):
 
-Path 2 is the common one and was nearly missed: the button labelled **"Resume
-Match"** on the watch home screen (`HomeView.swift:337-348`) does *not* call
-`resumeMatch(_:)` — it just reopens the modal on the still-live in-memory match.
-An earlier draft of this plan scoped the feature to path 1 only, which would have
-drawn no marker in exactly the rain-delay case the feature exists to explain.
+| Match | Started | Finished | History position | Trends order |
+|---|---|---|---|---|
+| A, interrupted | 1 Nov | 8 Nov, 16:00 | First | Latest |
+| C | 7 Nov | 7 Nov, 18:00 | Second | Middle |
+| B | 4 Nov | 4 Nov, 11:00 | Third | Earliest |
 
-In both paths the park and resume wall-clock times are **observed**, so the break
-duration is measured, never inferred. Nothing is guessed from gaps between point
-timestamps or from heart-rate data.
+A contributes **one** match to Trends, dated 8 Nov. Its row says `Finished 8 Nov`;
+its detail also says `Started 1 Nov`. Its graph marks where play resumed on 8 Nov.
+The week away does not occupy a week's width on the point-based graph.
 
-This makes a post-resume heart-rate change visually explainable and gives text,
-HTML, and AI exports an explicit interruption signal instead of forcing a user or
-a model to infer one from physiological data.
+This is a design proposal, not implemented behaviour. It expands and supersedes
+the July resume-marker proposal at this same path. In particular, it revises the
+old assumption that time away from the app proves a break in play (§4).
 
-## Success criteria
+## 2. Current implementation and constraints
 
-- Every measured break is retained, including multiple breaks in one match, across
-  both resume paths above.
-- Returning to a live match after a trivial pause (a glance at the watch face)
-  records **no** marker. Only breaks of at least `ResumeMarkers.minimumBreak` count.
-- The iPhone points graph clearly marks each resume boundary whether or not its
-  heart-rate overlay is enabled.
-- A measured break duration is shown whenever the park was observed; legacy and
-  manually entered matches use an honest unknown-duration state.
-- Summary, full, AI, interactive HTML, and static HTML exports carry the same
-  resume context.
-- AI instructions distinguish an interruption-related HR discontinuity from
-  uninterrupted fatigue or recovery.
-- Existing archives and saved watch state continue to decode without migration
-  failures.
+Verified against the repository on 4 November 2026:
 
-## Implementation changes
+| Area | Current behaviour / implementation |
+|---|---|
+| Match identity | `MatchRecord` retains `startTime`, optional `endTime`, and `isInProgress`. A completed draw has no winner; use `isInProgress`, never `iWon == nil` alone. |
+| Trends | `MatchTrendSample` carries `startTime`; `PerformanceTrends.samples` sorts by it, and `series` uses it for each point's date. The chart axis is ordinal match index, not elapsed calendar time. |
+| Phone history | `PhoneStatsStore` delegates sorting to `ArchiveBackupPolicy`; `PastMatchesView` sorts the combined archive/watch-only rows by start time. Row dates also use start time. |
+| Watch history | `StatsStore.appendMatch` sorts by start time before applying the 25-match cap; `MatchHistoryView` displays start time. |
+| Other ordering | `MatchMergePolicy.merge`, `WatchMirror`, `MatchComparison`, `PlayerRoster`, and `OpponentDirectory` also contain start-time chronology. |
+| Explicit park/resume | Watch `End Match` parks an unfinished match; history's `Resume this match` calls `ScoreViewModel.resumeMatch`. The watch home's `Resume Match` can simply reopen the still-live match. These are different paths. |
+| Timing | `matchElapsedSeconds` and `setElapsedSeconds` already accumulate across explicit history resumes. No persisted resume-event list or park timestamp exists. |
+| Completion | `finalizeCurrentMatchToStore` stamps `Date()` when it writes a completed record. `endingAtCurrentScore(at:)` uses the explicit completion action's time. Capture of the actual final scoring time needs attention (§3). |
+| Health | `HealthKitHRFetcher` queries from the original start to end/last point. `resumeMatch` starts a workout using the original match start, and finalization snapshots the current workout's activity. Multi-session health correctness needs explicit verification. |
 
-### Persisted model
+Relevant existing designs: [Performance Trends](PERFORMANCE_TRENDS_PLAN.md),
+[Health Trends](HEALTH_TRENDS_PLAN.md), [Match Tags](MATCH_TAGS_PLAN.md), and
+[Interactive HTML Export](INTERACTIVE_HTML_EXPORT_PLAN.md). The current lifecycle
+is documented in [match-lifecycle.md](../architecture/match-lifecycle.md).
 
-- Add a `MatchResumeEvent` value (see *Public interfaces* below) holding
-  `resumedAt` and an optional `pausedAt`. **It stores no point index** — see
-  *Graph anchor* for why.
-- Add `resumeEvents: [MatchResumeEvent]` and `parkedAt: Date?` to `MatchRecord`.
-  Follow the CLAUDE.md §4 recipe: memberwise-init parameters defaulting to `[]`
-  and `nil`, and `decodeIfPresent(...) ?? default` in the custom `init(from:)`.
-  Leave `CodingKeys`/`encode(to:)` synthesized.
-- `parkedAt` is the **open** park timestamp: set when the match is parked, cleared
-  when it is resumed. A completed record never carries one.
-- Keep this data on `MatchRecord`, **never on `PointStat`**. `MatchRecord`'s
-  `strippingHealthData()` / `fillingMissingHealthData(from:)`
-  (`Models/MatchRecord.swift:180`, `:191`) do `var copy = self` and mutate, so new
-  fields survive the iCloud backup round-trip automatically. `PointStat`'s
-  equivalents (`Models/PointStat.swift:168`, `:178`) rebuild via a fully-defaulted
-  memberwise init, so **any new `PointStat` field is silently dropped from every
-  backup with no compiler error**. Resume markers are session metadata, not health
-  measurements, so they are not stripped — and because they live on `MatchRecord`,
-  nothing needs to change in either function.
-- **Do not bump `ManualMatchArchiveBackup.supportedSchemaVersion`** (currently `1`).
-  Its `validate(_:)` requires *exact* equality, so a bump would make every
-  previously exported archive file un-importable. The archive encodes `MatchRecord`
-  directly, and `MatchRecord.init(from:)` already tolerates missing keys, so an
-  additive field needs no change there at all.
-- WatchConnectivity needs no new wire key: resume events travel inside the
-  Codable `MatchRecord` on the existing `MatchSyncKey.singleMatch` payload. They are
-  **cumulative state, not deltas**, so a checkpoint dropped while the phone is
-  unreachable (`MatchSyncTransport.sendRecord`) loses nothing — the next checkpoint
-  or the final record carries the full list.
+## 3. Date and ordering rules
 
-### Watch lifecycle
+### Shared date policy
 
-Two paths append an event. Both must record a *measured* park.
+Implement one pure Core policy for these meanings, reused across stores, views,
+Trends, and exports. Suggested names below describe semantics, not a committed API.
 
-**Path 1 — resume from history.** `finalizeCurrentMatchToStore()` already writes an
-unfinished match to the store when the user taps "End Match"; stamp `parkedAt = Date()`
-there when the record is in progress. `resumeMatch(_:)` (`ScoreViewModel.swift:1516`)
-then appends an event whose `pausedAt` is the record's stored `parkedAt`, and clears it.
+| Meaning | Rule |
+|---|---|
+| Original start | Keep `startTime` unchanged. |
+| Completed result date | `endTime`; for a legacy completed record without one, fall back to `startTime`. Label that fallback `Played`, not a falsely precise `Finished`. |
+| In-progress activity date | Latest recorded play/resume/explicit park time; fall back to `startTime`. Never use sync receipt, import, metadata edits, or the current render time. |
+| Archive recency | Completed result date for completed matches; activity date for unfinished ones. Sort descending, then UUID string ascending for deterministic ties. |
+| Trends chronology | Result date for completed matches; activity date for opted-in in-progress matches. Sort ascending, then UUID string ascending, before applying the selected window. |
 
-**Path 2 — resume a live match after a gap.** Stamp `parkedAt` when a live match
-leaves the screen, and check it when the user comes back:
+Keep the existing live-match section on iPhone. Retain a combined past-match list
+for the first release: unfinished rows stay visibly `In progress` and use their
+activity date. Among completed matches, newest completion always comes first.
+A separate `Paused matches` section is an optional later layout change.
 
-- App backgrounded — `DeuceMateApp.swift:44-51` already switches on `scenePhase`;
-  stamp on `.background` (alongside the existing `saveState()`) and check on `.active`.
-- Match sheet dismissed — `HomeView.swift:396` presents `RootModal()` via
-  `.sheet(isPresented: $showMatchView)` with no `onDismiss:`. Add one to stamp, and
-  clear/check when the sheet is re-presented.
-- On return: if `parkedAt` is set and `now - parkedAt >= ResumeMarkers.minimumBreak`,
-  append an event and clear `parkedAt`; otherwise just clear it.
+For schema-free phase 1, unfinished activity can use the last recorded point time
+(or start time when there are no points). Phase 2 adds observed park/resume times.
+Do not invent a last-played time for a tracking-disabled legacy record.
 
-Put `minimumBreak` in Core as one named constant (**5 minutes**), following the
-`WatchHistory.cap` precedent (`Sync/WatchHistoryCap.swift`) so the watch enforces and
-the docs cite a single number.
+### Trends
 
-Carrying the events through the rest of the lifecycle:
+- Update **both ordering and date labels**. Changing only the label leaves `Last
+  10`, recent/previous blocks, delta arrows, and sparklines using the wrong matches.
+- Keep one sample per match UUID, existing eligibility/coverage rules, filter-before-
+  window semantics, and pooled numerator/denominator calculations.
+- Add a distinct derived `date`/`resultDate` to `MatchTrendSample`; do not quietly
+  change the meaning of its existing `startTime` property.
+- Preserve the existing include-in-progress setting and its default. When enabled,
+  label unfinished samples provisional. On completion, move/update the same sample;
+  never append a second observation.
+- Explain briefly: `Completed matches are ordered by finish date.` With unfinished
+  matches enabled, also explain that they use last recorded activity.
+- Keep ordinal spacing. A week-long interruption does not require a new time axis.
 
-- Add `resumeEvents` and `parkedAt` to the watch `AppState` (`ScoreViewModel.swift:479-601`)
-  with `decodeIfPresent ?? []` / `?? nil` in its `init(from:)`. **Do not rely on a
-  version bump for migration**: `AppState.version` is written (`:1592`) but
-  `loadState()` never reads it — back-compat comes purely from `decodeIfPresent` +
-  defaults. Bumping the constant to `6` is cosmetic hygiene, not a mechanism.
-- `resumeMatch(_:)` must load `record.resumeEvents` into the view model and reset
-  `parkedAt`. Otherwise, on the "Replace current match?" flow (`MatchStatsView.swift:190`),
-  match A's events leak into match B.
-- `resetMatch()` (`:1415`) clears both.
-- Automatic state restoration after a kill/relaunch restores existing events. It
-  appends a new one only if the parked-at gap exceeds the threshold — that is path 2,
-  not a special case.
-- A manually entered or legacy in-progress record gets a marker on resume, but its
-  `pausedAt` stays `nil` so its duration is never guessed.
+### Match history and related dates
 
-> ⚠️ **Both record-construction sites must pass the new fields.**
-> `MatchRecord` is built via its memberwise init in two places —
-> `finalizeCurrentMatchToStore()` (`ScoreViewModel.swift:1373-1400`) and the live
-> checkpoint inside `saveState()` (`:1638-1660`). Because every new parameter has a
-> default, **omitting one at either site compiles cleanly and silently loses the
-> data.** This has already happened once in this exact function: `finalizeCurrentMatchToStore`
-> omits `recentPoints:` and `momentumEnabled:`, so every parked record is stored with
-> `recentPoints: []`. Prefer extracting a single private `makeRecord(...)` used by both
-> sites, so there is only one place to forget. At minimum, add the test in the
-> *Watch behaviour* section that asserts events survive a park → resume → finalize
-> round-trip **through `StatsStore`**, not just in memory.
-> (The pre-existing `recentPoints` omission is a real bug, but a separate concern —
-> file it, don't fold it into this feature's PR.)
+Use the same policy on both devices, watch-only mirror rows, import/restore
+results, archive backup previews, and the watch's retention ordering. Otherwise
+an old-start/new-finish match can still fall out of the watch's 25-match history
+immediately after finishing.
 
-### Graph anchor — derived, not persisted
+Update row labels alongside sorting. In details, show both start and finish when
+they fall on different local calendar days; a compact same-day presentation is
+sufficient otherwise. Format in the user's current locale/timezone; sort absolute
+instants, not formatted dates. Export both timestamps for multi-day matches.
 
-`PointStat` already carries `timestamp: Date` (`Models/PointStat.swift:102`). Together
-with `resumedAt`, that **already determines** where a marker sits. Persisting a point
-index alongside it would freeze a derived value into an archive schema that must stay
-compatible forever, and it would collapse to `0` for every resume when stats tracking
-is off.
+Apply completion chronology to `Compare with Previous Match`, baseline pickers,
+head-to-head recent results, and opponent match lists. For an unfinished comparison,
+use its activity date as the reference and clearly label it unfinished. Roster
+`last played` uses actual recorded play/activity where available: administratively
+closing an old match today should not pretend the opponents played today.
 
-So: persist timestamps only, and derive the boundary once, in Core.
+### Completion must be stable
 
-Add `Stats/ResumeMarkers.swift` (alongside the existing pure-derivation helpers such as
-`Stats/SetActivitySplit.swift`) exposing `minimumBreak` and a function mapping
-`(events, stats) -> [ResumeMarker]`, where a marker's boundary is the number of points
-whose `timestamp <= resumedAt`. Points are chronological, so this handles the leading
-edge (`0`), the trailing edge (`stats.count`), and the no-points case cleanly.
+Capture normal completion time when the final scoring action occurs, even when
+point categorisation or closing the match screen happens later. Persist it in live
+state; reuse it for checkpoints, finalization, and retries. Undo of the winning
+point clears that provisional completion time; a new winning point gets a new one.
+Do not derive it solely from `stats.last` because point tracking may be disabled.
 
-The SwiftUI chart, the JS viewer, and the static SVG all consume that one tested
-function. The web JSON still **ships the derived index**, so the renderers keep just
-painting — the denormalized index lives in the *render contract*, never in the *archive*.
-This is the repo's standing rule: derivation stays in tested Swift; the JS only paints.
+For **End at Current Score**, use the time of that deliberate completion action.
+For a match parked a week ago and closed today without more play, this means
+`Finished today`, with last-played information available separately. This explicit
+rule avoids silently guessing a historical finish date. Manual finish-date editing
+is deferred because `endTime` also participates in sync conflict resolution.
 
-### Native iPhone graph
+Do not bulk rewrite old records. Existing `endTime` values are the best available
+completion evidence. Date-policy changes must not change the merge winner rules or
+use display recency as a substitute for record revision/authority.
 
-- Derive markers via `ResumeMarkers` alongside the existing point, set-band, HR, and
-  steps series.
-- Draw a distinct dashed vertical `RuleMark` inside `PointsChartCore`
-  (`Views/PointsGraphView.swift:448`). It is the single shared chart body used by both
-  the inline view (`:1264`) and the fullscreen view (`:1519`), so **one mark covers both
-  surfaces**, and it remains visible when HR is off. The dashed selection `RuleMark` at
-  `:539-543` is the pattern to copy; set bands (`:505-521`) show the `.annotation` label
-  pattern.
-- Label a known break `Resumed · <duration>` and an unknown one `Resumed`. Add an
-  accessibility description carrying the boundary and duration.
-- If multiple events land on one boundary, coalesce the visual rules to avoid overdraw
-  while retaining every event in persistence and exports.
-- **Points tab / set filters:** show a resume divider row in the point-by-point list, and
-  specify its behaviour under an `All / Set N` filter — a boundary outside the selected
-  set is not rendered; a boundary at a set edge belongs to the set that *follows* it.
-  Leaving this unstated is how the Swift and JS renderers drift apart.
+## 4. What counts as a resume?
 
-### Text and AI exports
+**Confirmed interruption:** an explicit park followed by an explicit resume of
+that match. Record every such resume, including short breaks and multiple sessions.
+The park/resume timestamps measure time between these app actions, not the exact
+instant the ball stopped or restarted.
 
-- Add a `Match Interruptions` section listing each event in order with its point
-  boundary, resume time, and measured duration or `duration unavailable`.
-- Add it in `MatchExporter.dataSections` (`Export/MatchExporter.swift:60`) — the single
-  funnel through which summary, full, **and** AI-prompt exports all flow, so one
-  `sections.append` reaches all three. Slot it after `setBySetScores` (`:130`); both are
-  match-timeline facts, and it lands before the raw point table.
-- Interruptions are a property of the recording session, not of either player, so the
-  section is perspective-neutral — unlike the HR/PulseCoach/Movement block, which is
-  gated `focal == .me` (`:118-128`).
-- Extend the coaching instructions to compare pre-resume and post-resume performance
-  where enough data exists, and to treat an HR change at a resume boundary as an
-  interruption effect rather than evidence of continuous-match fatigue or recovery.
-- Emit nothing for matches with no resume events.
+- History resume is confirmed even for a legacy/manual record without a known
+  park time. Show `Resumed`; duration remains unknown.
+- Backgrounding, lowering the wrist, dismissing the scoring sheet, or relaunching
+  the app is **not sufficient evidence of stopped play**. The watch can continue
+  recording, and iPhone scoring can remain available.
+- Reopening a still-live match should not automatically create a confirmed marker.
+  A long inactivity gap may support a future `Did you take a break?` affordance,
+  but no prompt or automatic inference is required for the first release.
+- If a dedicated `Pause match` action is added, it should use the same park/resume
+  lifecycle. Consider renaming the current parking action `End Match` to `Pause
+  match`, with `Finish at current score` remaining separate. This is a proposed
+  UX follow-up, not a hidden change to existing button semantics.
 
-### Interactive and static HTML exports
+The previous draft's five-minute background threshold measured app inactivity,
+not necessarily an interruption. It is removed from the confirmed-break design.
+Never infer historical breaks from long gaps between points or heart-rate changes.
 
-- Add a top-level `interruptions` block to `MatchWebViewModel` carrying the
-  Core-derived point boundary, ISO resume time, optional duration in seconds, and a
-  Swift-derived display label. Bump `MatchWebViewModel.currentSchemaVersion` from **6**
-  to **7** (`WebExport/MatchWebViewModel.swift:23`).
-- Render the dashed rules and labels in the interactive SVG chart. Both renderers already
-  compute identical `xAt(i)` / `step` geometry (`MatchWebStaticFallback.swift:286`,
-  `MatchWebTemplate.swift:430`), and set bands already do the `± step/2` between-points
-  math in both, so a rule between points *i* and *i+1* is `xAt(i) + step/2`. The JS
-  already draws a dashed full-height selection line (`MatchWebTemplate.swift:501-505`) —
-  copy it. The static fallback has no vertical-line precedent but already has `lineSVG`.
-- Mirror the geometry in `MatchWebStaticFallback` so Quick Look and other no-JavaScript
-  previews stay truthful and visually consistent.
-- Preserve the offline/self-contained guarantee: resume rendering adds no external
-  resources and no network calls.
+## 5. Resume presentation
 
-### Documentation
+### Points graph
 
-- Update `CLAUDE.md` and `docs/architecture/file-inventory.md` for the new `MatchRecord`
-  metadata, the new `Stats/ResumeMarkers.swift`, the web schema version, and current
-  file sizes.
-- Update `docs/features/INTERACTIVE_HTML_EXPORT_PLAN.md` to make resume-marker parity
-  part of the interactive/static renderer contract.
-- Update `docs/USER_GUIDE.md` to explain graph markers, measured-versus-unknown break
-  duration, and how AI analysis treats interrupted sessions.
+Draw a subtle dashed vertical line **between** the last pre-resume point and the
+first post-resume point. Label it `Resumed · 8 Nov`; supplementary detail can say
+`Break: 7 days` when measured. Distinguish it from set boundaries and the selected-
+point rule using line style and text as well as colour.
 
-## Public interfaces and data contracts
-
-```swift
-public struct MatchResumeEvent: Codable, Equatable, Sendable {
-    /// When play resumed. Always observed.
-    public let resumedAt: Date
-    /// When the match was parked. `nil` for legacy and manually entered records,
-    /// whose park was never observed.
-    public let pausedAt: Date?
-
-    /// Measured break length. `nil` when the park was not observed. Never inferred.
-    public var duration: TimeInterval? {
-        guard let pausedAt else { return nil }
-        let seconds = resumedAt.timeIntervalSince(pausedAt)
-        return seconds >= 0 ? seconds : nil
-    }
-}
-
-public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
-    // Existing fields remain unchanged.
-    public var resumeEvents: [MatchResumeEvent]
-    /// Open park timestamp: set while parked, cleared on resume. Never set on a
-    /// completed record.
-    public var parkedAt: Date?
-}
+```text
+Points played →   •  •  •  •  │  •  •  •  •
+                              ┆
+                        Resumed · 8 Nov
+                        Break: 7 days
 ```
 
-`duration` is defined **once, on the struct**, so the four renderers (iOS graph, text
-export, interactive HTML, static HTML) cannot diverge on the rule.
+- Keep point spacing, score progression, set boundaries, and momentum continuous.
+  A resume does not reset the tennis score or create a new set.
+- Show markers with all graph modes and with health overlays off, in both inline
+  and expanded graphs through their shared `PointsChartCore`.
+- Break health/movement connecting lines at confirmed session boundaries; never
+  imply uninterrupted physiological measurement across the gap.
+- Add a corresponding divider in point history. For `All / Set N`, a boundary
+  belongs to the following point's set. Preserve full-history coordinates when
+  filtering; changing outcome/serve filters must not move the boundary.
+- Coalesce coincident visible rules (`Resumed twice`) but retain all events in
+  details and exports. Avoid overlapping labels on narrow screens.
+- With no post-resume points, retain a trailing event and show it in session details;
+  do not assign it to a future set yet. With no points at all, show a session summary
+  instead of manufacturing a chart point.
+- VoiceOver should announce, for example, `Play resumed 8 November, before recorded
+  point 43, after a seven-day break`. Large text must not obscure point selection.
 
-Renderers must not infer a duration from point timestamps, heart-rate samples, or match
-wall-clock time. They may, and do, use point timestamps to derive the *boundary* — that
-is `ResumeMarkers`' job, and only its job.
+### Match details, exports, and coaching
 
-The web-export JSON adds a top-level `interruptions` collection (carrying the derived
-boundary index) and moves to schema version 7. Old persisted `MatchRecord` JSON stays
-valid and decodes with no resume events.
+For interrupted matches add a compact `Play sessions` summary: original start,
+resumptions, finish, and recorded play duration. Offer detailed timestamps without
+making every match row taller. Do not call a week of wall-clock span play duration.
 
-## Test plan
+Text summary, full point report, AI prompt, interactive HTML, and static HTML must
+carry the same interruption context. Events are perspective-neutral; recorder-only
+health data remains subject to existing perspective and consent rules. Exports
+without events need no empty interruption section.
 
-### Core and persistence
+Coaching should avoid attributing a post-resume HR change to continuous-match
+fatigue or recovery. Session-aware comparisons may be offered only when coverage
+is sufficient; the line itself does not establish why performance changed.
 
-- Round-trip one and multiple resume events, including an open `parkedAt`.
-- Decode legacy `MatchRecord` JSON with neither new key; assert `[]` / `nil`.
-- `MatchResumeEvent.duration`: known break, absent `pausedAt`, and a negative interval
-  (clock skew) → `nil`.
-- `ResumeMarkers` boundary derivation: leading edge, trailing edge, mid-match, empty
-  stats, and two events sharing a boundary.
-- Health stripping and backfilling preserve resume metadata (satisfied by construction —
-  assert it anyway, so a future refactor of `strippingHealthData()` to a memberwise
-  rebuild is caught).
-- Manual-archive and WatchConnectivity record round trips retain events, and the manual
-  archive's `schemaVersion` stays `1`.
+## 6. Persistence, sync, and derivation
 
-### Watch behaviour
+Proposed additive fields:
 
-- Parking an unfinished match stores a park timestamp.
-- **Path 1:** explicit resume from history appends an event and preserves the prior park
-  timestamp.
-- **Path 2:** backgrounding a live match and returning after more than `minimumBreak`
-  appends an event with a measured duration; returning *under* the threshold appends
-  none. Same for dismissing and re-presenting the match sheet.
-- Multiple park/resume cycles remain ordered and survive finalization.
-- Manual and legacy resumes record an event with unknown duration.
-- Park → resume → finalize, then **read the record back from `StatsStore`** and assert the
-  events survived. (This is the assertion that would have caught the `recentPoints` bug.)
-- Live checkpoints contain completed events and no stale open park timestamp.
-- Watch `AppState` round-trip preserves events; state saved by an older build defaults to
-  an empty list.
-- Replacing a different live match parks that match before resuming the selected one,
-  without mixing their event histories.
+| Model | Fields |
+|---|---|
+| `MatchResumeEvent` | Stable `id`, observed `resumedAt`, optional `pausedAt`, optional `precedingPointID`. |
+| `MatchRecord` | `resumeEvents: [MatchResumeEvent] = []`, `parkedAt: Date? = nil`. |
+| Watch live state | Same events/open park, plus the captured normal completion timestamp. |
 
-### Exports and rendering
+A stable event ID allows duplicate delivery to be recognized. `precedingPointID`
+anchors a boundary to existing recorded history despite equal timestamps or a
+clock adjustment; it is not a mutable numeric index. Capture it before resumed
+points are accepted. No new field is required on `PointStat`.
 
-- Summary, full, and AI exports include ordered interruption details only for interrupted
-  matches, and preserve correct focal-player physiology wording.
-- AI output contains the pre/post-session and HR-discontinuity guidance.
-- Web JSON schema 7 represents known and unknown durations correctly. **Bump the
-  hard-coded assertion at `MatchWebExportTests.swift:189`** (`XCTAssertEqual(vm.schemaVersion, 6)`).
-- Interactive and static HTML contain resume rules and labels, including leading/trailing
-  boundaries and multiple events.
-- Existing script-safety, no-external-resources, and offline HTML invariants still pass.
-- Manually inspect the inline, fullscreen, browser-interactive, and Quick Look/static
-  charts with HR enabled and with more than one resume.
+Core derives render boundaries once, in a proposed `ResumeMarkers` helper. Prefer
+the point-ID anchor. If unavailable, use the first recorded point at/after the
+resume timestamp in stored play order, without reordering the score history.
+An unresolvable or inconsistent anchor should yield an unplaced session event,
+not a guessed line. Test equal timestamps, missing anchors, suffix-only history,
+and manual records. Render JSON may contain a derived boundary index.
 
-> Note: `ArchiveBackupPolicyTests.swift:206` builds its point-level expectation by calling
-> the function under test, so it would not catch a dropped `PointStat` field. Nothing here
-> touches `PointStat`, but don't trust that test further than it goes.
+Negative park-to-resume intervals yield unknown duration, never a negative label.
+Missing park times stay unknown. No previous resume is invented for old records.
 
-### Verification commands
+Follow `CLAUDE.md` §4: defaulted initializer parameters and `decodeIfPresent` in
+both record and live-state decoders. A cosmetic live-state version increment is
+not a migration mechanism. Manual archive schema remains compatible (currently
+version 1); additive record fields do not require rejecting old exports.
 
-Run from the repository root. (The `cd` is scoped to the package command — do not let it
-leak into the `xcodebuild -project` invocations, whose paths are root-relative.)
+Carry fields through **every** checkpoint, finalization, park, resume, clear,
+restore, and completion path, including phone `End at Current Score`. Prefer one
+shared record builder to duplicated defaulted initializers. Clear the open park
+on resume/completion; reset all session state when changing match identity.
 
-```bash
-# Shared package — where the ResumeMarkers and coding tests belong.
-cd DeuceMate/Packages/DeuceMateCore && \
-  xcodebuild test -scheme DeuceMateCore \
-  -destination "platform=macOS" CODE_SIGNING_ALLOWED=NO
+Persist the event before acknowledging resume; a failed save must not remove the
+only archived copy. Repeated save/sync or duplicate lifecycle callbacks must not
+append events. Existing events survive undo; boundaries must still resolve after
+undo/rescore. Resume without scoring, then park again, legitimately creates
+multiple sessions at the same point boundary.
 
-# Watch app tests
-xcodebuild test -project DeuceMate/DeuceMate.xcodeproj \
-  -scheme "DeuceMate Watch App" \
-  -destination "platform=watchOS Simulator,name=Apple Watch Series 9 (45mm),OS=latest"
+Events travel inside existing Codable match payloads, with no new wire key. The
+watch remains authoritative for scoring. Preserve confirmed events when a winning
+copy comes from an older app that omitted the new fields: reconcile immutable
+events by ID independently of body choice; take `parkedAt` only from the winning
+body and clear it for completed records. Pin deterministic resolution of duplicate
+IDs in Core tests. Never union point histories or bypass tombstones. Metadata tags,
+match-type revisions, and forgotten-player scrubbing retain their existing rules.
+An older app that alone rewrites a record may still lose unknown fields; guarantee
+full fidelity between updated peers and document this mixed-version limitation.
 
-# iPhone unit + UI tests
-xcodebuild test -project DeuceMate/DeuceMate.xcodeproj \
-  -scheme "DeuceMate" \
-  -destination "platform=iOS Simulator,name=iPhone 15,OS=latest"
-```
+Resume events are session metadata, not HealthKit samples. Preserve them through
+health stripping/sidecars, iCloud backup, manual archive transfer, and restoration.
+Update the HTML render contract and both renderers together. The current web
+schema is **13**; choose the next version at implementation time, not the obsolete
+6→7 bump specified in the July draft.
 
-## Assumptions and fixed decisions
+## 7. Additional aspects worth considering
 
-- A resume is any return to play across a **measured** break: either an explicit resume
-  from history, or a return to a live match after a gap of at least
-  `ResumeMarkers.minimumBreak` (5 minutes). Both endpoints of the break are observed.
-- The threshold exists only to suppress noise (a brief glance at the watch face). It is
-  not an inference: the interval itself is measured, not guessed.
-- Break duration is the park-to-resume interval. It is optional, and is never inferred for
-  legacy or manually entered records.
-- Every measured break is retained; no single-resume limitation is imposed.
-- Existing matches remain unchanged and show no marker until interrupted after this ships.
-- Resume markers are match/session metadata, not HealthKit measurements, so they remain in
-  normal sync and archive payloads even where health data is stripped.
+| Priority | Aspect | Recommendation |
+|---|---|---|
+| Required with date changes | Watch retention | Sort by the shared recency policy before capping at 25, so newly finished long-running matches remain available. Protect existing pre-eviction sync behaviour. |
+| Required with session support | Health query scope | Exclude known parked intervals from HR queries/buckets. If the park is unknown, avoid bridging across the boundary; use point snapshots where a continuous interval cannot be established. Never bucket a week's unrelated HR readings into one resumed point. |
+| Required with session support | Workout identity and totals | Start each resumed workout at that session's start, retaining the original match start only as match metadata. Verify steps/distance/calories accumulate once across sessions and survive retries; handle reset cumulative counters at session boundaries. |
+| Required with session support | Recorded duration | Exclude confirmed parked time from match/set timers. Keep `recorded play time` separate from start-to-finish span; app invisibility alone must not stop the play clock. Avoid claiming exact active time where legacy data cannot establish it. |
+| Required consistency | Previous match / head-to-head | Use finish chronology for completed results and baseline selection; keep unfinished matches out of completed win/loss records. |
+| Useful follow-up | Clearer actions | `Pause match`, `Resume match`, and `Finish at current score` better distinguish resumable and final states than today's `End Match`. |
+| Useful follow-up | Session-aware coaching | Compare pre/post-resume results only with adequate samples. Fatigue and recovery calculations must not bridge session boundaries. |
+| Later | Correcting historical dates | Offer explicit finish-date correction only with a separate revision/merge design; changing `endTime` currently affects conflict resolution. |
+| Later | Per-session analysis | Optional session picker and session summaries; keep aggregate match results and Trends as one match. |
 
-## Out of scope
+No reminders, automatic break detection, historical session reconstruction, new
+scoring rules, or reopening of finalized matches are proposed for the first release.
 
-- Inferring interruptions from long gaps between points or from heart-rate samples.
-- Treating changeovers or medical timeouts as resumes.
-- Recording a marker for an app relaunch or state restoration that happens **within** the
-  threshold — a crash-and-relaunch mid-game is not a break.
-- Retrofitting resume markers into historical completed matches.
-- Changing scoring or HealthKit sampling.
-- **Fixing `matchElapsedSeconds` on the live-resume path.** Today `sessionStartTime` is
-  reset only on resume-from-history (`ScoreViewModel.swift:1555`), so put-the-watch-down
-  idle time is still counted as *active play* when the user returns to a live match.
-  Stamping `parkedAt` (path 2) finally makes that fixable — but it is a behaviour change to
-  a long-standing number, and belongs in its own PR. Follow-up.
+## 8. Delivery plan and implementation map
+
+**Phase 1 — completion chronology.** Deliver the shared date policy, stable final-
+scoring timestamp, Trends ordering/labels/windows, history rows and retention,
+comparison/head-to-head consistency, and browser-demo parity. Existing completed
+archives improve immediately without a data rewrite. Add a short release note that
+recent Trends windows may change because they now reflect finish order.
+
+**Phase 2 — confirmed sessions.** Deliver persistence/lifecycle, graph and point-list
+markers, detail summaries, all export variants, session-safe health handling, and
+demo parity together. Health correctness is part of this phase, not something a
+visual line alone solves.
+
+**Phase 3 — optional UX.** Evaluate clearer pause/finish wording, unfinished-list
+sections, and session comparisons separately.
+
+| Surface | Main implementation sites |
+|---|---|
+| Dates and Trends | Core `Models/MatchRecord.swift`, proposed shared chronology helper, `Stats/MatchTrendSample.swift`, `Stats/PerformanceTrends.swift`; iOS `Views/Trends/` |
+| Storage and lists | Core `Sync/{MatchMergePolicy,ArchiveBackupPolicy,WatchMirror}.swift`; watch `StatsStore.swift`, `MatchHistoryView.swift`; iOS `Persistence/PhoneStatsStore.swift`, `Views/PastMatchesView.swift` |
+| Comparisons and opponents | Core `Stats/{MatchComparison,PlayerRoster,OpponentDirectory}.swift`; iOS `Views/MatchInfo/` |
+| Session capture | Core resume-event/marker types; watch `ScoreViewModel.swift`, `HomeView.swift`, `MatchStatsView.swift`; phone completion path |
+| Graph and health | iOS `Views/{PointsGraphView,MatchDetailView}.swift`, `HealthKitHRFetcher.swift`; watch `WorkoutManager.swift`; Core movement/coaching derivations |
+| Sharing | iOS `Export/MatchExporter.swift`; Core `WebExport/` view model, interactive template, static fallback; export-cache inputs and filename policy audited explicitly |
+| Demo | `docs/website/assets/` watch history, phone history/reports/trends/export/coaching mirrors; regenerate native export assets using the existing workflow |
+
+Keep export filenames start-date-based for phase 1, as currently documented;
+finish-date headers carry the new meaning. Renaming shared files can be considered
+separately. Full-record equality already invalidates `TrendsSamples`; maintain it.
+
+When implementing, update the user guide, lifecycle/health/sync architecture docs,
+`CLAUDE.md`, and production file inventory where sources are added or changed.
+This proposal itself changes no production architecture.
+
+## 9. Acceptance and verification
+
+1. The A/B/C example orders A–C–B in both histories and B–C–A in Trends. `Last N`,
+   filters, deltas, tooltips, and sparklines use that chronology; sync/import order
+   does not affect it.
+2. Single-session matches retain expected order. Equal completion instants have
+   deterministic ties. Completed draws work; legacy completed records without an
+   end time remain readable and use the documented fallback.
+3. The winning point is scored before midnight and the screen closed after midnight:
+   finish date remains the winning-point date. Undo/re-win updates it once. Delayed
+   categorisation and app restoration do not change it.
+4. Ending a parked match without more play uses the explicit action time. Phone/watch
+   reconciliation keeps the authoritative score and preserves session metadata.
+5. A provisional Trends sample becomes one completed sample with the same UUID.
+   Metadata edits, health backfill, sync, and imports do not make a match newly played.
+6. An old-start/new-finish match remains among the newest 25 watch records. Combined
+   phone/watch-only rows and backup previews use the same date policy.
+7. Explicit park → resume → play → finish survives a store read, relaunch, offline
+   sync, archive export/import, and health-stripped backup with every event intact.
+   Missing fields decode safely. Failed writes do not report successful transitions.
+8. Multiple sessions, unknown park times, resume-without-scoring, no points, tracking
+   disabled, clock changes, midnight/DST/travel, duplicate events, and undo/rescore
+   have deterministic behaviour. Background/foreground alone creates no marker.
+9. Inline, expanded, interactive HTML, static HTML, and demo graphs agree on boundaries
+   under set/outcome filters. Point selection still works; VoiceOver and large text
+   convey the interruption without relying on colour.
+10. HR/steps lines and coaching do not bridge confirmed breaks. Resumed workouts use
+    session dates; recorded duration excludes confirmed gaps; activity totals neither
+    lose earlier sessions nor count them twice.
+11. Text/AI/HTML exports agree on dates and interruptions, preserve health-sharing
+    consent, and remain self-contained/offline. Existing script-safety tests pass.
+12. Existing completion authority, tombstones, tags, match-type revisions, notes, and
+    forgotten-player handling remain intact through all merge/restore paths.
+
+Implementation verification: Core unit tests for chronology, Trends windows,
+comparison, retention, coding, markers, merge and export contracts; Watch tests for
+lifecycle persistence/timing/workouts; iPhone tests for history/graph/export updates;
+existing browser parity checks and manual accessibility review. Use local Swift/
+Xcode when available, following `CLAUDE.md`; do not trigger GitHub Actions.
