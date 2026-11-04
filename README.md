@@ -7,29 +7,45 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![App Store](https://img.shields.io/badge/App%20Store-Download-0D96F6.svg)](https://apps.apple.com/app/id6757105622)
 
-### 📲 [Download DeuceMate on the App Store](https://apps.apple.com/app/id6757105622) — free, no ads, no tracking
+<img src="docs/readme/hero.jpg" width="100%" alt="Apple Watch scoring a live match in front of two iPhones showing the Points Graph and Trends, with the headline Score on your wrist">
+
+### [▶ Try it in your browser](https://emrahman.github.io/DeuceMate/try.html) · [📲 Download on the App Store](https://apps.apple.com/app/id6757105622)
+
+Free, no ads, no tracking.
 
 DeuceMate is a lightweight, native Apple Watch app for scoring tennis matches in real time, bundled with an **iPhone companion app** for live score viewing, umpire-style announcements, and a complete match archive with detailed statistics. Built from the ground up with SwiftUI, it delivers a fast, reliable scoring experience without the bloat, crashes, or privacy concerns of existing alternatives.
 
 ## Screenshots
 
-| <img src="docs/website/screenshots/04-watch-scoreboard.png" width="260" alt="Apple Watch live scoreboard"> | <img src="docs/website/screenshots/01-hero-watch-iphone.png" width="380" alt="iPhone companion showing the live score"> |
+### On your wrist
+
+| <img src="docs/readme/watch-tag-point.jpg" width="230" alt="Apple Watch sheet tagging a won point as Winner, Forced Error or Unforced Error"> | <img src="docs/website/screenshots/01-hero-watch-iphone.png" width="560" alt="iPhone live scoreboard showing the same score as the Watch"> |
 |:--:|:--:|
-| **Gesture-first scoring, right on your wrist.** | **Watch it live on your phone — same score, real time.** |
-| <img src="docs/website/screenshots/15-watch-start-tracking.png" width="260" alt="Apple Watch start screen showing the remembered Singles / Best of 3 setup and the Points, Health and Pulse tracking chips"> | <img src="docs/website/screenshots/18-watch-changeover-sticky.png" width="260" alt="Apple Watch scoreboard with a sticky Players change ends reminder above the score"> |
-| **Start in three taps — and see what the match will record.** | **The changeover reminder that stays put.** |
-| <img src="docs/website/screenshots/02-points-momentum-graph.png" width="380" alt="Points momentum graph with heart rate and steps"> | <img src="docs/website/screenshots/03-match-stats.png" width="380" alt="Side-by-side match statistics"> |
-| **See your momentum — overlaid with heart rate and movement.** | **Pro-level analytics — 20+ stats, side by side.** |
-| <img src="docs/website/screenshots/07-points-outcomes-won.png" width="380" alt="Points graph filtered to points won"> | <img src="docs/website/screenshots/08-points-outcomes-lost.png" width="380" alt="Points graph filtered to points lost"> |
-| **Filter to your winning points — see exactly where you took control.** | **Filter to lost points — pinpoint where the match slipped away.** |
-| <img src="docs/website/screenshots/05-pulse-coach-hr-zones.png" width="380" alt="Pulse Coach heart-rate zone win rates"> | <img src="docs/website/screenshots/06-themes.png" width="380" alt="Five court-inspired themes"> |
-| **Discover the heart-rate zone you win in.** | **Five court-inspired themes.** |
-| <img src="docs/website/screenshots/09-ai-coach-launcher.png" width="380" alt="AI Coach — send your match to ChatGPT, Claude or Gemini"> | <img src="docs/website/screenshots/10-ai-coach-prompt.png" width="380" alt="Generated coaching prompt ready to paste into any AI"> |
-| **One tap to send your match data to an AI coach.** | **A structured prompt — with full context — ready for any AI.** |
-| <img src="docs/website/screenshots/11-ai-coach-stats.png" width="380" alt="Match stats included in the AI export"> | <img src="docs/website/screenshots/12-ai-coach-raw-data.png" width="380" alt="Full point-by-point data table in the AI export"> |
-| **Complete stats analysis included automatically.** | **Every point, in order — so the AI spots patterns you missed.** |
-| <img src="docs/website/screenshots/13-web-export-points.png" width="380" alt="Interactive HTML web export — points momentum chart and point-by-point list"> | <img src="docs/website/screenshots/14-web-export-stats.png" width="380" alt="Interactive HTML web export — Me-vs-Opponent match statistics"> |
-| **Share a match as one self-contained web page — no app required.** | **The full stats breakdown, filterable by set, right in the browser.** |
+| **Tag how each point ended. Every stat below starts here.** | **Same score, live on your iPhone.** |
+
+### Understand the match
+
+| <img src="docs/readme/momentum.jpg" width="260" alt="Points Graph with heart rate overlay and winning points marked"> | <img src="docs/readme/stats.jpg" width="260" alt="Side-by-side match statistics"> | <img src="docs/readme/pulse-zones.jpg" width="260" alt="Pulse Coach win rate by heart-rate zone and heart-rate timeline"> |
+|:--:|:--:|:--:|
+| **See every point, and how each one ended.** | **20+ stats, side by side.** | **Find the heart-rate zone you win in.** |
+
+### See the pattern
+
+| <img src="docs/readme/trends.jpg" width="260" alt="Trends filters above charts of errors and serve performance"> | <img src="docs/readme/head-to-head.jpg" width="260" alt="Head-to-head record, playing style and past matches for one opponent"> | <img src="docs/readme/compare.jpg" width="260" alt="Match rates compared with the previous match against the same opponent"> |
+|:--:|:--:|:--:|
+| **Know what's improving and what's slipping.** | **Your record against every opponent.** | **See what changed since you last played them.** |
+
+### Get coached, then share it
+
+| <img src="docs/readme/coaching-insights.jpg" width="260" alt="Coaching Insights and Pulse Coach observations for one match"> | <img src="docs/website/screenshots/09-ai-coach-launcher.png" width="260" alt="AI Coach sheet with ChatGPT, Claude and Gemini"> | <img src="docs/readme/web-report.jpg" width="260" alt="The shared match report open in a browser on iPhone, with the score and momentum chart"> |
+|:--:|:--:|:--:|
+| **Coaching insights from your own points.** | **Hand any match to ChatGPT, Claude or Gemini.** | **Share a match as one web page. No app needed.** |
+
+### Make it yours
+
+<img src="docs/readme/themes.jpg" width="100%" alt="The Watch score rows in all five court-inspired themes">
+
+**Five court-inspired themes.**
 
 ## Why DeuceMate Exists
 
@@ -59,7 +75,9 @@ This project also showcases my ability to ship production-quality native iOS/wat
 - **Bulletproof state** — full undo stack across game and set boundaries; in-progress matches survive backgrounding, notifications, and overnight pauses.
 - **iPhone companion** — stadium-style live scoreboard, umpire-style spoken announcements, optional swipe-to-score iPhone Input, manual match entry, and an unlimited on-device archive.
 - **Point outcome tracking** — tag every point with a cause and ending shot to unlock serve, return, break-point, pressure, rally-depth, and score-state analytics, filterable per set or whole match.
-- **Coaching insights** — RecCoach (eight data-driven observations per match) and PulseCoach (heart-rate-correlated insights), plus an interactive points-momentum graph with HR and steps overlays.
+- **Coaching insights** — Coaching Insights (up to three ranked observations per match) and PulseCoach (heart-rate-correlated insights), plus an interactive points-momentum graph with HR and steps overlays.
+- **Performance trends** — charts across your matches show what is improving and what is slipping, filterable by window, match type, format, competition type, and opponent.
+- **Match details and opponents** — add players, competition type, and a private note to any match, see your head-to-head record against each opponent, and compare a match with your previous one against them.
 - **AI coaching exports** — one tap builds a structured coaching prompt (including the raw point-by-point table) for ChatGPT, Claude, Gemini, and others, with a dual perspective mode so your opponent gets coached too.
 - **Shareable interactive web report** — export any match as a single self-contained HTML page (momentum chart with toggleable outcome/shot scatter, the full Me-vs-opponent stats with Stats/Points tabs and per-set filters, and a built-in AI-coach launcher) that opens in any browser, fully offline — no app, account, or server.
 - **Health & fitness** — optional HealthKit workout with live heart rate, calories, steps, distance, and per-set timers.
