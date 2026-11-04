@@ -61,7 +61,6 @@ when the item should constrain future changes.
 | [4a-write](#4a-write--surface-save-failures) | Persistence | Surface live-state and archive save failures | Medium impact; low likelihood | After, or alongside, read containment | Small–medium |
 | [26](#26--match-info-swipe-down-and-player-name-save-gaps) | Data loss | Match Info swipe-down and player-name save gaps | Low; swipe discard is accepted, a failed name save may show no error | Next Match Info change | Small |
 | [23](#23--validate-manual-match-scores-and-explain-invalid-input) | Correctness | Validate manual match scores and explain invalid input | Medium; inconsistent records can be resumed on Watch | Next manual-entry fix, after persistence containment | Small–medium |
-| [22](#22--show-disconnected-live-scoring-and-command-send-failures) | Sync / UX | Show disconnected live scoring and command send failures | Medium; input feedback can imply an unsent point counted | Next live-input reliability fix | Small–medium |
 | [24](#24--add-accessible-watch-scoring-actions) | Accessibility | Add accessible Watch scoring actions | Core scoring has no named accessibility actions | Coordinate with walkthrough shared controls | Small–medium |
 | [25](#25--make-interactive-html-export-failures-recoverable) | Export / UX | Make interactive HTML export failures recoverable | Low; failed export disappears with no explanation | Independent usability fix | Small |
 | [11](#11--de-duplicate-appthemeswift-into-core) | Duplication | De-duplicate `AppTheme.swift` (still byte-identical) | Medium change risk | Before the next theme edit | Small |
@@ -106,6 +105,7 @@ Completed, or parked with a recorded reason. Full write-ups are
 | [16](#16--drop-healthkit-date-of-birth-read-user-entered-birth-year-remove-dead-computed-max-hr-path-done-15-july-2026) | Health/Privacy | Drop HealthKit date-of-birth read; user-entered birth year | **Done** — 15 July 2026 |
 | [7](#7--convert-formatted-string-stats-to-typed-values-in-matchstatssummary-done) | Stats | Convert formatted string stats to typed `RatioStat` | **Done** — `PERFORMANCE_TRENDS_PLAN.md` PR 1 |
 | [17](#17--de-duplicate-stats-scaffolding-into-core-done) | Stats | De-duplicate set filters, durations, percent strings, compact score | **Done** — four new Core files |
+| [22](#22--show-disconnected-live-scoring-and-command-send-failures-done) | Sync / UX | Show disconnected live scoring and command send failures | **Done** — `LiveScoreboardStatus`; unreachable Watch blocks input and reads Waiting for Watch |
 | [15](#15--localization-parked) | i18n | Localization (all UI copy is hardcoded English) | **Parked** — product decision, not code |
 
 ---
@@ -716,49 +716,6 @@ the next substantial edit **to the existing content**, before the file crosses
 
 ---
 
-### 22 — Show disconnected live scoring and command send failures
-
-**Classification:** Existing-feature reliability/usability defect, tracked in
-the improvement backlog. The status UI is an enhancement to the presentation;
-it addresses a concrete gap in the existing input path.
-
-**Verified 18 September 2026:** `LiveScoreboardView.liveBadge` always renders
-`LIVE`. `handleSwipe` previews a point and produces a haptic without checking
-`PhoneMatchSyncService.isWatchReachable`. `sendScoreCommand` uses
-`queueOnFailure: false`; `MatchSyncTransport.sendControl` drops an unreachable
-send and only logs an asynchronous send error. The user receives no indication
-that their input could not be sent. Categorisation buttons use the same
-unreported, non-queued transport path.
-
-**Proposed scope:** Reflect session reachability in the badge; show **Watch
-disconnected** while unavailable, retain the last received score, suppress
-scoring previews/gestures and categorisation actions while disconnected, and
-return send failures to the UI with a short actionable message. Restore input
-on reconnection. A haptic may indicate a recognised gesture; it must not be
-presented as proof that the watch applied the point. Reachability alone is
-also not proof that the displayed score is current.
-
-Keep live commands non-queued. Do not add automatic retries: an ambiguous
-delivery failure can otherwise double-score. Explicit application
-acknowledgements would need command identity and deduplication and are outside
-this small feedback fix.
-
-**Verification:** Disconnected input sends nothing and shows no misleading
-preview; a connection lost during send produces visible feedback; reconnect
-restores controls; existing match-ID and pending-point guards still hold.
-
-**Existing related documentation:** `KNOWN_LIMITATIONS.md` #1 concerns
-oversized checkpoints, a different cause of a frozen scoreboard that this
-change does not solve. The disconnect copy in
-`DUAL_DEVICE_MATCH_BROADCAST_PLAN.md` concerns a proposed peer-broadcast feature,
-not the current paired Watch/iPhone path.
-
-**Key files:** `LiveScoreboardView.swift`, `PhoneMatchSyncService.swift`,
-`MatchSyncTransport.swift`, and `LivePointCategoryPanel.swift` if its caller
-cannot provide the disabled/error state alone.
-
----
-
 ### 23 — Validate manual match scores and explain invalid input
 
 **Classification:** Correctness defect plus a small validation-UX improvement.
@@ -1219,6 +1176,68 @@ on the shared enum.
 **Key files:** the four new Core files; `MatchDetailView`, `MatchExporter`,
 watch `MatchStatsView` / `MatchHistoryView`, `MatchWebViewModel+Build`,
 `MatchWebViewModel+Comparison`.
+
+---
+
+### 22 — Show disconnected live scoring and command send failures (Done)
+
+**Classification:** Existing-feature reliability/usability defect, tracked in
+the improvement backlog. The status UI is an enhancement to the presentation;
+it addresses a concrete gap in the existing input path.
+
+**Verified 18 September 2026:** `LiveScoreboardView.liveBadge` always renders
+`LIVE`. `handleSwipe` previews a point and produces a haptic without checking
+`PhoneMatchSyncService.isWatchReachable`. `sendScoreCommand` uses
+`queueOnFailure: false`; `MatchSyncTransport.sendControl` drops an unreachable
+send and only logs an asynchronous send error. The user receives no indication
+that their input could not be sent. Categorisation buttons use the same
+unreported, non-queued transport path.
+
+**Proposed scope:** Reflect session reachability in the badge; show **Watch
+disconnected** while unavailable, retain the last received score, suppress
+scoring previews/gestures and categorisation actions while disconnected, and
+return send failures to the UI with a short actionable message. Restore input
+on reconnection. A haptic may indicate a recognised gesture; it must not be
+presented as proof that the watch applied the point. Reachability alone is
+also not proof that the displayed score is current.
+
+Keep live commands non-queued. Do not add automatic retries: an ambiguous
+delivery failure can otherwise double-score. Explicit application
+acknowledgements would need command identity and deduplication and are outside
+this small feedback fix.
+
+**Verification:** Disconnected input sends nothing and shows no misleading
+preview; a connection lost during send produces visible feedback; reconnect
+restores controls; existing match-ID and pending-point guards still hold.
+
+**Existing related documentation:** `KNOWN_LIMITATIONS.md` #1 concerns
+oversized checkpoints, a different cause of a frozen scoreboard that this
+change does not solve. The disconnect copy in
+`DUAL_DEVICE_MATCH_BROADCAST_PLAN.md` concerns a proposed peer-broadcast feature,
+not the current paired Watch/iPhone path.
+
+**Key files:** `LiveScoreboardView.swift`, `PhoneMatchSyncService.swift`,
+`MatchSyncTransport.swift`, and `LivePointCategoryPanel.swift` if its caller
+cannot provide the disabled/error state alone.
+
+**Outcome (4 November 2026):** Core's `LiveScoreboardStatus` decides the badge,
+input gate, swipe hint and copy. While the Watch is unreachable the scoreboard
+reads **WAITING FOR WATCH** rather than LIVE and keeps the last score. Swipes,
+their previews and haptics do nothing, and the category panel stays visible but
+disabled. `MatchSyncTransport.sendControl` gained an optional `onUndelivered`
+callback, and `PhoneMatchSyncService.liveCommandFailureCount` turns it into a
+short on-screen message. Commands are still never queued or retried.
+
+The label is **Waiting for Watch**, not the **Watch disconnected** proposed above,
+because an in-range Watch is also unreachable while DeuceMate isn't active on it.
+The badge has no grace delay, so it and the input gate always agree. If real use
+shows the badge flickering, add a delay to the badge only, never to the input
+gate. A swipe sent just as reachability drops still gives its haptic before the
+failure message appears, which the scope above allows.
+
+**Verified:** `LiveScoreboardStatusTests`, `MatchSyncTransportTests` and
+`LiveCommandDeliveryTests`, plus simulator renders of each state. Behaviour with
+a real paired Watch needs a device check.
 
 ---
 

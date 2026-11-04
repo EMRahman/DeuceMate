@@ -57,6 +57,22 @@ struct LiveScoreboardView: View {
     /// Player a vertical drag would currently score for: true = ME (a win),
     /// false = OPP (a loss), nil = no preview. Drives the live row highlight.
     @State private var livePreviewWinsMe: Bool? = nil
+    /// The `liveCommandFailureCount` currently on screen; nil once its message
+    /// has timed out. Doubles as the id that restarts the timeout on a new failure.
+    @State private var shownCommandFailure: Int? = nil
+
+    private static let commandFailureDisplayDuration: Duration = .seconds(5)
+
+    private var status: LiveScoreboardStatus {
+        LiveScoreboardStatus(isWatchReachable: syncService.isWatchReachable,
+                             isInputEnabled: iPhoneInputEnabled)
+    }
+
+    /// A send failure outranks the steady status because it is about what the
+    /// user just did.
+    private var connectionMessage: String? {
+        shownCommandFailure != nil ? LiveScoreboardStatus.commandFailureMessage : status.detail
+    }
 
     private var meColor:     Color { theme.colors.me }
     private var oppColor:    Color { theme.colors.opponent }
@@ -68,7 +84,7 @@ struct LiveScoreboardView: View {
     /// release would be swallowed). They must stay in sync.
     private static let swipeDebounceInterval: TimeInterval = 0.25
 
-    // Space reserved for the top chrome (LIVE + close) and bottom format label.
+    // Space reserved for the top chrome (status + close) and bottom format label.
     private static let chromeTop: CGFloat = 44
     // When the momentum badge is shown it adds ~20 pt above the format label.
     private func showMomentum(for record: MatchRecord) -> Bool {
@@ -138,6 +154,14 @@ struct LiveScoreboardView: View {
                 VStack {
                     HStack(alignment: .top) {
                         liveBadge
+                        if let connectionMessage {
+                            Text(connectionMessage)
+                                .font(.caption)
+                                .foregroundStyle(Color.orange)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.7)
+                                .accessibilityIdentifier("live-connection-message")
+                        }
                         Spacer()
                         closeButton
                     }
@@ -157,7 +181,7 @@ struct LiveScoreboardView: View {
                         Text(formatLabel(for: record))
                             .font(.footnote)
                             .foregroundStyle(Self.dimWhite)
-                        if iPhoneInputEnabled {
+                        if status.showsSwipeHint {
                             Text("↑ Me   ↓ Opp   ← Undo")
                                 .font(.system(size: 11, weight: .medium, design: .rounded))
                                 .foregroundStyle(Color.white.opacity(0.55))
@@ -198,6 +222,9 @@ struct LiveScoreboardView: View {
                                     syncService.sendUndoPoint()
                                 }
                             )
+                            // Stays visible so the user can see the step they
+                            // are on; its actions can't be sent until reconnection.
+                            .disabled(!status.acceptsInput)
                             .padding(.horizontal, 24)
                             .padding(.bottom, 36)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -232,6 +259,21 @@ struct LiveScoreboardView: View {
                     handleSwipe(value: value)
                 }
         )
+        .onChange(of: syncService.liveCommandFailureCount) { _, count in
+            shownCommandFailure = count
+            UIAccessibility.post(notification: .announcement,
+                                 argument: LiveScoreboardStatus.commandFailureMessage)
+        }
+        .onChange(of: syncService.isWatchReachable) { _, _ in
+            UIAccessibility.post(notification: .announcement,
+                                 argument: status.detail ?? "Watch connected")
+        }
+        .task(id: shownCommandFailure) {
+            guard shownCommandFailure != nil else { return }
+            try? await Task.sleep(for: Self.commandFailureDisplayDuration)
+            guard !Task.isCancelled else { return }
+            shownCommandFailure = nil
+        }
         .onAppear {
             UIApplication.shared.isIdleTimerDisabled = true
             lockLandscape()
@@ -258,7 +300,8 @@ struct LiveScoreboardView: View {
     /// in-scene stats sheet (stats live in the past-matches detail), so a right
     /// swipe shouldn't accidentally trigger anything.
     private func handleSwipe(value: DragGesture.Value) {
-        guard iPhoneInputEnabled else { return }
+        // Unreachable: no haptic and no send, so nothing implies the point counted.
+        guard status.acceptsInput else { return }
         // Mirror the watch's swipe guard: while a categorization is pending we
         // can't safely score another point. The watch rejects the command
         // anyway, but blocking locally avoids confusing the user with a
@@ -304,7 +347,7 @@ struct LiveScoreboardView: View {
     /// hot path — with no live match the player rows aren't rendered, so a
     /// stray preview value simply has nothing to highlight.
     private func livePreviewTarget(for value: DragGesture.Value) -> Bool? {
-        guard iPhoneInputEnabled, syncService.pendingPoint == nil else { return nil }
+        guard status.acceptsInput, syncService.pendingPoint == nil else { return nil }
         if let last = lastSwipeUptime,
            ProcessInfo.processInfo.systemUptime - last < Self.swipeDebounceInterval {
             return nil
@@ -341,15 +384,20 @@ struct LiveScoreboardView: View {
     // MARK: - Chrome
 
     private var liveBadge: some View {
-        HStack(spacing: 6) {
+        let tint: Color = status.isWatchReachable ? .red : .orange
+        return HStack(spacing: 6) {
             Circle()
-                .fill(Color.red)
+                .fill(tint)
                 .frame(width: 9, height: 9)
-            Text("LIVE")
+            Text(status.badgeLabel)
                 .font(.caption.weight(.heavy))
-                .foregroundStyle(Color.red)
+                .foregroundStyle(tint)
                 .kerning(1.5)
+                .lineLimit(1)
+                .fixedSize()
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("live-connection-badge")
     }
 
     private var closeButton: some View {

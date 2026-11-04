@@ -379,8 +379,14 @@ async function testLiveDisconnectedInputAndPendingControls(browser) {
     check(afterBlocked.state === before, "keyboard score command must not change the Watch scorer while unreachable");
     check(afterBlocked.state === afterBlocked.phone, "phone snapshot and Watch scorer must remain the same authoritative state");
     check(afterBlocked.disabled, "live command controls must be disabled while unreachable");
+    const waitingBoard = c.root.locator(".phone-live");
+    check((await waitingBoard.locator(".phone-live-badge").textContent()) === "WAITING FOR WATCH", "unreachable scoreboard must not claim LIVE");
+    check(await waitingBoard.locator(".phone-live-hint").count() === 0, "swipe directions must hide while swipes do nothing");
+    check((await waitingBoard.locator(".phone-live-status").textContent()).includes("Last score shown. Open DeuceMate on the Watch to score here."), "unreachable scoreboard must explain the score and how to resume");
 
     await controls.getByLabel("Watch reachable").check();
+    check((await waitingBoard.locator(".phone-live-badge").textContent()) === "LIVE", "reconnecting must restore the LIVE badge");
+    check(await waitingBoard.locator(".phone-live-hint").count() === 1, "reconnecting must restore the swipe directions");
     await c.page.evaluate(() => window.DeuceMatePhone.setSetting("track", true));
     await click(c.root.locator(".phone-live-controls"), "↑ Me");
     await c.page.waitForFunction(() => !!window.DeuceMateShell.api.phoneState().pending, null, { timeout: TIMEOUT });

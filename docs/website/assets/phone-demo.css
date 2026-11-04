@@ -394,6 +394,8 @@ html.phone-landscape-lock { overflow:hidden; }
 .phone-live-badge { display:inline-flex; align-items:center; gap:6px; color:#ff3b30; font-size:12px; font-weight:800; letter-spacing:1.5px; }
 .phone-live-badge i { width:9px; height:9px; border-radius:50%; background:#ff3b30; }
 .phone-live-badge b { font-weight:800; }
+.phone-live-badge.waiting { color:#ff9f0a; }
+.phone-live-badge.waiting i { background:#ff9f0a; }
 .phone-frame .phone-live-close { margin:0; padding:0; width:28px; min-width:28px; height:28px; min-height:28px; border:0; border-radius:50%; background:transparent; color:#ffffff80; }
 .phone-live-close .phone-icon { width:28px; height:28px; display:block; stroke:none; }
 .phone-frame[data-screen=live] .phone-scoreboard { flex:1; min-height:0; margin:0; padding:44px 0 var(--live-bottom,28px); border-radius:0; background:#121212; display:flex; flex-direction:column; container-type:size; touch-action:none; user-select:none; box-sizing:border-box; }

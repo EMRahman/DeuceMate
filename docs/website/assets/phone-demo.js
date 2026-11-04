@@ -632,7 +632,8 @@
     var theme = S.THEMES[settings.theme] || S.THEMES.default, complete = api.complete();
     var closeLive = button("", function () { setOrientation(false); navigate("matches"); }, "phone-live-close");
     closeLive.append(icon("closeCircle")); closeLive.setAttribute("aria-label", "Back to Matches");
-    var badge = h("span", { class: "phone-live-badge" }, h("i", {}), h("b", {}, complete ? "MATCH COMPLETE" : "LIVE"));
+    var watchReady = connection.paired && connection.reachable && connection.activation === "ready";
+    var badge = h("span", { class: "phone-live-badge" + (!complete && !watchReady ? " waiting" : "") }, h("i", {}), h("b", {}, complete ? "MATCH COMPLETE" : watchReady ? "LIVE" : "WAITING FOR WATCH"));
     out.append(h("div", { class: "phone-live-top" }, badge, closeLive));
     var court = h("div", { class: "phone-scoreboard", tabindex: "0", "aria-label": "Live scoreboard. Swipe up for Me, down for Opponent, left to undo." });
     court.dataset.focusKey = "phone-live-scoreboard";
@@ -682,7 +683,7 @@
     var recent = rec.resume.momentum.slice(-8), slots = h("div", { class: "phone-momentum" + (recent.length ? "" : " empty") });
     for (var slot = 0; slot < 8; slot++) { var who = recent[slot - (8 - recent.length)]; slots.append(h("i", { class: who === "me" ? "me" : who ? "opp" : "" })); }
     var bottom = h("div", { class: "phone-live-bottom" }, recent.length ? slots : "", h("span", { class: "phone-live-format" }, format(rec)));
-    if (settings.iPhoneInput) bottom.append(h("span", { class: "phone-live-hint" }, "↑ Me   ↓ Opp   ← Undo"));
+    if (settings.iPhoneInput && watchReady) bottom.append(h("span", { class: "phone-live-hint" }, "↑ Me   ↓ Opp   ← Undo"));
     out.append(court, bottom);
     if (pending.pending && settings.iPhoneInput) {
       var commandsAvailable = connection.paired && connection.reachable && connection.activation === "ready";
@@ -711,7 +712,7 @@
     if (settings.announce) status.append(note("🔊 Score announcements enabled"));
     if (connection.activation === "connecting") status.append(note("Connecting to Apple Watch… Commands are unavailable until connected."));
     else if (connection.activation === "unavailable" || !connection.paired) status.append(note("Apple Watch unavailable. Commands are unavailable; the saved iPhone match is retained."));
-    else if (!connection.reachable) status.append(note("Watch disconnected. Commands are unavailable until it reconnects."));
+    else if (!connection.reachable) status.append(note(settings.iPhoneInput ? "Last score shown. Open DeuceMate on the Watch to score here." : "Last score shown. Updates resume when the Watch reconnects."));
     extras.append(button("View Match Stats", function () { navigate("detail", rec); }));
     out.append(status, extras);
     return out;

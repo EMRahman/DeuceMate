@@ -28,6 +28,9 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
 
     @Published private(set) var lastSyncDate: Date?
     @Published private(set) var isWatchReachable: Bool = false
+    /// Increments when a live score or category command may not have reached the
+    /// watch. A counter, so two identical failures in a row still both notify.
+    @Published private(set) var liveCommandFailureCount: Int = 0
     @Published private(set) var isPaired: Bool = false
     /// True while WCSession activation is in progress, for at most 10 seconds.
     @Published private(set) var isActivating: Bool = true
@@ -403,7 +406,18 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         if let id = matchID {
             payload[MatchSyncKey.scoreCommandMatchID] = id.uuidString
         }
-        transport.sendControl(payload, queueOnFailure: false)
+        sendLiveCommand(payload)
+    }
+
+    /// Fast-fail send for live commands, reporting anything undelivered through
+    /// `liveCommandFailureCount`. Never queued or retried: a failed send is
+    /// ambiguous, so sending it again could score a point twice.
+    private func sendLiveCommand(_ payload: [String: Any]) {
+        transport.sendControl(payload, queueOnFailure: false) { [weak self] in
+            DispatchQueue.main.async {
+                self?.liveCommandFailureCount += 1
+            }
+        }
     }
 
     /// Send a post-point categorization action to the watch. Mirrors
@@ -414,40 +428,28 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     /// failure: a stale categorization queued for hours would be applied to a
     /// long-resolved point, so we want fast-fail semantics like score commands.
     func sendSelectOutcome(_ outcome: PointOutcome) {
-        transport.sendControl(
-            [
-                MatchSyncKey.statAction: MatchSyncKey.statActionSelectOutcome,
-                MatchSyncKey.statActionOutcome: outcome.rawValue
-            ],
-            queueOnFailure: false
-        )
+        sendLiveCommand([
+            MatchSyncKey.statAction: MatchSyncKey.statActionSelectOutcome,
+            MatchSyncKey.statActionOutcome: outcome.rawValue
+        ])
     }
 
     func sendCommitEndingShot(_ shot: EndingShot) {
-        transport.sendControl(
-            [
-                MatchSyncKey.statAction: MatchSyncKey.statActionCommitEndingShot,
-                MatchSyncKey.statActionEndingShot: shot.rawValue
-            ],
-            queueOnFailure: false
-        )
+        sendLiveCommand([
+            MatchSyncKey.statAction: MatchSyncKey.statActionCommitEndingShot,
+            MatchSyncKey.statActionEndingShot: shot.rawValue
+        ])
     }
 
     func sendCancelOutcomeSelection() {
-        transport.sendControl(
-            [MatchSyncKey.statAction: MatchSyncKey.statActionCancelOutcomeSelection],
-            queueOnFailure: false
-        )
+        sendLiveCommand([MatchSyncKey.statAction: MatchSyncKey.statActionCancelOutcomeSelection])
     }
 
     /// Roll the whole point back from the categorization panel. Routed through
     /// the stat-action path, not `sendScoreCommand`, because the watch rejects
     /// score commands while a stat is pending — the state the panel lives in.
     func sendUndoPoint() {
-        transport.sendControl(
-            [MatchSyncKey.statAction: MatchSyncKey.statActionUndoPoint],
-            queueOnFailure: false
-        )
+        sendLiveCommand([MatchSyncKey.statAction: MatchSyncKey.statActionUndoPoint])
     }
 
     // MARK: - WCSessionDelegate
