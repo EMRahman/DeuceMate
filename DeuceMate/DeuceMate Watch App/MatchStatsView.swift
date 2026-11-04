@@ -104,12 +104,29 @@ struct MatchStatsView: View {
             && viewModel.currentMatchID != record.id
     }
 
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 6) {
+                if let error = viewModel.persistenceError {
+                    Text(error).font(.caption2).foregroundStyle(.orange)
+                        .accessibilityLabel("Storage warning: \(error)")
+                }
                 Text(title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+
+                if let record = completedRecord ?? resumableRecord {
+                    Text(MatchChronology.description(record, formatter: Self.dateFormatter))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
 
                 Text(matchFormat.displayLabel
                      + (matchType == .doubles ? " · Doubles" : " · Singles"))
@@ -140,8 +157,7 @@ struct MatchStatsView: View {
                         if hasConflictingLiveMatch {
                             showResumeConflictAlert = true
                         } else {
-                            viewModel.resumeMatch(record)
-                            dismiss()
+                            if viewModel.resumeMatch(record) { dismiss() }
                         }
                     } label: {
                         Label("Resume this match", systemImage: "play.fill")
@@ -225,8 +241,7 @@ struct MatchStatsView: View {
             Button("Cancel", role: .cancel) {}
             Button("Replace", role: .destructive) {
                 if let record = resumableRecord {
-                    viewModel.resumeMatch(record)
-                    dismiss()
+                    if viewModel.resumeMatch(record) { dismiss() }
                 }
             }
         } message: {

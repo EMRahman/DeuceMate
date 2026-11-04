@@ -109,7 +109,7 @@ struct MatchSetupDefaultsWatchTests {
         #expect(viewModel.matchType == .doubles)
     }
 
-    @Test func loadState_corruptFile_hydratesFromRememberedDefaults() throws {
+    @Test func loadState_corruptFile_preservesBytesAndBlocksWrites() throws {
         let (defaults, suiteName) = makeIsolatedDefaults()
         defer { teardown(suiteName) }
         defaults.set(MatchFormat.superTiebreak.rawValue, forKey: MatchSetupDefaults.formatKey)
@@ -121,8 +121,11 @@ struct MatchSetupDefaultsWatchTests {
 
         let viewModel = makeViewModel(stateURL: url, defaults: defaults)
         viewModel.loadState()
-        #expect(viewModel.matchFormat == .superTiebreak)
-        #expect(viewModel.matchType == .doubles)
+        #expect(!viewModel.stateRestorationSucceeded)
+        #expect(viewModel.persistenceError != nil)
+        let original = try Data(contentsOf: url)
+        #expect(!viewModel.saveState())
+        #expect(try Data(contentsOf: url) == original)
     }
 
     @Test func loadState_idleSavedState_hydratesFromRememberedDefaults() throws {

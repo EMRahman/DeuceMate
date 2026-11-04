@@ -295,9 +295,28 @@ public enum MatchWebTemplate {
             el("div", { class: "sub", text: "Points " + p.pointsWon + "–" + p.pointsLost + " · " + DATA.meta.durationDisplay })
           ]),
           setLines(),
+          sessionSummary(),
           privateNoteBlock()
         ]);
         return c;
+      }
+      function sessionSummary() {
+        if (!DATA.sessionSummary || !DATA.sessionSummary.length) return null;
+        return el("details", { class: "sub", style: "margin-top:12px" }, [
+          el("summary", { text: "Play sessions" }),
+          ...DATA.sessionSummary.map(line => el("div", { text: line, style: "margin-top:5px" })),
+          el("div", { text: "Breaks are confirmed app actions. Changes across sessions do not establish fatigue or recovery.", style: "margin-top:6px" })
+        ]);
+      }
+      function resumeGroups() {
+        const groups = new Map();
+        (DATA.resumeEvents || []).forEach(event => {
+          const index = event.beforePointIndex;
+          if (index == null || index >= DATA.points.length) return;
+          if (!groups.has(index)) groups.set(index, []);
+          groups.get(index).push(event);
+        });
+        return Array.from(groups, ([index, events]) => ({ index, events })).sort((a,b) => a.index - b.index);
       }
       // Match details (schema 13): the competition type and the reader-framed
       // side names. Both arrive pre-framed from Swift; this only paints. Names
@@ -554,6 +573,17 @@ public enum MatchWebTemplate {
           svg.appendChild(text(M.l - 6, y + 3, String(v), "end"));
         });
 
+        // Immutable full-history boundaries are independent of scatter/health filters.
+        const resumes = resumeGroups();
+        resumes.forEach((group, index) => {
+          const x = Math.max(M.l, xAt(group.index) - step / 2);
+          const label = group.events.length === 1 ? group.events[0].label : "Resumed " + group.events.length + " times";
+          svg.appendChild(s("line", { x1:x, y1:M.t, x2:x, y2:M.t+plotH, stroke:"currentColor",
+            "stroke-opacity":.65, "stroke-dasharray":"1 5", "aria-label":group.events.map(e => e.accessibilityLabel).join(". ") }));
+          if (index === resumes.length - 1 || resumes[index+1].index - group.index >= 8)
+            svg.appendChild(text(x+4, M.t+plotH-6, label, "start"));
+        });
+
         // momentum step lines (focal + other)
         svg.appendChild(stepPath(pts.map(p => [xAt(p.index), yP(otherCum(p))]), P.opponentLineHex, 2, false));
         svg.appendChild(stepPath(pts.map(p => [xAt(p.index), yP(focalCum(p))]), P.meLineHex, 2.5, false));
@@ -673,7 +703,7 @@ public enum MatchWebTemplate {
         if (fromZero) mn = 0;
         const span = (mx - mn) || 1;
         const y = v => M.t + plotH - ((v - mn) / span) * plotH;
-        const d = arr.map((p, i) => (i ? "L" : "M") + xAt(p.pointIndex != null ? p.pointIndex : p.index) + " " + y(valFn(p))).join(" ");
+        const d = arr.map((p, i) => (i && p.sessionIndex === arr[i-1].sessionIndex ? "L" : "M") + xAt(p.pointIndex != null ? p.pointIndex : p.index) + " " + y(valFn(p))).join(" ");
         const path = s("path", { d: d, fill: "none", stroke: color, "stroke-width": 2, "stroke-opacity": .8 });
         if (dashed) path.setAttribute("stroke-dasharray", "5 4");
         svg.appendChild(path);
@@ -855,7 +885,11 @@ public enum MatchWebTemplate {
           const c = el("div", { class: "card" }, [
             el("h2", { text: DATA.setLabels[g.setIndex] || ("Set " + (g.setIndex + 1)) })
           ]);
-          g.pts.forEach((p, i) => c.appendChild(pointRow(i + 1, p)));
+          g.pts.forEach((p, i) => {
+            const group = resumeGroups().find(g => g.index === p.index);
+            if (group) c.appendChild(el("div", { class:"sub", style:"border-top:1px dashed currentColor;padding:10px 0", text:group.events.map(e => e.label + " · " + e.detail).join("; ") }));
+            c.appendChild(pointRow(i + 1, p));
+          });
           wrap.appendChild(c);
         });
         return wrap;

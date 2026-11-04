@@ -37,6 +37,7 @@ private struct HREntry: Identifiable {
     let id: Int       // 1-based point index
     let pointIndex: Int
     let bpm: Int
+    let session: Int
 }
 
 private struct StepEntry: Identifiable {
@@ -44,6 +45,7 @@ private struct StepEntry: Identifiable {
     let pointIndex: Int
     let cumulativeSteps: Int
     let perPointSteps: Int  // steps during this point (cumulative − previous cumulative)
+    let session: Int
 }
 
 /// Which steps series to render in the chart. Mirrors `HRSeriesMode`'s small
@@ -187,7 +189,21 @@ private struct SetBand: Identifiable {
 /// A single pass over `stats` at init time produces every series the chart
 /// needs, so render frames during pinch/pan don't pay an O(N) cost per
 /// computed property — and rebuilding the struct on filter change is cheap.
+private struct GraphResumeRule: Identifiable {
+    let id: Int
+    let events: [MatchResumeEvent]
+    let showLabel: Bool
+    var label: String { events.count == 1 ? "Resumed · " + events[0].resumedAt.formatted(date: .abbreviated, time: .omitted) : "Resumed \(events.count) times" }
+    var accessibility: String {
+        events.map { event in
+            "Play resumed \(event.resumedAt.formatted(date: .long, time: .shortened)), before recorded point \(id + 1), " + (event.breakDuration.map { "after a \(MatchSessions.breakDescription($0)) break" } ?? "break duration unknown")
+        }.joined(separator: ". ")
+    }
+}
+
 private struct PointsGraphData {
+    let resumeRules: [GraphResumeRule]
+    let sessions: [Int]
     let lineEntries: [GraphEntry]
     let scatterEntries: [ScatterEntry]
     let hrEntries: [HREntry]
@@ -243,6 +259,16 @@ private struct PointsGraphData {
          selectedWonEndingShots: Set<EndingShot>,
          selectedLostEndingShots: Set<EndingShot>) {
         let stats = record.stats
+        let sessions = ResumeMarkers.sessionIndices(events: record.resumeEvents, points: stats)
+        self.sessions = sessions
+        let grouped = Dictionary(grouping: ResumeMarkers.derive(record).filter {
+            $0.beforePointIndex.map { $0 < stats.count } ?? false
+        }, by: { $0.beforePointIndex ?? 0 })
+        let boundaries = grouped.keys.sorted()
+        self.resumeRules = boundaries.enumerated().map { position, boundary in
+            GraphResumeRule(id: boundary, events: (grouped[boundary] ?? []).map(\.event),
+                showLabel: position == boundaries.count - 1 || boundaries[position + 1] - boundary >= 8)
+        }
         let totalSteps = record.totalSteps
         self.xDomain = 0...max(stats.count, 1)
         self.matchScoreByID = PointMatchScore.afterEachPoint(of: stats, record: record)
@@ -342,7 +368,7 @@ private struct PointsGraphData {
             line.append(GraphEntry(id: "\(x)-Opponent", pointIndex: x, player: "Opponent", count: o))
 
             if let bpm = stat.heartRateBPM {
-                hr.append(HREntry(id: x, pointIndex: x, bpm: bpm))
+                hr.append(HREntry(id: x, pointIndex: x, bpm: bpm, session: sessions[i]))
                 if bpm < hrMin { hrMin = bpm }
                 if bpm > hrMax { hrMax = bpm }
             }
@@ -466,20 +492,20 @@ private struct PointsGraphData {
         // StepsSeries (single source of truth). Core uses 0-based point indices;
         // map them onto the graph's 1-based x-axis and prepend a seed at x=0 so
         // the line starts at the chart origin.
-        let coreSteps = StepsSeries.make(stats: stats, totalSteps: totalSteps)
+        let coreSteps = StepsSeries.make(stats: stats, totalSteps: totalSteps, resumeEvents: record.resumeEvents)
         self.perPointStepsByIndex = Dictionary(uniqueKeysWithValues: coreSteps.map {
             ($0.pointIndex + 1, $0.perPoint)
         })
         if coreSteps.isEmpty {
             self.stepEntries = []
         } else {
-            var out: [StepEntry] = [StepEntry(id: 0, pointIndex: 0, cumulativeSteps: 0, perPointSteps: 0)]
+            var out: [StepEntry] = [StepEntry(id: 0, pointIndex: 0, cumulativeSteps: 0, perPointSteps: 0, session: sessions.first ?? 0)]
             out.reserveCapacity(coreSteps.count + 1)
             for p in coreSteps {
                 let x = p.pointIndex + 1
                 out.append(StepEntry(id: x, pointIndex: x,
                                      cumulativeSteps: p.cumulative,
-                                     perPointSteps: p.perPoint))
+                                     perPointSteps: p.perPoint, session: sessions[p.pointIndex]))
             }
             self.stepEntries = out
         }
@@ -515,37 +541,20 @@ private func smoothedHREntries(_ entries: [HREntry]) -> [HREntry] {
     return entries.enumerated().map { i, e in
         let lo = max(0, i - half)
         let hi = min(entries.count - 1, i + half)
-        let slice = entries[lo...hi]
+        let slice = entries[lo...hi].filter { $0.session == e.session }
         let avg = Int((Double(slice.reduce(0) { $0 + $1.bpm }) / Double(slice.count)).rounded())
-        return HREntry(id: e.id, pointIndex: e.pointIndex, bpm: avg)
+        return HREntry(id: e.id, pointIndex: e.pointIndex, bpm: avg, session: e.session)
     }
 }
 
-/// Converts averaged [HRChartPoint] (0-based, timestamp-sorted from the fetcher)
-/// into [HREntry] using the 1-based indices that PointsGraphData assigned.
-/// Fast path when stats are already in timestamp order (the common case) avoids
-/// an O(N log N) sort and dictionary allocation on every render frame during
-/// pan/zoom. Falls back to the ID-based mapping for unsorted arrays.
-private func averagedHREntries(from pts: [HRChartPoint], stats: [PointStat]) -> [HREntry] {
-    let isSorted = zip(stats, stats.dropFirst()).allSatisfy { $0.timestamp <= $1.timestamp }
-    if isSorted {
-        return pts.compactMap { hp -> HREntry? in
-            let graphIdx = hp.pointIndex + 1
-            guard graphIdx <= stats.count else { return nil }
-            return HREntry(id: graphIdx, pointIndex: graphIdx, bpm: hp.bpm)
-        }
+/// Session bucketing keeps stored play order. Convert its zero-based full-history
+/// coordinates to the graph's one-based point positions without timestamp sorting.
+private func averagedHREntries(from pts: [HRChartPoint], data: PointsGraphData) -> [HREntry] {
+    pts.compactMap { point in
+        guard data.sessions.indices.contains(point.pointIndex) else { return nil }
+        let x = point.pointIndex + 1
+        return HREntry(id: x, pointIndex: x, bpm: point.bpm, session: data.sessions[point.pointIndex])
     }
-    let sorted = stats.sorted { $0.timestamp < $1.timestamp }
-    var idxByID: [UUID: Int] = [:]
-    idxByID.reserveCapacity(stats.count)
-    for (i, stat) in stats.enumerated() { idxByID[stat.id] = i + 1 }
-    // Sort by pointIndex so LineMark connects left-to-right; the slow path
-    // emits entries in timestamp order which may not match graph order.
-    return pts.compactMap { hp -> HREntry? in
-        guard hp.pointIndex < sorted.count else { return nil }
-        guard let graphIdx = idxByID[sorted[hp.pointIndex].id] else { return nil }
-        return HREntry(id: graphIdx, pointIndex: graphIdx, bpm: hp.bpm)
-    }.sorted { $0.pointIndex < $1.pointIndex }
 }
 
 /// `loadedAveraged` is the already-extracted `.loaded` payload from the
@@ -562,7 +571,7 @@ private func activeHREntries(
     case .smoothed: return smoothedHREntries(data.hrEntries)
     case .averaged:
         guard let pts = loadedAveraged else { return [] }
-        return averagedHREntries(from: pts, stats: stats)
+        return averagedHREntries(from: pts, data: data)
     }
 }
 
@@ -654,6 +663,19 @@ private struct PointsChartCore: View {
                 .foregroundStyle(by: .value("Player", e.player))
                 .interpolationMethod(.stepEnd)
             }
+            ForEach(data.resumeRules) { marker in
+                RuleMark(x: .value("Resumed", Double(marker.id) + 0.5))
+                    .foregroundStyle(Color.secondary.opacity(0.8))
+                    .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [1, 4]))
+                    .annotation(position: .bottom, alignment: .leading, spacing: 2) {
+                        if marker.showLabel {
+                            Text(marker.label).font(.system(size: 9)).foregroundStyle(.secondary)
+                                .fixedSize().padding(.horizontal, 2)
+                                .background(Color(.systemBackground).opacity(0.85))
+                        }
+                    }
+                    .accessibilityLabel(marker.accessibility)
+            }
             ForEach(data.scatterEntries) { s in
                 PointMark(
                     x: .value("Point", s.pointIndex),
@@ -696,7 +718,8 @@ private struct PointsChartCore: View {
             ForEach(activeHREntries) { hr in
                 LineMark(
                     x: .value("Point", hr.pointIndex),
-                    y: .value("BPM", hr.bpm)
+                    y: .value("BPM", hr.bpm),
+                    series: .value("Session", hr.session)
                 )
                 .foregroundStyle(Color.red.opacity(0.7))
                 .lineStyle(StrokeStyle(lineWidth: 1.5))
@@ -736,7 +759,8 @@ private struct PointsChartCore: View {
             ForEach(data.stepEntries) { s in
                 LineMark(
                     x: .value("Point", s.pointIndex),
-                    y: .value("Steps", stepsValue(s))
+                    y: .value("Steps", stepsValue(s)),
+                    series: .value("Session", s.session)
                 )
                 .foregroundStyle(Color.green.opacity(0.75))
                 .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 3]))

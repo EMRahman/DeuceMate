@@ -140,6 +140,7 @@
     Object.keys(perSet).forEach(function (k) { setElapsed[k] = Math.round(perSet[k] * (22 + rnd() * 10)); total += setElapsed[k]; });
     var mins = total / 60;
     var start = Date.now() - o.daysAgo * 86400000 - (o.hourOffset || 0) * 3600000;
+    stats.forEach(function(point,index){point.id="seed"+o.seed+"-point-"+index;point.timestamp=start+(index+1)/Math.max(1,stats.length)*total*1000;});
     return {
       id: "seed" + o.seed, startTime: start, endTime: complete || o.completeAtStop ? start + total * 1000 : null,
       iWon: finished ? (winnerSide ? winnerSide === "me" : null) : null,
@@ -199,8 +200,8 @@
     else if (rec.stats.length) tag = h("span", { class: "h-tag" }, icon("chart", 11), "Match Stats");
     else tag = h("span", { class: "h-tag" }, icon("list", 11), "Score Only");
     var scoreEl = h("div", { class: "h-score" }); scoreEl.appendChild(styled(resultLabel(rec)));
-    var row = h("button", { type: "button", class: "hist-row", "aria-label": dateLabel(rec.startTime) + ". " + resultLabel(rec) + ". " + formatLine(rec) },
-      h("div", { class: "hr1" }, h("span", { text: dateLabel(rec.startTime) }), inProg ? icon("sync", 11) : null),
+    var row = h("button", { type: "button", class: "hist-row", "aria-label": window.DeuceMateChronology.describe(rec, dateLabel) + ". " + resultLabel(rec) + ". " + formatLine(rec) },
+      h("div", { class: "hr1" }, h("span", { text: window.DeuceMateChronology.describe(rec, dateLabel) }), inProg ? icon("sync", 11) : null),
       h("div", { class: "hr2" }, h("div", { class: "l" }, scoreEl, h("div", { class: "h-fmt", text: formatLine(rec) }), tagsLine(rec) ? h("div", { class: "h-fmt", text: tagsLine(rec) }) : null), tag));
 
     // swipe left to reveal Delete; a long swipe deletes (allowsFullSwipe)
@@ -266,9 +267,12 @@
      ========================================================================== */
   function resume(rec) {
     function go() {
+      if (rec.endTime!=null) return;
+      if (api.active() && S.liveRecordId()===rec.id) { S.popAll(); S.matchPhase="play"; S.push({id:"match"}); return; }
       if (api.active() && S.liveRecordId() !== rec.id && api.hasProgress()) S.saveLive(false);   // park the other live match first
       api.clear();
-      api.restore(rec);
+      var resumed=Object.assign({},rec,{parkedAt:null,resumeEvents:window.DeuceMateSessions.merge(rec.resumeEvents,[{id:"resume-"+Date.now()+"-"+Math.random().toString(36).slice(2),resumedAt:Date.now(),pausedAt:rec.parkedAt==null?null:rec.parkedAt,precedingPointID:(rec.stats||[]).length?rec.stats[rec.stats.length-1].id:null}])});
+      api.restore(resumed);
       S.liveId = rec.id; S.headingLocked = true;
       S.popAll();                                   // shouldOpenMatchView: history closes, then the match opens
       setTimeout(function () { S.matchPhase = "play"; S.push({ id: "match" }); }, 450);
@@ -289,7 +293,7 @@
             return;
           }
           var leader = Scoring.leaderWhenStopped({ cfg: cfgOf(rec.format), sets: rec.sets, currentPointsMe: rec.currentPointsMe, currentPointsOpponent: rec.currentPointsOpponent });
-          rec.endTime = Date.now(); rec.iWon = leader ? leader === "me" : null;
+          rec.endTime = Date.now(); rec.parkedAt=null; rec.iWon = leader ? leader === "me" : null;
           S.pop();
         } },
         { label: "Cancel", role: "cancel" }]
@@ -323,7 +327,7 @@
     var scroll = h("div", { class: "app-scroll pad det" });
     if (!rec) { scroll.appendChild(h("div", { class: "hist-empty" }, h("div", { class: "a", text: "Match not found." }))); return scroll; }
     var inProg = isInProgress(rec), hasStats = rec.stats.length > 0;
-    var title = inProg ? dateLabel(rec.startTime) : (hasStats ? "Match Stats" : "Score Only Match");
+    var title = inProg ? window.DeuceMateChronology.describe(rec, dateLabel) : (hasStats ? "Match Stats" : "Score Only Match");
     scroll.appendChild(h("div", { class: "det-title", text: title }));
     scroll.appendChild(h("div", { class: "det-fmt", text: formatLine(rec) }));
     if (tagsLine(rec)) scroll.appendChild(h("div", { class: "det-fmt det-tags", text: tagsLine(rec) }));
@@ -372,6 +376,7 @@
       scroll.appendChild(box);
     }
 
+    scroll.appendChild(h("div", { class: "muted", text: window.DeuceMateChronology.describe(rec, dateLabel) }));
     var body = h("div", { class: "stats-body" });
     if (!hasStats) body.appendChild(UI.empty("Point outcome tracking was off for this match."));
     else {

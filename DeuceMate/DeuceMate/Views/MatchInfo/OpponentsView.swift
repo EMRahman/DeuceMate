@@ -83,8 +83,7 @@ private struct OpponentDetailView: View {
         store.history
             .filter { $0.tags?.opponents.contains(where: { $0.id == opponentID }) == true }
             .sorted {
-                if $0.startTime != $1.startTime { return $0.startTime > $1.startTime }
-                return $0.id.uuidString < $1.id.uuidString
+                return MatchChronology.newestFirst($0, $1)
             }
     }
 
@@ -197,7 +196,7 @@ private struct OpponentDetailView: View {
         Button { selectedMatch = record } label: {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(Self.dateFormatter.string(from: record.startTime))
+                    Text(MatchChronology.caption(record, formatter: Self.dateFormatter))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     if let score = scoreLabel(for: record) {

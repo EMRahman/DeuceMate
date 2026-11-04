@@ -39,7 +39,7 @@ public enum ArchiveBackupPolicy {
         public static func from(records: [MatchRecord]) -> BackupPreview {
             BackupPreview(
                 recordCount: records.count,
-                newestMatchDate: records.max(by: { $0.startTime < $1.startTime })?.startTime
+                newestMatchDate: records.map { MatchChronology.date($0) }.max()
             )
         }
     }
@@ -112,11 +112,7 @@ public enum ArchiveBackupPolicy {
     }
 
     public static func sortedNewestFirst(_ records: [MatchRecord]) -> [MatchRecord] {
-        records.sorted {
-            $0.startTime != $1.startTime
-                ? $0.startTime > $1.startTime
-                : $0.id.uuidString < $1.id.uuidString
-        }
+        records.sorted(by: MatchChronology.newestFirst)
     }
 
     /// Chooses the body by the restore rules below, then merges tags by their
@@ -127,6 +123,7 @@ public enum ArchiveBackupPolicy {
     static func resolveBackup(backup: MatchRecord, local: MatchRecord?) -> MatchRecord {
         guard let local else { return backup.mergingMatchTypeRevision(backup.matchTypeRevision) }
         var winner = resolveBackupBody(backup: backup, local: local)
+        winner = winner.mergingResumeEvents(local.resumeEvents + backup.resumeEvents)
         winner.tags = MatchTags.merged(local.tags, backup.tags)
         winner = winner.mergingMatchTypeRevision(
             MatchTypeRevision.merged(local.matchTypeRevision, backup.matchTypeRevision)

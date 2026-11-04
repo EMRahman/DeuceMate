@@ -78,8 +78,8 @@ flowchart LR
     HK --> HRF --> CHART
 ```
 
-- **Watch (the only writer of stored health data).** `WorkoutManager` runs an
-  `HKWorkoutSession` for the match and reads heart rate, calories, steps, and
+- **Watch (the only writer of stored health data).** `WorkoutManager` runs a fresh
+  `HKWorkoutSession` for each play session and reads heart rate, calories, steps, and
   distance. `ScoreViewModel` stamps `heartRateBPM`/`stepsCumulative` onto each
   tracked point and attaches the three totals when the match is finalised.
 - **Phone (read-only, display only).** `HealthKitHRFetcher` reads heart-rate
@@ -317,3 +317,35 @@ access, starts/stops workouts, acquires heading or calibrates a compass. Normal
 app-launch Health authorization remains separate; the first-use guide waits for
 that presentation's completion, including denial. No guide record reaches any
 archive, sidecar, backup or export path. See [match-lifecycle.md](match-lifecycle.md).
+
+## Confirmed resumes and fitness continuity
+
+`MatchResumeEvent` and parkedAt are observed app-action metadata, not HealthKit
+measurements. They may travel with the health-stripped archive. No new Health
+fields are added to MatchRecord: the existing five fields remain the stripping,
+sidecar and export-consent contract. `MatchActivityTotals` is an aggregate baseline
+inside backup-excluded Watch AppState, never an iCloud-backed session payload.
+
+Each resumed/relaunched workout begins at the current session start, never the
+original match date. Saved prior activity plus the active builder snapshot forms
+the current aggregate. Snapshotting repeatedly does not add it repeatedly; a fresh
+builder may restart its step counter and per-point steps receive the prior offset.
+Stopping a workout never exposes its builder as the new workout's source. Callback
+identity guards prevent delayed stopped sessions from updating current readings.
+
+Phone HR queries are bounded to confirmed session windows. Unknown prior parks or
+unplaced boundaries use saved point snapshots rather than broad interval queries.
+Full-history resolution precedes set filtering. Health lines and smoothing split
+at boundaries, movement deltas restart there, and linear total-step estimates are
+withheld for interrupted records. Continuous Pulse/Steps insights are withheld;
+exertion candidates must remain within one adequately covered session. Text/AI/
+HTML explain that changes between sessions do not establish fatigue or recovery.
+
+Automated policies and fake-workout tests cannot prove physical HealthKit behavior.
+Use the feature plan's hardware checklist before release.
+
+Workout completion retains collection-until-clear behavior: a delayed winning-point
+categorization or result dismissal may add Health totals after the result date,
+while recorded play clocks are frozen. Immediate provisional-win workout stopping
+and undo/restart need separate design; pending point samples currently occur at
+commit. The physical checklist explicitly covers this retained limitation.

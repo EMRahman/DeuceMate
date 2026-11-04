@@ -8,6 +8,8 @@ private let statsStoreLogger = Logger(subsystem: "com.deucemate.persistence", ca
 /// Watch-only persistence capability for an explicit history completion. Unlike
 /// the legacy append API, success means the existing record was actually saved.
 protocol WatchStatsStoring: StatsStoring {
+    func loadHistoryOrNil() -> [MatchRecord]?
+    @discardableResult func appendMatchDurably(_ record: MatchRecord) -> Bool
     /// Read, update and save on the store's serial queue. Returns the saved
     /// history, or nil for an unreadable archive, missing/completed ID or failed
     /// write. Never recreates a record from a stale history-sheet snapshot.
@@ -99,6 +101,7 @@ final class StatsStore: WatchStatsStoring {
                   let index = records.firstIndex(where: { $0.id == id }),
                   records[index].isInProgress else { return nil }
             records[index] = records[index].endingAtCurrentScore(at: date)
+            records.sort(by: MatchChronology.newestFirst)
             guard _writeUnsafe(records) else { return nil }
             return records
         }
@@ -154,10 +157,15 @@ final class StatsStore: WatchStatsStoring {
     }
 
     func appendMatch(_ record: MatchRecord) {
+        _ = appendMatchDurably(record)
+    }
+
+    @discardableResult
+    func appendMatchDurably(_ record: MatchRecord) -> Bool {
         queue.sync {
             guard var records = _loadHistoryUnsafe() else {
                 statsStoreLogger.error("appendMatch skipped: match history unreadable; refusing to overwrite")
-                return
+                return false
             }
             // Tags and matchTypeRevision are metadata that live checkpoints never carry.
             // Merge the stored copy's tags and revision forward so replacing a record
@@ -165,16 +173,17 @@ final class StatsStore: WatchStatsStoring {
             var record = record
             if let stored = records.first(where: { $0.id == record.id }) {
                 record = record
+                    .mergingResumeEvents(stored.resumeEvents)
                     .mergingTags(stored.tags)
                     .mergingMatchTypeRevision(stored.matchTypeRevision)
             }
             records.removeAll { $0.id == record.id }
             records.append(record)
-            records.sort { $0.startTime > $1.startTime }
+            records.sort(by: MatchChronology.newestFirst)
             if records.count > StatsStore.historyCap {
                 records = Array(records.prefix(StatsStore.historyCap))
             }
-            _writeUnsafe(records)
+            return _writeUnsafe(records)
         }
     }
 
@@ -211,6 +220,7 @@ final class StatsStore: WatchStatsStoring {
         do {
             let data = try Data(contentsOf: fileURL)
             return try JSONDecoder().decode([MatchRecord].self, from: data)
+                .sorted(by: MatchChronology.newestFirst)
         } catch CocoaError.fileReadNoSuchFile {
             return []
         } catch {

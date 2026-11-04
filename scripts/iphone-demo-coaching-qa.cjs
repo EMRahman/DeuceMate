@@ -11,6 +11,7 @@ const root = path.resolve(__dirname, "..");
 const jsPath = path.join(root, "docs/website/assets/phone-demo-coaching.js");
 const core = path.join(root, "DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/Stats");
 const window = {};
+vm.runInNewContext(fs.readFileSync(path.join(root,"docs/website/assets/watch-demo.js"),"utf8"), {window,document:{querySelectorAll:()=>[]}}, {filename:"watch-demo.js"});
 vm.runInNewContext(fs.readFileSync(jsPath, "utf8"), { window, Date, Number, Math, Array, Object, String }, { filename: jsPath });
 const coaching = window.DeuceMatePhoneCoaching;
 assert.ok(coaching, "coaching module should expose pure functions");
@@ -200,6 +201,7 @@ assert.ok(coaching.pulse({}, breakPoints, 190).some(line => line === "You lost 2
 const late = [];
 for (let i = 0; i < 10; i++) late.push(point(i, { winner: focal, heartRateBPM: 120 }));
 for (let i = 10; i < 20; i++) late.push(point(i, { winner: other, heartRateBPM: 160 }));
+assert.equal(coaching.pulse({resumeEvents:[{id:"confirmed",resumedAt:late[10].timestamp}]}, late, 190).length,0,"interrupted matches cannot trigger continuous-match HR coaching");
 const lateLines = coaching.pulse({}, late, 190);
 assert.ok(lateLines.some(line => line === "Win rate dropped from 100% to 0% as average HR climbed by 40 bpm."));
 assert.ok(lateLines.length <= 3, "Pulse Coach output remains capped at three insights");
@@ -227,7 +229,7 @@ if (process.env.COACHING_PARITY_OUTPUT) {
   fixtures.forEach(fixture => {
     const points = fixture.stats.map(p => ({ ...p, timestamp: (p.timestamp + 978307200) * 1000 }));
     const actual = rec(points, { focal: fixture.focal, setFilter: fixture.setFilter == null ? "all" : fixture.setFilter,
-      record: { stats: points, matchType: fixture.matchType } });
+      record: { stats: points, matchType: fixture.matchType, resumeEvents: (fixture.resumeEvents||[]).map(e=>({...e,resumedAt:(e.resumedAt+978307200)*1000,pausedAt:e.pausedAt==null?null:(e.pausedAt+978307200)*1000})) } });
     assert.deepEqual(Array.from(actual), fixture.expected, fixture.name + " / " + fixture.matchType + " / " + fixture.focal + " / " + fixture.setFilter);
   });
   process.stdout.write("Swift/browser coaching parity passed: " + fixtures.length + " scenarios.\n");

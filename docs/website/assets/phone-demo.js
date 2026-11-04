@@ -157,7 +157,7 @@
   function note(text) { return h("p", { class: "phone-note" }, text); }
   function heading(text) { return h("h3", { class: "phone-section-title" }, text); }
   function copy(r) { return JSON.parse(JSON.stringify(r)); }
-  function sortRecords(a) { return a.sort(function (a, b) { return b.startTime - a.startTime; }); }
+  function sortRecords(a) { return a.sort(window.DeuceMateChronology.newest); }
   function upsert(r) {
     if (!r || tombstones.has(r.id)) return;
     var i = archive.findIndex(function (a) { return a.id === r.id; });
@@ -436,7 +436,7 @@
     var location = h("span", { class: "phone-row-badge phone-storage-badge", "aria-label": storageLabel(rec), title: storageLabel(rec) });
     if (storageLabel(rec) !== "iPhone only") location.append(icon("watch"));
     if (storageLabel(rec) !== "On Apple Watch only") location.append(icon("phone"));
-    b.append(h("span", { class: "phone-row-top" }, h("span", { class: "phone-row-date" }, new Date(rec.startTime).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })), h("span", { class: "phone-row-badges" }, badge, connection.paired ? location : null)),
+    b.append(h("span", { class: "phone-row-top" }, h("span", { class: "phone-row-date" }, window.DeuceMateChronology.describe(rec)), h("span", { class: "phone-row-badges" }, badge, connection.paired ? location : null)),
       h("strong", { class: "phone-row-score" }, window.DeuceMatePhoneReports.score(rec, "me")),
       h("span", { class: "phone-row-format" }, rec.endTime ? h("span", { class: "phone-result-badge " + (rec.iWon === true ? "won" : rec.iWon === false ? "lost" : "draw") }, rec.iWon === true ? "Won" : rec.iWon === false ? "Lost" : "Draw") : null, format(rec)));
     var tagLine = window.DeuceMatePhoneMatchInfo.displayLine(rec.tags);
@@ -767,7 +767,7 @@
       if (S.liveId === selected) rec = liveRecord() || rec;
       content = rec ? window.DeuceMatePhoneReports.detail(phone, rec) : card(note("This match is no longer in the archive."));
       if (rec) {
-        nav.querySelector("strong").textContent = !rec.endTime ? new Date(rec.startTime).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : window.DeuceMatePhoneReports.detailTitle(rec);
+        nav.querySelector("strong").textContent = !rec.endTime ? window.DeuceMateChronology.describe(rec) : window.DeuceMatePhoneReports.detailTitle(rec);
         var tools = h("div", { class: "phone-nav-tools" });
         var ai = button("", function () { window.DeuceMatePhoneReports.openAI(phone, rec, rec.stats || [], "me"); });
         ai.setAttribute("aria-label", "Open AI Coach"); ai.append(icon("sparkles"));

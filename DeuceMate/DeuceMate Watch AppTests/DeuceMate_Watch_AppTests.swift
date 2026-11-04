@@ -430,6 +430,9 @@ struct DeuceMate_Watch_AppTests {
     /// In-memory mock so tests don't write to the real Documents directory
     /// (and don't pollute one another).
     final class MockStatsStore: WatchStatsStoring {
+    func loadHistoryOrNil() -> [MatchRecord]? { loadHistory() }
+    func appendMatchDurably(_ record: MatchRecord) -> Bool { appendMatch(record); return true }
+
         private(set) var records: [MatchRecord] = []
         var appendCallCount = 0
         var removeCallCount = 0
@@ -676,8 +679,8 @@ struct DeuceMate_Watch_AppTests {
         #expect(viewModel.currentMatchStats.count == 2)
         #expect(viewModel.currentMatchID == originalID)
         #expect(viewModel.matchStartTime == originalStartTime)
-        // Removed from store on resume
-        #expect(store.records.isEmpty)
+        // Retain the archived checkpoint until the next durable park/finalize.
+        #expect(store.records.map(\.id) == [originalID])
 
         // Continue playing
         viewModel.winPoint(player: .me)
@@ -818,8 +821,8 @@ struct DeuceMate_Watch_AppTests {
 
         // Resuming A should park B first rather than dropping it.
         viewModel.resumeMatch(parkedA)
-        #expect(store.records.count == 1)
-        #expect(store.records[0].id != parkedA.id)
+        #expect(store.records.count == 2)
+        #expect(store.records.contains { $0.id != parkedA.id })
     }
 
     @Test func resumeWithDifferentLiveMatchParksTheLiveOne() throws {
@@ -840,10 +843,44 @@ struct DeuceMate_Watch_AppTests {
 
         // Resume the parked one — live one should be parked first
         viewModel.resumeMatch(parkedRecord)
-        // The store now contains the live-one (just parked) but NOT the resumed one
+        // Both checkpoints remain durable while the resumed identity is live.
         #expect(store.records.contains(where: { $0.id == liveMatchID }))
-        #expect(store.records.contains(where: { $0.id == parkedRecord.id }) == false)
+        #expect(store.records.contains(where: { $0.id == parkedRecord.id }))
         #expect(viewModel.currentMatchID == parkedRecord.id)
+    }
+
+    @Test(arguments: [true, false]) func completionInstantSurvivesPendingCategorizationRestoreUndoAndRewin(tracking: Bool) throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("completion-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = MockStatsStore()
+        let suite = "completion-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let vm = ScoreViewModel(statsStore: store, stateFileURL: url, userDefaults: defaults)
+        vm.currentServer = .me
+        vm.statsTrackingEnabled = tracking
+        vm.matchFormat = .superTiebreak
+        vm.sets = [SetScore(isTieBreak: true)]
+        for _ in 0..<9 { vm.winPoint(player: .me); vm.commitPointStat(outcome: .winner) }
+        vm.winPoint(player: .me)
+        let firstFinish = try #require(vm.matchCompletionTime)
+        #expect((vm.pendingStatPoint != nil) == tracking)
+        let saved = try JSONDecoder().decode(ScoreViewModel.AppState.self, from: Data(contentsOf: url))
+        #expect(saved.matchCompletionTime == firstFinish)
+        let restored = ScoreViewModel(statsStore: store, stateFileURL: url, userDefaults: defaults)
+        restored.loadState()
+        #expect(restored.matchCompletionTime == firstFinish)
+        #expect(restored.undo())
+        #expect(restored.matchCompletionTime == nil)
+        restored.winPoint(player: .me)
+        let newFinish = try #require(restored.matchCompletionTime)
+        #expect(newFinish >= firstFinish)
+        restored.commitPointStat(outcome: .winner)
+        restored.saveState()
+        #expect(restored.matchCompletionTime == newFinish)
+        restored.resetMatch()
+        #expect(store.records.last?.endTime == newFinish)
+        #expect(restored.matchCompletionTime == nil)
     }
 
     @Test func appStateV1MigratesWithDefaults() throws {
@@ -864,6 +901,7 @@ struct DeuceMate_Watch_AppTests {
         #expect(state.version == 1)
         #expect(state.currentMatchStats.isEmpty)
         #expect(state.matchStartTime == nil)
+        #expect(state.matchCompletionTime == nil)
         #expect(state.isOnSecondServe == false)
         #expect(state.pendingStatPoint == nil)
         #expect(state.currentMatchID == nil)

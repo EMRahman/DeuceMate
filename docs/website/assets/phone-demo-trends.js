@@ -75,7 +75,7 @@
       if (!p.length) return;
       var previous = null, load = 0, samples = 0;
       p.forEach(function (x) {
-        if (!Number.isFinite(x.stepsCumulative)) return;
+        if ((record.resumeEvents||[]).length || !Number.isFinite(x.stepsCumulative)) return;
         if (previous != null) { load += Math.max(0, x.stepsCumulative - previous); samples++; }
         previous = x.stepsCumulative;
       });
@@ -90,7 +90,7 @@
       depth: depth(points), servedDepth: depth(points.filter(function (p) { return p.server === "me"; })),
       returnedDepth: depth(points.filter(function (p) { return p.server !== "me"; })), sets: sets };
   }
-  function samples(records) { return records.map(sample).filter(Boolean).sort(function (a, b) { return a.record.startTime - b.record.startTime; }); }
+  function samples(records) { return records.map(sample).filter(Boolean).sort(function (a, b) { return window.DeuceMateChronology.oldest(a.record, b.record); }); }
   // Native TrendFilter.competitionType / opponentID: tags only; doubles match on either opponent.
   function opponentKey(p) { var M = window.DeuceMatePhoneMatchInfo; return M && M.playerKey ? M.playerKey(p) : String(p && p.id || ""); }
   function opponentList(records) { var M = window.DeuceMatePhoneMatchInfo; return M && M.opponentEntries ? M.opponentEntries({ records: function () { return records; } }) : []; }
@@ -244,7 +244,7 @@
       }
       [0, Math.floor((list.length - 1) / 2)].filter(function (i, n, a) { return a.indexOf(i) === n; }).forEach(function (index) {
         var x = xAt(index); node("line", { x1: x, x2: x, y1: top, y2: bottom, stroke: "var(--native-separator)", "stroke-dasharray": "2 2" });
-        node("text", { x: x + 2, y: 136, fill: "var(--native-secondary)", "font-size": 10 }, new Date(list[index].record.startTime).toLocaleDateString("en-US", { month: "short", day: "numeric" }));
+        node("text", { x: x + 2, y: 136, fill: "var(--native-secondary)", "font-size": 10 }, new Date(window.DeuceMateChronology.date(list[index].record)).toLocaleDateString("en-US", { month: "short", day: "numeric" }));
       });
       if (stacked) shown.forEach(function (s, i) {
         var upper = [], lower = [], last = -2;
@@ -266,7 +266,7 @@
       function select(index) {
         index = Math.max(0, Math.min(list.length - 1, index)); selections[group] = index;
         rule.setAttribute("x1", xAt(index)); rule.setAttribute("x2", xAt(index)); rule.setAttribute("visibility", "visible");
-        summary.hidden = false; summary.replaceChildren(h("strong", {}, new Date(list[index].record.startTime).toLocaleDateString("en-US", { month: "short", day: "numeric" })));
+        summary.hidden = false; summary.replaceChildren(h("strong", {}, new Date(window.DeuceMateChronology.date(list[index].record)).toLocaleDateString("en-US", { month: "short", day: "numeric" }) + (window.DeuceMateChronology.inProgress(list[index].record) ? " · Provisional" : "")));
         shown.forEach(function (s) { var p = s.points.find(function (p) { return p.index === index; }); if (p) { var value = h("span", {}, h("i", {}), useCount ? p.pair.join("/") : display(p.value, unit)); value.style.setProperty("--metric-color", chartColor(s.metric)); value.title = s.metric.label; summary.append(value); } });
       }
       var tracking = false;
@@ -288,6 +288,7 @@
     }
     function paint() {
       output.replaceChildren(); var list = scoped(phone.records(), filters);
+      output.append(phone.note("Completed matches are ordered by finish date." + (filters.includeInProgress ? " In-progress matches use last recorded activity and are provisional." : "")));
       if (list.length < 3) {
         output.append(h("div", { class: "pr-trend-empty" }, h("span", { "aria-hidden": "true" }, "⌁"), h("h3", {}, "Not Enough Matches"), phone.note(!list.length ? "No tracked matches match these filters." : "Only " + list.length + " tracked " + (list.length === 1 ? "match" : "matches") + " found for these filters — Trends needs at least 3."))); return;
       }

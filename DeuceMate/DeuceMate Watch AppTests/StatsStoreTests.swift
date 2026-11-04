@@ -35,6 +35,22 @@ struct StatsStoreTests {
         )
     }
 
+    @Test func existingArchiveLoadsByFinishWithoutRewritingAndRetentionKeepsNewCompletion() throws {
+        let url = makeTempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        let longRunning = MatchRecord(startTime: base, endTime: base.addingTimeInterval(100_000), setScores: [], stats: [], iWon: true)
+        let others = (1...25).map { i in MatchRecord(startTime: base.addingTimeInterval(Double(i * 100)), endTime: base.addingTimeInterval(Double(i * 100 + 60)), setScores: [], stats: [], iWon: true) }
+        let original = try JSONEncoder().encode(others + [longRunning])
+        try original.write(to: url)
+        let store = StatsStore(fileURL: url)
+        #expect(store.loadHistory().first?.id == longRunning.id)
+        #expect(try Data(contentsOf: url) == original)
+        store.appendMatch(longRunning)
+        #expect(store.loadHistory().count == StatsStore.historyCap)
+        #expect(store.loadHistory().first?.id == longRunning.id)
+    }
+
     // MARK: - Absent file == genuinely empty
 
     @Test func absentFileLoadsAsEmpty() {
@@ -106,7 +122,7 @@ struct StatsStoreTests {
         let url = makeTempURL()
         defer { try? FileManager.default.removeItem(at: url) }
         let store = StatsStore(fileURL: url)
-        let records = [makeRecord(), makeRecord()]
+        let records = [makeRecord(), makeRecord()].sorted(by: MatchChronology.newestFirst)
 
         store.saveHistory(records)
 

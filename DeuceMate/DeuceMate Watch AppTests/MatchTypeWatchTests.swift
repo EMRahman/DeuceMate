@@ -52,6 +52,9 @@ struct MatchTypeWatchTests {
     }
 
     private final class FailingStatsStore: WatchStatsStoring {
+    func loadHistoryOrNil() -> [MatchRecord]? { loadHistory() }
+    func appendMatchDurably(_ record: MatchRecord) -> Bool { appendMatch(record); return true }
+
         private var records: [MatchRecord] = []
         func loadHistory() -> [MatchRecord] { records }
         func saveHistory(_ records: [MatchRecord]) { self.records = records }
@@ -267,11 +270,11 @@ struct MatchTypeWatchTests {
 
         // 3. Returns false and does NOT sync when match matches currentMatchID
         sync.histories.removeAll()
-        let liveRecord = makeRecord(matchType: .doubles, isInProgress: false)
+        let liveRecord = makeRecord(matchType: .doubles, isInProgress: true)
         store.saveHistory([liveRecord])
         viewModel.resumeMatch(liveRecord)
         #expect(viewModel.currentMatchID == liveRecord.id)
-        #expect(viewModel.convertStoredMatchType(liveRecord, to: .singles) == false)
+        #expect(viewModel.convertStoredMatchType(liveRecord.endingAtCurrentScore(), to: .singles) == false)
         #expect(sync.histories.isEmpty)
         viewModel.resetMatch()
 

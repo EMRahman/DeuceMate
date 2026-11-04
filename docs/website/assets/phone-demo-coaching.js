@@ -118,7 +118,7 @@
       var early=knownServe.filter(p=>p.endingShot==="servePlusOne"),late=knownServe.filter(p=>p.endingShot==="rally"),gap=rate(early)-rate(late);
       if(early.length>=8&&late.length>=8&&gap>=0.15) add("rallies",6+gap*Math.min(early.length,late.length,25),["rally"],"On serve, you won "+fraction(early)+" points ending at Serve+1 vs "+fraction(late)+" in the rally phase — review how rallies were lost before changing tactics.");
     }
-    var laterSets=selected==null?Array.from(new Set(all.map(p=>p.setIndex))).filter(i=>i>0).sort((a,b)=>a-b):selected>0?[selected]:[];
+    var laterSets=(record&&record.resumeEvents||[]).length?[]:selected==null?Array.from(new Set(all.map(p=>p.setIndex))).filter(i=>i>0).sort((a,b)=>a-b):selected>0?[selected]:[];
     laterSets.forEach(later=>{
       var earlier=later-1,firstAll=all.filter(p=>p.setIndex===earlier),secondAll=all.filter(p=>p.setIndex===later);
       var firstLost=categorized(firstAll).filter(p=>p.winner!==me),secondLost=categorized(secondAll).filter(p=>p.winner!==me);
@@ -133,9 +133,11 @@
       add("setChange"+later,8+Math.max(rise?r2-r1:0,decline?drop:0)*25,rise?["setChange","errors"]:["setChange"],facts.join("; ")+" — review preparation, positioning and shot selection.");
     });
     if(allowHealth!==false&&me==="me"&&record&&record.matchType==="singles") {
-      var ordered=chronological(scoped),movement=[],heartRate=[];
+      var ordered=chronological(scoped),movement=[],heartRate=[],interrupted=(record.resumeEvents||[]).length>0;
+      var sessionList=interrupted?(root.DeuceMateSessions?root.DeuceMateSessions.indices(record,points):points.map((_,i)=>i)):points.map(()=>0),sessionMap=new Map(points.map((p,i)=>[p,sessionList[i]]));
       function consecutive(a,b) {
         var x=a.gameScoreAtStart,y=b.gameScoreAtStart,dt=timestampValue(b)-timestampValue(a);
+        if(sessionMap.get(a)!==sessionMap.get(b))return false;
         if(a.server!=="me"||b.server!=="me"||a.setIndex!==b.setIndex||!x||!y||x.isTiebreak||y.isTiebreak||timestampValue(a)==null||timestampValue(b)==null||!(dt>0&&dt<=90000))return false;
         var server=x.server+(a.winner==="me"?1:0),returner=x.returner+(a.winner==="me"?0:1);
         if(Math.max(server,returner)>=4&&Math.abs(server-returner)>=2)return false;
@@ -147,7 +149,7 @@
         if(previous.heartRateBPM>0)heartRate.push({next,load:previous.heartRateBPM});
         if(i>=2){var before=ordered[i-2];if(consecutive(before,previous)&&before.outcome!=="uncategorized"&&before.stepsCumulative!=null&&previous.stepsCumulative!=null&&before.stepsCumulative>=0&&previous.stepsCumulative>=before.stepsCumulative)movement.push({next,load:previous.stepsCumulative-before.stepsCumulative});}
       }
-      function effort(samples,label,id,separation) {
+      function effort(samples,label,id,separation,session) {
         if(samples.length<20)return;
         var sorted=samples.map(x=>x.load).sort((a,b)=>a-b),middle=Math.floor(sorted.length/2),median=sorted.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2;
         var high=samples.filter(x=>x.load>median),low=samples.filter(x=>x.load<=median);
@@ -156,13 +158,14 @@
         if(mean(high)-mean(low)<separation)return;
         var hp=high.map(x=>x.next),lp=low.map(x=>x.next),hi=count(hp,firstIn)/hp.length,li=count(lp,firstIn)/lp.length;
         var hd=count(hp,p=>p.outcome==="doubleFault"&&p.winner!=="me"),ld=count(lp,p=>p.outcome==="doubleFault"&&p.winner!=="me"),rise=hd/hp.length-ld/lp.length,drop=rate(lp)-rate(hp),weight=Math.min(high.length,low.length,30);
-        var advice=" — practise resetting your breathing and serve routine between points.";
-        if(li-hi>=0.15)add(id+"FirstServe",20+(li-hi)*weight,["exertion","serveReliability"],"First serves in after "+label+": "+pct(hi)+"% ("+count(hp,firstIn)+"/"+hp.length+") vs "+pct(li)+"% ("+count(lp,firstIn)+"/"+lp.length+") otherwise"+advice);
-        if(hd>=3&&rise>=0.1)add(id+"DoubleFaults",20+rise*weight,["exertion","serveReliability","errors"],"Double faults after "+label+": "+hd+"/"+hp.length+" service points vs "+ld+"/"+lp.length+" otherwise"+advice);
-        if(drop>=0.2)add(id+"ServicePoints",12+drop*weight,["exertion","serveResults"],"Service points won after "+label+": "+fraction(hp)+" vs "+fraction(lp)+" otherwise"+advice);
+        var advice=" — practise resetting your breathing and serve routine between points.",prefix=session==null?"":"Session "+(session+1)+": ";
+        if(session!=null)id="session"+session+"-"+id;
+        if(li-hi>=0.15)add(id+"FirstServe",20+(li-hi)*weight,["exertion","serveReliability"],prefix+"First serves in after "+label+": "+pct(hi)+"% ("+count(hp,firstIn)+"/"+hp.length+") vs "+pct(li)+"% ("+count(lp,firstIn)+"/"+lp.length+") otherwise"+advice);
+        if(hd>=3&&rise>=0.1)add(id+"DoubleFaults",20+rise*weight,["exertion","serveReliability","errors"],prefix+"Double faults after "+label+": "+hd+"/"+hp.length+" service points vs "+ld+"/"+lp.length+" otherwise"+advice);
+        if(drop>=0.2)add(id+"ServicePoints",12+drop*weight,["exertion","serveResults"],prefix+"Service points won after "+label+": "+fraction(hp)+" vs "+fraction(lp)+" otherwise"+advice);
       }
-      effort(movement,"higher-movement points","movement",5);
-      effort(heartRate,"points with higher recorded heart rate","heartRate",10);
+      if(interrupted){Array.from(new Set(sessionList)).sort((a,b)=>a-b).forEach(session=>{effort(movement.filter(x=>sessionMap.get(x.next)===session),"higher-movement points","movement",5,session);effort(heartRate.filter(x=>sessionMap.get(x.next)===session),"points with higher recorded heart rate","heartRate",10,session);});}
+      else {effort(movement,"higher-movement points","movement",5);effort(heartRate,"points with higher recorded heart rate","heartRate",10);}
     }
     candidates.sort((a,b)=>b.score-a.score||(a.id<b.id?-1:a.id>b.id?1:0));
     var topics=new Set(),lines=[];
@@ -171,6 +174,7 @@
   }
 
   function pulse(_record, points, maxHR, focal) {
+    if((_record&&_record.resumeEvents||[]).length)return [];
     var me = focal === "opponent" ? "opponent" : "me";
     var samples = (Array.isArray(points) ? points : []).map(function (point, index) {
       var bpm = Number(point.heartRateBPM);

@@ -40,12 +40,11 @@ final class HealthKitHRFetcher: ObservableObject {
     private let healthStore = HKHealthStore()
     private var activeTask: Task<Void, Never>?
 
-    /// Fetches raw heart-rate samples for the match's [start, end] window and
-    /// averages them per point in `filteredStats`. `firstWindowStart` is the
-    /// lower bound of the first bucket — usually the timestamp of the point in
-    /// `record.stats` that immediately precedes `filteredStats.first`, or
-    /// `record.startTime` if there is none. Cancels any in-flight fetch so
-    /// rapid set-filter changes don't race to overwrite `state` out of order.
+    /// Fetches only established session windows, then resolves buckets in full
+    /// play order before applying the selected set. Unknown park times use
+    /// stored point snapshots. `firstWindowStart` remains a compatibility hint;
+    /// full-history session evidence now determines every lower bound. Cancels
+    /// an in-flight fetch so rapid filter changes cannot publish stale results.
     func load(
         for record: MatchRecord,
         filteredStats: [PointStat],
@@ -74,10 +73,20 @@ final class HealthKitHRFetcher: ObservableObject {
             // HealthKit cannot distinguish "denied" from "not yet asked" on read,
             // so we proceed to query and treat an empty result as a likely-denied
             // signal only if the match actually contained snapshot HR data.
-            let end = record.endTime ?? filteredStats.last?.timestamp ?? Date()
-            let samples: [(Date, Double)]
+            let windows = MatchSessions.heartRateWindows(record)
+            let sessions = ResumeMarkers.sessionIndices(events: record.resumeEvents, points: record.stats)
+            let intervals = Dictionary(grouping: windows.enumerated().filter { $0.element != nil },
+                by: { sessions[$0.offset] }).values.compactMap { group -> DateInterval? in
+                    let values = group.compactMap(\.element)
+                    guard let start = values.map(\.start).min(), let end = values.map(\.end).max(), end > start else { return nil }
+                    return DateInterval(start: start, end: end)
+                }
+            var samples: [(Date, Double)] = []
             do {
-                samples = try await self.fetchSamples(start: record.startTime, end: end)
+                for interval in intervals {
+                    guard !Task.isCancelled else { return }
+                    samples += try await self.fetchSamples(start: interval.start, end: interval.end)
+                }
             } catch {
                 guard !Task.isCancelled else { return }
                 self.state = .failed(error.localizedDescription)
@@ -86,18 +95,30 @@ final class HealthKitHRFetcher: ObservableObject {
             guard !Task.isCancelled else { return }
 
             let hadSnapshots = filteredStats.contains { ($0.heartRateBPM ?? 0) > 0 }
-            if samples.isEmpty {
+            if samples.isEmpty && !windows.contains(where: { $0 == nil }) {
                 self.state = hadSnapshots ? .denied : .empty
                 return
             }
 
-            let bucketed = Self.bucketByPoints(
+            let bucketed = Self.bucketBySession(
                 samples: samples,
-                stats: filteredStats,
-                firstWindowStart: firstWindowStart
+                record: record,
+                filteredStats: filteredStats
             )
             guard !Task.isCancelled else { return }
             self.state = bucketed.isEmpty ? .empty : .loaded(bucketed)
+        }
+    }
+
+    /// Full-history windows are resolved before the set filter. This preserves
+    /// boundary placement and avoids a first set bucket spanning a parked gap.
+    static func bucketBySession(samples: [(Date, Double)], record: MatchRecord,
+                                filteredStats: [PointStat]) -> [HRChartPoint] {
+        let byID = Dictionary(MatchSessions.bucketHeartRate(samples: samples, record: record).map {
+            (record.stats[$0.pointIndex].id, $0.bpm)
+        }, uniquingKeysWith: { a, _ in a })
+        return filteredStats.enumerated().compactMap { index, point in
+            byID[point.id].map { HRChartPoint(pointIndex: index, bpm: $0, setIndex: point.setIndex) }
         }
     }
 

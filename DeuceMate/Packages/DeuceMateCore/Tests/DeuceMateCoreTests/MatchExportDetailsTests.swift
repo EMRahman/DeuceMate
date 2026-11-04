@@ -237,12 +237,12 @@ final class MatchExportDetailsTests: XCTestCase {
         XCTAssertEqual(d.sideNames(reader: .opponent).other, ["Opponent", "Sam"])
     }
 
-    func test_viewModel_metaCarriesFramedDetails_andSchema13() throws {
+    func test_viewModel_metaCarriesFramedDetails_andSchema14() throws {
         let record = doubles()
         let d = details(record, names: true, notes: true)
         let me = MatchWebViewModel.make(from: record, perspective: .me, details: d).meta
         let opp = MatchWebViewModel.make(from: record, perspective: .opponent, details: d).meta
-        XCTAssertEqual(MatchWebViewModel.currentSchemaVersion, 13)
+        XCTAssertEqual(MatchWebViewModel.currentSchemaVersion, 14)
         XCTAssertEqual(me.competitionTypeLabel, "Tournament")
         XCTAssertEqual(me.readerSideNames, ["Me", "Sam"])
         XCTAssertEqual(me.otherSideNames, ["Alex", "Jo"])

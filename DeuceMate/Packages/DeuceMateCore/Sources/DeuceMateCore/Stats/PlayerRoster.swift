@@ -153,7 +153,7 @@ public enum PlayerRoster {
             for player in tags.allPlayers where !forgotten.contains(player.id) && !player.name.isEmpty {
                 if var acc = byID[player.id] {
                     acc.matchIDs.insert(record.id)
-                    acc.lastPlayed = max(acc.lastPlayed, record.startTime)
+                    acc.lastPlayed = max(acc.lastPlayed, MatchChronology.activityDate(record))
                     if tags.supersedes(acc.nameRevision) {
                         acc.player = player
                         acc.nameRevision = tags
@@ -162,7 +162,7 @@ public enum PlayerRoster {
                 } else {
                     byID[player.id] = Accumulator(
                         player: player, nameRevision: tags,
-                        matchIDs: [record.id], lastPlayed: record.startTime
+                        matchIDs: [record.id], lastPlayed: MatchChronology.activityDate(record)
                     )
                 }
             }
@@ -445,9 +445,7 @@ public enum HeadToHead {
         let completed = candidates
             .compactMap { record in MatchResult(record: record).map { (record, $0) } }
             .sorted { a, b in
-                a.0.startTime != b.0.startTime
-                    ? a.0.startTime > b.0.startTime
-                    : a.0.id.uuidString > b.0.id.uuidString
+                MatchChronology.newestFirst(a.0, b.0)
             }
         let results = completed.map(\.1)
         return HeadToHeadRecord(
@@ -455,7 +453,7 @@ public enum HeadToHead {
             losses: results.filter { $0 == .loss }.count,
             draws: results.filter { $0 == .draw }.count,
             recentResults: results,
-            lastPlayed: completed.first?.0.startTime
+            lastPlayed: completed.map { MatchChronology.activityDate($0.0) }.max()
         )
     }
 }

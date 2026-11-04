@@ -48,6 +48,7 @@ public enum WatchMirror {
         for record in completed {
             let prior = byID[record.id]
             byID[record.id] = record
+                .mergingResumeEvents(prior?.resumeEvents ?? [])
                 .mergingTags(prior?.tags)
                 .mergingMatchTypeRevision(prior?.matchTypeRevision)
         }
@@ -64,10 +65,6 @@ public enum WatchMirror {
     /// Newest first, with a stable id tiebreak so equal start times never reorder
     /// the list between renders (avoids spurious SwiftUI row animations).
     private static func sortedByRecency(_ records: [MatchRecord]) -> [MatchRecord] {
-        records.sorted {
-            $0.startTime != $1.startTime
-                ? $0.startTime > $1.startTime
-                : $0.id.uuidString < $1.id.uuidString
-        }
+        records.sorted(by: MatchChronology.newestFirst)
     }
 }

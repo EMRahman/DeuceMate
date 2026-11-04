@@ -62,11 +62,12 @@
     };
   }
 
-  /* ---- PointStat (PointStat.swift L100-131) — demo subset: no id/timestamp
-     (not meaningful without persistence) and no heartRateBPM/stepsCumulative
-     (no HealthKit in a browser). ---- */
+  /* Point IDs and observed scoring times anchor confirmed resume boundaries.
+     Health samples remain fictional seeded-report data, never real sensors. */
+  var pointSequence = 0;
   function buildPointStat(pending, outcome, endingShot) {
     return {
+      id: "point-" + Date.now() + "-" + (++pointSequence), timestamp: Date.now(),
       setIndex: pending.setIndex,
       server: pending.server,
       winner: pending.winner,

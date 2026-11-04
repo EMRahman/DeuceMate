@@ -598,12 +598,15 @@
     var rec = api.snapshot(endAtCurrentScore);
     if (!rec) return;
     rec.id = S.liveId || rec.id;
+    rec.parkedAt = rec.endTime==null ? Date.now() : null;
     S.upsertRecord(rec);
   }
   S.upsertRecord = function (rec) {
     var i = -1;
     S.history.forEach(function (r, idx) { if (r.id === rec.id) i = idx; });
+    if (i >= 0) rec.resumeEvents = window.DeuceMateSessions.merge(S.history[i].resumeEvents, rec.resumeEvents);
     if (i >= 0) S.history[i] = rec; else S.history.unshift(rec);
+    S.history.sort(window.DeuceMateChronology.newest);
     if (S.history.length > S.HISTORY_CAP) S.history.length = S.HISTORY_CAP;
   };
   function resetMatch() {

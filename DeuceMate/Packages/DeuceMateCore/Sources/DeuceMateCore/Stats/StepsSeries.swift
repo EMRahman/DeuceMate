@@ -42,28 +42,31 @@ public enum StepsSeries {
     /// matches that only have a match-total (`MatchRecord.totalSteps`) fall back
     /// to a linear estimate spread evenly across the points. Returns an empty
     /// array when no step data is available.
-    public static func make(stats: [PointStat], totalSteps: Int?) -> [StepsSeriesPoint] {
+    public static func make(stats: [PointStat], totalSteps: Int?, resumeEvents: [MatchResumeEvent] = []) -> [StepsSeriesPoint] {
         let realSamples: [(index: Int, cumulative: Int)] = stats.enumerated().compactMap { i, s in
             guard let c = s.stepsCumulative else { return nil }
             return (i, c)
         }
 
+        let sessions = ResumeMarkers.sessionIndices(events: resumeEvents, points: stats)
         if realSamples.count >= 2 {
             let base = realSamples[0].cumulative
             var out: [StepsSeriesPoint] = []
             out.reserveCapacity(realSamples.count)
             var prev = 0
+            var previousSession: Int?
             for sample in realSamples {
                 let cumulative = max(0, sample.cumulative - base)
                 out.append(StepsSeriesPoint(pointIndex: sample.index,
                                             cumulative: cumulative,
-                                            perPoint: max(0, cumulative - prev)))
+                                            perPoint: previousSession == sessions[sample.index] ? max(0, cumulative - prev) : 0))
+                previousSession = sessions[sample.index]
                 prev = cumulative
             }
             return out
         }
 
-        if let total = totalSteps, total > 0, !stats.isEmpty {
+        if resumeEvents.isEmpty, let total = totalSteps, total > 0, !stats.isEmpty {
             let n = stats.count
             var out: [StepsSeriesPoint] = []
             out.reserveCapacity(n)

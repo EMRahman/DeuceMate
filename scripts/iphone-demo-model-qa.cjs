@@ -274,4 +274,58 @@ setFixture.endTime = null;
 assert.equal(trends.series("winRateDecidingTiebreak", [trends.sample(setFixture)]).points.length, 0, "current set never enters fatigue trends");
 assert.equal(trends.series("winRateSet1", [trends.sample(setFixture)]).points.length, 1, "completed sets remain eligible in a live match");
 
+// Completion chronology changes order/windows while preserving original starts.
+const chronology = context.window.DeuceMateChronology;
+const chronologyFixture = (id, start, end) => Object.assign(JSON.parse(JSON.stringify(completed)), { id, startTime: start, endTime: end });
+const chronologyA = chronologyFixture("A", 100, 900);
+const chronologyB = chronologyFixture("B", 200, 300);
+const chronologyC = chronologyFixture("C", 400, 500);
+assert.equal([chronologyB, chronologyA, chronologyC].sort(chronology.newest).map(r => r.id).join(","), "A,C,B");
+const chronologySamples = trends.samples([chronologyA, chronologyC, chronologyB]);
+assert.equal(chronologySamples.map(s => s.record.id).join(","), "B,C,A");
+assert.equal(trends.scoped([chronologyA, chronologyB, chronologyC], {window: "2", type: "all", format: "all", includeInProgress: false}).map(s => s.record.id).join(","), "C,A");
+assert.equal(chronologyA.startTime, 100);
+const provisional = chronologyFixture("P", 0, null); provisional.iWon = null;
+provisional.stats = [{timestamp: 600}, {timestamp: 550}];
+assert.equal(chronology.date(provisional), 600, "activity uses latest timestamp rather than array suffix");
+provisional.endTime = 900;
+assert.equal(chronology.date(provisional), 900);
+assert.equal(chronology.activity(provisional), 600, "administrative completion never changes last played");
+const legacy = chronologyFixture("L", 10, null);
+assert.equal(chronology.label(legacy), "Played");
+assert.equal(chronology.date(legacy), 10);
+const tied = [Object.assign({}, chronologyA, {id: "Z"}), Object.assign({}, chronologyA, {id: "A"})];
+assert.equal(tied.sort(chronology.newest).map(r => r.id).join(","), "A,Z");
+const multiDay = chronologyFixture("M", 1, 2 * 86400000);
+assert.match(chronology.describe(multiDay), /Started .*Finished /);
+
+// Confirmed sessions use stable full-history anchors, independent of filtering.
+const sessions = context.window.DeuceMateSessions;
+const multi = JSON.parse(JSON.stringify(completed));
+multi.id = "multi-session-fixture";
+multi.stats.forEach((p,i) => { p.id = "session-point-"+i; p.timestamp=1_700_000_000_000+i*30_000+(i>=20?7*86400000:0);p.stepsCumulative=100+i*10; });
+const event = {id:"resume-a",resumedAt:multi.stats[20].timestamp-10_000,pausedAt:multi.stats[19].timestamp+10_000,precedingPointID:multi.stats[19].id};
+multi.resumeEvents=[event];multi.startTime=multi.stats[0].timestamp-10_000;multi.endTime=multi.stats[multi.stats.length-1].timestamp+10_000;multi.elapsed=600;
+assert.equal(sessions.markers(multi)[0].beforePointIndex,20);
+assert.equal(sessions.indices(multi)[19],0);assert.equal(sessions.indices(multi)[20],1);
+const interruptedSteps=reports.graphSteps(multi.stats,multi.steps,multi.resumeEvents);
+assert.equal(interruptedSteps.find(p=>p.pointIndex===20).perPoint,0,"the first session sample is a baseline, never the parked interval's movement");
+const multiVM=reports.exportModel(multi,multi.stats,"me");
+assert.equal(multiVM.schemaVersion,14);assert.equal(multiVM.points[20].sessionIndex,1);
+assert.equal(multiVM.resumeEvents[0].beforePointIndex,20);assert.ok(multiVM.sessionSummary.some(s=>s.includes("Recorded play time")));
+assert.equal(multiVM.steps.timeline.find(p=>p.pointIndex===20).perPoint,0);
+for(const focal of ["me","opponent"]){const html=reports.standaloneHTML(multi,multi.stats,focal);assert.ok(html.includes("Play sessions")&&html.includes("stroke-dasharray=\"1 5\""));for(const kind of ["summary","full","ai"]){const text=reports.reportText(multi,multi.stats,focal,kind);assert.ok(text.includes("## Play sessions")&&text.includes("do not establish fatigue or recovery"));}}
+const coincident={...event,id:"resume-b",resumedAt:event.resumedAt+1};
+assert.equal(sessions.markers({...multi,resumeEvents:[event,coincident]})[1].beforePointIndex,20);
+assert.equal(sessions.markers({...multi,resumeEvents:[{...event,precedingPointID:"missing"}]})[0].beforePointIndex,null);
+assert.equal(sessions.markers({...multi,stats:multi.stats.slice(20)})[0].beforePointIndex,null,"suffix-only history cannot guess a missing anchor");
+assert.equal(sessions.breakSeconds({...event,pausedAt:event.resumedAt+1}),null);
+assert.equal(sessions.breakSeconds({...event,pausedAt:null}),null);
+assert.equal(sessions.markers({stats:[],resumeEvents:[{id:"empty",resumedAt:1}]})[0].beforePointIndex,0);
+const conflict={...event,pausedAt:event.pausedAt+1};
+assert.equal(JSON.stringify(sessions.merge([event],[conflict])),JSON.stringify(sessions.merge([conflict],[event])));
+const strippedMulti={...multi,steps:0,kcal:0,stats:multi.stats.map(p=>{const copy={...p};delete copy.heartRateBPM;delete copy.stepsCumulative;return copy;})};
+const strippedVM=reports.exportModel(strippedMulti,strippedMulti.stats,"me");assert.equal(strippedVM.hr,null);assert.equal(strippedVM.steps,null);assert.equal(strippedVM.resumeEvents.length,1);
+assert.deepEqual(Array.from(reports.graphSteps([{},{}],100,[event])),[],"a total-only interrupted match cannot invent a per-session movement series");
+
 process.stdout.write("iPhone demo model QA passed.\n");

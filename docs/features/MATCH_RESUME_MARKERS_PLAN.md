@@ -1,6 +1,6 @@
 ---
 title: Multi-session Matches — Completion Dates and Resume Markers
-status: proposed
+status: implemented_pending_hardware_validation
 document_type: feature_design
 created: 2026-07-14
 last_updated: 2026-11-04
@@ -10,11 +10,22 @@ platforms: [watchOS, iOS, interactive-html-export, browser-demo]
 
 # Multi-session Matches — Completion Dates and Resume Markers
 
+**Implementation status (2026-11-04):** Phases 1 and 2 are implemented; physical-Watch validation remains pending.
+`MatchChronology` is the shared policy; Watch `AppState.matchCompletionTime` captures
+normal completion and survives categorisation/restoration/undo/re-win. Live
+checkpoints deliberately stay unfinished until finalization, preserving winning-
+point undo under existing merge authority. No `MatchRecord` or wire fields were
+added; existing archives are not rewritten. Histories/retention, Trends, comparisons,
+roster activity dates and text/AI/HTML/browser reports use the policy. Export
+filenames remain start-based. Phase 2 adds confirmed sessions, transactional resume/park,
+workout accumulation, session-aware health analysis, graph/history markers and
+all report variants. Phase 3 remains proposed. See the hardware checklist below.
+
 ## 1. Problem and intended experience
 
 A match can start on one day, be parked, and finish a week later. It remains one
-match, but its result belongs to the day it finished. Today, Trends and match
-history order it by its original start time, and the points graph does not
+match, but its result belongs to the day it finished. Before Phase 1, Trends and match
+history ordered it by its original start time, and the points graph does not
 explain the interruption.
 
 **Proposed behaviour:** date completed matches by completion in Trends, show the
@@ -33,13 +44,13 @@ A contributes **one** match to Trends, dated 8 Nov. Its row says `Finished 8 Nov
 its detail also says `Started 1 Nov`. Its graph marks where play resumed on 8 Nov.
 The week away does not occupy a week's width on the point-based graph.
 
-This is a design proposal, not implemented behaviour. It expands and supersedes
-the July resume-marker proposal at this same path. In particular, it revises the
+This design is implemented through Phase 2, subject to the pending hardware
+checks below. It expands and supersedes the July resume-marker proposal at this same path. In particular, it revises the
 old assumption that time away from the app proves a break in play (§4).
 
-## 2. Current implementation and constraints
+## 2. Baseline before implementation and constraints
 
-Verified against the repository on 4 November 2026:
+Historical baseline captured on 4 November 2026 before Phases 1–2:
 
 | Area | Current behaviour / implementation |
 |---|---|
@@ -57,6 +68,36 @@ Relevant existing designs: [Performance Trends](PERFORMANCE_TRENDS_PLAN.md),
 [Health Trends](HEALTH_TRENDS_PLAN.md), [Match Tags](MATCH_TAGS_PLAN.md), and
 [Interactive HTML Export](INTERACTIVE_HTML_EXPORT_PLAN.md). The current lifecycle
 is documented in [match-lifecycle.md](../architecture/match-lifecycle.md).
+
+### Pre-fix fitness-session audit during Phase 1 (4 November 2026)
+
+The requested resume check found the following gaps before Phase 2. The
+implementation below addresses these paths; sensor behavior still requires
+physical-Watch verification:
+
+- `ScoreViewModel.resumeMatch` restarts HealthKit with `matchStartTime`, the
+  original match date, rather than the new session start. The resulting workout
+  interval can span the parked break.
+- Resume restores match/set elapsed timers, but does not restore saved steps,
+  distance or calories into an accumulator. Finalization uses only
+  `WorkoutManager.snapshotActivity()`. Earlier session totals are therefore not
+  explicitly preserved or combined; builder behavior is not a safe substitute.
+- Per-point steps come directly from the current builder, so their cumulative
+  counter can restart across workouts. Session boundaries are required before
+  movement/fatigue calculations can safely combine those points.
+- `HealthKitHRFetcher` queries the original start-to-finish interval and buckets
+  between point timestamps. The first point after resume can include unrelated
+  heart-rate samples from the parked interval.
+- Existing Watch test `parkAndResumeExcludesIdleTimeFromSetDuration` verifies
+  retained set play time and a restarted clock. It does not verify HealthKit
+  workout intervals or activity totals.
+
+The Phase 2 implementation follows this requirement: persist explicit session boundaries and prior
+activity, start each workout at resume, accumulate each session exactly once,
+and scope HR buckets/graphs/coaching to sessions. Test repeated resumes, relaunch,
+Health disabled on a later session, counter resets and delayed workout callbacks.
+Real HealthKit collection and saved workout intervals also require physical-Watch
+verification; simulator scoring tests cannot prove sensor behavior.
 
 ## 3. Date and ordering rules
 
@@ -220,7 +261,7 @@ anchors a boundary to existing recorded history despite equal timestamps or a
 clock adjustment; it is not a mutable numeric index. Capture it before resumed
 points are accepted. No new field is required on `PointStat`.
 
-Core derives render boundaries once, in a proposed `ResumeMarkers` helper. Prefer
+Core derives render boundaries once, in the `ResumeMarkers` helper. Prefer
 the point-ID anchor. If unavailable, use the first recorded point at/after the
 resume timestamp in stored play order, without reordering the score history.
 An unresolvable or inconsistent anchor should yield an unplaced session event,
@@ -258,9 +299,8 @@ full fidelity between updated peers and document this mixed-version limitation.
 
 Resume events are session metadata, not HealthKit samples. Preserve them through
 health stripping/sidecars, iCloud backup, manual archive transfer, and restoration.
-Update the HTML render contract and both renderers together. The current web
-schema is **13**; choose the next version at implementation time, not the obsolete
-6→7 bump specified in the July draft.
+Update the HTML render contract and both renderers together. The web schema is **14**, including resume rows, session summaries and health
+series session IDs (up from 13 before Phase 2).
 
 ## 7. Additional aspects worth considering
 
@@ -297,7 +337,7 @@ sections, and session comparisons separately.
 
 | Surface | Main implementation sites |
 |---|---|
-| Dates and Trends | Core `Models/MatchRecord.swift`, proposed shared chronology helper, `Stats/MatchTrendSample.swift`, `Stats/PerformanceTrends.swift`; iOS `Views/Trends/` |
+| Dates and Trends | Core `Models/MatchRecord.swift`, shared `MatchChronology` helper, `Stats/MatchTrendSample.swift`, `Stats/PerformanceTrends.swift`; iOS `Views/Trends/` |
 | Storage and lists | Core `Sync/{MatchMergePolicy,ArchiveBackupPolicy,WatchMirror}.swift`; watch `StatsStore.swift`, `MatchHistoryView.swift`; iOS `Persistence/PhoneStatsStore.swift`, `Views/PastMatchesView.swift` |
 | Comparisons and opponents | Core `Stats/{MatchComparison,PlayerRoster,OpponentDirectory}.swift`; iOS `Views/MatchInfo/` |
 | Session capture | Core resume-event/marker types; watch `ScoreViewModel.swift`, `HomeView.swift`, `MatchStatsView.swift`; phone completion path |
@@ -311,7 +351,7 @@ separately. Full-record equality already invalidates `TrendsSamples`; maintain i
 
 When implementing, update the user guide, lifecycle/health/sync architecture docs,
 `CLAUDE.md`, and production file inventory where sources are added or changed.
-This proposal itself changes no production architecture.
+The implemented component and lifecycle changes are recorded in the architecture documents.
 
 ## 9. Acceptance and verification
 
@@ -352,3 +392,76 @@ comparison, retention, coding, markers, merge and export contracts; Watch tests 
 lifecycle persistence/timing/workouts; iPhone tests for history/graph/export updates;
 existing browser parity checks and manual accessibility review. Use local Swift/
 Xcode when available, following `CLAUDE.md`; do not trigger GitHub Actions.
+
+## Phase 2 implementation and release validation
+
+The session model is additive: `MatchResumeEvent`, default-empty resumeEvents and
+optional parkedAt, with deterministic event union independent of score authority.
+`ResumeMarkers` derives full-history coordinates; `MatchSessions` supplies shared
+session descriptions and HR windows. Private backup-excluded AppState retains
+fitness baselines and clocks. Graph/history/detail, physiological calculations,
+text/AI reports, interactive/static HTML schema 14 and browser replicas carry the
+same context. Unreadable/newer live-state files block writes/scoring; failed park
+or resume retains durable data and shows an error. Resumed checkpoints remain in
+history until successful park/finalization, protecting crashes during transition.
+
+For interrupted records, continuous Pulse/Steps insights are withheld, exertion
+comparisons are confined to adequately covered individual sessions, and estimated
+linear step timelines are suppressed. Unknown parks use saved HR snapshots where
+continuous sample windows cannot be established. This does not infer breaks from
+backgrounding or fabricate historical sessions. Updated peers preserve metadata;
+an old app that rewrites a record alone may drop fields it does not understand.
+
+### Retained workout completion behavior
+
+Result dates and recorded play/set clocks stop at the winning point. HealthKit
+collection retains the existing behavior of continuing until successful match
+clear/finalization. Delayed final-point categorization or result-screen dismissal
+can therefore extend the saved workout and its Health totals past the winning
+point. Pending point sensor snapshots are also taken on commit. No confirmed
+parked break is included. Ending a workout immediately at a provisional winning
+point requires a separate completion/undo design so final-point measurements are
+preserved and undo can restart collection without inventing a resume event.
+
+### Pending physical-Watch checklist (required before release)
+
+- [ ] Play, park, wait, resume and finish on the same day. Confirm separate saved
+  Health workout intervals start/end at each play session and exclude the break.
+- [ ] Repeat across different dates and multiple resumes, including resume without
+  scoring. One match/result retains every explicit event and known/unknown break.
+- [ ] Score a winning point, wait before categorizing/dismissing, then inspect
+  workout end/totals. Confirm the retained collection-until-dismissal behavior
+  and distinguish it from the frozen result date and recorded play clock.
+- [ ] Compare steps, distance and calories before parking, after resuming and after
+  finalizing. Earlier totals survive; each new workout contributes once.
+- [ ] Disable/deny Health on a later session. Prior totals remain; missing new
+  measurements do not become fabricated activity.
+- [ ] Background/reopen/lower the wrist without parking: no resume event or invented
+  break, and existing play/workout behavior remains usable.
+- [ ] Relaunch during resumed play, retry saves, and start a new session while an
+  older workout finishes. No duplicated totals or stale HR/calorie publications.
+- [ ] Check HR overlays, smoothing and movement on both sides of a known break;
+  unrelated break-time samples must not enter a resumed-point average. Check
+  unknown prior parks use snapshots and graphs do not draw continuous health lines.
+- [ ] Check VoiceOver and large text: markers announce the resume/date/break and
+  point history/session details remain readable, including trailing events.
+- [ ] Compare the native report and both HTML perspectives (with/without JavaScript),
+  set filters and sharing disclosures on actual supported devices.
+
+Automated results are reported separately; this checklist must not be inferred
+complete from simulator or browser tests.
+
+### Automated verification (4 November 2026)
+
+- Core: 883 tests passed, including coding/merge/privacy/marker/window/HTML contracts.
+- Watch: 111 tests passed, including injected resume/park/idle-write failures and
+  fake-workout accumulation/relaunch/Health-unavailable cases.
+- iPhone: 111 tests passed, including HR session/set windows and text/AI exports.
+- Native/browser coaching parity: 240 scenarios passed, including interrupted play.
+- Browser model/session and coaching suites passed; generated native export is current.
+- Chromium and WebKit session probes passed: seven-day interruption, fixed inline
+  and expanded markers, session IDs, interactive export and JavaScript-disabled
+  static export. Expanded graph screenshot reviewed.
+- Existing Chromium export/prompt/manual/rotation suite passed; diff whitespace clean.
+
+These results do not complete the pending physical-Watch checklist above.

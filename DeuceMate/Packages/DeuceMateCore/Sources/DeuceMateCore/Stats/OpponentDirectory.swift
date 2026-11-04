@@ -15,9 +15,9 @@ public enum OpponentDirectory {
             guard let tags = record.tags else { continue }
             for id in Set(tags.opponents.map(\.id)) where !forgotten.contains(id) {
                 if let current = appearances[id] {
-                    appearances[id] = (current.count + 1, max(current.lastPlayed, record.startTime))
+                    appearances[id] = (current.count + 1, max(current.lastPlayed, MatchChronology.activityDate(record)))
                 } else {
-                    appearances[id] = (1, record.startTime)
+                    appearances[id] = (1, MatchChronology.activityDate(record))
                 }
             }
         }
@@ -46,10 +46,10 @@ public enum OpponentDirectory {
             guard record.matchType == .doubles,
                   let matchup = Matchup(record: record),
                   matchup.opponentIDs.contains(playerID) else { return nil }
-            return (matchup, record.startTime, record.id.uuidString)
+            return (matchup, MatchChronology.date(record), record.id.uuidString)
         }.sorted { a, b in
             if a.1 != b.1 { return a.1 > b.1 }
-            return a.2 > b.2
+            return a.2 < b.2
         }
         var seen: Set<Matchup> = []
         return matching.compactMap { seen.insert($0.0).inserted ? $0.0 : nil }

@@ -117,6 +117,23 @@ Everything needed to run a match from setup through completion, without paper or
 - Calorie, step count, and distance tracking
 - Per-set and total match timer showing accumulated active play duration
 
+**Pausing and resuming a match**
+
+Use the Watch's **End Match** action to park unfinished play, then open the saved
+match and choose **Resume this match**. The tennis score continues in the same
+match. Confirmed resumes appear in Play sessions, point history and the points
+graph; known break durations are shown, and older records may say the duration is
+unknown. Merely reopening the live match or lowering your wrist adds no marker.
+
+Recorded play time excludes explicit parked breaks. Each resumed workout starts
+a new fitness session, with prior steps, distance and calories carried forward.
+Heart-rate averages and movement lines respect known session boundaries. After
+match point, the play clock stops, while the fitness workout continues until you
+close/finalize the match. Some
+fitness insights are withheld when continuous-play assumptions are unsupported.
+Reports include the same session context. Updating both apps preserves all session
+metadata; older app versions may omit it when rewriting a match.
+
 **iPhone live scoreboard**
 - Stadium-style scoreboard mirrors the watch in real time over WatchConnectivity
 - Red LIVE badge with blinking indicator; screen stays on so you can leave your phone courtside
@@ -327,6 +344,25 @@ An interactive timeline view on iPhone plots cumulative points for both players 
 
 ---
 
+## Match dates and Trends
+
+Completed matches appear by finish date in history and Trends. A match started
+last week and finished today appears with today's results; its original start
+is preserved. Details and shared reports show both dates for a match spanning
+multiple local days. Older completed records without a finish date say **Played**.
+
+Trends' Last 5/10/20 windows and comparisons use finish order. Recent windows may
+therefore change after this update. **Include In-Progress Matches** remains off
+by default; enabled matches use their last recorded point (or start when no
+points were saved) and are labelled **Provisional** in chart selections. They
+remain one match when completed. Player **last played** reflects recorded play,
+so ending an old parked match today does not claim the opponents played today.
+
+A normal finish is dated when the winning point was scored, even if you classify
+it or close the match later. Undoing that point clears the finish; winning again
+records the new instant. **End at Current Score** uses the time you choose that
+action. Shared export filenames retain the original start date.
+
 ## Match Info, opponents and private notes
 
 Match Info sits under the score on an iPhone match's detail screen. It starts
@@ -369,7 +405,7 @@ backup.
 This opens the match next to an earlier one of the same type. With an opponent
 added, it uses your last completed match against them. If you have not played them
 before, it asks you to choose a match. With no opponent added, it uses your most
-recent earlier match. **Choose Another Match** picks a different one at any time. A
+recent earlier match by finish date (last recorded activity for an unfinished comparison). **Choose Another Match** picks a different one at any time. A
 figure shows "Not recorded" when a match did not track it.
 
 ### Private notes

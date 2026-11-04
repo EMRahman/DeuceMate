@@ -82,8 +82,8 @@ final class MatchComparisonTests: XCTestCase {
 
     func test_pickerCandidates_completedByDefault_inProgressOnRequest_newestFirst() {
         let current = F.record(start: 500, tags: nil)
-        let older = F.record(start: 100)
-        let later = F.record(start: 900)
+        let older = F.record(start: 100, end: 60)
+        let later = F.record(start: 900, end: 60)
         let live = F.record(start: 700, end: nil, iWon: nil)
         let doubles = F.record(start: 300, type: .doubles)
         let all = [current, older, later, live, doubles]

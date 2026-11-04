@@ -100,17 +100,23 @@ nonisolated struct MatchExporter {
             stats: allStats,
             focal: focal,
             setElapsedSeconds: record.setElapsedSeconds,
-            maxHR: maxHR
+            maxHR: maxHR,
+            resumeEvents: record.resumeEvents, sessionPoints: record.stats
         )
         let categorizedSummary = hasSomeOutcomes ? MatchStatsSummary(
             stats: categorizedStats,
             focal: focal,
             setElapsedSeconds: record.setElapsedSeconds,
-            maxHR: maxHR
+            maxHR: maxHR,
+            resumeEvents: record.resumeEvents, sessionPoints: record.stats
         ) : fullSummary
 
         var sections: [String] = []
         sections.append(matchOverview(record: record, focal: focal, details: details))
+        let sessions = MatchSessions.descriptions(record, formatter: exportDateFormatter)
+        if !sessions.isEmpty {
+            sections.append((["## Play sessions"] + sessions + ["Session breaks are confirmed app actions. Physiological changes across breaks do not establish fatigue or recovery."]).joined(separator: "\n"))
+        }
         if let privateNote = details.privateNoteSection {
             sections.append(privateNote)
         }
@@ -132,7 +138,8 @@ nonisolated struct MatchExporter {
             sections.append(opponentErrors(summary: categorizedSummary, focal: focal))
             let coaching = RecCoachInsights.generate(
                 stats: allStats, focal: focal, setElapsedSeconds: record.setElapsedSeconds,
-                matchType: focal == .me ? record.matchType : nil
+                matchType: focal == .me ? record.matchType : nil,
+                resumeEvents: record.resumeEvents
             )
             if !coaching.isEmpty {
                 sections.append(recCoachSection(insights: coaching))
@@ -166,7 +173,7 @@ nonisolated struct MatchExporter {
         sections.append(setBySetScores(record: record, focal: focal))
 
         if includeRawPoints && hasStats {
-            sections.append(rawPointData(stats: allStats, focal: focal))
+            sections.append(rawPointData(stats: allStats, focal: focal, resumeEvents: record.resumeEvents))
         }
 
         return sections
@@ -186,7 +193,7 @@ nonisolated struct MatchExporter {
         }
 
         var lines = ["## Match Overview"]
-        lines.append(row("Date:", exportDateFormatter.string(from: record.startTime)))
+        lines.append(row("Date:", MatchChronology.description(record, formatter: exportDateFormatter)))
         lines.append(row("Format:", formatLabel(record: record)))
         // Competition / Opponent(s) / Partner: only what the caller chose to
         // share (names appear only when "Include player names" is on).
@@ -195,7 +202,7 @@ nonisolated struct MatchExporter {
         }
         lines.append(row("Result:", result))
         lines.append(row("Score:", scoreString(record: record, focal: focal) ?? "—"))
-        lines.append(row("Duration:", totalDurationString(record: record)))
+        lines.append(row(record.resumeEvents.isEmpty ? "Duration:" : "Recorded play time:", totalDurationString(record: record)))
         if let steps = record.totalSteps, steps > 0 {
             lines.append(row("Steps:", steps.formatted()))
         }
@@ -413,7 +420,7 @@ nonisolated struct MatchExporter {
 
     // MARK: - Raw point data table
 
-    private static func rawPointData(stats: [PointStat], focal: Player) -> String {
+    private static func rawPointData(stats: [PointStat], focal: Player, resumeEvents: [MatchResumeEvent] = []) -> String {
         // HR and steps are always the recorder's. From the recorder's reading
         // they're "My …"; from the opponent's reading the recorder is their
         // opponent, so prefix "Opp …".
@@ -422,7 +429,7 @@ nonisolated struct MatchExporter {
         let totalStepLabel = focal == .opponent ? "Opp Total Steps" : "Total Steps"
 
         // Per-point movement load (steps during each point), keyed by point id.
-        let stepDeltas = MatchStatsSummary.perPointStepDeltas(stats)
+        let stepDeltas = MatchStatsSummary.perPointStepDeltas(stats, resumeEvents: resumeEvents)
 
         var lines = ["## Raw Point Data"]
         lines.append("Each row is one point in match order. " +

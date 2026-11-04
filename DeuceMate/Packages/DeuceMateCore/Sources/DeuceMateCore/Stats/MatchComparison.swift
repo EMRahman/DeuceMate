@@ -40,12 +40,12 @@ public enum PreviousMatchBaseline {
 
     /// Chooses the default baseline for `current` from `records` (the whole
     /// archive; `current` itself is excluded by id). Only completed records
-    /// strictly earlier than `current` — by start time, then id — qualify.
+    /// strictly earlier than `current` — by result/activity date, then id — qualify.
     public static func select(for current: MatchRecord, in records: [MatchRecord]) -> Selection {
         let earlierCompleted = records
             .filter { $0.id != current.id && !$0.isInProgress && $0.matchType == current.matchType
                 && isOrderedBefore($0, current) }
-            .sorted { isOrderedBefore($1, $0) }   // newest first
+            .sorted(by: MatchChronology.newestFirst)   // newest first
 
         if let matchup = Matchup(record: current) {
             if let rematch = earlierCompleted.first(where: { Matchup(record: $0) == matchup }) {
@@ -70,12 +70,12 @@ public enum PreviousMatchBaseline {
         records
             .filter { $0.id != current.id && $0.matchType == current.matchType
                 && (includeInProgress || !$0.isInProgress) }
-            .sorted { isOrderedBefore($1, $0) }
+            .sorted(by: MatchChronology.newestFirst)
     }
 
-    /// Chronological order: start time, then id string as a stable tie-break.
+    /// Chronological order: result/activity date, then id string as a stable tie-break.
     public static func isOrderedBefore(_ a: MatchRecord, _ b: MatchRecord) -> Bool {
-        a.startTime != b.startTime ? a.startTime < b.startTime : a.id.uuidString < b.id.uuidString
+        MatchChronology.oldestFirst(a, b)
     }
 }
 
@@ -88,6 +88,8 @@ public struct MatchComparison: Sendable {
     public struct Side: Equatable, Sendable {
         public let matchID: UUID
         public let startTime: Date
+        public let date: Date
+        public let dateLabel: String
         public let matchType: MatchType
         public let matchFormat: MatchFormat
         /// In progress — label "In Progress — partial stats"; never infer a result.
@@ -196,7 +198,8 @@ public struct MatchComparison: Sendable {
     private static func sample(_ record: MatchRecord, categorizedOnly: Bool = false) -> MatchTrendSample {
         let stats = categorizedOnly ? record.stats.filter { $0.outcome != .uncategorized } : record.stats
         let summary = MatchStatsSummary(stats: stats, focal: .me,
-                                        setElapsedSeconds: record.setElapsedSeconds)
+                                        setElapsedSeconds: record.setElapsedSeconds,
+                                        resumeEvents: record.resumeEvents, sessionPoints: record.stats)
         return MatchTrendSample(record: record, summary: summary)
     }
 
@@ -224,6 +227,8 @@ public struct MatchComparison: Sendable {
         return Side(
             matchID: record.id,
             startTime: record.startTime,
+            date: MatchChronology.date(record),
+            dateLabel: MatchChronology.label(record),
             matchType: record.matchType,
             matchFormat: record.matchFormat,
             isPartial: record.isInProgress,

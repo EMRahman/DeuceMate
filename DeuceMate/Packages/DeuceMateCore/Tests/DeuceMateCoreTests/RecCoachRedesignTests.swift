@@ -213,6 +213,18 @@ final class RecCoachRedesignTests: XCTestCase {
         XCTAssertFalse(theirText.contains("First serves in after"))
     }
 
+    func test_confirmedSessionsNeverPoolExertionAndAllowAdequatelyCoveredSingleSession() {
+        let stats = effort()
+        let boundaries = stride(from: 4, to: stats.count, by: 4).map { index in
+            MatchResumeEvent(resumedAt: stats[index].timestamp, precedingPointID: stats[index - 1].id)
+        }
+        let split = RecCoachInsights.generate(stats: stats, focal: .me, matchType: .singles, resumeEvents: boundaries)
+        XCTAssertFalse(split.contains { $0.contains("First serves in after") })
+        let allInOne = [MatchResumeEvent(resumedAt: stats[0].timestamp.addingTimeInterval(-1))]
+        let covered = RecCoachInsights.generate(stats: stats, focal: .me, matchType: .singles, resumeEvents: allInOne)
+        XCTAssertTrue(covered.contains { $0.hasPrefix("Session 2: First serves in after") })
+    }
+
     // Opt-in Swift/browser parity oracle, consumed by the JS QA script. Normal
     // test runs have no filesystem side effect. Fixtures are fictional.
     func test_browserParityFixtures() throws {
@@ -224,6 +236,7 @@ final class RecCoachRedesignTests: XCTestCase {
             let matchType: MatchType?
             let focal: Player
             let setFilter: Int?
+            let resumeEvents: [MatchResumeEvent]?
         }
         var fixtures: [Fixture] = []
         let cases = [("tiebreakOnlyFaults", tiebreakFaults(regularFaults: 0)), ("mixedFaults", tiebreakFaults(regularFaults: 3)), ("first", lowFirst()), ("balance", balance()), ("return", returnErrors(.return)),
@@ -236,9 +249,22 @@ final class RecCoachRedesignTests: XCTestCase {
                     for set: Int? in [nil, 0, 1] {
                         fixtures.append(Fixture(name: name, stats: stats,
                                                 expected: lines(stats, type: type, focal: focal, scope: set.map { .set($0) } ?? .all),
-                                                matchType: type, focal: focal, setFilter: set))
+                                                matchType: type, focal: focal, setFilter: set, resumeEvents: nil))
                     }
                 }
+            }
+        }
+        let sessionStats = effort()
+        let many = stride(from: 4, to: sessionStats.count, by: 4).map { index in
+            MatchResumeEvent(resumedAt: sessionStats[index].timestamp, precedingPointID: sessionStats[index - 1].id)
+        }
+        let single = [MatchResumeEvent(resumedAt: sessionStats[0].timestamp.addingTimeInterval(-1))]
+        for (name, events) in [("manyShortSessions", many), ("oneCoveredSession", single)] {
+            for set: Int? in [nil,0,1] {
+                fixtures.append(Fixture(name: name, stats: sessionStats,
+                    expected: RecCoachInsights.generate(stats: sessionStats, focal: .me,
+                        setScope: set.map { .set($0) } ?? .all, matchType: .singles, resumeEvents: events),
+                    matchType: .singles, focal: .me, setFilter: set, resumeEvents: events))
             }
         }
         try JSONEncoder().encode(fixtures).write(to: URL(fileURLWithPath: path))

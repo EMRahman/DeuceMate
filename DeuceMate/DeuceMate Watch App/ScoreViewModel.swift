@@ -48,7 +48,7 @@ class ScoreViewModel: ObservableObject {
             }
         }
     }
-    let workoutManager = WorkoutManager()
+    let workoutManager: WorkoutManager
     private var cancellables = Set<AnyCancellable>()
     private var isSyncingChangeover_ = false
     @Published var checkChangeover: Bool = UserDefaults.standard.object(forKey: "checkChangeover") as? Bool ?? false {
@@ -305,6 +305,8 @@ class ScoreViewModel: ObservableObject {
     private var pendingAnnouncementWorkItem: DispatchWorkItem?
     @Published private(set) var currentMatchStats: [PointStat] = []
     @Published var matchStartTime: Date? = nil
+    /// Final scoring instant; independent of delayed categorisation/dismissal.
+    private(set) var matchCompletionTime: Date? = nil
     @Published var showStatsView: Bool = false
     @Published var showHistoryView: Bool = false
     @Published var isOnSecondServe: Bool = false
@@ -328,6 +330,11 @@ class ScoreViewModel: ObservableObject {
     /// the history store, so without this the next checkpoint/finalize would be
     /// tag-less (MATCH_TAGS_PLAN.md §3). Never edited on the watch (v1).
     private(set) var liveMatchTags: MatchTags? = nil
+    private(set) var resumeEvents: [MatchResumeEvent] = []
+    /// Health-bearing private state; written only to the backup-excluded live file.
+    private var priorActivity = MatchActivityTotals()
+    @Published private(set) var persistenceError: String?
+    private var stateWritesBlocked = false
     @Published private(set) var tiebreakStartServer: Player? = nil
     @Published private(set) var tiebreakFirstPointReceiver: Player? = nil
     @Published private(set) var lastTiebreakPointServer: Player? = nil
@@ -456,6 +463,7 @@ class ScoreViewModel: ObservableObject {
         // v2 fields — all default-able when migrating from v1.
         let currentMatchStats: [PointStat]
         let matchStartTime: Date?
+        let matchCompletionTime: Date?
         let isOnSecondServe: Bool
         let pendingStatPoint: PendingPointInfo?
         let currentMatchID: UUID?
@@ -475,6 +483,9 @@ class ScoreViewModel: ObservableObject {
         let needsDoublesTeamServerDecision: Bool
         // v6 field — tags of a resumed live match (optional; additive).
         let currentMatchTags: MatchTags?
+        let resumeEvents: [MatchResumeEvent]
+        let activityTotals: MatchActivityTotals
+        let clockSavedAt: Date?
 
         init(version: Int,
              sets: [SetScore],
@@ -489,6 +500,7 @@ class ScoreViewModel: ObservableObject {
              lastTiebreakPointServer: Player?,
              currentMatchStats: [PointStat] = [],
              matchStartTime: Date? = nil,
+             matchCompletionTime: Date? = nil,
              isOnSecondServe: Bool = false,
              pendingStatPoint: PendingPointInfo? = nil,
              currentMatchID: UUID? = nil,
@@ -503,7 +515,13 @@ class ScoreViewModel: ObservableObject {
              tiebreakStartDoublesIndex: Int = 0,
              matchFormat: MatchFormat = .standard,
              needsDoublesTeamServerDecision: Bool = false,
-             currentMatchTags: MatchTags? = nil) {
+             currentMatchTags: MatchTags? = nil,
+             resumeEvents: [MatchResumeEvent] = [],
+             activityTotals: MatchActivityTotals = MatchActivityTotals(),
+             clockSavedAt: Date? = nil) {
+            self.resumeEvents = resumeEvents
+            self.activityTotals = activityTotals
+            self.clockSavedAt = clockSavedAt
             self.currentMatchTags = currentMatchTags
             self.version = version
             self.sets = sets
@@ -518,6 +536,7 @@ class ScoreViewModel: ObservableObject {
             self.lastTiebreakPointServer = lastTiebreakPointServer
             self.currentMatchStats = currentMatchStats
             self.matchStartTime = matchStartTime
+            self.matchCompletionTime = matchCompletionTime
             self.isOnSecondServe = isOnSecondServe
             self.pendingStatPoint = pendingStatPoint
             self.currentMatchID = currentMatchID
@@ -549,6 +568,7 @@ class ScoreViewModel: ObservableObject {
             lastTiebreakPointServer = try c.decodeIfPresent(Player.self, forKey: .lastTiebreakPointServer)
             currentMatchStats = try c.decodeIfPresent([PointStat].self, forKey: .currentMatchStats) ?? []
             matchStartTime = try c.decodeIfPresent(Date.self, forKey: .matchStartTime)
+            matchCompletionTime = try c.decodeIfPresent(Date.self, forKey: .matchCompletionTime)
             isOnSecondServe = try c.decodeIfPresent(Bool.self, forKey: .isOnSecondServe) ?? false
             pendingStatPoint = try c.decodeIfPresent(PendingPointInfo.self, forKey: .pendingStatPoint)
             currentMatchID = try c.decodeIfPresent(UUID.self, forKey: .currentMatchID)
@@ -565,6 +585,9 @@ class ScoreViewModel: ObservableObject {
             needsDoublesTeamServerDecision = try c.decodeIfPresent(Bool.self, forKey: .needsDoublesTeamServerDecision) ?? false
             // Optional metadata: a malformed value degrades to "no information".
             currentMatchTags = try? c.decodeIfPresent(MatchTags.self, forKey: .currentMatchTags)
+            resumeEvents = try c.decodeIfPresent([MatchResumeEvent].self, forKey: .resumeEvents) ?? []
+            activityTotals = try c.decodeIfPresent(MatchActivityTotals.self, forKey: .activityTotals) ?? MatchActivityTotals()
+            clockSavedAt = try c.decodeIfPresent(Date.self, forKey: .clockSavedAt)
         }
     }
     
@@ -601,7 +624,7 @@ class ScoreViewModel: ObservableObject {
     /// True when a live match has meaningful progress that should be protected
     /// before replacing/resuming another record.
     var hasInProgressMatchData: Bool {
-        if !history.isEmpty || !currentMatchStats.isEmpty { return true }
+        if !history.isEmpty || !currentMatchStats.isEmpty || !resumeEvents.isEmpty { return true }
         if currentPointsMe > 0 || currentPointsOpponent > 0 { return true }
         return sets.contains { $0.gamesMe > 0 || $0.gamesOpponent > 0 || $0.tieBreakPointsMe > 0 || $0.tieBreakPointsOpponent > 0 }
     }
@@ -619,7 +642,13 @@ class ScoreViewModel: ObservableObject {
     /// other test suite Swift Testing happens to run concurrently.
     private let userDefaults: UserDefaults
 
-    init(statsStore: WatchStatsStoring = StatsStore.shared, stateFileURL: URL? = nil, userDefaults: UserDefaults = .standard) {
+    private let writeLiveState: (AppState, URL) throws -> Void
+
+    init(statsStore: WatchStatsStoring = StatsStore.shared, stateFileURL: URL? = nil, userDefaults: UserDefaults = .standard,
+         writeLiveState: @escaping (AppState, URL) throws -> Void = { try BackupExcludedFileWriter.write($0, to: $1) },
+         workoutManager: WorkoutManager = WorkoutManager()) {
+        self.workoutManager = workoutManager
+        self.writeLiveState = writeLiveState
         self.statsStore = statsStore
         self.stateFileURL = stateFileURL
             ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -667,14 +696,15 @@ class ScoreViewModel: ObservableObject {
     }
 
     func beginMatchSession() {
-        workoutManager.startWorkout(startDate: matchStartTime ?? Date())
+        guard !stateWritesBlocked else { return }
+        workoutManager.startWorkout(startDate: Date())
     }
 
     /// Called after HealthKit authorization on launch. Restarts the workout
     /// session when the app was terminated mid-match and relaunched.
     func resumeWorkoutIfMatchInProgress() {
         guard sessionStartTime != nil, !isMatchComplete() else { return }
-        workoutManager.startWorkout(startDate: matchStartTime ?? Date())
+        workoutManager.startWorkout(startDate: Date())
     }
 
     /// Resolved player max HR using the same precedence chain as the iPhone:
@@ -717,6 +747,7 @@ class ScoreViewModel: ObservableObject {
     /// in-progress record to the phone so it appears immediately without
     /// waiting for the first point.
     func syncMatchStart() {
+        guard !stateWritesBlocked else { return }
         bootstrapLiveMatchIdentityIfNeeded()
         saveState()
     }
@@ -745,6 +776,7 @@ class ScoreViewModel: ObservableObject {
     /// four-player service rotation. "S1" is whichever opponent serves first,
     /// "S2" the other — the labels are purely positional to avoid confusion.
     func startDoublesMatch(firstServer: DoublesServer) {
+        guard !stateWritesBlocked else { return }
         matchType = .doubles
         doublesServiceIndex = 0
         needsDoublesTeamServerDecision = false
@@ -911,6 +943,7 @@ class ScoreViewModel: ObservableObject {
     }
 
     func winPoint(player: Player) {
+        guard !stateWritesBlocked else { return }
         // Capture stats context BEFORE updateScore, since updateScore rotates
         // the server when a game completes.
         let serverBefore = currentServer
@@ -973,6 +1006,7 @@ class ScoreViewModel: ObservableObject {
     }
 
     func losePoint(player: Player) {
+        guard !stateWritesBlocked else { return }
         let opponent = player == .me ? ScoreViewModel.Player.opponent : ScoreViewModel.Player.me
         let serverBefore = currentServer
         let setIndexBefore = max(sets.count - 1, 0)
@@ -1044,8 +1078,12 @@ class ScoreViewModel: ObservableObject {
     }
 
     func updateScore(for player: Player) {
+        guard !stateWritesBlocked else { return }
+        let wasComplete = isMatchComplete()
+        let scoredAt = Date()
         let result = ScoringEngine.pointWon(by: player, in: scoringState())
         applyScoringResult(result)
+        if !wasComplete && isMatchComplete() { matchCompletionTime = scoredAt }
     }
 
     private func scoringState() -> ScoringState {
@@ -1255,6 +1293,7 @@ class ScoreViewModel: ObservableObject {
     /// by the double-tap gesture on the score display. No-op while a
     /// categorization is pending or when stats tracking is off.
     func toggleSecondServe() {
+        guard !stateWritesBlocked else { return }
         guard statsTrackingEnabled,
               !matchFormat.config.disablesPointTracking,
               currentServer != nil,
@@ -1305,8 +1344,7 @@ class ScoreViewModel: ObservableObject {
     /// Returns `nil` when no workout session is active or before HealthKit has
     /// produced any step samples for the current match.
     private func currentStepsForStat() -> Int? {
-        guard workoutManager.isRunning else { return nil }
-        return workoutManager.currentTotalStepsForStat()
+        return workoutManager.currentTotalStepsForStat().map { (priorActivity.steps ?? 0) + $0 }
     }
 
     /// Stamps a committed stat's ID onto the most recent history entry so
@@ -1347,17 +1385,19 @@ class ScoreViewModel: ObservableObject {
             ? ScoringEngine.leaderWhenStopped(scoringState())
             : nil
         let iWon = winner.map { $0 == .me }
-        let totalElapsed = matchElapsedSeconds + (sessionStartTime.map { Date().timeIntervalSince($0) } ?? 0)
+        let now = Date()
+        let clockEnd = matchCompletionTime ?? now
+        let totalElapsed = matchElapsedSeconds + (sessionStartTime.map { max(0, clockEnd.timeIntervalSince($0)) } ?? 0)
         var finalSetElapsed = setElapsedSeconds
         let currentSetIndex = max(sets.count - 1, 0)
         if let setStart = currentSetSessionStart {
-            finalSetElapsed[currentSetIndex, default: 0] += Date().timeIntervalSince(setStart)
+            finalSetElapsed[currentSetIndex, default: 0] += max(0, clockEnd.timeIntervalSince(setStart))
         }
-        let hkSnapshot = workoutManager.snapshotActivity()
+        let hkSnapshot = activitySnapshot()
         let record = MatchRecord(
             id: id,
             startTime: start,
-            endTime: shouldComplete ? Date() : nil,
+            endTime: shouldComplete ? (matchCompletionTime ?? Date()) : nil,
             setScores: sets,
             stats: currentMatchStats,
             iWon: iWon,
@@ -1378,10 +1418,12 @@ class ScoreViewModel: ObservableObject {
             tiebreakStartDoublesIndex: tiebreakStartDoublesIndex,
             matchElapsedSeconds: totalElapsed,
             setElapsedSeconds: finalSetElapsed,
-            totalSteps: hkSnapshot?.steps,
-            totalDistanceMeters: hkSnapshot?.distanceMeters,
-            totalCaloriesKcal: hkSnapshot?.caloriesKcal,
-            tags: liveMatchTags
+            totalSteps: hkSnapshot.steps,
+            totalDistanceMeters: hkSnapshot.distanceMeters,
+            totalCaloriesKcal: hkSnapshot.caloriesKcal,
+            tags: liveMatchTags,
+            resumeEvents: resumeEvents,
+            parkedAt: shouldComplete ? nil : now
         )
         // Belt-and-braces: if this append will evict the oldest watch record,
         // push the full history first so the phone archives the about-to-be-
@@ -1392,7 +1434,10 @@ class ScoreViewModel: ObservableObject {
                 sync.sendFullHistory(history)
             }
         }
-        statsStore.appendMatch(record)
+        guard statsStore.appendMatchDurably(record) else {
+            persistenceError = "Match could not be saved. Try again before leaving."
+            return false
+        }
         syncService?.sendMatch(record, announcement: nil)
         return true
     }
@@ -1475,9 +1520,31 @@ class ScoreViewModel: ObservableObject {
         return true
     }
 
-    private func clearMatch(completeAtCurrentScore: Bool) {
+    @discardableResult
+    private func clearMatch(completeAtCurrentScore: Bool) -> Bool {
+        guard !stateWritesBlocked else { return false }
+        if currentMatchID != nil && (hasInProgressMatchData || completeAtCurrentScore) {
+            guard finalizeCurrentMatchToStore(completeAtCurrentScore: completeAtCurrentScore) else { return false }
+        }
+        // The archived score is durable, but the live file must also stop
+        // describing active play before we acknowledge a successful park. A
+        // failed idle write leaves this live match and its workout actionable.
+        let defaults = MatchSetupDefaults.resolve(
+            formatRaw: userDefaults.string(forKey: MatchSetupDefaults.formatKey),
+            typeRaw: userDefaults.string(forKey: MatchSetupDefaults.typeKey))
+        let idle = AppState(version: 7, sets: [SetScore()], currentPointsMe: 0,
+            currentPointsOpponent: 0, history: [], currentServer: nil, gameCount: 0,
+            pointCountInTiebreak: 0, tiebreakStartServer: nil,
+            tiebreakFirstPointReceiver: nil, lastTiebreakPointServer: nil,
+            matchType: defaults.type, matchFormat: defaults.format)
+        do {
+            try writeLiveState(idle, stateFileURL)
+            persistenceError = nil
+        } catch {
+            persistenceError = "Match could not be paused. Keep it open and try again."
+            return false
+        }
         workoutManager.stopWorkout()
-        finalizeCurrentMatchToStore(completeAtCurrentScore: completeAtCurrentScore)
         syncService?.clearActiveMatch()
         currentServer = nil
         gameCount = 0
@@ -1491,6 +1558,7 @@ class ScoreViewModel: ObservableObject {
         currentPointsOpponent = 0
         currentMatchStats = []
         matchStartTime = nil
+        matchCompletionTime = nil
         pendingStatPoint = nil
         pendingOutcome = nil
         pendingAnnouncementInfo = nil
@@ -1499,6 +1567,8 @@ class ScoreViewModel: ObservableObject {
         isOnSecondServe = false
         currentMatchID = nil
         liveMatchTags = nil
+        resumeEvents = []
+        priorActivity = MatchActivityTotals()
         matchElapsedSeconds = 0
         setElapsedSeconds = [:]
         currentSetSessionStart = nil
@@ -1517,7 +1587,7 @@ class ScoreViewModel: ObservableObject {
         // triple predicate already holds — but routing through the same
         // helper keeps one rule for "seed from the remembered setup."
         applyRememberedSetupIfIdle()
-        saveState()
+        return true
     }
 
     func startHeadingMonitoring() {
@@ -1577,64 +1647,66 @@ class ScoreViewModel: ObservableObject {
         currentHeadingAccuracy = -1
     }
 
-    /// Restores a previously parked in-progress (or completed) match as the
-    /// live match. Caller is responsible for confirming with the user if a
-    /// different live match already exists. Removes the record from StatsStore
-    /// because it'll be re-appended on the next finalize.
-    func resumeMatch(_ record: MatchRecord) {
-        // If a different live match exists, park it first so it's not lost.
-        if let liveID = currentMatchID, liveID != record.id, hasInProgressMatchData {
-            finalizeCurrentMatchToStore()
+    /// Persist the resumed state before changing navigation or touching the only
+    /// archived checkpoint. Keeping that checkpoint until the next park/finalize
+    /// also makes a crash immediately after this write harmless.
+    @discardableResult
+    func resumeMatch(_ requested: MatchRecord) -> Bool {
+        guard !stateWritesBlocked, requested.isInProgress else { return false }
+        if currentMatchID == requested.id {
+            shouldOpenMatchView = true
+            return true
         }
-        sets = record.setScores
-        currentPointsMe = record.currentPointsMe
-        currentPointsOpponent = record.currentPointsOpponent
-        currentServer = record.currentServer
-        gameCount = record.gameCount
-        pointCountInTiebreak = record.pointCountInTiebreak
-        tiebreakStartServer = record.tiebreakStartServer
-        tiebreakFirstPointReceiver = record.tiebreakFirstPointReceiver
-        lastTiebreakPointServer = record.lastTiebreakPointServer
-        matchType = record.matchType
-        matchFormat = record.matchFormat
-        doublesServer = record.doublesServer
-        doublesServiceOrder = record.doublesServiceOrder
-        doublesServiceIndex = record.doublesServiceIndex
-        tiebreakStartDoublesIndex = record.tiebreakStartDoublesIndex
-        currentMatchStats = record.stats
-        matchStartTime = record.startTime
-        currentMatchID = record.id
-        liveMatchTags = record.tags
-        // Resume does not preserve the per-point HistoryEntry chain — undo
-        // therefore only works for points scored after the resume. This is an
-        // accepted v1 limitation since we don't persist `history` in
-        // MatchRecord. We do seed resumedRecentPoints from the record so the
-        // momentum strip stays populated until live history pushes it out.
-        history = []
+        guard let records = statsStore.loadHistoryOrNil() else {
+            persistenceError = "Match history could not be read. Try again later."
+            return false
+        }
+        // A stale sheet cannot recreate a deleted/finalized stored record.
+        guard let record = records.first(where: { $0.id == requested.id }), record.isInProgress else { return false }
+        if currentMatchID != nil && hasInProgressMatchData {
+            guard finalizeCurrentMatchToStore() else { return false }
+        }
+        let now = Date()
+        let events = MatchResumeEvent.merged(record.resumeEvents, [MatchResumeEvent(
+            resumedAt: now, pausedAt: record.parkedAt, precedingPointID: record.stats.last?.id)])
+        let candidate = AppState(
+            version: 7, sets: record.setScores,
+            currentPointsMe: record.currentPointsMe, currentPointsOpponent: record.currentPointsOpponent,
+            history: [], currentServer: record.currentServer, gameCount: record.gameCount,
+            pointCountInTiebreak: record.pointCountInTiebreak, tiebreakStartServer: record.tiebreakStartServer,
+            tiebreakFirstPointReceiver: record.tiebreakFirstPointReceiver, lastTiebreakPointServer: record.lastTiebreakPointServer,
+            currentMatchStats: record.stats, matchStartTime: record.startTime,
+            isOnSecondServe: record.isOnSecondServe, currentMatchID: record.id,
+            matchElapsedSeconds: record.matchElapsedSeconds, setElapsedSeconds: record.setElapsedSeconds,
+            matchType: record.matchType, doublesServer: record.doublesServer,
+            doublesServiceOrder: record.doublesServiceOrder, doublesServiceIndex: record.doublesServiceIndex,
+            tiebreakStartDoublesIndex: record.tiebreakStartDoublesIndex, matchFormat: record.matchFormat,
+            currentMatchTags: record.tags, resumeEvents: events,
+            activityTotals: MatchActivityTotals(record: record), clockSavedAt: now)
+        do {
+            try writeLiveState(candidate, stateFileURL)
+        } catch {
+            persistenceError = "Match could not be resumed. Your saved match is retained."
+            return false
+        }
+        workoutManager.stopWorkout()
+        loadState()
+        guard stateRestorationSucceeded else { return false }
         resumedRecentPoints = record.recentPoints
         discardAllPendingState()
-        // Restore the persisted second-serve flag so the next point is
-        // correctly classified after resume.
-        isOnSecondServe = record.isOnSecondServe
-        applyDoublesDefaultsIfNeeded()
         pendingChangeoverAck = nil
-        // Restore accumulated play time and begin a new session clock.
-        matchElapsedSeconds = record.matchElapsedSeconds
-        setElapsedSeconds = record.setElapsedSeconds
-        sessionStartTime = Date()
-        currentSetSessionStart = Date()
-        workoutManager.stopWorkout()
-        workoutManager.startWorkout(startDate: matchStartTime ?? Date())
-        // Signal HomeView to navigate to the score view.
+        workoutManager.startWorkout(startDate: now)
         shouldOpenMatchView = true
-        // Drop from store; will be re-appended on next finalize. The sheet's
-        // snapshot can predate a phone tag update the store has since saved, so
-        // merge the stored copy's current tags in as it is removed.
-        let storedTags = statsStore.removeMatchReturningTags(id: record.id)
-        liveMatchTags = MatchTags.merged(liveMatchTags, storedTags)
-        saveState()
+        // Publish only after the new identity and event are durable.
+        _ = saveState()
+        return true
     }
-    
+
+    private func activitySnapshot() -> MatchActivityTotals {
+        guard let current = workoutManager.snapshotActivity() else { return priorActivity }
+        return priorActivity.adding(MatchActivityTotals(steps: current.steps,
+            distanceMeters: current.distanceMeters, caloriesKcal: current.caloriesKcal))
+    }
 
     /// Ensures every played match gets a stable identity/timer anchor, even
     /// when detailed point stats are disabled.
@@ -1653,15 +1725,19 @@ class ScoreViewModel: ObservableObject {
         }
     }
 
-    func saveState() {
-        let snapshotElapsed = matchElapsedSeconds + (sessionStartTime.map { Date().timeIntervalSince($0) } ?? 0)
+    @discardableResult
+    func saveState() -> Bool {
+        guard !stateWritesBlocked else { return false }
+        let now = Date()
+        let clockEnd = matchCompletionTime ?? now
+        let snapshotElapsed = matchElapsedSeconds + (sessionStartTime.map { max(0, clockEnd.timeIntervalSince($0)) } ?? 0)
         var snapshotSetElapsed = setElapsedSeconds
         let currentSetIndex = max(sets.count - 1, 0)
         if let start = currentSetSessionStart {
-            snapshotSetElapsed[currentSetIndex, default: 0] += Date().timeIntervalSince(start)
+            snapshotSetElapsed[currentSetIndex, default: 0] += max(0, clockEnd.timeIntervalSince(start))
         }
         let state = AppState(
-            version: 5,
+            version: 7,
             sets: sets,
             currentPointsMe: currentPointsMe,
             currentPointsOpponent: currentPointsOpponent,
@@ -1674,6 +1750,7 @@ class ScoreViewModel: ObservableObject {
             lastTiebreakPointServer: lastTiebreakPointServer,
             currentMatchStats: currentMatchStats,
             matchStartTime: matchStartTime,
+            matchCompletionTime: matchCompletionTime,
             isOnSecondServe: isOnSecondServe,
             pendingStatPoint: pendingStatPoint,
             currentMatchID: currentMatchID,
@@ -1688,19 +1765,27 @@ class ScoreViewModel: ObservableObject {
             tiebreakStartDoublesIndex: tiebreakStartDoublesIndex,
             matchFormat: matchFormat,
             needsDoublesTeamServerDecision: needsDoublesTeamServerDecision,
-            currentMatchTags: liveMatchTags
+            currentMatchTags: liveMatchTags,
+            resumeEvents: resumeEvents,
+            activityTotals: activitySnapshot(),
+            clockSavedAt: now
         )
         do {
             // Class B (until-first-unlock): the live-match state must stay writable
             // when the watch is locked/off-wrist during a match. The transient
             // Health-bearing state is excluded from device backup after every save.
-            try BackupExcludedFileWriter.write(state, to: stateFileURL)
+            try writeLiveState(state, stateFileURL)
+            persistenceError = nil
         } catch {
             #if DEBUG
             print("Critical: Failed to save state")
             #endif
+            persistenceError = "Latest score could not be saved. Keep this match open and try again."
+            return false
         }
 
+        // Keep checkpoints reversible until finalization: a completed body would
+        // reject a later winning-point undo under the existing merge authority.
         // Push in-progress checkpoint to the phone via WatchConnectivity so
         // the phone's archive stays current even if the match is never finished.
         if let sync = syncService, let start = matchStartTime, let id = currentMatchID {
@@ -1728,9 +1813,13 @@ class ScoreViewModel: ObservableObject {
                 tiebreakStartDoublesIndex: tiebreakStartDoublesIndex,
                 matchElapsedSeconds: snapshotElapsed,
                 setElapsedSeconds: snapshotSetElapsed,
+                totalSteps: state.activityTotals.steps,
+                totalDistanceMeters: state.activityTotals.distanceMeters,
+                totalCaloriesKcal: state.activityTotals.caloriesKcal,
                 recentPoints: Array((resumedRecentPoints + history.map { $0.player }).suffix(8)),
                 momentumEnabled: momentumEnabled,
-                tags: liveMatchTags
+                tags: liveMatchTags,
+                resumeEvents: resumeEvents
             )
             let ann = phoneAnnouncementsEnabled ? pendingPhoneAnnouncement : nil
             pendingPhoneAnnouncement = nil
@@ -1738,6 +1827,7 @@ class ScoreViewModel: ObservableObject {
         } else {
             pendingPhoneAnnouncement = nil
         }
+        return true
     }
 
     @Published private(set) var stateRestorationSucceeded = false
@@ -1757,6 +1847,9 @@ class ScoreViewModel: ObservableObject {
         do {
             let data = try Data(contentsOf: stateFileURL)
             let state = try JSONDecoder().decode(AppState.self, from: data)
+            guard state.version <= 7 else { throw CocoaError(.coderReadCorrupt) }
+            stateWritesBlocked = false
+            persistenceError = nil
             stateRestorationSucceeded = true
             sets = state.sets
             currentPointsMe = state.currentPointsMe
@@ -1770,10 +1863,13 @@ class ScoreViewModel: ObservableObject {
             lastTiebreakPointServer = state.lastTiebreakPointServer
             currentMatchStats = state.currentMatchStats
             matchStartTime = state.matchStartTime
+            matchCompletionTime = state.matchCompletionTime
             isOnSecondServe = state.isOnSecondServe
             pendingStatPoint = state.pendingStatPoint
             currentMatchID = state.currentMatchID
             liveMatchTags = state.currentMatchTags
+            resumeEvents = state.resumeEvents
+            priorActivity = state.activityTotals
             matchElapsedSeconds = state.matchElapsedSeconds
             setElapsedSeconds = state.setElapsedSeconds
             if let symbol = state.pendingAnnouncementMessage {
@@ -1792,16 +1888,25 @@ class ScoreViewModel: ObservableObject {
             tiebreakStartDoublesIndex = state.tiebreakStartDoublesIndex
             matchFormat = state.matchFormat
             applyDoublesDefaultsIfNeeded()
-            if currentServer != nil || !currentMatchStats.isEmpty {
-                sessionStartTime = Date()
+            if currentMatchID != nil || currentServer != nil || !currentMatchStats.isEmpty {
+                let now = Date()
+                let invisibleElapsed = state.matchCompletionTime == nil ? max(0, state.clockSavedAt.map { now.timeIntervalSince($0) } ?? 0) : 0
+                matchElapsedSeconds += invisibleElapsed
+                sessionStartTime = now
                 // Don't restart the set timer for a completed match; the final set's
                 // elapsed is already finalized and must not accumulate idle time.
                 if !isMatchComplete() {
-                    currentSetSessionStart = Date()
+                    setElapsedSeconds[max(sets.count - 1, 0), default: 0] += invisibleElapsed
+                    currentSetSessionStart = now
                 }
             }
         } catch {
             stateRestorationSucceeded = (error as? CocoaError)?.code == .fileReadNoSuchFile
+            stateWritesBlocked = !stateRestorationSucceeded
+            if stateWritesBlocked {
+                persistenceError = "Saved match could not be read. It has been preserved; scoring is unavailable."
+                return
+            }
             #if DEBUG
             print("Warning: Failed to load previous state")
             #endif
@@ -1817,6 +1922,7 @@ class ScoreViewModel: ObservableObject {
             lastTiebreakPointServer = nil
             currentMatchStats = []
             matchStartTime = nil
+            matchCompletionTime = nil
             isOnSecondServe = false
             pendingStatPoint = nil
             pendingOutcome = nil
@@ -1886,7 +1992,9 @@ class ScoreViewModel: ObservableObject {
     /// Returns whether a point was actually reversed (false when nothing to undo).
     @discardableResult
     func undo() -> Bool {
+        guard !stateWritesBlocked else { return false }
         guard let last = history.popLast() else { return false }
+        matchCompletionTime = nil
 
         sets = last.sets
         currentPointsMe = last.currentPointsMe
@@ -1952,7 +2060,7 @@ class ScoreViewModel: ObservableObject {
     }
 
     func totalElapsedSeconds(at date: Date = Date()) -> TimeInterval {
-        matchElapsedSeconds + (sessionStartTime.map { date.timeIntervalSince($0) } ?? 0)
+        matchElapsedSeconds + (sessionStartTime.map { max(0, (matchCompletionTime ?? date).timeIntervalSince($0)) } ?? 0)
     }
 }
 

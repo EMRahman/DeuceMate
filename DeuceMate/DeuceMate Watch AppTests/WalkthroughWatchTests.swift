@@ -51,10 +51,14 @@ struct WalkthroughWatchTests {
         try Data("broken JSON".utf8).write(to: url)
         vm.loadState()
         #expect(!vm.stateRestorationSucceeded)
-        vm.currentServer = .me
-        vm.currentPointsMe = 1
-        vm.saveState()
-        let restored = ScoreViewModel(statsStore: StatsStore(fileURL: tempURL()), stateFileURL: url, userDefaults: try defaults())
+        #expect(!vm.saveState())
+        #expect(try Data(contentsOf: url) == Data("broken JSON".utf8))
+        let validURL = tempURL()
+        let valid = ScoreViewModel(statsStore: StatsStore(fileURL: tempURL()), stateFileURL: validURL, userDefaults: try defaults())
+        valid.currentServer = .me
+        valid.currentPointsMe = 1
+        #expect(valid.saveState())
+        let restored = ScoreViewModel(statsStore: StatsStore(fileURL: tempURL()), stateFileURL: validURL, userDefaults: try defaults())
         restored.loadState()
         #expect(restored.stateRestorationSucceeded)
         #expect(!restored.walkthroughIsIdle)
@@ -147,6 +151,9 @@ struct WalkthroughWatchTests {
 
 
 private final class PracticeStoreSpy: WatchStatsStoring {
+    func loadHistoryOrNil() -> [MatchRecord]? { loadHistory() }
+    func appendMatchDurably(_ record: MatchRecord) -> Bool { appendMatch(record); return true }
+
     var calls = 0
     func loadHistory() -> [MatchRecord] { calls += 1; return [] }
     func saveHistory(_ records: [MatchRecord]) { calls += 1 }

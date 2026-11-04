@@ -266,7 +266,7 @@ struct MatchComparisonView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
-            Text(Self.dateFormatter.string(from: side.startTime))
+            Text("\(side.dateLabel) \(Self.dateFormatter.string(from: side.date))")
                 .font(.subheadline.weight(.semibold))
             if side.isPartial {
                 Text("In Progress — partial stats")
@@ -407,7 +407,7 @@ struct BaselinePickerView: View {
     private func candidateRow(_ record: MatchRecord) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(Self.dateFormatter.string(from: record.startTime))
+                Text(MatchChronology.caption(record, formatter: Self.dateFormatter))
                     .font(.subheadline.weight(.semibold))
                 let score = record.setScores.enumerated().map { index, set in
                     SetScoreLabel.string(for: set, setIndex: index, matchFormat: record.matchFormat)

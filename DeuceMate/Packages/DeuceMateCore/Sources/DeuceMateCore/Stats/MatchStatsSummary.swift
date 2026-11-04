@@ -192,7 +192,9 @@ public struct MatchStatsSummary: Sendable {
         stats: [PointStat],
         focal: Player,
         setElapsedSeconds: [Int: TimeInterval] = [:],
-        maxHR: Int = 190
+        maxHR: Int = 190,
+        resumeEvents: [MatchResumeEvent] = [],
+        sessionPoints: [PointStat]? = nil
     ) {
         let other: Player = focal == .me ? .opponent : .me
 
@@ -393,15 +395,15 @@ public struct MatchStatsSummary: Sendable {
             }
         }
         resolvedMaxHR = maxHR
-        autoInsights = PulseCoachInsights.generate(
+        autoInsights = resumeEvents.isEmpty ? PulseCoachInsights.generate(
             stats: stats,
             focal: focal,
             maxHR: maxHR
-        )
+        ) : []
 
         // Step (movement) aggregations — one sampled-and-sorted pass produces
         // the per-point loads; feed the timeline straight to the rule engine.
-        let stepLoads = Self.sampledStepLoads(stats)
+        let stepLoads = Self.sampledStepLoads(stats, resumeEvents: resumeEvents, sessionPoints: sessionPoints)
         stepsTimeline = stepLoads.enumerated().map { idx, entry in
             StepPoint(
                 pointIndex: idx,
@@ -411,12 +413,13 @@ public struct MatchStatsSummary: Sendable {
                 wonByFocal: entry.point.winner == focal
             )
         }
-        stepsInsights = StepsCoachInsights.generate(timeline: stepsTimeline)
+        stepsInsights = resumeEvents.isEmpty ? StepsCoachInsights.generate(timeline: stepsTimeline) : []
 
         recCoachInsights = RecCoachInsights.generate(
             stats: stats,
             focal: focal,
-            setElapsedSeconds: setElapsedSeconds
+            setElapsedSeconds: setElapsedSeconds,
+            resumeEvents: resumeEvents
         )
     }
 
@@ -432,12 +435,19 @@ public struct MatchStatsSummary: Sendable {
     /// Later deltas are clamped non-negative so sample jitter can't go below 0.
     /// Single source of the per-point figure, reused by `perPointStepDeltas`
     /// (id-keyed, for the exporter table) and `stepsTimeline` (ordered).
-    private static func sampledStepLoads(_ stats: [PointStat]) -> [(point: PointStat, perPointSteps: Int)] {
+    private static func sampledStepLoads(_ stats: [PointStat], resumeEvents: [MatchResumeEvent] = [], sessionPoints: [PointStat]? = nil) -> [(point: PointStat, perPointSteps: Int)] {
         let sampled = stats
             .filter { $0.stepsCumulative != nil }
             .sorted { $0.timestamp < $1.timestamp }
+        let allPoints = sessionPoints ?? stats
+        let sessions = ResumeMarkers.sessionIndices(events: resumeEvents, points: allPoints)
+        let sessionByID = Dictionary(allPoints.enumerated().map { ($0.element.id, sessions[$0.offset]) }, uniquingKeysWith: { a, _ in a })
+        var previousSession: Int?
         var prev: Int?
         return sampled.map { pt in
+            let session = sessionByID[pt.id]
+            if previousSession != session { prev = nil }
+            previousSession = session
             let cum = pt.stepsCumulative ?? 0
             let load = prev.map { max(0, cum - $0) } ?? 0
             prev = max(prev ?? cum, cum)
@@ -449,8 +459,8 @@ public struct MatchStatsSummary: Sendable {
     /// raw point table can show a per-point figure on each row in match order;
     /// `stepsTimeline` carries the same values in chronological order for the
     /// stats/insights path.
-    public static func perPointStepDeltas(_ stats: [PointStat]) -> [UUID: Int] {
-        Dictionary(uniqueKeysWithValues: sampledStepLoads(stats).map { ($0.point.id, $0.perPointSteps) })
+    public static func perPointStepDeltas(_ stats: [PointStat], resumeEvents: [MatchResumeEvent] = []) -> [UUID: Int] {
+        Dictionary(uniqueKeysWithValues: sampledStepLoads(stats, resumeEvents: resumeEvents).map { ($0.point.id, $0.perPointSteps) })
     }
 
     /// Mean per-point step load over a slice of the step timeline, rounded to

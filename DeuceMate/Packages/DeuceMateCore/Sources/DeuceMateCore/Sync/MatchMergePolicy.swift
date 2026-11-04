@@ -33,6 +33,7 @@ public enum MatchMergePolicy {
     public static func resolve(incoming: MatchRecord, existing: MatchRecord?) -> MatchRecord {
         guard let existing else { return incoming.mergingMatchTypeRevision(incoming.matchTypeRevision) }
         var winner = resolveBody(incoming: incoming, existing: existing)
+        winner = winner.mergingResumeEvents(existing.resumeEvents + incoming.resumeEvents)
         winner.tags = MatchTags.merged(existing.tags, incoming.tags)
         winner = winner.mergingMatchTypeRevision(
             MatchTypeRevision.merged(existing.matchTypeRevision, incoming.matchTypeRevision)
@@ -102,10 +103,6 @@ public enum MatchMergePolicy {
         // Stable id tiebreak so equal start times never reorder the list
         // between merges (mirrors `WatchMirror.sortedByRecency`).
         return byID.values
-            .sorted {
-                $0.startTime != $1.startTime
-                    ? $0.startTime > $1.startTime
-                    : $0.id.uuidString < $1.id.uuidString
-            }
+            .sorted(by: MatchChronology.newestFirst)
     }
 }

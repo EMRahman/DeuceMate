@@ -17,7 +17,7 @@
   function matchResult(r,focal) { if(r.iWon==null)return r.endTime?"Draw":"In progress";var won=focal==="opponent"?!r.iWon:r.iWon;return won?"Won":"Lost"; }
   function fmtDate(ms) { return new Date(ms).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }); }
   function detailTitle(record) {
-    if (record.endTime == null) return fmtDate(record.startTime);
+    if (record.endTime == null) return window.DeuceMateChronology.describe(record, fmtDate);
     var formats = { superTiebreak: "Super Tiebreak", perpetualSuperTiebreak: "Perpetual Tiebreak", quick4Games: "Quick 4 Games", perpetualPoints: "Perpetual Points" };
     if (formats[record.format]) return formats[record.format];
     return (record.stats || []).some(function (point) { return point.outcome !== "uncategorized"; }) ? "Match Stats" : "Score Only Match";
@@ -143,15 +143,16 @@
   function exportContext() {return {score:score,setLabel:setLabel,scoreTimeline:scoreTimeline,pointSteps:pointSteps,graphSteps:graphSteps,activitySplit:activitySplit,outcomeMatch:outcomeMatch,servingMatch:servingMatch,graphSymbol:graphSymbol};}
   function exportSettings(level) {var settings=window.DeuceMatePhone?window.DeuceMatePhone.settings:{};return Object.assign({},settings,level?{playerNTRP:level}:{});}
   function reportText(r,pts,focal,kind,level) {return window.DeuceMatePhoneExport.text(r,pts,focal||"me",kind||"full",exportSettings(level),exportContext());}
-  function pointSteps(points,index) { if(index<1||points[index].stepsCumulative==null||points[index-1].stepsCumulative==null)return null;return Math.max(0,points[index].stepsCumulative-points[index-1].stepsCumulative); }
-  function graphSteps(points, totalSteps) {
+  function pointSteps(points,index,resumeEvents) { if(index>0&&(resumeEvents||[]).length){var sessions=window.DeuceMateSessions.indices({stats:points,resumeEvents:resumeEvents});if(sessions[index]!==sessions[index-1])return points[index].stepsCumulative==null?null:0;} if(index<1||points[index].stepsCumulative==null||points[index-1].stepsCumulative==null)return null;return Math.max(0,points[index].stepsCumulative-points[index-1].stepsCumulative); }
+  function graphSteps(points, totalSteps, resumeEvents) {
+    var sessions=window.DeuceMateSessions?window.DeuceMateSessions.indices({stats:points,resumeEvents:resumeEvents||[]}):points.map(function(){return 0;}),previousSession=null;
     var samples = points.map(function (point, index) { return point.stepsCumulative == null ? null : { pointIndex: index, cumulative: Number(point.stepsCumulative) }; }).filter(Boolean), previous = 0;
     if (samples.length >= 2) {
       var base = samples[0].cumulative;
-      return samples.map(function (sample) { var cumulative = Math.max(0, sample.cumulative - base), delta = Math.max(0, cumulative - previous); previous = cumulative; return { pointIndex: sample.pointIndex, cumulative: cumulative, perPoint: delta }; });
+      return samples.map(function (sample) { var cumulative = Math.max(0, sample.cumulative - base), session=sessions[sample.pointIndex], delta = previousSession===session?Math.max(0, cumulative - previous):0; previous = cumulative;previousSession=session; return { pointIndex: sample.pointIndex, cumulative: cumulative, perPoint: delta, sessionIndex:session }; });
     }
     var total = Number(totalSteps || 0);
-    return total > 0 && points.length ? points.map(function (_, index) { var cumulative = Math.floor((index + 1) / points.length * total), delta = Math.max(0, cumulative - previous); previous = cumulative; return { pointIndex: index, cumulative: cumulative, perPoint: delta }; }) : [];
+    return !(resumeEvents||[]).length && total > 0 && points.length ? points.map(function (_, index) { var cumulative = Math.floor((index + 1) / points.length * total), delta = Math.max(0, cumulative - previous); previous = cumulative; return { pointIndex: index, cumulative: cumulative, perPoint: delta }; }) : [];
   }
   function graphSelection(record, points, index, timeline) {
     var point = points[index]; if (!point) return null;
@@ -171,13 +172,13 @@
         gameAfter = gameScoreString(after.currentPointsMe, after.currentPointsOpponent, "me") || "0–0";
       }
     }
-    var movement = graphSteps(points, record.steps).find(function (sample) { return sample.pointIndex === index; });
+    var movement = graphSteps(points, record.steps, record.resumeEvents).find(function (sample) { return sample.pointIndex === index; });
     return { set: Number(point.setIndex || 0) + 1, point: through.filter(function (p) { return p.setIndex === point.setIndex; }).length,
       me: me, opponent: index + 1 - me, gameAfter: gameAfter, matchAfter: snapshot ? snapshot.matchAfter : null, steps: movement ? movement.perPoint : null };
   }
   function reportCSV(r, pts, focal) {
-    var rows = [["Point", "Set", "Server", "Winner", "Outcome", "Ending shot", "Second serve", "Break point", "Recorder HR BPM", "Steps during point"]];
-    pts.forEach(function (p, i) { rows.push([i + 1, (p.setIndex || 0) + 1, p.server === focal ? "Me" : "Opponent", p.winner === focal ? "Me" : "Opponent", labelOutcome(p.outcome), labelShot(p.endingShot), p.isSecondServe ? "Yes" : "No", p.isBreakPoint ? "Yes" : "No", p.heartRateBPM == null ? "" : p.heartRateBPM, pointSteps(pts,i) == null ? "" : pointSteps(pts,i)]); });
+    var rows = [["Point", "Set", "Server", "Winner", "Outcome", "Ending shot", "Second serve", "Break point", "Recorder HR BPM", "Steps during point", "Play session", "Resumed before point"]], sessions=window.DeuceMateSessions.indices(r,pts),events=window.DeuceMateSessions.webEvents(r,pts);
+    pts.forEach(function (p, i) { rows.push([i + 1, (p.setIndex || 0) + 1, p.server === focal ? "Me" : "Opponent", p.winner === focal ? "Me" : "Opponent", labelOutcome(p.outcome), labelShot(p.endingShot), p.isSecondServe ? "Yes" : "No", p.isBreakPoint ? "Yes" : "No", p.heartRateBPM == null ? "" : p.heartRateBPM, pointSteps(pts,i,r.resumeEvents) == null ? "" : pointSteps(pts,i,r.resumeEvents),sessions[i]+1,events.filter(function(e){return e.beforePointIndex===i;}).map(function(e){return e.label+" · "+e.detail;}).join("; ")]); });
     return rows.map(function (row) { return row.map(function (x) { return '"' + safe(x).replace(/"/g, '""') + '"'; }).join(","); }).join("\r\n");
   }
   function standaloneHTML(r,pts,focal) {return window.DeuceMatePhoneExport.html(r,pts,focal||"me",exportSettings(),exportContext());}
@@ -204,6 +205,7 @@
   }
   function graphSvg(allPoints, state, select, viewRange, showXAxis, externalGestures) {
     var offset=viewRange?viewRange.start:0,points=viewRange?allPoints.slice(viewRange.start,viewRange.end):allPoints;
+    var sessionRecord={stats:allPoints,resumeEvents:state.resumeEvents||[]},sessionIds=window.DeuceMateSessions.indices(sessionRecord);
     var allTotals=allPoints.reduce(function(total,p){total[p.winner]++;return total;},{me:0,opponent:0});
     var ns="http://www.w3.org/2000/svg", w=340,h=250,left=29,right=w-(state.showHR||state.showSteps?38:10),top=15,bottom=224,max=Math.max(allTotals.me,allTotals.opponent,1),xCount=Math.max(points.length,1);
     function tickStep(span,count){var raw=Math.max(1,span/count),power=Math.pow(10,Math.floor(Math.log10(raw))),scaled=raw/power;return(scaled<Math.sqrt(2)?1:scaled<Math.sqrt(5)?2:scaled<Math.sqrt(12.5)?2.5:scaled<Math.sqrt(50)?5:10)*power;}
@@ -223,6 +225,8 @@
         label.textContent=title==="steps"&&value>=1000?String(Math.round(value/100)/10)+"k":String(Math.round(value));svg.append(label);
       }
     }
+    var resumeGroups=new Map();window.DeuceMateSessions.webEvents(sessionRecord).forEach(function(event){var index=event.beforePointIndex;if(index==null||index>=allPoints.length||index<offset||index>=offset+points.length)return;if(!resumeGroups.has(index))resumeGroups.set(index,[]);resumeGroups.get(index).push(event);});
+    var resumeIndices=Array.from(resumeGroups.keys()).sort(function(a,b){return a-b;});resumeIndices.forEach(function(index,position){var events=resumeGroups.get(index),x=pointX(index-offset+.5);line(x,top,x,bottom,"#829087","1 4");var rule=svg.lastChild;rule.setAttribute("aria-label",events.map(function(e){return e.accessibilityLabel;}).join(". "));if(position===resumeIndices.length-1||resumeIndices[position+1]-index>=8){var label=document.createElementNS(ns,"text");label.setAttribute("x",x+3);label.setAttribute("y",bottom-5);label.setAttribute("font-size","9");label.setAttribute("fill","#829087");label.textContent=events.length===1?events[0].label:"Resumed "+events.length+" times";svg.appendChild(label);}});
     var m=allPoints.slice(0,offset).filter(function(p){return p.winner==="me";}).length,o=offset-m,me=[left+","+(bottom-(bottom-top)*m/max)],opp=[left+","+(bottom-(bottom-top)*o/max)],coords=[];
     points.forEach(function(p,i){if(p.winner==="me")m++;else o++;var x=pointX(i+1), ym=bottom-(bottom-top)*m/max, yo=bottom-(bottom-top)*o/max;me.push(x+","+ym);opp.push(x+","+yo);coords.push({x:x,ym:ym,yo:yo,p:p,i:i});});
     function poly(coords,color,stepped){if(!coords.length)return null;var n=document.createElementNS(ns,stepped?"path":"polyline");n.setAttribute("fill","none");n.setAttribute("stroke",color);n.setAttribute("stroke-width","2.5");if(stepped){var d="M "+coords[0].split(",").join(" ");for(var i=1;i<coords.length;i++){var pair=coords[i].split(",");d+=" H "+pair[0]+" V "+pair[1];}n.setAttribute("d",d);}else n.setAttribute("points",coords.join(" "));svg.appendChild(n);return n;}
@@ -240,8 +244,9 @@
       });
       var hit=document.createElementNS(ns,"circle");hit.classList.add("pr-chart-hit");if(state.selected===v.i+offset)hit.classList.add("is-selected");hit.setAttribute("cx",v.x);hit.setAttribute("cy",v.ym);hit.setAttribute("r",state.selected===v.i+offset?8:6);hit.setAttribute("fill","transparent");hit.setAttribute("stroke",state.selected===v.i+offset?"#a6ada8":"transparent");hit.setAttribute("tabindex","0");hit.setAttribute("role","button");hit.setAttribute("aria-label","Inspect point "+(v.i+offset+1));hit.onclick=function(){if(!externalGestures)select(v.i+offset);};hit.onkeydown=function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();select(v.i+offset);}};svg.appendChild(hit);
     });
-    if(state.showHR){var hr=allPoints.map(function(p,i){return p.heartRateBPM==null?null:{pointIndex:i,bpm:Number(p.heartRateBPM)};}).filter(Boolean),mode=state.hrMode||"snapshot",rawValues=hr.map(function(x){return x.bpm;}),rawMin=rawValues.length?Math.max(40,Math.min.apply(null,rawValues)-10):50,rawMax=rawValues.length?Math.max(Math.max.apply(null,rawValues)+10,rawMin+20):200;if(hr.length)secondaryAxis(rawMin,rawMax,"#ff3b30b3","bpm");if(mode!=="snapshot"&&hr.length>=2){var radius=mode==="smoothed"?2:1;hr=hr.map(function(entry,i){var values=hr.slice(Math.max(0,i-radius),Math.min(hr.length,i+radius+1)),avg=values.reduce(function(sum,x){return sum+x.bpm;},0)/values.length;return{pointIndex:entry.pointIndex,bpm:Math.round(avg)};});}var visibleHR=hr.filter(function(x){return x.pointIndex>=offset&&x.pointIndex<offset+points.length;});if(visibleHR.length)poly(visibleHR.map(function(x){var local=x.pointIndex-offset;return pointX(local+1)+","+(bottom-(bottom-top)*(x.bpm-rawMin)/Math.max(1,rawMax-rawMin));}),"#ff3b30b3");}
-    if(state.showSteps){var steps=graphSteps(allPoints,state.totalSteps),field=state.stepsMode==="perPoint"?"perPoint":"cumulative",visibleSteps=steps.filter(function(x){return x.pointIndex>=offset&&x.pointIndex<offset+points.length;}),stepMax=Math.max.apply(null,steps.map(function(x){return x[field];}).concat([1]));if(visibleSteps.length){secondaryAxis(0,stepMax,"#34c759bf","steps");var previous=steps.filter(function(x){return x.pointIndex<offset;}).slice(-1)[0],base=previous?previous[field]:0,stepCoords=[left+","+(bottom-(bottom-top)*base/stepMax)].concat(visibleSteps.map(function(x){return pointX(x.pointIndex-offset+1)+","+(bottom-(bottom-top)*x[field]/stepMax);})),stepLine=poly(stepCoords,"#34c759bf");if(stepLine)stepLine.setAttribute("stroke-dasharray","5 3");}}
+    function healthPaths(values,color,toCoord,dashed){var groups=[];values.forEach(function(value){var session=sessionIds[value.pointIndex],group=groups[groups.length-1];if(!group||group.session!==session){group={session:session,values:[]};groups.push(group);}group.values.push(value);});groups.forEach(function(group){var path=poly(group.values.map(toCoord),color);if(path&&dashed)path.setAttribute("stroke-dasharray","5 3");});}
+    if(state.showHR){var hr=allPoints.map(function(p,i){return p.heartRateBPM==null?null:{pointIndex:i,bpm:Number(p.heartRateBPM)};}).filter(Boolean),mode=state.hrMode||"snapshot",rawValues=hr.map(function(x){return x.bpm;}),rawMin=rawValues.length?Math.max(40,Math.min.apply(null,rawValues)-10):50,rawMax=rawValues.length?Math.max(Math.max.apply(null,rawValues)+10,rawMin+20):200;if(hr.length)secondaryAxis(rawMin,rawMax,"#ff3b30b3","bpm");if(mode!=="snapshot"&&hr.length>=2){var radius=mode==="smoothed"?2:1;hr=hr.map(function(entry,i){var values=hr.slice(Math.max(0,i-radius),Math.min(hr.length,i+radius+1)).filter(function(x){return sessionIds[x.pointIndex]===sessionIds[entry.pointIndex];}),avg=values.reduce(function(sum,x){return sum+x.bpm;},0)/values.length;return{pointIndex:entry.pointIndex,bpm:Math.round(avg)};});}var visibleHR=hr.filter(function(x){return x.pointIndex>=offset&&x.pointIndex<offset+points.length;});healthPaths(visibleHR,"#ff3b30b3",function(x){return pointX(x.pointIndex-offset+1)+","+(bottom-(bottom-top)*(x.bpm-rawMin)/Math.max(1,rawMax-rawMin));});}
+    if(state.showSteps){var steps=graphSteps(allPoints,state.totalSteps,state.resumeEvents),field=state.stepsMode==="perPoint"?"perPoint":"cumulative",visibleSteps=steps.filter(function(x){return x.pointIndex>=offset&&x.pointIndex<offset+points.length;}),stepMax=Math.max.apply(null,steps.map(function(x){return x[field];}).concat([1]));if(visibleSteps.length){secondaryAxis(0,stepMax,"#34c759bf","steps");healthPaths(visibleSteps,"#34c759bf",function(x){return pointX(x.pointIndex-offset+1)+","+(bottom-(bottom-top)*x[field]/stepMax);},true);}}
     svg.style.touchAction = "none";
     svg.addEventListener("pointerdown", function (event) {
       if (!points.length || externalGestures) return;
@@ -339,7 +344,7 @@
 
   function detail(phone, record) {
     var root = el("div", "phone-report"), pts = (record.stats || []).slice(), timeline=scoreTimeline(record,pts,"me"), scroll = el("div", "pr-scroll"); root.appendChild(scroll);
-    var top = phone.card(); top.classList.add("pr-hero"); top.appendChild(el("div", "pr-overline", fmtDate(record.startTime) + " · " + fmtFormat(record)));
+    var top = phone.card(); top.classList.add("pr-hero"); top.appendChild(el("div", "pr-overline", window.DeuceMateChronology.describe(record, fmtDate) + " · " + fmtFormat(record)));
     // Retain the report's semantic heading without adding a non-native title row.
     top.appendChild(el("h2", "pr-title phone-visually-hidden", detailTitle(record)));
     var scoreRow = el("div", "pr-score-row"); scoreRow.appendChild(el("div", "pr-score", score(record,"me")));
@@ -351,11 +356,13 @@
     }
     var pwSlot=el("div","pr-pw-slot");top.appendChild(pwSlot);scroll.appendChild(top);
     if (window.DeuceMatePhoneMatchInfo && record.id !== (phone.liveRecord()||{}).id) scroll.appendChild(window.DeuceMatePhoneMatchInfo.section(phone, record));
+    var sessionLines=window.DeuceMateSessions.description(record);
+    if(sessionLines.length){var sessionBox=el("div","pr-session-summary");sessionLines.forEach(function(line){sessionBox.appendChild(el("div","pr-muted",line));});scroll.appendChild(section("Play sessions",sessionBox));}
     var graphSection = el("section", "pr-section pr-native-graph"); graphSection.appendChild(el("h3", "pr-section-title", "Points Graph")); scroll.appendChild(graphSection);
     var tabbar = el("div", "pr-tabs"), statsTab = phone.button("Stats", null, "pr-tab active"), pointsTab = phone.button("Points", null, "pr-tab"); tabbar.appendChild(statsTab); tabbar.appendChild(pointsTab); if (pts.length) scroll.appendChild(tabbar);
     var content = el("div", "pr-content"); scroll.appendChild(content);
     var state = detailStates.get(record.id) || { tab: "stats", set: "all", selected: -1, showHR: false, showSteps: false, hrMode: "snapshot", stepsMode: "cumulative", outcomesMe: [], outcomesOpp: [], serveMe: [], serveOpp: [], shotsWon: [], shotsLost: [] };
-    if(!state.hrMode)state.hrMode="snapshot";if(!state.stepsMode)state.stepsMode="cumulative";state.totalSteps=Number(record.steps||0);
+    if(!state.hrMode)state.hrMode="snapshot";if(!state.stepsMode)state.stepsMode="cumulative";state.totalSteps=Number(record.steps||0);state.resumeEvents=record.resumeEvents||[];
     detailStates.set(record.id, state);
     statsTab.classList.toggle("active", state.tab === "stats"); pointsTab.classList.toggle("active", state.tab === "points");
     function filtered() { return pts.filter(function (p) { return state.set === "all" || Number(p.setIndex || 0) === Number(state.set); }); }
@@ -444,7 +451,7 @@
         empty.append(phone.icon("chart"),el("strong","","No Points to Graph"));graphSection.append(empty);return;
       }
       var expand=phone.button("",openExpandedGraph,"pr-graph-expand");expand.setAttribute("aria-label","Expand graph");expand.appendChild(phone.icon("expand"));graphSection.appendChild(expand);
-      var totals=counts()[0],clean={selected:state.selected,outcomesMe:[],outcomesOpp:[],serveMe:[],serveOpp:[],shotsWon:[],shotsLost:[],showHR:false,showSteps:false};
+      var totals=counts()[0],clean={resumeEvents:record.resumeEvents||[],selected:state.selected,outcomesMe:[],outcomesOpp:[],serveMe:[],serveOpp:[],shotsWon:[],shotsLost:[],showHR:false,showSteps:false};
       var svg=graphSvg(pts,clean,function(idx){state.selected=idx;drawGraph();}),holder=el("div","pr-chart-wrap");holder.appendChild(svg);var leg=el("div","pr-chart-legend");leg.appendChild(el("span","pr-legend-me","Me"));leg.appendChild(el("span","pr-legend-opp","Opponent"));holder.appendChild(leg);graphSection.appendChild(holder);
       appendInspector(graphSection);graphSection.appendChild(el("p","pr-muted pr-graph-caption","⤢ Expand to filter points"+(record.steps>0||pts.some(function(p){return p.heartRateBPM!=null||p.stepsCumulative!=null;})?" & add overlays":"")));
     }
@@ -600,8 +607,9 @@
       function y(value) { return 145 - (value - lo) / (hi - lo || 1) * 135; }
       [0, .6, .7, .8, .9].forEach(function (edge, i) { var low = Math.max(lo, maxHR * edge), high = Math.min(hi, maxHR * ([.6, .7, .8, .9, 2][i])); if (high <= low) return; mark(timeline, "rect", { x: 28, y: y(high), width: 276, height: y(low) - y(high), fill: colors[i], opacity: .18 }); mark(timeline, "text", { x: 308, y: y((low + high) / 2) + 3, fill: colors[i], "font-size": 10 }, "Z" + (i + 1)); });
       [0, .5, 1].forEach(function (f) { var value = Math.round(lo + (hi - lo) * f); mark(timeline, "text", { x: 0, y: y(value) + 3, fill: "#98989e", "font-size": 10 }, value); });
-      var line = hr.map(function (p, i) { var radius = state.pulseMode === "smoothed" ? 2 : state.pulseMode === "averaged" ? 1 : 0, window = hr.slice(Math.max(0, i - radius), i + radius + 1), avg = window.reduce(function (sum, q) { return sum + q.heartRateBPM; }, 0) / window.length; return (28 + i / Math.max(1, hr.length - 1) * 276) + "," + y(avg); });
-      mark(timeline, "polyline", { points: line.join(" "), fill: "none", stroke: "#f2f2f7", "stroke-width": 1.5 }); rows.append(timeline);
+      var pulseSessions=window.DeuceMateSessions.indices(record),pulseSession=function(p){return pulseSessions[pts.indexOf(p)];};
+      var line = hr.map(function (p, i) { var radius = state.pulseMode === "smoothed" ? 2 : state.pulseMode === "averaged" ? 1 : 0, window = hr.slice(Math.max(0, i - radius), i + radius + 1).filter(function(q){return pulseSession(q)===pulseSession(p);}), avg = window.reduce(function (sum, q) { return sum + q.heartRateBPM; }, 0) / window.length; return (28 + i / Math.max(1, hr.length - 1) * 276) + "," + y(avg); });
+      var pulseGroups=[];hr.forEach(function(p,i){var session=pulseSession(p),group=pulseGroups[pulseGroups.length-1];if(!group||group.session!==session){group={session:session,coords:[]};pulseGroups.push(group);}group.coords.push(line[i]);});pulseGroups.forEach(function(group){mark(timeline,"polyline",{points:group.coords.join(" "),fill:"none",stroke:"#f2f2f7","stroke-width":1.5});});rows.append(timeline);
       if (state.pulseMode === "averaged") rows.append(phone.note("Per-point averages are simulated from recorded samples; this demo does not fetch Health data."));
       return nativeSection("Pulse Coach", rows);
     }
@@ -644,13 +652,14 @@
       (record.sets || []).forEach(function (_, setIndex) {
         var list = el("div", "pr-point-list"), points = pts.filter(function (p) { return Number(p.setIndex || 0) === setIndex; }); if (!points.length) return;
         points.forEach(function (p, i) {
-          var original = pts.indexOf(p), row = phone.button("", function () { state.selected = original; drawGraph(); graphSection.scrollIntoView({ block: "nearest" }); }, "pr-point-row"), main = el("span", "pr-point-main");
+          var original = pts.indexOf(p);window.DeuceMateSessions.webEvents(record).filter(function(event){return event.beforePointIndex===original;}).forEach(function(event){var divider=el("div","pr-muted pr-resume-divider",event.label+" · "+event.detail);divider.style.borderTop="1px dashed currentColor";divider.style.padding="10px 0";list.appendChild(divider);});
+          var row = phone.button("", function () { state.selected = original; drawGraph(); graphSection.scrollIntoView({ block: "nearest" }); }, "pr-point-row"), main = el("span", "pr-point-main");
           var before = timeline && timeline[original] ? timeline[original].before : ""; if (before) main.append(el("small", "pr-point-match-score", before));
           main.append(el("span", "pr-point-service", (p.server === "me" ? "🎾 Serving" : "Receiving") + (gameScoreBeforeLabel(p) ? " · " + gameScoreBeforeLabel(p) : "") + (p.isBreakPoint ? " · BP" : "") + (p.isSecondServe ? " · 2nd" : "")));
           var winner = p.winner === "me", fault = p.outcome === "doubleFault", actor = p.outcome === "winner" || p.outcome === "uncategorized" ? winner ? "Me" : "Opp" : winner ? "Opp" : "Me";
           var chip = el("b", "phone-result-badge " + ((p.outcome === "winner" || p.outcome === "uncategorized" ? winner : !winner) ? "won" : "lost"), ({ winner: winner ? "W" : "Opp W", forcedError: "FE", unforcedError: "UE", doubleFault: "DF", uncategorized: winner ? "+" : "−" })[p.outcome] || "+");
           var outcome = el("span", "pr-point-outcome"); outcome.append(chip, document.createTextNode(labelOutcome(p.outcome) + " — " + actor)); main.append(outcome);
-          var health = el("span", "pr-point-health"); if (p.endingShot) health.append(el("small", "", labelShot(p.endingShot))); if (p.heartRateBPM != null) health.append(el("small", "", "My HR: " + p.heartRateBPM + " bpm")); var steps = pointSteps(pts, original); if (steps != null) health.append(el("small", "", steps + " steps"));
+          var health = el("span", "pr-point-health"); if (p.endingShot) health.append(el("small", "", labelShot(p.endingShot))); if (p.heartRateBPM != null) health.append(el("small", "", "My HR: " + p.heartRateBPM + " bpm")); var steps = pointSteps(pts, original, record.resumeEvents); if (steps != null) health.append(el("small", "", steps + " steps"));
           row.append(el("span", "pr-point-index", String(i + 1)), main, health); list.append(row);
         }); wrap.append(nativeSection(setName(setIndex), list));
       }); return wrap;
