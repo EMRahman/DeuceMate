@@ -133,6 +133,7 @@ Everything needed to run a match from setup through completion, without paper or
 - Optional swipe-to-score directly on the iPhone live scoreboard — up for you, down for opponent, left to undo — mirroring the watch gestures
 - The same post-point categorisation panel surfaces on the iPhone when outcome tracking is on
 - The watch remains the source of truth; iPhone inputs are forwarded to it
+- If the iPhone can't reach the watch, the scoreboard says **Waiting for Watch** and shows the last score it received. Swipes and category buttons pause until the watch reconnects, so open DeuceMate on the watch to carry on
 
 **Manual match entry**
 - Reconstruct a match that started on paper (or after a watch crash) using a simple form on the iPhone

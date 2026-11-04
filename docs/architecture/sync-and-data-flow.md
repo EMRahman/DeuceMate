@@ -30,7 +30,10 @@ flowchart LR
 Delivery is pragmatic: live checkpoints go instantly when the phone is reachable
 (and are silently skipped when it isn't — the next checkpoint supersedes them);
 important records are queued so they survive locked screens; large history pushes
-go as file transfers. That strategy lives in `MatchSyncTransport`. A successfully
+go as file transfers. That strategy lives in `MatchSyncTransport`. Commands from
+the phone's live scoreboard are the exception to queuing: they are never queued
+or retried, the scoreboard blocks them while the Watch is unreachable, and a
+failed send shows a short message. A successfully
 read full-history request ends with the Watch manifest; an unreadable Watch
 archive sends neither history nor a misleading empty manifest. The phone treats
 a received manifest as the successful acknowledgement even when it is empty,

@@ -237,6 +237,81 @@ final class MatchSyncTransportTests: XCTestCase {
         XCTAssertTrue(fake.queuedUserInfos.isEmpty)
     }
 
+    func test_sendControl_delivered_doesNotReportUndelivered() {
+        let fake = FakeSyncSession()
+        let transport = MatchSyncTransport(session: fake)
+        var undelivered = 0
+
+        transport.sendControl(MatchSyncPayloadBuilder.requestFullHistory(), queueOnFailure: false) {
+            undelivered += 1
+        }
+
+        XCTAssertEqual(fake.sentMessages.count, 1)
+        XCTAssertEqual(undelivered, 0)
+    }
+
+    func test_sendControl_unreachableWithoutQueue_reportsUndeliveredAndSendsNothing() {
+        let fake = FakeSyncSession()
+        fake.isReachable = false
+        let transport = MatchSyncTransport(session: fake)
+        var undelivered = 0
+
+        transport.sendControl(MatchSyncPayloadBuilder.requestFullHistory(), queueOnFailure: false) {
+            undelivered += 1
+        }
+
+        XCTAssertEqual(undelivered, 1)
+        XCTAssertTrue(fake.sentMessages.isEmpty)
+        XCTAssertTrue(fake.queuedUserInfos.isEmpty)
+    }
+
+    func test_sendControl_notActivated_reportsUndeliveredAndSendsNothing() {
+        let fake = FakeSyncSession()
+        fake.isActivated = false
+        let transport = MatchSyncTransport(session: fake)
+        var undelivered = 0
+
+        transport.sendControl(MatchSyncPayloadBuilder.requestFullHistory(), queueOnFailure: false) {
+            undelivered += 1
+        }
+
+        XCTAssertEqual(undelivered, 1)
+        XCTAssertTrue(fake.sentMessages.isEmpty)
+        XCTAssertTrue(fake.queuedUserInfos.isEmpty)
+    }
+
+    func test_sendControl_failedSendWithoutQueue_reportsUndeliveredOnceWithoutRetrying() {
+        let fake = FakeSyncSession()
+        fake.failLiveSend = true
+        let transport = MatchSyncTransport(session: fake)
+        var undelivered = 0
+
+        transport.sendControl(MatchSyncPayloadBuilder.requestFullHistory(), queueOnFailure: false) {
+            undelivered += 1
+        }
+
+        XCTAssertEqual(undelivered, 1)
+        XCTAssertEqual(fake.sentMessages.count, 1, "must not retry an ambiguous failure")
+        XCTAssertTrue(fake.queuedUserInfos.isEmpty)
+    }
+
+    func test_sendControl_queuedPayload_isNotReportedUndelivered() {
+        let unreachable = FakeSyncSession()
+        unreachable.isReachable = false
+        let failing = FakeSyncSession()
+        failing.failLiveSend = true
+        var undelivered = 0
+
+        MatchSyncTransport(session: unreachable)
+            .sendControl(MatchSyncPayloadBuilder.requestFullHistory(), queueOnFailure: true) { undelivered += 1 }
+        MatchSyncTransport(session: failing)
+            .sendControl(MatchSyncPayloadBuilder.requestFullHistory(), queueOnFailure: true) { undelivered += 1 }
+
+        XCTAssertEqual(undelivered, 0)
+        XCTAssertEqual(unreachable.queuedUserInfos.count, 1)
+        XCTAssertEqual(failing.queuedUserInfos.count, 1)
+    }
+
     func test_sendControl_unreachableWithQueueOnFailure_queues() {
         let fake = FakeSyncSession()
         fake.isReachable = false

@@ -151,15 +151,34 @@ public final class MatchSyncTransport {
     /// Sends a control payload (e.g. `clearActiveMatch`, `requestFullHistory`).
     /// `queueOnFailure` controls whether unreachable / errored sends fall back
     /// to `transferUserInfo`.
-    public func sendControl(_ payload: [String: Any], queueOnFailure: Bool) {
-        guard isActivated else { return }
+    ///
+    /// `onUndelivered` runs when the payload was neither sent nor queued, or when
+    /// a live send reported an error and was not queued. It may run on a
+    /// background queue. An error is ambiguous, because the peer may still have
+    /// received the message, so callers must not treat it as proof of non-delivery
+    /// or retry automatically.
+    public func sendControl(
+        _ payload: [String: Any],
+        queueOnFailure: Bool,
+        onUndelivered: (() -> Void)? = nil
+    ) {
+        guard isActivated else {
+            onUndelivered?()
+            return
+        }
         if session.isReachable {
             session.sendMessage(payload, replyHandler: nil) { [weak self] error in
                 self?.logger.error("sendControl failed: \(error.localizedDescription, privacy: .public)")
-                if queueOnFailure { self?.session.queueUserInfo(payload) }
+                if queueOnFailure {
+                    self?.session.queueUserInfo(payload)
+                } else {
+                    onUndelivered?()
+                }
             }
         } else if queueOnFailure {
             session.queueUserInfo(payload)
+        } else {
+            onUndelivered?()
         }
     }
 
