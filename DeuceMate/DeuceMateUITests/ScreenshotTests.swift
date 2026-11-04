@@ -192,6 +192,130 @@ final class ScreenshotTests: XCTestCase {
         saveScreenshot("04-coaching-insights")
     }
 
+    // MARK: - README gallery (docs/screenshots/README.md)
+
+    /// Scrolls with slow drags from the left gutter (clear of the charts) until
+    /// `element` sits just below the navigation bar, so a shot leads with it.
+    @MainActor
+    private func bring(_ element: XCUIElement, in app: XCUIApplication, toY target: CGFloat = 132) {
+        for _ in 0..<14 {
+            guard element.exists else {
+                drag(in: app, by: 420)
+                continue
+            }
+            let delta = element.frame.minY - target
+            if abs(delta) < 24 { return }
+            drag(in: app, by: max(-420, min(420, delta)))
+        }
+    }
+
+    @MainActor
+    private func drag(in app: XCUIApplication, by delta: CGFloat) {
+        let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0.03, dy: 0))
+        let start = origin.withOffset(CGVector(dx: 0, dy: delta > 0 ? 700 : 200))
+        let end = start.withOffset(CGVector(dx: 0, dy: -delta))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
+    }
+
+    @MainActor
+    private func openTargetMatch(_ id: String, in app: XCUIApplication) {
+        let matchRow = app.buttons["match-row-\(id)"]
+        for _ in 0..<40 where !matchRow.isHittable {
+            app.swipeUp(velocity: .slow)
+        }
+        XCTAssertTrue(matchRow.waitForExistence(timeout: 10))
+        matchRow.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 10))
+        Thread.sleep(forTimeInterval: 0.5)
+    }
+
+    /// One match's report: momentum graph, Pulse Coach zones, insights, stats.
+    /// Run in dark appearance with DEUCEMATE_TARGET_MATCH_ID set to a tracked
+    /// match that has recorded heart rate.
+    @MainActor
+    func test_captureReadmeMatchShots() throws {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Matches"].waitForExistence(timeout: 20))
+        openTargetMatch(targetMatchID, in: app)
+
+        let expand = app.buttons["expand-points-graph"]
+        for _ in 0..<4 where !expand.exists { app.swipeUp() }
+        XCTAssertTrue(expand.waitForExistence(timeout: 10))
+        expand.tap()
+        XCTAssertTrue(app.navigationBars["Points Graph"].waitForExistence(timeout: 10))
+        let heartRate = app.buttons["heart-rate-overlay-toggle"]
+        if heartRate.waitForExistence(timeout: 3) { heartRate.tap() }
+        let pointsWon = app.buttons["points-won-chip"]
+        XCTAssertTrue(pointsWon.waitForExistence(timeout: 5))
+        pointsWon.tap()
+        Thread.sleep(forTimeInterval: 0.8)
+        saveScreenshot("readme-momentum")
+        app.navigationBars["Points Graph"].buttons["Done"].tap()
+        XCTAssertTrue(expand.waitForExistence(timeout: 10))
+
+        let insights = app.staticTexts
+            .matching(NSPredicate(format: "label BEGINSWITH 'Coaching Insights'")).firstMatch
+        bring(insights, in: app)
+        Thread.sleep(forTimeInterval: 0.5)
+        saveScreenshot("readme-insights")
+
+        bring(app.staticTexts["Pulse Coach"], in: app)
+        Thread.sleep(forTimeInterval: 0.5)
+        saveScreenshot("readme-pulse-zones")
+
+        let outcomes = app.staticTexts["Outcome Breakdown"]
+        bring(outcomes, in: app)
+        Thread.sleep(forTimeInterval: 0.5)
+        saveScreenshot("readme-stats")
+    }
+
+    /// Screens that span matches: Trends, one opponent, and Compare. Set
+    /// DEUCEMATE_TARGET_MATCH_ID to a rematch and DEUCEMATE_OPPONENT_NAME to a
+    /// fictional opponent with several matches. Never capture a real name.
+    @MainActor
+    func test_captureReadmeArchiveShots() throws {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Matches"].waitForExistence(timeout: 20))
+        Thread.sleep(forTimeInterval: 1)
+
+        let trends = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Unforced'")).firstMatch
+        XCTAssertTrue(trends.waitForExistence(timeout: 10))
+        trends.tap()
+        XCTAssertTrue(app.navigationBars["Trends"].waitForExistence(timeout: 10))
+        Thread.sleep(forTimeInterval: 1)
+        saveScreenshot("readme-trends")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        let opponentsLink = app.buttons["opponents-section-link"]
+        XCTAssertTrue(opponentsLink.waitForExistence(timeout: 10))
+        opponentsLink.tap()
+        let opponentName = ProcessInfo.processInfo.environment["DEUCEMATE_OPPONENT_NAME"] ?? "Alice Morgan"
+        let opponentRow = app.buttons
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'opponent-row-' AND label CONTAINS %@", opponentName))
+            .firstMatch
+        XCTAssertTrue(opponentRow.waitForExistence(timeout: 10))
+        opponentRow.tap()
+        Thread.sleep(forTimeInterval: 1)
+        saveScreenshot("readme-head-to-head")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        Thread.sleep(forTimeInterval: 0.5)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        openTargetMatch(targetMatchID, in: app)
+        let disclosure = app.buttons["match-info-disclosure"]
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 10))
+        let compare = app.buttons["compare-previous-match"]
+        if !compare.waitForExistence(timeout: 1) { disclosure.tap() }
+        XCTAssertTrue(compare.waitForExistence(timeout: 5))
+        compare.tap()
+        Thread.sleep(forTimeInterval: 1)
+        bring(app.staticTexts["Rates"], in: app)
+        Thread.sleep(forTimeInterval: 0.5)
+        saveScreenshot("readme-compare")
+    }
+
     /// The full Trends screen with its filters. Run on a freshly seeded
     /// simulator so the persisted filters are at their defaults, from an archive
     /// with tagged matches so the opponent filter appears.

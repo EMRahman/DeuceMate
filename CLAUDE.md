@@ -363,6 +363,9 @@ Practical consequences:
 - The marketing screenshots live in `docs/website/screenshots/` because the site
   shows them; the capture guide that documents them stays at
   `docs/screenshots/README.md`, outside the published folder.
+- The README gallery's images live in `docs/readme/`, outside the published
+  folder, so they don't ship with the site. Their capture and build steps are in
+  the same guide.
 
 ---
 

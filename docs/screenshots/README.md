@@ -219,6 +219,40 @@ Note that `04` is *not* superseded by `18`: the sticky banner occupies the
 momentum strip's slot while it is showing, so `04` remains the shot for the
 ordinary scoreboard, with the strip and a richer mid-match score.
 
+## README gallery (`docs/readme/`)
+
+The root README's images are dark, real-data captures. They live outside
+`docs/website/` so they aren't published with the site. Only `05` is shared: it
+is the same capture as `docs/readme/pulse-zones.jpg`.
+
+1. **Sanitize a copy of an exported archive, outside the repo.** Replace every
+   player name with a generic one and remove the `notes` section. Never commit
+   that archive or capture a real name. Keep the Health data: it must be real.
+2. **Use a disposable iPhone 17 Pro Max simulator** set to dark with the status
+   bar at 09:41 (`simctl ui <udid> appearance dark`, `simctl status_bar`), and
+   seed it with `DeuceMateArchiveTool seed`.
+3. **Run the opt-in tests** with `TEST_RUNNER_DEUCEMATE_CAPTURE_SCREENSHOTS=1`
+   and `TEST_RUNNER_DEUCEMATE_SCREENSHOT_OUTPUT_DIR` set:
+   - `ScreenshotTests/test_captureReadmeMatchShots`, with
+     `TEST_RUNNER_DEUCEMATE_TARGET_MATCH_ID` set to a tracked match with heart
+     rate. Run it again on another match if you want its Coaching Insights.
+   - `ScreenshotTests/test_captureReadmeArchiveShots`, with that variable set to
+     a rematch against the opponent in `DEUCEMATE_OPPONENT_NAME`.
+   - `ReadmeScreenshotTests` in the Watch UI tests (about four minutes). It plays
+     to one score, then shoots it in each theme and opens the tag sheet.
+4. **Shoot the web report as a friend sees it.** Render it with
+   `DeuceMateArchiveTool webexport`, serve its folder with
+   `python3 -m http.server 8765 --bind 127.0.0.1`, open
+   `http://127.0.0.1:8765/<match>.html` with `simctl openurl`, wait for the page
+   to load, then save the screen with `simctl io <udid> screenshot`. Opening a
+   `file://` URL brings up the Files save dialog instead, and the simulator's
+   share sheet has no Messages or contacts to show.
+5. **Build:** `docs/readme/source/build.sh <iphone-dir> <watch-dir>
+   <insights.png> <safari.png>`. It crops off Safari's address bar.
+
+A simulator has no heart rate or calories, so the Watch crops keep only the score
+rows and the tag sheet. The hero's Watch is the physical-device capture `04`.
+
 ## Setup guide shots (`docs/website/screenshots/setup/`)
 
 The step-by-step [setup guide](../website/setup.html) uses its own set of
