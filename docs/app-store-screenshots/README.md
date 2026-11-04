@@ -124,8 +124,8 @@ calories, and heart-rate samples alongside its score and point outcomes. Those
 real measurements are visible in the graph and Pulse Coach capture; no health
 values were generated or invented for the screenshots.
 
-The 1.3.0 captures above still need uploading to App Store Connect. separate
-hardware demo/review video described in
+1.3.0 is now released, so check App Store Connect to confirm the 1.3.0 captures
+above are the ones live. The separate hardware demo/review video described in
 `docs/release/SUBMISSION_REVIEW.md` still needs to be recorded on the physical
 iPhone and
 Apple Watch and attached in App Store Connect.

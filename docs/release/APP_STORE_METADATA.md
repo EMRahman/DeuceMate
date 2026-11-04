@@ -27,9 +27,10 @@ statistics. The submission is the iOS app (`ehsan.DeuceMate`); the watchOS app
 Now track who you play: head-to-head records, match comparisons and private notes, alongside Apple Watch scoring and AI coaching. Free forever. No ads, no tracking.
 ```
 
-**Character count:** 164 characters. Proposed for the 1.3.0 submission; do
-not change it on the store until 1.3.0 is approved, because it describes 1.3.0
-features. Live until then (since the 1.1.0 submission, 19 August 2026): "Score on Apple Watch, tag how every point ended, then hand the match to your favourite AI for real coaching. Free forever. No ads, no tracking."
+**Character count:** 164 characters. Proposed for the 1.3.0 submission. It held
+back until 1.3.0 was approved because it describes 1.3.0 features; 1.3.0 is now
+released, so check App Store Connect to confirm this text is live. The previous
+text (since the 1.1.0 submission, 19 August 2026): "Score on Apple Watch, tag how every point ended, then hand the match to your favourite AI for real coaching. Free forever. No ads, no tracking."
 
 Two deliberate choices carried over from the previous line:
 
@@ -182,6 +183,27 @@ Built by a recreational tennis player for players who want dependable scorekeepi
 
 ## What's New (4000 characters max)
 
+### Version 1.3.1 - Trends filters and swipe vibration
+
+```
+Focus your trends on one opponent, and feel every swipe count.
+
+NEW: FILTER TRENDS
+• Narrow Trends to friendly, league, tournament or practice matches, or to a single opponent.
+
+NEW: SWIPE VIBRATION
+• An optional wrist tap on Apple Watch confirms that a swipe scored or undid a point, so you don't need to look down. Turn it on in Settings on your Apple Watch or iPhone.
+
+IMPROVED
+• Each opponent's page now shows your head-to-head record and their playing style above your past matches.
+
+No account, subscription, ads, or tracking — just your tennis, on your devices.
+```
+
+> **Scope.** The shipping targets are configured as version **1.3.1 (15)**. The
+> comparison baseline is the released `v1.3.0` tag. Revise this text if anything
+> else merges before the archive.
+
 ### Version 1.3.0 - Match Info, opponents, comparisons and private notes
 
 ```
@@ -214,7 +236,7 @@ No account, subscription, ads, or tracking — just your tennis, on your devices
 
 **Character count:** 1,526 characters (including line breaks; under 4,000)
 
-> **Scope.** The shipping targets are configured as version **1.3.0 (13)**.
+> **Scope.** Released as version **1.3.0 (13)**.
 > This is a minor release because Match Info adds new user-entered data, new
 > iPhone screens and new export choices, the same reasoning as 1.2.0 and Trends.
 > The comparison baseline is the `1.2.1 (10)` archive built on 22 September
@@ -554,29 +576,20 @@ App Review Information persists across versions in App Store Connect, so the
 previous submission's text is probably still sitting in the field — check it
 rather than assuming the field is empty.
 
-Use the following for the 1.3.0 submission. It is comfortably under the 4,000-
+Use the following for the 1.3.1 submission. It is comfortably under the 4,000-
 character field limit.
 
 ```
 This is an update to a previously approved app. No new
 permissions, no accounts, no in-app purchases, no ads, no tracking.
 
-WHAT CHANGED IN 1.3.0
-- iPhone: Match Info lets the user add opponent/partner names, a competition
-  type and a private note to a match. Names are typed by the user; the app does
-  not access Contacts. New screens show head-to-head records by opponent and
-  compare a match with an earlier one. Players can be renamed, merged or
-  forgotten in Settings.
-- All of this stays on the user's devices and their private iCloud Drive backup.
-  Private notes stay on the iPhone. A note leaves the device only if the user
-  turns on "Include private note" for a specific export and reviews it first.
-- Interactive web reports can be exported from either player's perspective, and
-  reports and AI prompts have switches for player names and the private note.
-- Coaching Insights are ranked with new observations.
-- A completed match can be changed between singles and doubles on iPhone or
-  Apple Watch.
-- Apple Watch: start-screen tracking chips now open their explanation in
-  Settings.
+WHAT CHANGED IN 1.3.1
+- iPhone: the Trends screen can be filtered by competition type and by opponent.
+- iPhone: an opponent's page shows head-to-head and playing style above past
+  matches.
+- Apple Watch: an optional setting, off by default, taps the wrist when a swipe
+  scores or undoes a point. It can be turned on from Settings on the Apple Watch
+  or the iPhone, and the setting syncs between them.
 
 REVIEWING WITHOUT AN APPLE WATCH
 The iPhone app is fully usable on its own. On an iPhone with no Watch paired,
@@ -584,10 +597,15 @@ the Matches screen offers "Enter a match manually" (pencil icon, top left) —
 that creates a match you can open, review and export, exercising the archive,
 statistics, points timeline and export flows without any Watch involvement.
 
-To see the new features: enter two matches manually. Open one, expand Match Info,
+To see the opponent page: enter two matches manually. Open one, expand Match Info,
 tap the Match Info row, add an opponent name and tap Save. Do the same on the
-other match using the same player. Then use "Compare with Previous Match" in
-Match Info, and Opponents > Head-to-head records on the Matches screen.
+other match using the same player. Then open Opponents > Head-to-head records on
+the Matches screen and choose the player.
+
+The Trends filters need at least three matches scored on Apple Watch with point
+tracking on. Manually entered matches have no point data and do not count, so
+without a Watch the Trends section shows how many more matches are needed. Swipe
+vibration can be switched on in Settings > Apple Watch, but needs a Watch to feel.
 
 PERMISSIONS
 HealthKit (Watch at first launch; iPhone for per-point heart rate) and location
@@ -595,7 +613,8 @@ HealthKit (Watch at first launch; iPhone for per-point heart rate) and location
 usable with every prompt denied. No ATT, camera, mic, photos, contacts,
 calendar, notifications or Bluetooth.
 
-Devices tested: iPhone 16 (iOS 27.2) and Apple Watch Series 7 GPS (watchOS 26.6).
+Devices tested: [fill in after testing 1.3.1. 1.3.0 used iPhone 16 (iOS 27.2) and
+Apple Watch Series 7 GPS (watchOS 26.6).]
 ```
 
 The no-Watch paragraph is the one that earns its place: this is a Watch-first
@@ -785,4 +804,4 @@ Center attachment limit.
 
 ---
 
-*Prepared for DeuceMate v1.3.0 (build 13) - 2026*
+*Prepared for DeuceMate v1.3.1 (build 15) - 2026*
