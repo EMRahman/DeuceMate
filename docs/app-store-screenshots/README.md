@@ -25,8 +25,16 @@ through. All ten are 1320 x 2868 with no alpha — a set must be one size.
 | 6 | `iphone-6.9/03-match-stats.png` | raw |
 | 7 | `iphone-6.9/04-coaching-insights.png` | raw — ranked Coaching Insights |
 | 8 | `iphone-6.9/05-match-archive.png` | raw — Trends, Opponents and match history |
-| 9 | `iphone-6.9/09-opponent-head-to-head.png` | raw — opponent profile and head-to-head |
+| 9 | `iphone-6.9/09-opponent-head-to-head.png` | raw — opponent head-to-head and profile |
 | 10 | `iphone-6.9/06-trends-overview.png` | raw — Trends filters and Errors |
+
+### What changed for 1.3.1
+
+- **Replace in App Store Connect:**
+  - Slot 9, `iphone-6.9/09-opponent-head-to-head.png`, which now shows Head to Head
+    first and the Manage button.
+  - Slot 10, `iphone-6.9/06-trends-overview.png`, which now shows the competition
+    and opponent filters.
 
 ### What changed for 1.3.0
 
@@ -64,6 +72,10 @@ newest short-format matches (three Super Tiebreak and two Perpetual Points).
 Items 1, 4, 5, 8 and 9 were recaptured in November 2026 for 1.3.0 on the same
 simulator from a sanitized copy of the current archive; the overview, comparison
 and archive use the 2 November match and Coaching Insights the 15 October match.
+Item 6 was recaptured on 4 November 2026 for 1.3.1 on the iPhone 18 Pro Max
+simulator (same 1320 x 2868 size) from a sanitized copy of the 2 November archive.
+Item 9 was recaptured the same day, on the same simulator and from a sanitized copy
+of the same archive.
 
 1. `01-match-overview.png` - completed score, result, points split, Match Info,
    and graph
@@ -73,12 +85,13 @@ and archive use the 2 November match and Coaching Insights the 15 October match.
 4. `04-coaching-insights.png` - match duration and ranked coaching
 5. `05-match-archive.png` - Trends summary, Opponents, and match history with
    player captions
-6. `06-trends-overview.png` - trend filters, Errors, and Serve & Return
+6. `06-trends-overview.png` - trend filters including competition and opponent,
+   Errors, and Serve & Return
 7. `07-trends-serve-return.png` - Serve & Return and Attack history (not uploaded
    since 1.3.0)
 8. `08-compare-previous-match.png` - this match next to the previous match against
    the same opponent
-9. `09-opponent-head-to-head.png` - playing style, past matches, and head-to-head
+9. `09-opponent-head-to-head.png` - head-to-head, playing style, and past matches
 
 This one 6.9-inch set satisfies the iPhone screenshot-size requirement; do not
 mix in the older 6.3/6.5-inch files from `docs/website/screenshots/` for this
@@ -124,8 +137,7 @@ calories, and heart-rate samples alongside its score and point outcomes. Those
 real measurements are visible in the graph and Pulse Coach capture; no health
 values were generated or invented for the screenshots.
 
-The 1.3.0 captures above still need uploading to App Store Connect. separate
-hardware demo/review video described in
+1.3.0 went live with its captures on 4 November 2026. The separate hardware demo/review video described in
 `docs/release/SUBMISSION_REVIEW.md` still needs to be recorded on the physical
 iPhone and
 Apple Watch and attached in App Store Connect.
