@@ -10,8 +10,9 @@ in App Store Connect.
 The iPhone app and embedded Apple Watch app are both configured as
 `MARKETING_VERSION = 1.3.1` and `CURRENT_PROJECT_VERSION = 15` in their Debug and
 Release shipping configurations. The test targets remain at their non-shipping
-version/build values. The owner reported testing it on the same iPhone and Apple Watch as 1.3.0 on
-4 November 2026. The boxes below were not confirmed one by one, so they stay open.
+version/build values. The owner tested it on the same iPhone and Apple Watch as
+1.3.0, confirmed every check below, and submitted build 15 to App Review on
+4 November 2026. It is tagged `v1.3.1`.
 
 The baseline is the released `v1.3.0` tag. So far this candidate adds **Trends
 filters for competition type and opponent**, optional **swipe vibration** on Apple
@@ -23,18 +24,18 @@ and [`APP_STORE_METADATA.md`](APP_STORE_METADATA.md#app-review-information--note
 
 Before submission:
 
-- [ ] Archive the exact release `HEAD`, validate, upload, and install the
+- [x] Archive the exact release `HEAD`, validate, upload, and install the
   TestFlight build as an upgrade over `1.3.0 (13)`. Confirm iPhone and embedded
   Watch both report `1.3.1 (15)`, because Xcode raised the build number at upload
   for 1.3.0, and that the existing archive is intact.
-- [ ] Turn swipe vibration on and off from each device and confirm the other
+- [x] Turn swipe vibration on and off from each device and confirm the other
   follows. With it on, confirm a swipe that scores or undoes a point taps the wrist,
   and that iPhone score commands do not.
-- [ ] With at least three point-tracked matches, filter Trends by each competition
+- [x] With at least three point-tracked matches, filter Trends by each competition
   type and by opponent, then relaunch and confirm the filters are remembered.
-- [ ] Open a player from Opponents and confirm Head to Head, Playing Style, Pending
+- [x] Open a player from Opponents and confirm Head to Head, Playing Style, Pending
   Matches and Past Matches appear in that order, and that Manage is available.
-- [ ] Re-run the unpaired-iPhone reviewer path in the review notes.
+- [x] Re-run the unpaired-iPhone reviewer path in the review notes.
 - [x] Upload the recaptured `iphone-6.9/09-opponent-head-to-head.png` to the 1.3.1
   submission in App Store Connect, replacing the old image in slot 9 of the iPhone
   6.9-inch set. It shows Head to Head first and the Manage button.
@@ -45,7 +46,7 @@ Before submission:
 - [x] Add the tested devices to App Review Information → Notes: iPhone 16
   (iOS 27.2) and Apple Watch Series 7 GPS (watchOS 26.6). The owner reported
   testing 1.3.1 on these devices on 4 November 2026.
-- [ ] Tag the uploaded commit `v1.3.1`.
+- [x] Tag the uploaded commit `v1.3.1`.
 
 ## Released — 1.3.0 (build 13)
 
