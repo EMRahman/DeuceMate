@@ -28,6 +28,12 @@ through. All ten are 1320 x 2868 with no alpha — a set must be one size.
 | 9 | `iphone-6.9/09-opponent-head-to-head.png` | raw — opponent profile and head-to-head |
 | 10 | `iphone-6.9/06-trends-overview.png` | raw — Trends filters and Errors |
 
+### What changed for 1.3.1
+
+- **Replace in App Store Connect:** slot 10, `iphone-6.9/06-trends-overview.png`,
+  which now shows the competition and opponent filters. The other nine stay as they
+  are.
+
 ### What changed for 1.3.0
 
 - **Replace in App Store Connect:** slots 1, 4, 7 and 8.
@@ -64,6 +70,8 @@ newest short-format matches (three Super Tiebreak and two Perpetual Points).
 Items 1, 4, 5, 8 and 9 were recaptured in November 2026 for 1.3.0 on the same
 simulator from a sanitized copy of the current archive; the overview, comparison
 and archive use the 2 November match and Coaching Insights the 15 October match.
+Item 6 was recaptured on 4 November 2026 for 1.3.1 on the iPhone 18 Pro Max
+simulator (same 1320 x 2868 size) from a sanitized copy of the 2 November archive.
 
 1. `01-match-overview.png` - completed score, result, points split, Match Info,
    and graph
@@ -73,7 +81,8 @@ and archive use the 2 November match and Coaching Insights the 15 October match.
 4. `04-coaching-insights.png` - match duration and ranked coaching
 5. `05-match-archive.png` - Trends summary, Opponents, and match history with
    player captions
-6. `06-trends-overview.png` - trend filters, Errors, and Serve & Return
+6. `06-trends-overview.png` - trend filters including competition and opponent,
+   Errors, and Serve & Return
 7. `07-trends-serve-return.png` - Serve & Return and Attack history (not uploaded
    since 1.3.0)
 8. `08-compare-previous-match.png` - this match next to the previous match against

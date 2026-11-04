@@ -34,8 +34,10 @@ Before submission:
 - [ ] Open a player from Opponents and confirm Head to Head, Playing Style, Pending
   Matches and Past Matches appear in that order, and that Manage is available.
 - [ ] Re-run the unpaired-iPhone reviewer path in the review notes.
-- [ ] Decide whether `iphone-6.9/06-trends-overview.png` needs recapturing, because
-  it predates the new Trends filters.
+- [ ] Upload the recaptured `iphone-6.9/06-trends-overview.png` to the 1.3.1
+  submission in App Store Connect, replacing the old image in slot 10 of the iPhone
+  6.9-inch set. It shows the new Trends filters. See
+  [`docs/app-store-screenshots/README.md`](../app-store-screenshots/README.md).
 - [ ] Add the devices actually tested on this build to App Review Information →
   Notes.
 - [ ] Tag the uploaded commit `v1.3.1`.
