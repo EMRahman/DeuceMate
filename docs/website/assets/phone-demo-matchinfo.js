@@ -437,7 +437,7 @@
     body.append(footnote("Players come from your matches. Renaming or merging updates every match; forgetting removes a player from every match."));
     phone.showSheet("Players", body, { detent: "large" });
   }
-  function playerDetail(phone, p) {
+  function playerDetail(phone, p, onBack) {
     var body = h("div", "mi-page"), original = p.name, who = { id: p.id, name: p.name }, n = playerMatchCount(phone, who).length;
     var name = h("input", "mi-name-input mi-block"); name.value = p.name; name.maxLength = 40; name.setAttribute("aria-label", "Player name");
     name.addEventListener("change", function () { var v = clean(name.value); if (!v) { name.value = original; return; } mapPlayers(phone, who, function (q) { q.name = v; return q; }); original = v; if (!who.id) who = { name: v }; });
@@ -451,7 +451,7 @@
     body.append(group(null, merge), footnote("If the same person was added twice, merge this entry into the other one. Every match then uses that player."));
     var forget = phone.button("", function () { phone.confirm("Forget " + original + "?", "Removes " + original + " from every match on this iPhone and, when it holds those matches, your Apple Watch. Scores are kept.", "Forget Player", function () { mapPlayers(phone, who, function () { return null; }); playersSheet(phone); }); }, "mi-row"); forget.append(h("span", "mi-row-title mi-destructive", "Forget Player"));
     body.append(group(null, forget), footnote("Removes " + original + " from every match on this iPhone and, when it holds those matches, your Apple Watch. Scores are kept."));
-    phone.showSheet(original, body, { detent: "large", leading: backButton(phone, function () { playersSheet(phone); }), trailing: h("span", "phone-sheet-spacer") });
+    phone.showSheet(original, body, { detent: "large", leading: backButton(phone, onBack || function () { playersSheet(phone); }), trailing: h("span", "phone-sheet-spacer") });
   }
 
   // MARK: Opponents directory (OpponentsSection / OpponentsView), opponents only, by singles opponent + doubles pairs
@@ -475,10 +475,7 @@
     if (label(HAND, entry.hand)) style.push(kvRow("Handedness", label(HAND, entry.hand)));
     if (label(BACK, entry.backhand)) style.push(kvRow("Backhand", label(BACK, entry.backhand)));
     if (label(STYLE, entry.style)) style.push(kvRow("Play Style", label(STYLE, entry.style)));
-    if (style.length) body.append(group("Playing Style", style));
     var pending = matches.filter(function (r) { return !r.endTime; }), done = matches.filter(function (r) { return r.endTime; });
-    if (pending.length) body.append(group("Pending Matches", pending.map(function (r) { return matchRow(phone, r, function () { openRecord(phone, r); }); })));
-    body.append(group("Past Matches", done.length ? done.map(function (r) { return matchRow(phone, r, function () { openRecord(phone, r); }); }) : h("div", "mi-kv-head", "No completed matches yet")));
     var singles = done.filter(function (r) { return r.matchType !== "doubles" && (r.tags.opponents || []).length === 1; });
     var sc = [];
     if (!singles.length) sc.push(h("div", "mi-kv-head", "No completed matches yet"));
@@ -500,9 +497,17 @@
       })));
       body.append(h("p", "phone-note mi-footer", "Each row uses the same partner and exact opponent pair. Matches with incomplete player tags are not grouped."));
     }
-    var manage = phone.button("", function () { playersSheet(phone); }, "mi-row mi-link"); manage.append(phone.icon("person"), h("span", "mi-row-title", "Rename or Manage Player"));
-    body.append(group(null, manage));
-    phone.showSheet(entry.name, body, { detent: "large", leading: backButton(phone, function () { opponentsSheet(phone); }), trailing: h("span", "phone-sheet-spacer") });
+    if (style.length) body.append(group("Playing Style", style));
+    if (pending.length) body.append(group("Pending Matches", pending.map(function (r) { return matchRow(phone, r, function () { openRecord(phone, r); }); })));
+    body.append(group("Past Matches", done.length ? done.map(function (r) { return matchRow(phone, r, function () { openRecord(phone, r); }); }) : h("div", "mi-kv-head", "No completed matches yet")));
+    var manage = phone.button("Manage", function () {
+      playerDetail(phone, entry, function () {
+        var current = opponentEntries(phone).find(function (p) { return samePlayer(p, entry); });
+        if (current) opponentSheet(phone, current); else opponentsSheet(phone);
+      });
+    });
+    manage.setAttribute("aria-label", "Rename or Manage Player");
+    phone.showSheet(entry.name, body, { detent: "large", leading: backButton(phone, function () { opponentsSheet(phone); }), trailing: manage });
   }
   function opponentsSheet(phone) {
     var body = h("div", "mi-editor"), entries = opponentEntries(phone);

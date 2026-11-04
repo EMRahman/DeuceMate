@@ -95,35 +95,6 @@ private struct OpponentDetailView: View {
         Group {
             if let opponent {
                 List {
-                    if opponent.handedness != nil || opponent.backhand != nil || opponent.playStyle != nil {
-                        Section("Playing Style") {
-                            if let handedness = opponent.handedness {
-                                LabeledContent("Handedness", value: handedness.displayLabel)
-                            }
-                            if let backhand = opponent.backhand {
-                                LabeledContent("Backhand", value: backhand.displayLabel)
-                            }
-                            if let playStyle = opponent.playStyle {
-                                LabeledContent("Play Style", value: playStyle.displayLabel)
-                            }
-                        }
-                    }
-
-                    if !pendingMatches.isEmpty {
-                        Section("Pending Matches") {
-                            ForEach(pendingMatches) { record in matchRow(record) }
-                        }
-                    }
-
-                    Section("Past Matches") {
-                        if completedMatches.isEmpty {
-                            Text("No completed matches yet")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(completedMatches) { record in matchRow(record) }
-                        }
-                    }
-
                     Section("Head to Head · Singles") {
                         headToHeadRow(HeadToHead.record(vs: opponentID, in: store.history, excluding: nil, matchType: .singles))
                     }
@@ -153,19 +124,50 @@ private struct OpponentDetailView: View {
                         }
                     }
 
-                    Section {
-                        NavigationLink {
-                            PlayerManageView(playerID: opponentID)
-                                .environmentObject(syncService)
-                        } label: {
-                            Label("Rename or Manage Player", systemImage: "person.crop.circle")
+                    if opponent.handedness != nil || opponent.backhand != nil || opponent.playStyle != nil {
+                        Section("Playing Style") {
+                            if let handedness = opponent.handedness {
+                                LabeledContent("Handedness", value: handedness.displayLabel)
+                            }
+                            if let backhand = opponent.backhand {
+                                LabeledContent("Backhand", value: backhand.displayLabel)
+                            }
+                            if let playStyle = opponent.playStyle {
+                                LabeledContent("Play Style", value: playStyle.displayLabel)
+                            }
                         }
-                        .accessibilityIdentifier("opponent-manage-player")
+                    }
+
+                    if !pendingMatches.isEmpty {
+                        Section("Pending Matches") {
+                            ForEach(pendingMatches) { record in matchRow(record) }
+                        }
+                    }
+
+                    Section("Past Matches") {
+                        if completedMatches.isEmpty {
+                            Text("No completed matches yet")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(completedMatches) { record in matchRow(record) }
+                        }
                     }
                 }
                 .accessibilityIdentifier("opponent-detail")
                 .navigationTitle(opponent.name)
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        NavigationLink {
+                            PlayerManageView(playerID: opponentID)
+                                .environmentObject(syncService)
+                        } label: {
+                            Text("Manage")
+                        }
+                        .accessibilityLabel("Rename or Manage Player")
+                        .accessibilityIdentifier("opponent-manage-player")
+                    }
+                }
             } else {
                 ContentUnavailableView("Opponent Removed", systemImage: "person.crop.circle.badge.xmark")
                     .accessibilityIdentifier("opponent-detail")
