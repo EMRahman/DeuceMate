@@ -141,6 +141,8 @@
       info: '<circle cx="12" cy="12" r="10"/><path d="M12 11v6m0-10h0" stroke-width="2.2"/>',
       help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7m0 3h0"/>',
       mail: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="m2 7 10 7 10-7"/>',
+      bubble: '<path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-11a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/>',
+      star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/>',
       warning: '<path d="m12 2 11 20H1L12 2Z"/><path d="M12 9v6m0 3h0"/>'
     };
     var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");

@@ -1,5 +1,6 @@
 // PastMatchesView.swift — iPhone equivalent of the watch's MatchHistoryView.
 import SwiftUI
+import StoreKit
 import DeuceMateCore
 
 /// Renders a score string with the tiebreak parenthetical (e.g. "(7-2)") as superscript.
@@ -60,8 +61,11 @@ struct PastMatchesView: View {
     @EnvironmentObject private var syncService: PhoneMatchSyncService
     @Environment(\.appTheme) private var theme
     @Environment(\.openURL) private var openURL
+    @Environment(\.requestReview) private var requestReview
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var selected: MatchRecord?
+    @State private var reviewPrompt = ReviewPromptCoordinator()
     @State private var showSettings = false
     @State private var showScoreboard = false
     @State private var showManualEntry = false
@@ -261,7 +265,7 @@ struct PastMatchesView: View {
     var body: some View {
         NavigationStack {
             screenContent
-            .sheet(item: $selected) { record in
+            .sheet(item: $selected, onDismiss: requestReviewIfEarned) { record in
                 NavigationStack {
                     MatchDetailView(record: record)
                         .environmentObject(syncService)
@@ -302,6 +306,12 @@ struct PastMatchesView: View {
                     return ", latest \(Self.dateFormatter.string(from: date))"
                 }()
                 Text("Found a backup with \(preview.recordCount) match\(preview.recordCount == 1 ? "" : "es")\(dateStr). Restore it to this iPhone?")
+            }
+            .onChange(of: selected?.id) { _, id in
+                if let id { reviewPrompt.reportOpened(matchID: id, isActive: scenePhase == .active) }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                reviewPrompt.scenePhaseChanged(isActive: phase == .active)
             }
             .onChange(of: store.pendingRestorePreview) { _, preview in
                 if preview != nil { showRestorePrompt = true }
@@ -663,6 +673,26 @@ struct PastMatchesView: View {
             syncService.sendDeleteMatchOnWatch(pending.record.id)
         }
         pendingDelete = nil
+    }
+
+    // MARK: - Review prompt
+
+    /// Runs when a match report closes, the moment the player has just finished
+    /// reading their stats. `requestReview` may show nothing; that's Apple's call.
+    private func requestReviewIfEarned() {
+        let closedAt = Date()
+        Task { @MainActor in
+            // Let the list settle, and let a save made on the way out (End at
+            // Current Score) reach `store.history`.
+            try? await Task.sleep(for: .seconds(1))
+            guard selected == nil, pendingDelete == nil, scenePhase == .active,
+                  !showSettings, !showScoreboard, !showManualEntry,
+                  !showICloudGuide, !showRestorePrompt,
+                  reviewPrompt.shouldRequestReviewOnClose(history: store.history, now: closedAt)
+            else { return }
+            reviewPrompt.recordRequest()
+            requestReview()
+        }
     }
 
     // MARK: - Row

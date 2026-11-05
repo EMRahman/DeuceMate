@@ -529,6 +529,16 @@ struct SettingsView: View {
                         Label("Contact Support", systemImage: "envelope.fill")
                     }
                 }
+                if let url = Self.feedbackEmailURL {
+                    Link(destination: url) {
+                        Label("Send Feedback", systemImage: "bubble.left.fill")
+                    }
+                }
+                if let url = URL(string: ReviewPromptPolicy.writeReviewURL) {
+                    Link(destination: url) {
+                        Label("Rate DeuceMate", systemImage: "star.fill")
+                    }
+                }
             } header: {
                 Text("About")
             } footer: {
@@ -913,13 +923,17 @@ struct SettingsView: View {
 
     /// mailto: link with the app version in the subject so support emails
     /// arrive pre-triaged.
-    private static let supportEmailURL: URL? = {
+    private static let supportEmailURL = emailURL(topic: "Support")
+
+    private static let feedbackEmailURL = emailURL(topic: "Feedback")
+
+    private static func emailURL(topic: String) -> URL? {
         var components = URLComponents()
         components.scheme = "mailto"
         components.path = "mail@ehsanrahman.com"
         components.queryItems = [
-            URLQueryItem(name: "subject", value: "DeuceMate Support (v\(appVersion), build \(appBuild))")
+            URLQueryItem(name: "subject", value: "DeuceMate \(topic) (v\(appVersion), build \(appBuild))")
         ]
         return components.url
-    }()
+    }
 }

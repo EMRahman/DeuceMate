@@ -196,7 +196,9 @@
       valueRow("Build", "Web"),
       linkRow(phone, "hand", "Privacy Policy", "privacy.html"),
       linkRow(phone, "help", "Support & FAQ", "support.html"),
-      linkRow(phone, "mail", "Contact Support", "mailto:mail@ehsanrahman.com?subject=DeuceMate%20Support")
+      linkRow(phone, "mail", "Contact Support", "mailto:mail@ehsanrahman.com?subject=DeuceMate%20Support"),
+      linkRow(phone, "bubble", "Send Feedback", "mailto:mail@ehsanrahman.com?subject=DeuceMate%20Feedback"),
+      linkRow(phone, "star", "Rate DeuceMate", "https://apps.apple.com/app/id6757105622?action=write-review")
     ], "No developer backend, analytics, or tracking. This browser replica keeps matches in local browser storage; the native app stores them on your Apple devices with an automatic copy, minus HealthKit measurements, in your personal iCloud Drive. Exports or shares may send data to a recipient or service you choose."));
     // Form headers and explanatory footers sit outside the rounded list rows.
     out.querySelectorAll(".phone-card").forEach(function (group) {
