@@ -263,10 +263,17 @@ h2.title { font-size: clamp(1.9rem, 4.4vw, 2.9rem); font-weight: 800; }
 }
 .watch img { display: block; width: 100%; height: auto; border-radius: 42px; }
 
-/* Hero demo cluster (static watch shot + iPhone mirror shot). */
-.hero-demo { margin: 50px auto 0; max-width: 760px; }
-.hero-demo-cap { text-align: center; color: var(--muted); font-size: .92rem; margin: 18px auto 0; max-width: 52ch; }
-.hero-demo-cap a { color: var(--green); white-space: nowrap; }
+/* Hero flow: score on the watch, tag the point, see what to fix on the iPhone. */
+.hero-flow {
+  list-style: none; margin: 56px auto 0; padding: 0; max-width: 900px;
+  display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 28px; align-items: center;
+}
+.hero-step { min-width: 0; }
+.hero-step .watch { width: 100%; max-width: 210px; margin: 0 auto; }
+.hero-step .watch img { height: 100%; object-fit: cover; }
+.hero-step .phone { width: 100%; max-width: 300px; margin: 0 auto; }
+.hero-step-cap { color: var(--muted); font-size: .92rem; line-height: 1.45; margin: 16px auto 0; max-width: 30ch; }
+.hero-step-cap strong { display: block; color: var(--ink); font-size: 1.02rem; margin-bottom: 3px; }
 
 /* "Simulated browser demo" callout (used on try.html). */
 .sim-note {
@@ -449,6 +456,11 @@ details.faq .body a { color: var(--green); }
   .feature { grid-template-columns: 1fr; gap: 30px; padding: 44px 0; }
   .feature.flip .feature-media { order: 0; }
   .feature-media { order: -1; }
+}
+@media (max-width: 680px) {
+  /* The two watch steps share a row; the coaching result gets the width. */
+  .hero-flow { grid-template-columns: 1fr 1fr; gap: 28px 16px; margin-top: 44px; align-items: start; }
+  .hero-step-phone { grid-column: 1 / -1; }
 }
 @media (max-width: 560px) {
   section { padding: 64px 0; }

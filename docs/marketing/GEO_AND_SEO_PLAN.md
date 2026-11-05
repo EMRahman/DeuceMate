@@ -48,7 +48,7 @@ Use this checklist to track progress across technical fixes, content updates, an
 
 | Surface | What Works Well Now | Key Gaps Holding Back GEO / SEO |
 |---------|---------------------|---------------------------------|
-| **Website (`docs/website/index.html`)** | Fast static HTML, zero external bloat, rich `alt` attributes on screenshots, strong privacy messaging, interactive browser replica at `try.html`. | `<h1>` (*"Never lose track of the score again."*) omits *"tennis"*, *"Apple Watch"*, and *"score tracker"*. No JSON-LD schema, no `robots.txt`, no `sitemap.xml`, no `llms.txt`, relative 2.1 MB `og:image`, missing v1.2 Trends & v1.3 Head-to-Head features. |
+| **Website (`docs/website/index.html`)** | Fast static HTML, zero external bloat, rich `alt` attributes on screenshots, strong privacy messaging, interactive browser replica at `try.html`. | `<h1>` (*"Know what to work on after every match."*) deliberately leads with coaching, so the search terms *"tennis"*, *"Apple Watch"* and *"score tracker"* sit in the `<title>` and description. No JSON-LD schema, no `robots.txt`, no `sitemap.xml`, no `llms.txt`, relative 2.1 MB `og:image`, missing v1.2 Trends & v1.3 Head-to-Head features. |
 | **Support & Setup (`support.html`, `setup.html`)** | Clear task-oriented headings, semantic `<details>` FAQ blocks, accessible step-by-step structure. | Missing `FAQPage` and `HowTo` JSON-LD schemas; deep reference content in `docs/USER_GUIDE.md` is not published to the website. |
 | **GitHub (`README.md`)** | Clear value proposition, App Store badges, screenshots with descriptive captions, architecture transparency. | Does not link to `try.html` (the browser demo); omits v1.2 Performance Trends and v1.3 Opponent Head-to-Head / Match Comparisons / Notes; lacks a structured comparison table. |
 | **HTML Match Export (`MatchWebViewModel+Promo.swift`)** | Every shared `.html` match report includes a top `"Tracked with DeuceMate"` banner with App Store and website links. | Website link anchor text is generic (`"Learn more"`), missing an opportunity for descriptive anchor context when reports are shared online. |
@@ -218,10 +218,10 @@ Embed inside `<head>` in `docs/website/index.html`:
 
 | Element | Current (`docs/website/index.html`) | Recommended Update |
 |---------|-------------------------------------|--------------------|
-| `<title>` | `DeuceMate — Tennis scoring, live on your wrist. Coaching, from your data.` | `DeuceMate — Free Tennis Score Tracker & Keeper App for Apple Watch & iPhone` |
-| `<meta name="description">` | `Now on the App Store — free. DeuceMate keeps score on your Apple Watch, mirrors it live on your iPhone, and turns every match into 20+ stats and one-tap AI coaching. No ads. No tracking.` | `Free, open-source tennis and padel score tracker for Apple Watch and iPhone. Swipe to score on your wrist, hear live umpire announcements, track 20+ match stats, head-to-head records, and get one-tap AI coaching. No ads, no subscriptions.` |
+| `<title>` | `DeuceMate — Free Tennis Score Tracker & Coaching for Apple Watch` | `DeuceMate — Free Tennis Score Tracker & Keeper App for Apple Watch & iPhone` |
+| `<meta name="description">` | `Free tennis score tracker for Apple Watch and iPhone. Swipe to keep score, tag how points ended, and see what to work on after every match, with 20+ stats, coaching insights and one-tap AI coaching. No ads. No tracking.` | `Free, open-source tennis and padel score tracker for Apple Watch and iPhone. Swipe to score on your wrist, hear live umpire announcements, track 20+ match stats, head-to-head records, and get one-tap AI coaching. No ads, no subscriptions.` |
 | Hero Eyebrow | `🎾 Now on the App Store — free, for club & recreational players` | `🎾 Free, Open-Source Tennis & Padel Score Tracker for Apple Watch & iPhone` |
-| `<h1>` | `Never lose track of the score again.` | `Never lose track of the tennis score again.` *(or pair with a semantic subheading containing "Apple Watch tennis score keeper & match tracker")* |
+| `<h1>` | `Know what to work on after every match.` | Keep the coaching-first headline (owner decision, Nov 2026). Carry the score-tracker search terms in the `<title>` and description. |
 
 ### 3.6 Comparison Table for GEO Citability (`index.html` & `README.md`)
 LLMs answering *"What is the best tennis score tracker app?"* look for side-by-side feature matrices. Adding a concise comparison table gives retrieval models pre-structured facts:

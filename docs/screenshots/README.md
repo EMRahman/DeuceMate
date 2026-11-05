@@ -21,7 +21,7 @@ shots so the gallery feels cohesive; only `06-themes.png` shows multiple themes.
 
 | # | Filename | What to capture | Screen (source file) |
 |---|----------|-----------------|----------------------|
-| 1 | `01-hero-watch-iphone.png` | A live-match iPhone landscape scoreboard. (Despite the filename this is currently a solo iPhone shot, not a true watch+iPhone composite — a genuine side-by-side composite needs a paired watch+phone simulator session; see "Live-match shots" below.) | `DeuceMate/DeuceMate/Views/LiveScoreboardView.swift` |
+| 1 | `01-hero-watch-iphone.png` | A live-match iPhone landscape scoreboard, now used by the README gallery and no longer by the website hero. (Despite the filename this is currently a solo iPhone shot, not a true watch+iPhone composite — a genuine side-by-side composite needs a paired watch+phone simulator session; see "Live-match shots" below.) | `DeuceMate/DeuceMate/Views/LiveScoreboardView.swift` |
 | 2 | `02-points-momentum-graph.png` | iPhone **points-momentum graph** with the heart-rate and steps overlays on, set bands and outcome markers visible. The flagship "wow" shot. | `DeuceMate/DeuceMate/Views/PointsGraphView.swift` |
 | 3 | `03-match-stats.png` | iPhone **match stats** tab — Outcome Breakdown (Winners/Unforced Errors/Aggression Index, with raw counts inside the bars). | `DeuceMate/DeuceMate/Views/MatchDetailView.swift` |
 | 4 | `04-watch-scoreboard.png` | **Clean solo** Apple Watch live scoreboard mid-match — score rows, momentum strip, heart-rate badge. | `DeuceMate/DeuceMate Watch App/ContentView.swift` |
@@ -38,6 +38,9 @@ shots so the gallery feels cohesive; only `06-themes.png` shows multiple themes.
 | 16 | `16-watch-match-setup.png` | Watch **Match Setup sheet** — the Singles/Doubles choice above the format list, with a format selected and its detail line visible. Reached by tapping the setup row in 15. | `DeuceMate/DeuceMate Watch App/HomeView.swift` |
 | 17 | `17-watch-changeover-prompt.png` | The **set-complete changeover modal** ("Set complete — players change ends" + OK). The prompt half of the ends-switch story; pairs with 18. Committed for the App Store set, where the prompt → sticky before/after is worth showing; **not** currently used by the site or README, which show only the sticky half. | `DeuceMate/DeuceMate Watch App/ContentView.swift` (`ChangeoverAckOverlay`) |
 | 18 | `18-watch-changeover-sticky.png` | The **sticky ends reminder** on the live scoreboard after the modal is dismissed — the banner sits in the momentum strip's slot until the first point of the next set. | `DeuceMate/DeuceMate Watch App/ContentView.swift` |
+| 19 | `19-coaching-insights.jpg` | Website hero's result step: **Coaching Insights** above Pulse Coach. Copy of `docs/readme/coaching-insights.jpg` (the website can't load from outside its published folder), so recapture both together. |
+| 20 | `20-watch-tag-point.jpg` | Website hero's tagging step: the Watch **won-point sheet**. Copy of `docs/readme/watch-tag-point.jpg`, at that capture's 416×496 size. |
+| 21 | `21-trends.jpg` | Website **Trends** feature: filters above the Errors and Serve & Return charts. Copy of `docs/readme/trends.jpg`. |
 
 > **15–18 are manual captures** (see "Manual-only shots" below) — the automation
 > drives a live match, not the start screen, the setup sheet, or a set boundary.
