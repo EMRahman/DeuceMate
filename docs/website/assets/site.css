@@ -206,12 +206,12 @@ h2.title { font-size: clamp(1.9rem, 4.4vw, 2.9rem); font-weight: 800; }
   transition: transform .22s ease, border-color .22s ease, background .22s ease;
 }
 .card:hover { transform: translateY(-4px); border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.05); }
-.card .ic {
+.card .tile-ic {
   width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center;
   background: rgba(47,208,138,.12); border: 1px solid rgba(47,208,138,.25);
   margin-bottom: 16px;
 }
-.card .ic svg { width: 24px; height: 24px; stroke: var(--green); }
+.card .tile-ic svg { width: 24px; height: 24px; stroke: var(--green); }
 .card h3 { font-size: 1.18rem; font-weight: 750; margin-bottom: 8px; }
 .card p { color: var(--muted); margin: 0; font-size: .98rem; }
 .card .pain { color: var(--muted-2); font-size: .82rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; margin: 0 0 10px; }
@@ -283,6 +283,22 @@ h2.title { font-size: clamp(1.9rem, 4.4vw, 2.9rem); font-weight: 800; }
 }
 .sim-note strong { color: var(--ink); }
 
+/* Home page demo. Sits right after the hero, so it needs less top padding. */
+.home-try { padding-top: 48px; padding-bottom: 48px; }
+.cta-final.home-try-launch { padding: 30px 26px; }
+.cta-final.home-try-launch p { margin-top: 0; }
+.home-try-launch .hero-actions { margin-top: 22px; }
+.home-try-status:empty { display: none; }
+.home-try-status { text-align: center; }
+/* The demo's stylesheet reserves room for try.html's sticky device switcher.
+   Here that would push every other section's menu jump down the page. */
+html:has(#try .companion-demo) { scroll-padding-top: 0; }
+#try .device-panel { scroll-margin-top: 86px; }
+@media (max-width: 800px) { #try .device-panel { scroll-margin-top: 132px; } }
+/* The simulated phone nearly fills a real phone's screen. Scrolling must carry
+   on to the page at its top and bottom, or a visitor can get stuck in the demo. */
+#try .phone-body { overscroll-behavior: auto; }
+
 /* --- AI Coach spotlight (full-bleed band) -------------------------------- */
 .spotlight {
   position: relative; overflow: hidden;
@@ -308,7 +324,7 @@ h2.title { font-size: clamp(1.9rem, 4.4vw, 2.9rem); font-weight: 800; }
 
 .apps-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 26px 0 0; align-items: center; }
 .apps-row .lbl { color: var(--muted-2); font-size: .9rem; margin-right: 4px; }
-.chip {
+.app-chip {
   display: inline-flex; align-items: center; gap: 7px;
   background: var(--glass-2); border: 1px solid var(--line); border-radius: 10px;
   padding: 8px 13px; font-size: .92rem; font-weight: 600; color: var(--ink);
@@ -335,8 +351,8 @@ h2.title { font-size: clamp(1.9rem, 4.4vw, 2.9rem); font-weight: 800; }
   transition: transform .2s ease, border-color .2s ease;
 }
 .mini:hover { transform: translateY(-3px); border-color: rgba(255,255,255,.16); }
-.mini .ic { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: rgba(79,155,255,.12); border: 1px solid rgba(79,155,255,.25); margin-bottom: 14px; }
-.mini .ic svg { width: 21px; height: 21px; stroke: var(--blue); }
+.mini .tile-ic { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: rgba(79,155,255,.12); border: 1px solid rgba(79,155,255,.25); margin-bottom: 14px; }
+.mini .tile-ic svg { width: 21px; height: 21px; stroke: var(--blue); }
 .mini h3 { font-size: 1.06rem; font-weight: 720; margin-bottom: 6px; }
 .mini p { margin: 0; color: var(--muted); font-size: .94rem; }
 
@@ -347,7 +363,7 @@ h2.title { font-size: clamp(1.9rem, 4.4vw, 2.9rem); font-weight: 800; }
   display: flex; align-items: center; gap: 11px;
   background: var(--glass); border: 1px solid var(--line); border-radius: 14px; padding: 11px 15px;
 }
-.theme-card .sw { width: 24px; height: 24px; border-radius: 7px; flex: none; box-shadow: 0 2px 10px -2px rgba(0,0,0,.5); }
+.theme-card .swatch { width: 24px; height: 24px; border-radius: 7px; flex: none; box-shadow: 0 2px 10px -2px rgba(0,0,0,.5); }
 .theme-card .tx { display: flex; flex-direction: column; line-height: 1.2; }
 .theme-card .nm { font-weight: 700; font-size: .92rem; }
 .theme-card .ct { color: var(--muted); font-size: .78rem; margin-top: 2px; }

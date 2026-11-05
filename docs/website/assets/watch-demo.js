@@ -1321,8 +1321,23 @@
      "R" (new match) is the sheet's one bypass — plan's Undo model: "'New
      match' / R likewise clears sheet + pending + stats." Everything else is
      blocked while a sheet is open (plan §UI state machine). */
+  /* data-keyboard="scoped" (the home page): the keys belong to the page until
+     the visitor is using the Watch, and go back once it's off screen, so they
+     can still scroll past the demo. */
+  var keyboardScoped = useKeyboard && root.getAttribute("data-keyboard") === "scoped";
+  var keyboardEngaged = !keyboardScoped;
+  if (keyboardScoped) {
+    var keyboardArea = root.closest(".device-panel") || root;
+    ["pointerdown", "focusin"].forEach(function (type) {
+      document.addEventListener(type, function (e) { keyboardEngaged = keyboardArea.contains(e.target); }, true);
+    });
+  }
   if (useKeyboard) document.addEventListener("keydown", function (e) {
     if (e.target.closest && e.target.closest("#iphone-demo, input, textarea, select, dialog")) return;
+    if (keyboardScoped) {
+      var box = root.getBoundingClientRect();
+      if (!keyboardEngaged || box.bottom < 0 || box.top > window.innerHeight) return;
+    }
     if (!el.play || el.play.hidden || shellOpen()) return;
     if (e.key.toLowerCase() === "r" && !appMode) { startMatch(); e.preventDefault(); return; }
     if (doublesDecisionPending()) return; // real <button>s handle their own Enter/Space once focused
