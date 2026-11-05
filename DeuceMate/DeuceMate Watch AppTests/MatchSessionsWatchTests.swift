@@ -141,6 +141,159 @@ struct MatchSessionsWatchTests {
         #expect(store.loadHistory().first?.totalCaloriesKcal == 33)
     }
 
+    // MARK: - A live match is not in history
+
+    private final class LiveIDSpy: MatchSyncService {
+        var liveIDs: [UUID?] = []
+        var lastSyncDate: Date? { nil }
+        func start() {}
+        func sendMatch(_ record: MatchRecord, announcement: String?) {}
+        func sendFullHistory(_ records: [MatchRecord]) {}
+        func clearActiveMatch() {}
+        func liveMatchDidChange(_ matchID: UUID?) { liveIDs.append(matchID) }
+    }
+
+    private func tags(at seconds: TimeInterval) -> MatchTags {
+        MatchTags(opponents: [TaggedPlayer(name: "Alex")], competitionType: .league,
+                  updatedAt: Date(timeIntervalSince1970: seconds))
+    }
+
+    /// Live state for `saved`, as a resume would leave it, with the store holding `leftover`.
+    private func relaunch(saved: MatchRecord, leftover: MatchRecord) throws -> (ScoreViewModel, StatsStore, URL) {
+        let store = StatsStore(fileURL: url()), stateURL = url()
+        store.saveHistory([saved])
+        let first = ScoreViewModel(statsStore: store, stateFileURL: stateURL, workoutManager: WorkoutSpy())
+        #expect(first.resumeMatch(saved))
+        store.saveHistory([leftover])
+        let restored = ScoreViewModel(statsStore: store, stateFileURL: stateURL, workoutManager: WorkoutSpy())
+        restored.loadState()
+        return (restored, store, stateURL)
+    }
+
+    @Test func resumeMovesTheMatchFromHistoryToLiveStateAndParkMovesItBack() throws {
+        let store = StatsStore(fileURL: url()), stateURL = url(), saved = parked()
+        store.saveHistory([saved])
+        let vm = ScoreViewModel(statsStore: store, stateFileURL: stateURL, workoutManager: WorkoutSpy())
+        #expect(vm.resumeMatch(saved))
+        #expect(store.loadHistory().isEmpty)
+        let live = try JSONDecoder().decode(ScoreViewModel.AppState.self, from: Data(contentsOf: stateURL))
+        #expect(live.currentMatchID == saved.id)
+
+        vm.statsTrackingEnabled = false
+        vm.winPoint(player: .me)
+        vm.resetMatch()
+        let reparked = try #require(store.loadHistory().first)
+        #expect(reparked.id == saved.id)
+        #expect(reparked.currentPointsMe == 1)
+        #expect(reparked.parkedAt != nil)
+    }
+
+    @Test func relaunchRemovesAnInProgressCopyLeftByACrashAndKeepsItsNewerTags() throws {
+        let saved = parked()
+        var leftover = saved
+        leftover.tags = tags(at: 500)
+        let (restored, store, stateURL) = try relaunch(saved: saved, leftover: leftover)
+        #expect(restored.currentMatchID == saved.id)
+        #expect(store.loadHistory().isEmpty)
+        #expect(restored.liveMatchTags == leftover.tags)
+        // The tags left the store, so the live file must now hold them.
+        let live = try JSONDecoder().decode(ScoreViewModel.AppState.self, from: Data(contentsOf: stateURL))
+        #expect(live.currentMatchTags == leftover.tags)
+    }
+
+    @Test func relaunchKeepsACompletedCopyOfTheLiveIdentity() throws {
+        let saved = parked()
+        let completed = saved.endingAtCurrentScore()
+        let (restored, store, _) = try relaunch(saved: saved, leftover: completed)
+        #expect(restored.currentMatchID == saved.id)
+        #expect(store.loadHistory().map(\.id) == [saved.id])
+        #expect(store.loadHistory().first?.isInProgress == false)
+    }
+
+    @Test func relaunchLeavesOtherParkedMatchesInHistory() throws {
+        let saved = parked(), other = parked()
+        let (restored, store, _) = try relaunch(saved: saved, leftover: other)
+        #expect(restored.currentMatchID == saved.id)
+        #expect(store.loadHistory().map(\.id) == [other.id])
+    }
+
+    @Test func resumeStillSucceedsWhenTheStoredCopyCannotBeRemovedAndPushesLeaveItOut() throws {
+        let failure = FailureSwitch()
+        let store = StatsStore(fileURL: url(), writeHistory: { records, target in
+            if failure.fail { throw CocoaError(.fileWriteOutOfSpace) }
+            try BackupExcludedFileWriter.write(records, to: target)
+        })
+        let saved = parked(); store.saveHistory([saved])
+        let stateURL = url()
+        let vm = ScoreViewModel(statsStore: store, stateFileURL: stateURL, workoutManager: WorkoutSpy())
+        failure.fail = true
+        #expect(vm.resumeMatch(saved))
+        #expect(vm.currentMatchID == saved.id)
+        #expect(store.loadHistory().map(\.id) == [saved.id])
+        #expect(WatchHistory.recordsForPush(store.loadHistory(), liveMatchID: vm.currentMatchID).isEmpty)
+
+        // The next launch finishes the job once writes work again.
+        failure.fail = false
+        let restored = ScoreViewModel(statsStore: store, stateFileURL: stateURL, workoutManager: WorkoutSpy())
+        restored.loadState()
+        #expect(store.loadHistory().isEmpty)
+    }
+
+    @Test func syncServiceFollowsTheLiveMatchThroughItsWholeLifecycle() throws {
+        let store = StatsStore(fileURL: url()), stateURL = url(), failure = FailureSwitch()
+        let saved = parked(), other = parked(); store.saveHistory([saved, other])
+        let vm = ScoreViewModel(statsStore: store, stateFileURL: stateURL, writeLiveState: { state, target in
+            if failure.fail && state.currentMatchID == nil { throw CocoaError(.fileWriteOutOfSpace) }
+            try BackupExcludedFileWriter.write(state, to: target)
+        }, workoutManager: WorkoutSpy())
+        let spy = LiveIDSpy()
+        vm.syncService = spy
+        #expect(spy.liveIDs.last == .some(nil))
+
+        #expect(vm.resumeMatch(saved))
+        #expect(spy.liveIDs.last == saved.id)
+
+        // Switching matches parks the first and moves on to the second.
+        #expect(vm.resumeMatch(other))
+        #expect(spy.liveIDs.last == other.id)
+
+        // A failed park leaves the match live, with a stored copy that goes stale as scoring continues.
+        failure.fail = true
+        vm.resetMatch()
+        #expect(vm.currentMatchID == other.id)
+        #expect(spy.liveIDs.last == other.id)
+        #expect(store.loadHistory().contains { $0.id == other.id })
+        #expect(WatchHistory.recordsForPush(store.loadHistory(), liveMatchID: vm.currentMatchID).map(\.id) == [saved.id])
+
+        failure.fail = false
+        vm.resetMatch()
+        #expect(spy.liveIDs.last == .some(nil))
+    }
+
+    @Test func aServiceWiredUpAfterLoadStateLearnsTheRestoredLiveMatch() throws {
+        let saved = parked()
+        let (restored, _, _) = try relaunch(saved: saved, leftover: parked())
+        let spy = LiveIDSpy()
+        restored.syncService = spy
+        #expect(spy.liveIDs == [saved.id])
+    }
+
+    @Test func watchServiceLeavesTheLiveInProgressRecordOutOfHistoryPushes() {
+        let service = WatchMatchSyncService()
+        let live = parked(), other = parked(), completedLive = parked().endingAtCurrentScore()
+        #expect(service.recordsForHistoryPush([live, other]).map(\.id) == [live.id, other.id])
+
+        service.liveMatchDidChange(live.id)
+        #expect(service.recordsForHistoryPush([live, other]).map(\.id) == [other.id])
+        #expect(service.recordsForHistoryPush([live]).isEmpty)
+
+        service.liveMatchDidChange(completedLive.id)
+        #expect(service.recordsForHistoryPush([completedLive]).map(\.id) == [completedLive.id])
+
+        service.liveMatchDidChange(nil)
+        #expect(service.recordsForHistoryPush([live, other]).map(\.id) == [live.id, other.id])
+    }
+
     @Test func unreadableOrFutureLiveStateRefusesOverwriteAndScoring() throws {
         for future in [false, true] {
             let stateURL = url()

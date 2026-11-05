@@ -145,7 +145,7 @@ anything portable; no `.pbxproj` change needed — the package globs its sources
 | `Sync/SyncIncomingPayload.swift`, `MatchSyncTransport.swift`, `MatchMergePolicy.swift` | Decode/route incoming payloads, incl. the sanitized `.matchTagsUpdate(matchID:tags:)` event, which **both** apps route. Watch (`WatchMatchSyncService`): a stored match goes through metadata-only `StatsStore.updateTags` (never `appendMatch`/`.singleMatch`, never creates a record), and `onMatchTagsReceived` → `ScoreViewModel.applyIncomingMatchTags` merges it into `liveMatchTags` for the live match (which isn't in history); captions are read-only in `MatchHistoryView`/`MatchStatsView`. Phone (`PhoneMatchSyncService`, v1 watches never author tags): merges defensively via `PhoneStatsStore.applyIncomingTags` (tag clock + forgotten-player scrub, unknown ids ignored) and, when its own copy then supersedes what arrived — a stale echo or a scrub — answers with a `matchTagsUpdate` of the phone's tags; merge policy decides watch-vs-phone **body** winner, then merges `tags` by their own clock on every return path (the equal-`endTime` untagged-watch-copy hazard, MATCH_TAGS_PLAN.md §3) and `merge(…forgottenPlayers:)` scrubs forgotten players. Any new merge site must do the same. |
 | `Sync/LiveScoreboardStatus.swift` | Pure rule for the iPhone live scoreboard and its browser mirror: LIVE or WAITING FOR WATCH, whether swipes and category actions run, and the matching copy. Reachability doesn't prove the score is current, so the copy only ever calls it the last score received. |
 | `Sync/MatchStorageLocation.swift` | Pure derivation of where a match lives (`both` / `phoneOnly` / `watchOnly`) from the watch's reported id manifest vs the phone's store. Drives the iOS storage-location indicators. |
-| `Sync/WatchMirror.swift`, `WatchHistoryCap.swift` | Pure merge/prune rules for the phone's mirror of the watch's rolling history; `WatchHistory.cap` (25) lives here so the watch (enforces) and phone (explains) cite one number. |
+| `Sync/WatchMirror.swift`, `WatchHistoryCap.swift` | Pure merge/prune rules for the phone's mirror of the watch's rolling history; `WatchHistory.cap` (25) lives here so the watch (enforces) and phone (explains) cite one number, along with `recordsForPush`, which keeps an in-progress copy of the live match out of full-history pushes. |
 | `Sync/ArchiveBackupPolicy.swift` | Pure one-way iCloud backup policy: builds outbound snapshots from the phone archive (stripping the five HealthKit-derived fields to comply with App Store Review Guideline 5.1.3(ii)), handles the one-time initial restore before the local archive is initialized (using `isInProgress`, so completed draws remain final), and defines `BackupPreview` (record count + newest date, used for the restore prompt). Used by `PhoneStatsStore`. |
 | `Persistence/HealthSidecarPolicy.swift` | Pure split/merge policy for the phone's local archive: projects exactly the five HealthKit-derived fields into a backup-excluded sidecar and reconstructs full records in memory without overwriting existing non-nil Health values. |
 | `Persistence/ManualMatchArchiveBackup.swift` | Versioned full-fidelity JSON codec + merge/replace policy for the iPhone Settings > Backup & Transfer manual archive export/import. Manual exports intentionally include HealthKit-derived fields and must stay separate from iCloud backup policy. Carries an optional `forgottenPlayers` ledger (additive within schema 1). |
@@ -557,7 +557,7 @@ compiler does not connect** (see §5). To add one, keep them consistent:
   the forgotten-player ledger.
   **Enforced on the watch (PR 2):** `StatsStore.appendMatch` merges the stored
   copy's tags forward; `ScoreViewModel.liveMatchTags` carries them across resume
-  (which retains the archived checkpoint until the next successful park/finalize) and into every checkpoint/finalize
+  and into every checkpoint/finalize
   record and `appState.json`; `completeStoredMatch` copies the record so tags
   survive; `StatsStore.updateTags` (reached only from `.matchTagsUpdate`) is
   metadata-only and never creates a record. `MatchTagsWatchTests` pins all of it —
@@ -652,8 +652,15 @@ keeps terminal tiebreak points visible, and suppresses unknown suffix-history ga
 ### Confirmed play sessions
 
 Explicit history resume persists an additive AppState candidate before opening the
-match; it retains the archived checkpoint for crash/write-failure safety. Reopening
-the same live identity or background/foreground creates no event. Park/finalize
+match, and only then removes the stored copy, so a crash leaves it in at least one
+file. **A live match is not in history**: push, manifest, Past Matches and delete
+paths all assume this. `ScoreViewModel.loadState` removes any in-progress copy left
+by a crash or failed write (a completed copy stays). Failed writes can still leave
+one until then, so `WatchMatchSyncService.sendFullHistory` also filters it through
+`WatchHistory.recordsForPush`; the phone accepts any in-progress record, so a stale
+copy would overwrite newer checkpoints. A push queued before a resume can still
+arrive late (TECHNICAL_DEBT #2). Reopening the same live identity or
+background/foreground creates no event. Park/finalize
 uses `appendMatchDurably` and must succeed before clearing/replacing live state.
 Unreadable/newer live state blocks writes and scoring rather than becoming empty.
 Each workout starts at its own start/resume/relaunch time; aggregate prior activity

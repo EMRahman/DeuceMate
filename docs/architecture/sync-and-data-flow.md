@@ -330,5 +330,10 @@ Tombstones, tags, match-type revisions and forgotten-player handling keep their
 existing authority. Updated peers preserve full metadata; an older app that alone
 rewrites a record can drop unknown fields. Session times survive health stripping,
 iCloud backup and manual transfer; activity measurements retain their existing
-sidecar/consent boundaries. The Watch retains a resumed archived checkpoint until
-a later successful park/finalize while live state owns subsequent scoring.
+sidecar/consent boundaries. Live state owns a resumed match, so the Watch removes
+the stored copy once the resume is durable and returns it at the next park/finalize.
+Full-history pushes leave out any in-progress copy of the live match that a failed
+write left behind, because the phone accepts any in-progress record. Pushes are
+queued and checkpoints are sent directly, so one queued before a resume can still
+arrive after newer checkpoints; `docs/features/TECHNICAL_DEBT.md` #2 tracks the
+revision that would let the phone reject it.

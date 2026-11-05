@@ -50,6 +50,11 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     )
     private let logger = Logger(subsystem: "com.deucemate.sync", category: "Watch")
 
+    /// Copy of `ScoreViewModel.currentMatchID`. Pushes also run on the
+    /// WatchConnectivity queue, which can't read the main-thread view model.
+    private let liveMatchIDLock = NSLock()
+    private var liveMatchID: UUID?
+
     // MARK: - MatchSyncService
 
     func start() {
@@ -100,8 +105,23 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
         transport.sendControl([MatchSyncKey.clearActiveMatch: true], queueOnFailure: false)
     }
 
+    func liveMatchDidChange(_ matchID: UUID?) {
+        liveMatchIDLock.lock()
+        defer { liveMatchIDLock.unlock() }
+        liveMatchID = matchID
+    }
+
+    /// `records` minus any stored in-progress copy of the live match.
+    func recordsForHistoryPush(_ records: [MatchRecord]) -> [MatchRecord] {
+        liveMatchIDLock.lock()
+        defer { liveMatchIDLock.unlock() }
+        return WatchHistory.recordsForPush(records, liveMatchID: liveMatchID)
+    }
+
+    /// Every full-history push passes through here. The manifest stays unfiltered:
+    /// it reports what the Watch actually holds.
     func sendFullHistory(_ records: [MatchRecord]) {
-        transport.sendHistory(records)
+        transport.sendHistory(recordsForHistoryPush(records))
         sendManifest()
     }
 

@@ -209,7 +209,7 @@ struct MatchTagsWatchTests {
         viewModel.syncService = sync
         viewModel.statsTrackingEnabled = false
 
-        // Resume retains the checkpoint and also carries its tags in live state.
+        // Resume removes the record from the store; the view model must keep the tags.
         viewModel.resumeMatch(record)
         #expect(viewModel.liveMatchTags == stored)
 
@@ -291,9 +291,9 @@ struct MatchTagsWatchTests {
         let incoming = tags(at: 300)
         let pointsBefore = viewModel.currentPointsMe
 
-        // The retained checkpoint and live identity each merge the metadata.
-        #expect(store.updateTags(id: record.id, tags: incoming)?.tags == incoming)
-        // The live model accepts only its own identity.
+        // The live match is not in the store, so the store update is a no-op…
+        #expect(store.updateTags(id: record.id, tags: incoming) == nil)
+        // …and the view model picks it up instead (only for its own identity).
         viewModel.applyIncomingMatchTags(tags("Other", at: 400), matchID: UUID())
         #expect(viewModel.liveMatchTags == nil)
         viewModel.applyIncomingMatchTags(incoming, matchID: record.id)

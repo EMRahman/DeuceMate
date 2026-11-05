@@ -275,8 +275,10 @@ Only explicit history resume creates a `MatchResumeEvent`: stable ID, resume tim
 optional observed park time and optional preceding point ID. Park writes parkedAt;
 resume/completion clears it. A same-identity reopen and scene changes create none.
 A resume candidate must be durably saved to live state before navigation/workout
-replacement. The archived checkpoint remains until normal park/finalization, so a
-failed write or immediate crash cannot destroy the only saved copy. Park/finalize
+replacement. Only then is the archived checkpoint removed, so a failed write or
+immediate crash cannot destroy the only saved copy; a copy left behind is removed
+on the next launch. While live, the match is in live state and not in history.
+Park/finalize
 must durably append before clearing/replacing the live match; failures remain visible.
 Unreadable/newer live states suspend writes and scoring, preserving original bytes.
 

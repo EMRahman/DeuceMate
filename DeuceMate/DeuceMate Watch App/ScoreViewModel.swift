@@ -324,7 +324,11 @@ class ScoreViewModel: ObservableObject {
     /// match so that resume-then-park reuses the same id (no duplicates).
     /// Internal-readable so views can detect "this stored record IS the live
     /// match" and skip the replace-confirm alert.
-    private(set) var currentMatchID: UUID? = nil
+    private(set) var currentMatchID: UUID? = nil {
+        didSet {
+            if currentMatchID != oldValue { syncService?.liveMatchDidChange(currentMatchID) }
+        }
+    }
     /// Phone-authored tags of the live match, carried only so every record the
     /// watch writes or sends for it keeps them. A resumed match is removed from
     /// the history store, so without this the next checkpoint/finalize would be
@@ -349,6 +353,8 @@ class ScoreViewModel: ObservableObject {
     /// Injected sync service. Set by the app entry point after WCSession is ready.
     var syncService: (any MatchSyncService)? {
         didSet {
+            // `loadState()` runs before this is wired up at launch.
+            syncService?.liveMatchDidChange(currentMatchID)
             // If we resumed a kill-mid-flow state, the pending-point property
             // observers fired before `syncService` was wired up — the phone
             // missed that initial mirror. Push current state once on
@@ -1648,8 +1654,8 @@ class ScoreViewModel: ObservableObject {
     }
 
     /// Persist the resumed state before changing navigation or touching the only
-    /// archived checkpoint. Keeping that checkpoint until the next park/finalize
-    /// also makes a crash immediately after this write harmless.
+    /// archived checkpoint. `loadState()` then removes the stored copy, so a crash
+    /// at any point leaves the match in at least one durable file.
     @discardableResult
     func resumeMatch(_ requested: MatchRecord) -> Bool {
         guard !stateWritesBlocked, requested.isInProgress else { return false }
@@ -1900,6 +1906,7 @@ class ScoreViewModel: ObservableObject {
                     currentSetSessionStart = now
                 }
             }
+            dropStoredCopyOfLiveMatch()
         } catch {
             stateRestorationSucceeded = (error as? CocoaError)?.code == .fileReadNoSuchFile
             stateWritesBlocked = !stateRestorationSucceeded
@@ -1939,6 +1946,20 @@ class ScoreViewModel: ObservableObject {
         // guard false and is left untouched; anything else (including the
         // catch path's hard-coded fallback) is seeded from the remembered pair.
         applyRememberedSetupIfIdle()
+    }
+
+    /// A live match belongs to the live state, not the history file. Without this,
+    /// anything reading history would see its old score as a parked match. Running
+    /// on every restore covers resume and also a copy left by a crash or failed
+    /// write. A completed copy stays, because it isn't resumable and can't be
+    /// replaced by an in-progress record.
+    private func dropStoredCopyOfLiveMatch() {
+        guard let id = currentMatchID,
+              statsStore.loadHistoryOrNil()?.first(where: { $0.id == id })?.isInProgress == true else { return }
+        let merged = MatchTags.merged(liveMatchTags, statsStore.removeMatchReturningTags(id: id))
+        guard merged != liveMatchTags else { return }
+        liveMatchTags = merged
+        _ = saveState()
     }
 
     func displayedScore(for player: Player) -> String {

@@ -679,8 +679,8 @@ struct DeuceMate_Watch_AppTests {
         #expect(viewModel.currentMatchStats.count == 2)
         #expect(viewModel.currentMatchID == originalID)
         #expect(viewModel.matchStartTime == originalStartTime)
-        // Retain the archived checkpoint until the next durable park/finalize.
-        #expect(store.records.map(\.id) == [originalID])
+        // Removed from store on resume
+        #expect(store.records.isEmpty)
 
         // Continue playing
         viewModel.winPoint(player: .me)
@@ -821,8 +821,8 @@ struct DeuceMate_Watch_AppTests {
 
         // Resuming A should park B first rather than dropping it.
         viewModel.resumeMatch(parkedA)
-        #expect(store.records.count == 2)
-        #expect(store.records.contains { $0.id != parkedA.id })
+        #expect(store.records.count == 1)
+        #expect(store.records[0].id != parkedA.id)
     }
 
     @Test func resumeWithDifferentLiveMatchParksTheLiveOne() throws {
@@ -843,9 +843,9 @@ struct DeuceMate_Watch_AppTests {
 
         // Resume the parked one — live one should be parked first
         viewModel.resumeMatch(parkedRecord)
-        // Both checkpoints remain durable while the resumed identity is live.
+        // The store now contains the live-one (just parked) but NOT the resumed one
         #expect(store.records.contains(where: { $0.id == liveMatchID }))
-        #expect(store.records.contains(where: { $0.id == parkedRecord.id }))
+        #expect(store.records.contains(where: { $0.id == parkedRecord.id }) == false)
         #expect(viewModel.currentMatchID == parkedRecord.id)
     }
 

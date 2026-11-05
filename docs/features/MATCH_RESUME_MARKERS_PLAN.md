@@ -402,8 +402,10 @@ session descriptions and HR windows. Private backup-excluded AppState retains
 fitness baselines and clocks. Graph/history/detail, physiological calculations,
 text/AI reports, interactive/static HTML schema 14 and browser replicas carry the
 same context. Unreadable/newer live-state files block writes/scoring; failed park
-or resume retains durable data and shows an error. Resumed checkpoints remain in
-history until successful park/finalization, protecting crashes during transition.
+or resume retains durable data and shows an error. A resumed checkpoint leaves
+history only after the live state is durable, protecting crashes during transition.
+If the live file later becomes unreadable, the Watch has no stored copy until it can
+be read again; the file is preserved and the phone keeps its last checkpoint.
 
 For interrupted records, continuous Pulse/Steps insights are withheld, exertion
 comparisons are confined to adequately covered individual sessions, and estimated
