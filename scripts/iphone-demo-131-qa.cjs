@@ -52,6 +52,17 @@ async function startLive(page) {
   await page.evaluate(() => { window.DeuceMatePhone.setSetting("iPhoneInput", false); window.DeuceMatePhone.render(); });
   await page.waitForTimeout(300);
   assert.equal(await status(), "Last score shown. Updates resume when the Watch reconnects.");
+  // Regression: with the category panel open, its "Undo point" button must still reach the Watch.
+  await page.evaluate(() => { const c = window.DeuceMatePhone.connection; c.reachable = true; c.activation = "ready"; window.DeuceMatePhone.setSetting("iPhoneInput", true); window.DeuceMatePhone.setSetting("track", true); });
+  await page.evaluate(() => { const sh = window.DeuceMateShell; sh.liveId = "qa131b"; sh.api.start({ format: "standard", server: "me", tracking: true }); sh.push({ id: "match" }); window.DeuceMatePhone.navigate("live"); });
+  await page.waitForTimeout(400);
+  await page.locator(".phone-scoreboard").first().focus(); await page.keyboard.press("ArrowUp"); await page.waitForTimeout(400);
+  const panelUndo = page.getByRole("button", { name: "Undo point", exact: true });
+  assert.equal(await panelUndo.isEnabled(), true, "category panel offers Undo point");
+  await panelUndo.click(); await page.waitForTimeout(400);
+  assert.equal(await page.evaluate(() => window.DeuceMateShell.api.phoneState().pending), null, "Undo point from the panel clears the pending point");
+  assert.equal(await status(), "", "undo from the panel is delivered, not reported as unconfirmed");
+  process.stdout.write("[1.3.1 QA] category-panel undo passed\n");
   assert.deepEqual(errors, [], "no page errors");
   process.stdout.write("[1.3.1 QA] live scoreboard messages passed\n1.3.1 demo QA passed.\n");
   await browser.close();

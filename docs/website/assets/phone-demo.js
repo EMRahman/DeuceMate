@@ -627,9 +627,9 @@
   }
   function send(command, value) {
     if (!settings.iPhoneInput || !connection.paired || !connection.reachable) return;
-    // Native handleSwipe blocks locally while a categorization/changeover is open: no send, so no failure.
-    var local = api.phoneState();
-    if ((command === "point" && !local.canScore) || (command === "undo" && !local.canUndo)) return;
+    // Native handleSwipe blocks a scoring swipe locally while a categorization/changeover is open: no send, so no failure.
+    // Undo is not gated here: the category panel's own "Undo point" button must still reach the Watch.
+    if (command === "point" && !api.phoneState().canScore) return;
     if (connection.activation !== "ready" || api.phoneCommand(command, value, displayedLiveId) === false) reportCommandFailure();
     queueRender();
   }
@@ -675,7 +675,7 @@
       var dx = e.clientX - gesture.x, dy = e.clientY - gesture.y, now = performance.now();
       if (now - lastPhoneSwipe < 250) return;
       if (Math.abs(dy) > 20 && Math.abs(dy) > Math.abs(dx)) { lastPhoneSwipe = now; send("point", dy < 0 ? "me" : "opponent"); }
-      else if (dx < -20 && Math.abs(dx) > Math.abs(dy)) { lastPhoneSwipe = now; send("undo"); }
+      else if (dx < -20 && Math.abs(dx) > Math.abs(dy)) { lastPhoneSwipe = now; if (!api.phoneState().pending) send("undo"); }
     }
     court.addEventListener("pointerdown", function (e) {
       if (e.button !== 0 || start) return;
@@ -688,7 +688,7 @@
     court.addEventListener("keydown", function (e) {
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "2"].indexOf(e.key) < 0) return;
       e.preventDefault(); e.stopPropagation();
-      if (e.key === "2") send("secondServe"); else if (e.key === "ArrowLeft") send("undo"); else send("point", e.key === "ArrowUp" ? "me" : "opponent");
+      if (e.key === "2") send("secondServe"); else if (e.key === "ArrowLeft") { if (!api.phoneState().pending) send("undo"); } else send("point", e.key === "ArrowUp" ? "me" : "opponent");
     });
     var recent = rec.resume.momentum.slice(-8), slots = h("div", { class: "phone-momentum" + (recent.length ? "" : " empty") });
     for (var slot = 0; slot < 8; slot++) { var who = recent[slot - (8 - recent.length)]; slots.append(h("i", { class: who === "me" ? "me" : who ? "opp" : "" })); }
