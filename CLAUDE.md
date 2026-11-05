@@ -240,6 +240,14 @@ AI launch buttons never contact external services. See
 `docs/features/IPHONE_DEMO_PARITY_PLAN.md` for implementation and verification
 status. Run `node scripts/iphone-demo-model-qa.cjs` and
 `node scripts/iphone-demo-coaching-qa.cjs` for dependency-free model checks.
+The home page's Try section (`assets/home-demo.js`) loads this same demo from
+`try.html` only when a visitor asks for it: never duplicate the markup or asset
+list in `index.html`, and never add `.reveal` or a transform around it, which
+would break the phone's fixed-position layers. The demo's stylesheets load into
+the home page, so an unscoped selector in them can restyle it (`.chip`, `.ic` and
+`.sw` already did). `scripts/home-demo-qa.cjs` fails if opening the demo changes
+anything outside the section (same `PLAYWRIGHT_MODULE`; it starts its own local
+server, since the page reads `try.html` over HTTP).
 Run `scripts/iphone-demo-qa.cjs`, `scripts/iphone-demo-extended-qa.cjs`,
 `scripts/iphone-demo-state-qa.cjs`, `scripts/iphone-demo-visual-qa.cjs` and
 `scripts/iphone-demo-popup-qa.cjs`, `scripts/iphone-demo-matchinfo-qa.cjs` and `scripts/iphone-demo-export-qa.cjs` with an externally installed Playwright
