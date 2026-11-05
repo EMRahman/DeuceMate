@@ -25,4 +25,15 @@ nonisolated enum ExportFilenames {
         f.dateFormat = "yyyy-MM-dd_HHmm"
         return "deuce_mate_\(f.string(from: startTime))\(opponentPerspective ? "_opponent" : "").html"
     }
+
+    /// "deuce_mate_game_plan_2026-11-05_1530.txt", or
+    /// "deuce_mate_game_plan_2026-11-05_1530_part2of3.txt". Takes only the
+    /// build time — never the opponent's name.
+    static func gamePlan(builtAt: Date, part: Int, of total: Int) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd_HHmm"
+        let suffix = total > 1 ? "_part\(part)of\(total)" : ""
+        return "deuce_mate_game_plan_\(f.string(from: builtAt))\(suffix).txt"
+    }
 }

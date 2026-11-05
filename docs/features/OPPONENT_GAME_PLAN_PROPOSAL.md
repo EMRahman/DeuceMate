@@ -1,6 +1,7 @@
 # Feature proposal: Opponent Game Plan
 
-**Status:** Proposed — not implemented or scheduled.  
+**Status:** Implemented for the iPhone (v1, 5 November 2026) — see §11. Browser
+demo parity is still open.  
 **Date:** 4 November 2026  
 **Surface:** iPhone companion, accessed from an opponent's profile.
 
@@ -402,3 +403,111 @@ The recommended defaults above are sufficient to build a prototype. Review:
 - Whether users need saved in-app plans enough to justify a separate private store.
 - Whether doubles preparation and an optional general-form baseline merit the
   next release after the singles evidence and workflow have been evaluated.
+
+## 11. Implementation notes (v1)
+
+### Where it lives
+
+| Layer | Files | Role |
+|---|---|---|
+| Core | `GamePlan/GamePlanScope.swift` | Eligibility, competition buckets, filters, Last N / All / custom selection. |
+| Core | `GamePlan/GamePlanEvidence.swift` | The allowlisted projection (§7 export boundary), per-match figures, pooled scopes, competition rows. |
+| Core | `GamePlan/GamePlanPackBuilder.swift`, `GamePlanText.swift` | Pack text, numbered parts, coaching request, shared labels. |
+| Core | `GamePlan/GamePlanTokenEstimator.swift` | On-device token estimate. |
+| iOS | `Views/GamePlan/*` | The preparation flow, build orchestration, match picker, notes review, preview. Entry: `OpponentsView` opponent detail. |
+| Dev | `scripts/game-plan-token-calibration.cjs` | Reference token counts for estimator calibration (external tokenizer packages; never shipped). |
+
+No new `MatchRecord` field, wire key, setting, store or backup path was added.
+All state is session-local, as §7 requires.
+
+### Decisions made while building
+
+- **Ordering** follows §4 literally: `startTime` descending, UUID tie-break —
+  not `MatchChronology`'s finish-date order used by history lists. Match
+  references are assigned oldest first (M001 is the earliest selected match).
+- **Completion status** is derived, not inferred from `iWon`: `MatchResult`
+  for the result, then `ScoringEngine.isMatchComplete` on the stored score to
+  label a completed match that stopped before its format's normal finish
+  (End at Current Score or a short manual entry). Open-ended formats say so.
+- **Serve/return splits** reuse `MatchComparison`'s categorized-only rule, so an
+  untracked point's default `isSecondServe == false` never counts as a first
+  serve in. Other rates use all saved points through `TrendMetric.rawPair`.
+- **Pooling** is Σ/Σ over the matches that recorded a figure; a figure is marked
+  "(k of n matches)" only when some matches did not. Scopes: all selected
+  completed, latest five completed (only when more than five), each competition
+  context (only when there is more than one), and unfinished checkpoints
+  (partial, never results or head-to-head).
+- **Note review** is per note and per text: the pack includes a note only if the
+  player approved that exact text in this session. A newly selected match's
+  note, or one edited after review, stays out until reviewed. An unreadable
+  notes file shows an error and blocks inclusion; it is never treated as "no
+  notes".
+- **Hand-off**: Copy Prompt copies the complete pack (request included). Share
+  Evidence File shares the `.txt` with a short message pointing at the
+  request. Opening an AI app copies the text and opens the app with **no URL
+  pre-fill** (`AICoachLauncher.openWithoutPrefill`), because the existing
+  pre-fill truncates at 1,500 characters. With parts, the app gets part 1 and
+  each part has its own Copy button.
+- **Parts** target ~25k, ~50k or ~100k estimated tokens. Part 1 always opens
+  with the brief and manifest (including a part index); the request travels in
+  the final part. Targets are approximate: a part can run over by one block.
+  Device-measured thresholds (§10) are still to be chosen.
+- **Freshness**: `GamePlanBuildInputs` (selected records, roster entry, notes of
+  selected matches, upcoming context, every toggle) is the build identity. A
+  change clears the pack, waits 0.3 s (typing), builds off the main actor in a
+  new `ExportStaging` generation, and a superseded build deletes its files.
+  Filenames carry only the build time (`deuce_mate_game_plan_<date>_<time>.txt`).
+
+### Token estimator calibration
+
+Method: representative packs written by
+`GamePlanPackTests.test_writeCalibrationFixtures` plus English and non-English
+notes, counted with three reference tokenizers — the legacy Claude tokenizer
+(`@anthropic-ai/tokenizer` 0.0.4) and OpenAI's `o200k_base` / `cl100k_base`
+(`js-tiktoken` 1.0.12) — then the heuristic's constants were swept to minimise
+error. Current Claude and GPT tokenizers are not public, so these are proxies.
+
+| Fixture | Estimate vs reference mean | Worst single reference |
+|---|---:|---:|
+| Full pack (6 matches, 878 points) | −0.9% | −2.3% / +2.2% |
+| Summary-only pack | −1.5% | −3.8% / +3.3% |
+| Point appendix | −0.7% | ±1.9% |
+| Cross-match / dossier tables | −2.5% / −3.4% | −6.4% |
+| English coaching prose | +7.9% | +10.3% |
+| English note | −0.4% | −1.3% |
+| French / Spanish / German notes | −6% / −14% / −27% | up to −34% |
+| Russian / Japanese / Chinese / Korean notes | +2% / +11% / +3% / +4% | up to +47% vs `o200k_base` |
+
+The references themselves disagree by up to ~60% on Cyrillic, Japanese and
+Korean text. The screen therefore says "usually within about 10% for tennis
+tables and English text; notes in other languages vary more", rounds the
+figure (nearest 10 / 100 / 1,000), and labels it approximate.
+`GamePlanTokenEstimatorTests` pins 11 fixtures with their reference counts
+(±10% structured, ±30% multilingual). The 100-match / 20,000-point fixture
+estimates at roughly 700k tokens (~1.6 MB), which is why parts exist.
+
+### Performance
+
+`test_performanceFixture_buildsCompletely` builds the 100-match / 20,000-point
+fixture (projection, single file and 100k-token parts) in about 1.8 s in a
+debug build on an Apple-silicon Mac. A supported-iPhone measurement of time and
+peak memory remains a release check (§9).
+
+### Verified
+
+- Core: `swift test --filter GamePlan` — scope, projection, privacy, completeness,
+  splitting, estimator and performance tests.
+- iOS: `GamePlanBuildTests` (staging, filenames, cancellation) and the
+  `MatchDetailsUITests.testPrepareGamePlanFromOpponentProfile` flow on the
+  iPhone simulator (entry point, Last 5 default, names off, estimate follows the
+  selection, preview text).
+
+### Still open
+
+- **Browser demo parity** (§8 stage 4): the iPhone demo on `docs/website/` does
+  not yet offer Prepare Game Plan. Mirroring it needs a JS port of the pack
+  builder and estimator; tracked as a follow-up rather than shipped half-done.
+- Supported-iPhone performance/memory and AI-app hand-off limits (§10).
+- Manual review of returned plans for the fictional fixtures listed in §9,
+  Dynamic Type/VoiceOver passes on device, and a doubles mode (§4).
+

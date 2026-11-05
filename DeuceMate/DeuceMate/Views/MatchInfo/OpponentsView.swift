@@ -94,6 +94,18 @@ private struct OpponentDetailView: View {
         Group {
             if let opponent {
                 List {
+                    Section {
+                        NavigationLink {
+                            GamePlanView(opponentID: opponentID)
+                                .environmentObject(store)
+                        } label: {
+                            Label("Prepare Game Plan", systemImage: "list.bullet.clipboard")
+                        }
+                        .accessibilityIdentifier("opponent-prepare-game-plan")
+                    } footer: {
+                        Text("Build an evidence pack from your singles matches against \(opponent.name) to ask an AI app for a pre-match plan.")
+                    }
+
                     Section("Head to Head · Singles") {
                         headToHeadRow(HeadToHead.record(vs: opponentID, in: store.history, excluding: nil, matchType: .singles))
                     }

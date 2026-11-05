@@ -20,7 +20,7 @@ this document is one of them:
 
 | | Mechanism | Meaning | Used for |
 |---|---|---|---|
-| 🔒 | **STRIPPED** | The five fields are set to `nil` before the bytes are written. | The phone's canonical on-disk history; the iCloud backup copy. |
+| 🔒 | **STRIPPED** | The five fields are set to `nil` before the bytes are written. | The phone's canonical on-disk history; the iCloud backup copy; the Opponent Game Plan evidence pack. |
 | 🚫 | **BACKUP-EXCLUDED** | Full data on disk, but the file is flagged `isExcludedFromBackup` (+ file protection) so no device iCloud/finder backup copies it. | The phone's Health sidecar; the watch's history and live-state files. |
 | ✋ | **CONSENT-GATED** | Full data, released only after the user confirms a disclosure that names exactly what is included. | Manual archive export; text / HTML / AI-prompt shares; AI Coach hand-off. |
 | ♻️ | **RE-DERIVED** | Read fresh from HealthKit for display; never persisted, so never a backup risk. | The phone's heart-rate momentum chart. |
@@ -144,6 +144,7 @@ is backup-excluded; the only full-fidelity release is user-gated.
 | Manual archive export | ✋ gated | `HealthExportConsent` + `ManualMatchArchiveBackup` | `ManualMatchArchiveBackupTests`, `HealthExportConsentTests` |
 | Text / HTML / AI-prompt share | ✋ gated | `HealthExportConsent` + `MatchExporter` / `WebExport` | `MatchExporterTests`, `MatchWebExportTests`, `HealthExportConsentTests` |
 | AI Coach hand-off | ✋ gated | `HealthExportConsent` (at sheet entry) + `AICoachLauncher` | `HealthExportConsentTests`, `DeuceMateUITests` |
+| Opponent Game Plan pack (copy / `.txt` share / AI app) | 🔒 stripped | `GamePlanEvidence.project` calls `strippingHealthData()` before any derivation; `GamePlanPackBuilder` only sees that projection, whose point rows carry no Health samples or timestamps. No consent alert is needed because nothing Health-derived can be present. Free-text notes are disclosed separately. | `GamePlanPackTests` (`test_healthFieldsNeverReachThePack`, `test_projectionCarriesNoHealthEvenInMemory`), `GamePlanBuildTests` |
 | HR momentum chart | ♻️ re-derived | `HealthKitHRFetcher` (never persists) | — (nothing stored) |
 
 ---
@@ -296,7 +297,10 @@ Before you touch anything in this map, know these:
   `MatchDetailView.beginShare` / `beginAICoach` (or the `SettingsView` archive
   alert) so it inherits the `HealthExportConsent` gate. **Never** hand-roll a bare
   `ShareLink` on health-bearing content — the whole point of the alert is that the
-  tap can be interrupted for disclosure.
+  tap can be interrupted for disclosure. The one alternative is a surface that
+  strips Health before it builds anything, as the Opponent Game Plan's
+  `GamePlanEvidence` projection does, with a test proving no Health field or
+  label reaches the output.
 - **Never push the Health sidecar to iCloud**, and never add iCloud/ubiquity
   entitlements to the watch target. The two strips + exclusion assume the watch is
   cloud-free and only `matchHistory.json` + tombstones are pushed.
