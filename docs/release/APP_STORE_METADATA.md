@@ -183,6 +183,10 @@ Built by a recreational tennis player for players who want dependable scorekeepi
 
 ## What's New (4000 characters max)
 
+> **Next release:** before drafting its text, confirm the manual testing gate in
+> [`SUBMISSION_REVIEW.md`](SUBMISSION_REVIEW.md#next-release--manual-testing-gate)
+> is complete. #174 and #175 have not been tested on a physical Watch yet.
+
 ### Version 1.3.1 - Trends filters and swipe vibration
 
 ```

@@ -5,6 +5,90 @@ Current pre-flight review of DeuceMate against the
 focused on upload blockers, likely rejection reasons, and the manual work needed
 in App Store Connect.
 
+## Next release — manual testing gate
+
+**Before writing release notes for the release after 1.3.1, confirm that every
+box below is ticked.** Two changes merged since `v1.3.1` have not been tested on a
+physical iPhone and Apple Watch. Xcode can't currently connect to the owner's
+Watch, so test through a TestFlight build. The build number must be higher than
+15. Record the devices and date here when done, and fix or defer anything that
+fails before the change ships.
+
+### #175 — play sessions and resuming a parked match
+
+Use throwaway matches with the Watch and iPhone connected unless a step says
+otherwise. Note the score at each step. To disconnect, turn on Airplane Mode on
+the iPhone, then turn off Wi-Fi and Bluetooth in the Settings app: the Control
+Centre toggles can leave the Watch connected.
+
+- [ ] **Sync Now after a resume.** Start a match, score a few points and choose
+  End Match (score X). On the Watch, open Past Matches, pick the match and tap
+  Resume this match. Score at least 6 more points (score Y), then tap
+  Settings > Sync Now on the iPhone. **Expected:** the archive row and Live
+  Scoreboard stay at Y and never fall back to X.
+- [ ] **Reconnect and iPhone relaunch.** In the same live match, disconnect for 30
+  seconds without scoring, reconnect, then force-quit and reopen the iPhone app.
+  **Expected:** the iPhone stays at Y each time, and the next point updates it.
+- [ ] **The live match isn't in Past Matches.** While it's live, open Past Matches
+  on the Watch. **Expected:** it isn't listed, and the button is hidden if it's the
+  only saved match. The iPhone shows it under Live Match with a Live badge, and its
+  detail screen can say "Saved on iPhone only".
+- [ ] **Park, resume again and finish.** Choose End Match, resume again, then play
+  to a win. **Expected:** after parking, one row returns on the Watch at the latest
+  score and the iPhone shows In Progress. After the win, both devices show one
+  completed match with the right score, and the point history includes every
+  session.
+- [ ] **Force-quit the Watch app.** Resume a parked match, score, then force-quit
+  and reopen the Watch app. **Expected:** Home offers Resume Match at the latest
+  score, Past Matches doesn't list the match and the iPhone has one row. Score a
+  point and tap Sync Now: the score doesn't fall back.
+- [ ] **Swap between two matches.** With match A parked, start match B and score.
+  Resume A from Past Matches and tap Replace, score, then resume B the same way.
+  **Expected:** each keeps its own score, only the parked one is listed on the
+  Watch, and nothing is duplicated. Sync Now changes neither score.
+- [ ] **Match details survive a resume.** On the iPhone, add an opponent and
+  competition type to a parked match. Resume it on the Watch and score, change the
+  details on the iPhone while it's live, then park and finish it. **Expected:** the
+  newest details are on both devices after parking and finishing, and the score is
+  unaffected.
+- [ ] **End from the iPhone.** Resume a match and score, then tap End at Current
+  Score on the iPhone. **Expected:** the Watch ends it at its own latest score, and
+  both devices show one completed match at that score.
+- [ ] **Undo.** Resume a match, score 3 points and undo one. Then win the match,
+  undo the winning point and win it again. **Expected:** the iPhone follows each
+  undo, the match returns to in progress on both devices, and it ends as one
+  completed match.
+- [ ] **Resume while disconnected.** Park a match and disconnect. Resume it on the
+  Watch, score and choose End Match. Reconnect and tap Sync Now. **Expected:** the
+  iPhone shows the latest parked score as In Progress, with one row.
+- [ ] **Workouts, Health, accessibility and reports.** Complete the
+  [pending physical-Watch checklist](../features/MATCH_RESUME_MARKERS_PLAN.md#pending-physical-watch-checklist-required-before-release)
+  on the same build.
+
+**Not failures:** after a reconnect, the iPhone can stay on the last score it
+received until the next point. A rare drop to an older score that corrects itself
+on the next point is the known late-push limit
+([TECHNICAL_DEBT #2](../features/TECHNICAL_DEBT.md)); note what you did just before
+it. A score that stays wrong after the next point is a failure.
+
+### #174 — live scoreboard when the Watch can't be reached
+
+The simulator can't show when a real Watch counts as unreachable. With iPhone
+Input on, open the iPhone's Live Scoreboard during a match:
+
+- [ ] **Health off, wrist down:** the badge changes to WAITING FOR WATCH and swipes
+  stop.
+- [ ] **Wrist up:** LIVE and input come back.
+- [ ] **Workout running, wrist down:** the Watch stays reachable and the badge
+  stays LIVE.
+- [ ] **Watch out of range mid-match:** the waiting state appears, then recovers
+  on return.
+- [ ] **iPhone Input off (spectator):** the badge and copy are correct, with no
+  mention of scoring.
+
+#174's PR notes that if the badge flickers on a device, a delay may be added to the
+badge only, never to the input gate.
+
 ## Current release candidate — 1.3.1 (build 15), 4 November 2026
 
 The iPhone app and embedded Apple Watch app are both configured as
