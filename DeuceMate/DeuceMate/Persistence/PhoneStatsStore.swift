@@ -221,6 +221,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             let carried = newRecords.map { record -> MatchRecord in
                 let prior = existingByID[record.id]
                 let merged = record
+                    .mergingResumeEvents(prior?.resumeEvents ?? [])
                     .mergingTags(prior?.tags)
                     .mergingMatchTypeRevision(prior?.matchTypeRevision)
                 return forgotten.scrubbed(merged, now: now)
@@ -238,6 +239,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             let prior = updated.first(where: { $0.id == record.id })
             updated.removeAll { $0.id == record.id }
             let merged = record
+                .mergingResumeEvents(prior?.resumeEvents ?? [])
                 .mergingTags(prior?.tags)
                 .mergingMatchTypeRevision(prior?.matchTypeRevision)
             updated.append(forgotten.scrubbed(merged, now: Date()))

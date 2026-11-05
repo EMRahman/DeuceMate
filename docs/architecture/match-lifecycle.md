@@ -93,6 +93,32 @@ or failed save reports failure: the detail sheet stays open with an error and
 no history is synced. Only the successfully saved history snapshot is sent to
 the phone. A stale sheet record is never used to recreate an absent match.
 
+## Result and activity dates
+
+`MatchChronology` keeps the original `startTime` intact. Completed results use
+`endTime`; legacy completed records without it use the start, labelled **Played**.
+Unfinished matches use their latest recorded point timestamp, falling back to the
+start when there are no recorded points. History, Watch retention (25 matches),
+restore/import results, backup previews, comparisons and head-to-head recent
+results share this chronology. Equal dates sort by UUID ascending. Trends uses
+ascending chronology before filtering/windowing, with a separate sample `date`;
+its original `startTime` retains its meaning. Opted-in unfinished samples are
+provisional and keep the same UUID after completion.
+
+The Watch captures `matchCompletionTime` when the final scoring action happens,
+including with outcome tracking off. It is an optional, backward-compatible
+`AppState` field, reused at normal finalization after categorisation or relaunch.
+Undo clears it; a new winning point captures a new instant. Live checkpoints
+remain unfinished until finalization so undo remains authoritative. Explicit
+**End at Current Score** uses the deliberate action time. Roster last-played uses
+recorded activity, so administratively closing a parked match does not invent play.
+
+Rows label the date's meaning; details and every report retain both start and
+finish when their local calendar days differ. Export filenames still use the
+original start. This requires no archive migration or rewrite and adds no match
+record/wire fields in Phase 1. Phase 2 adds backward-compatible session metadata,
+with the lifecycle below; elapsed span is never evidence of active play.
+
 ## Stage by stage
 
 **1 · Setup (watch).** The player picks singles or doubles, names, the match
@@ -242,3 +268,28 @@ and stats views take values only; category previews are read-only fixed examples
 Navigation/dismissal cancels tasks and rejects old generation callbacks; scene
 inactivity pauses the script. No guide path reaches persistence, sync, export,
 workout or heading. Production background and remote work stays in the normal app.
+
+## Confirmed session lifecycle
+
+Only explicit history resume creates a `MatchResumeEvent`: stable ID, resume time,
+optional observed park time and optional preceding point ID. Park writes parkedAt;
+resume/completion clears it. A same-identity reopen and scene changes create none.
+A resume candidate must be durably saved to live state before navigation/workout
+replacement. Only then is the archived checkpoint removed, so a failed write or
+immediate crash cannot destroy the only saved copy; a copy left behind is removed
+on the next launch. While live, the match is in live state and not in history.
+Park/finalize
+must durably append before clearing/replacing the live match; failures remain visible.
+Unreadable/newer live states suspend writes and scoring, preserving original bytes.
+
+Undo retains events. Marker derivation uses original point order and stable IDs;
+missing/ambiguous anchors stay unplaced. Trailing/no-point events remain visible in
+session summaries without inventing a point. Coincident markers coalesce visually.
+The full-history boundary determines set membership before display filtering.
+
+Workouts restart at the current session time. Prior aggregate activity survives
+AppState save/relaunch and is added once to each fresh builder snapshot; repeated
+saves do not advance the baseline. Match/set play clocks exclude explicit parked
+time and stop at normal completion, including delayed categorization. No historical
+breaks are inferred. See [health-data-flow.md](health-data-flow.md) for physiological
+window and privacy rules, and the feature plan for pending hardware validation.

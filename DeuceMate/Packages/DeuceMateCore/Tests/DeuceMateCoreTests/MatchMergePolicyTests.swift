@@ -240,10 +240,11 @@ final class MatchMergePolicyTests: XCTestCase {
 
     // MARK: - merge ordering
 
-    func test_merge_equalStartTimes_deterministicOrder() {
+    func test_merge_equalCompletionTimes_deterministicOrder() {
         let sharedStart = Date(timeIntervalSince1970: 1_000)
-        let a = makeRecord(startTime: sharedStart, endTime: Date(), iWon: true)
-        let b = makeRecord(startTime: sharedStart, endTime: Date(), iWon: false)
+        let finish = sharedStart.addingTimeInterval(60)
+        let a = makeRecord(startTime: sharedStart, endTime: finish, iWon: true)
+        let b = makeRecord(startTime: sharedStart, endTime: finish, iWon: false)
 
         let firstPass = MatchMergePolicy.merge(incoming: [a, b], into: [])
         let secondPass = MatchMergePolicy.merge(incoming: [b, a], into: [])

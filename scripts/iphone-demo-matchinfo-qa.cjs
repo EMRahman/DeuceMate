@@ -50,13 +50,13 @@ const path = require("path"), { pathToFileURL } = require("url"), assert = requi
   if (target === "Singles") assert(!after.tags.partner && after.tags.opponents.length === 1);
   // export
   const ex = await page.evaluate(id => { const r = window.DeuceMatePhone.records().find(r => r.id === id); const m = window.DeuceMatePhoneReports.exportModel(r, r.stats || [], "me"); return { v: m.schemaVersion, meta: m.meta.readerSideNames, comp: m.meta.competitionTypeLabel, note: m.meta.privateNote, text: window.DeuceMatePhoneReports.reportText(r, r.stats || [], "me", "full").split("## Match Context")[1].slice(0, 120) }; }, rec.id);
-  console.log("export", JSON.stringify(ex)); assert.equal(ex.v, 13);
+  console.log("export", JSON.stringify(ex)); assert.equal(ex.v, 14);
   // share menu switches
   await ph.getByRole("button", { name: "Share match" }).click();
   await ph.getByText("Include player names").waitFor(); await ph.getByText("Include private note").waitFor();
   await ph.getByText("Include private note").click(); await ph.getByText("This exact text will be included").waitFor(); await ph.getByRole("button", { name: "Include Note" }).click();
   assert.equal(await page.evaluate(() => window.DeuceMatePhoneMatchInfo.exportOptions.noteMatchId), rec.id);
-  // interactive page renders the details (schema 13 viewer), names + note opted in
+  // interactive page renders the details (schema 14 viewer), names + note opted in
   const html = await page.evaluate(id => { const r = window.DeuceMatePhone.records().find(r => r.id === id); return window.DeuceMatePhoneReports.standaloneHTML(r, r.stats || [], "me"); }, rec.id);
   const viewer = await b.newPage(); await viewer.setContent(html);
   const viewerText = await viewer.locator("body").innerText();

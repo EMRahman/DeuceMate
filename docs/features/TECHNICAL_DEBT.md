@@ -67,7 +67,7 @@ when the item should constrain future changes.
 | [12](#12--extract-the-point-categorisation-flow-state-machine-into-core) | Duplication | Extract point-categorisation flow state machine into Core | Medium change risk | Before the next outcome / ending-shot change | Medium |
 | [21](#21--record-an-executable-local-verification-gate) | Verification | Record an executable local verification gate | Medium regression/process risk | Establish now; require for scoring, persistence, and sync PRs | Small |
 | [9](#9--mark-anchors-for-scoreviewmodel-homeview-contentview) | Navigability | `MARK:` anchors for `ScoreViewModel` / `HomeView` / `ContentView` | **None at runtime** | Independent quick win | Small — comment-only |
-| [2](#2--add-a-monotonic-record-revision-before-queued-checkpoints) | Sync | Add a monotonic record revision for merge policy | Low today | **Mandatory before queueing live checkpoints** | Small |
+| [2](#2--add-a-monotonic-record-revision-before-queued-checkpoints) | Sync | Add a monotonic record revision for merge policy | Low; a late history push can briefly revert the phone's score | **Mandatory before queueing live checkpoints**; replaces the live-match push filter | Small–medium |
 | [6](#6--phonestatsstore-concurrency-model) | Concurrency | `PhoneStatsStore` actor / `@MainActor` migration | Low today | Before Swift 6 strict concurrency or new background mutation paths | Medium |
 | [13](#13--split-pastmatchesview) | Architecture | Split `PastMatchesView` (745 lines, still the fastest-growing file) | None today | Opportunistically on the next substantial edit | Small |
 
@@ -490,9 +490,23 @@ do not clear it merely because the view disappeared.
 `transferUserInfo`-queued checkpoint ever arrived after a newer live one had
 already been applied — the phone would silently roll back to the stale state.
 
-The transport deliberately avoids this today by **dropping** all in-progress
-checkpoints when unreachable (only announcements are queued). That removes the
-stale-arrival path. The risk is therefore latent rather than active.
+The transport drops in-progress *checkpoints* when unreachable (only
+announcements are queued), but that does not remove the stale-arrival path, as
+this item previously claimed. `sendHistory` always queues, and a history push can
+carry parked in-progress records. PR #175 found two consequences:
+
+- **Stale copy of the live match (fixed in #175).** That PR first kept the stored
+  checkpoint during a resume. Every full-history push then sent the pre-resume
+  score, and the phone accepted it. Resume now removes the stored copy once the live
+  state is durable, and `WatchHistory.recordsForPush` drops any copy that a failed
+  write leaves behind.
+- **Push queued before a resume (still open, also on `main`).** Launching the Watch
+  app queues a full-history push containing the parked match. If the player resumes
+  and wins a point before it is delivered, the direct checkpoint can overtake it.
+  The old push then reverts the phone until the next checkpoint. If it arrives after
+  the final park, the archive stays wrong until the next full-history push. Completed
+  records are safe. Real-device delivery delay has not been measured; a history
+  large enough to go as a file is the likeliest slow case.
 
 A previous attempt to use `stats.count` as a "newer" proxy broke undos
 (an undo checkpoint has fewer stats, so the phone wrongly discarded it). The
@@ -512,17 +526,31 @@ primitive. Device time can move backwards and two rapid mutations need not have
 distinct timestamps. A `lastModified` date may still be useful for display or
 diagnostics, but it should not decide which queued checkpoint wins.
 
+The revision must survive everything that moves a match between files: persist it
+in `AppState`, write it to every checkpoint and finalize record, seed it from the
+stored record on resume, and carry it through any path that replaces a record by id
+(the §5 `CLAUDE.md` trap for rebuilt records). The phone's explicit completion and
+Case 2–4 completion rules are unchanged.
+
+**What it replaces, and what it doesn't.** Once this lands, retire
+`WatchHistory.recordsForPush` and `liveMatchDidChange`, since the phone can then
+reject a stale record however it arrives. Keep the rule that a live match is not in
+history: Past Matches, swipe-delete and Remove from Watch rely on it, and ordering
+does not address them.
+
 Once revision ordering exists, the transport can safely queue a bounded
 “latest live checkpoint” when unreachable, improving phone archive freshness
 during BLE gaps. Currently the phone can lag for the whole gap.
 
-**Risk and trigger:** **Low today.** The transport intentionally drops
-unreachable in-progress checkpoints, so the stale queued-arrival path does not
-exist. Make this a mandatory prerequisite — in the same PR or an immediately
-preceding one — before any transport change starts queueing them.
+**Risk and trigger:** **Low.** The remaining path needs a slow delivery at the
+wrong moment and usually corrects itself on the next point. Make this a mandatory
+prerequisite — in the same PR or an immediately preceding one — before any transport
+change starts queueing checkpoints. Effort was previously marked Small; the
+persistence and resume work above makes it Small–medium.
 
 **Key files:** `MatchRecord.swift`, `MatchMergePolicy.swift`,
-`MatchSyncTransport.swift`, `MatchRecordCodingTests.swift`,
+`MatchSyncTransport.swift`, `WatchHistoryCap.swift`, `ScoreViewModel.swift`,
+`WatchMatchSyncService.swift`, `MatchRecordCodingTests.swift`,
 `MatchMergePolicyTests.swift`.
 
 ---

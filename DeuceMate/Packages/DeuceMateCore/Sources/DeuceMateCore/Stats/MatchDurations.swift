@@ -24,7 +24,10 @@ public enum MatchDurations {
     }
 
     public static func setElapsedSeconds(_ record: MatchRecord, setIndex: Int) -> TimeInterval? {
-        setElapsedSeconds(setIndex: setIndex, stats: record.stats, stored: record.setElapsedSeconds)
+        if let stored = record.setElapsedSeconds[setIndex] { return stored }
+        // A point span can include a week-long break; do not call it play time.
+        guard record.resumeEvents.isEmpty else { return nil }
+        return setElapsedSeconds(setIndex: setIndex, stats: record.stats, stored: record.setElapsedSeconds)
     }
 
     /// Whole-match seconds: the recorded elapsed time when the watch kept one,
@@ -32,7 +35,8 @@ public enum MatchDurations {
     /// without a recorded elapsed time.
     public static func matchElapsedSeconds(_ record: MatchRecord) -> TimeInterval? {
         if record.matchElapsedSeconds > 0 { return record.matchElapsedSeconds }
-        if let end = record.endTime { return end.timeIntervalSince(record.startTime) }
+        guard record.resumeEvents.isEmpty else { return nil }
+        if let end = record.endTime { return max(0, end.timeIntervalSince(record.startTime)) }
         return nil
     }
 

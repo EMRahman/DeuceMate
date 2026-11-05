@@ -752,7 +752,7 @@ struct SettingsView: View {
             uniquingKeysWith: { first, _ in first }
         )
         return store.history.compactMap { record in
-            notes[record.id].map { ArchiveExportOptionsSheet.NoteLine(note: $0, matchDate: record.startTime) }
+            notes[record.id].map { ArchiveExportOptionsSheet.NoteLine(note: $0, matchDate: MatchChronology.date(record)) }
         }
     }
 

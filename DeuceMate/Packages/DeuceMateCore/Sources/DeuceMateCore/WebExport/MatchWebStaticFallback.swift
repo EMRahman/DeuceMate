@@ -77,6 +77,12 @@ extension MatchHTMLExporter {
         \(sets)\(noteBlock)</div>
         """
 
+        if !vm.sessionSummary.isEmpty {
+            html += "<div class=\"card\"><h2>Play sessions</h2>"
+            html += vm.sessionSummary.map { "<div class=\"sub\">" + esc($0) + "</div>" }.joined()
+            html += "<div class=\"sub\">Breaks are confirmed app actions. Changes across sessions do not establish fatigue or recovery.</div></div>"
+        }
+
         // Momentum charts (server-rendered SVG) — one per preset selection, each
         // with its scatter overlay + pills, mirroring the interactive quick-selects.
         if !vm.points.isEmpty {
@@ -338,6 +344,20 @@ extension MatchHTMLExporter {
             svg += "<rect x=\"\(fmt(left))\" y=\"\(fmt(mt))\" width=\"\(fmt(width))\" height=\"\(fmt(plotH))\""
                 + " fill=\"\(b.colorHex)\" fill-opacity=\"\(b.opacity)\"/>"
             svg += textTag((left + right) / 2, mt + 12, b.label, "middle")
+        }
+
+        let groupedResumes = Dictionary(grouping: vm.resumeEvents.filter {
+            $0.beforePointIndex.map { $0 < n } ?? false
+        }, by: { $0.beforePointIndex ?? 0 })
+        let boundaries = groupedResumes.keys.sorted()
+        for (position, boundary) in boundaries.enumerated() {
+            let events = groupedResumes[boundary] ?? []
+            let x = max(ml, xAt(boundary) - step / 2)
+            let label = events.count == 1 ? events[0].label : "Resumed \(events.count) times"
+            svg += "<line x1=\"\(fmt(x))\" y1=\"\(fmt(mt))\" x2=\"\(fmt(x))\" y2=\"\(fmt(mt + plotH))\" stroke=\"currentColor\" stroke-dasharray=\"1 5\"><title>\(esc(events.map(\.accessibilityLabel).joined(separator: ". ")))</title></line>"
+            if position == boundaries.count - 1 || boundaries[position + 1] - boundary >= 8 {
+                svg += textTag(x + 4, mt + plotH - 6, label, "start")
+            }
         }
 
         // Gridlines + Y labels at 0 / 50% / 100%.

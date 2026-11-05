@@ -131,6 +131,9 @@ public protocol MatchSyncService: AnyObject {
     /// dismiss any sheet still up." Outcome is only non-nil when the watch has
     /// advanced to phase 2 of the sheet.
     func sendPendingPointState(_ pending: PendingPointInfo?, outcome: PointOutcome?)
+    /// Tells the service which match is live, so a full-history push can leave
+    /// out any stored in-progress copy of it. `nil` means no match is live.
+    func liveMatchDidChange(_ matchID: UUID?)
     /// ISO 8601 date of the last successfully processed sync, if any.
     var lastSyncDate: Date? { get }
 }
@@ -139,6 +142,8 @@ public extension MatchSyncService {
     /// Default no-op so platforms that don't yet emit pending-state updates
     /// (e.g. the phone) compile without boilerplate.
     func sendPendingPointState(_ pending: PendingPointInfo?, outcome: PointOutcome?) {}
+    /// Default no-op for services that never push history while a match is live.
+    func liveMatchDidChange(_ matchID: UUID?) {}
 }
 
 // MARK: - Encoding helpers

@@ -141,6 +141,10 @@ struct ContentView: View {
             }
 
             VStack(spacing: 0) {
+                if let error = viewModel.persistenceError {
+                    Text(error).font(.system(size: 9)).foregroundStyle(.orange)
+                        .accessibilityLabel("Storage warning: \(error)")
+                }
                 // Scoreboard rows
                 let isSuperTiebreakFormat = viewModel.isTiebreakOnlyFormat
                 VStack(spacing: 6) {

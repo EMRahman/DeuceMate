@@ -12,6 +12,34 @@
 (function () {
   "use strict";
 
+  // Mirror Core immutable session metadata, full-history marker coordinates and
+  // conservative physiological continuity. No app-visibility inference.
+  var sessions = {
+    merge: function(a,b) {
+      var byID=new Map();(a||[]).concat(b||[]).forEach(function(event){var old=byID.get(event.id),key=function(e){return [e.resumedAt,e.pausedAt==null?-Infinity:e.pausedAt,String(e.precedingPointID||"")];};if(!old){byID.set(event.id,Object.assign({},event));return;}var x=key(old),y=key(event);for(var i=0;i<x.length;i++){if(x[i]===y[i])continue;if(x[i]<y[i])byID.set(event.id,Object.assign({},event));break;}});
+      return Array.from(byID.values()).sort(function(a,b){return a.resumedAt-b.resumedAt||String(a.id).localeCompare(String(b.id));});
+    },
+    markers: function(record,points) {points=points||record.stats||[];return sessions.merge([],record.resumeEvents).map(function(event){var index=null;if(event.precedingPointID!=null){var matches=[];points.forEach(function(point,i){if(point.id===event.precedingPointID)matches.push(i);});if(matches.length===1)index=matches[0]+1;}else{index=points.findIndex(function(point){return point.timestamp>=event.resumedAt;});if(index<0)index=points.length;}return{event:event,beforePointIndex:index};});},
+    indices: function(record,points) {points=points||record.stats||[];var markers=sessions.markers(record,points);return points.map(function(_,i){return markers.some(function(m){return m.beforePointIndex==null;})?i:markers.filter(function(m){return m.beforePointIndex<=i;}).length;});},
+    breakSeconds: function(event) {return event.pausedAt!=null&&event.resumedAt>=event.pausedAt?(event.resumedAt-event.pausedAt)/1000:null;},
+    breakDescription: function(seconds) {var n=Math.max(0,Math.floor(seconds));if(n>=86400){n=Math.floor(n/86400);return n+(n===1?" day":" days");}if(n>=3600){n=Math.floor(n/3600);return n+(n===1?" hour":" hours");}return n>=60?Math.floor(n/60)+" min":n+" sec";},
+    description: function(record,format) {if(!(record.resumeEvents||[]).length)return[];format=format||function(ms){return new Date(ms).toLocaleString([], {dateStyle:"medium",timeStyle:"short"});};var lines=["Started "+format(record.startTime)];sessions.merge([],record.resumeEvents).forEach(function(event){var seconds=sessions.breakSeconds(event);lines.push((event.pausedAt==null?"":"Parked "+format(event.pausedAt)+"; ")+"Resumed "+format(event.resumedAt)+" · "+(seconds==null?"Break duration unknown":"Break: "+sessions.breakDescription(seconds)));});if(record.parkedAt!=null)lines.push("Parked "+format(record.parkedAt));if(record.endTime!=null)lines.push("Finished "+format(record.endTime));if(record.elapsed>0)lines.push("Recorded play time: "+Math.floor(record.elapsed/60)+" min");return lines;},
+    webEvents: function(record,points) {points=points||record.stats||[];return sessions.markers(record,points).map(function(marker){var e=marker.event,index=marker.beforePointIndex,seconds=sessions.breakSeconds(e),label="Resumed · "+new Date(e.resumedAt).toLocaleString([], {dateStyle:"medium",timeStyle:"short"}),detail=seconds==null?"Break duration unknown":"Break: "+sessions.breakDescription(seconds);return{id:e.id,resumedAt:new Date(e.resumedAt).toISOString(),pausedAt:e.pausedAt==null?null:new Date(e.pausedAt).toISOString(),beforePointIndex:index,setIndex:index!=null&&index<points.length?points[index].setIndex:null,breakSeconds:seconds,label:label,detail:detail,accessibilityLabel:label+(index==null?", point boundary unknown":index<points.length?", before recorded point "+(index+1):", awaiting a recorded point")+", "+detail};});}
+  };
+  window.DeuceMateSessions = sessions;
+
+  // Mirror Core MatchChronology; this is display recency, never merge authority.
+  var chronology = {
+    inProgress: function (r) { return r.endTime == null && r.iWon == null; },
+    activity: function (r) { var points = [r.startTime,r.parkedAt].concat((r.stats || []).map(function (p) { return p.timestamp; }), (r.resumeEvents || []).map(function(e){return e.resumedAt;})).filter(Number.isFinite); return Math.max.apply(null, points); },
+    date: function (r) { return chronology.inProgress(r) ? chronology.activity(r) : (r.endTime == null ? r.startTime : r.endTime); },
+    label: function (r) { return chronology.inProgress(r) ? ((r.stats || []).length || (r.resumeEvents || []).length || r.parkedAt!=null ? "Last activity" : "Started") : r.endTime == null ? "Played" : "Finished"; },
+    newest: function (a, b) { return chronology.date(b) - chronology.date(a) || String(a.id).localeCompare(String(b.id)); },
+    oldest: function (a, b) { return chronology.date(a) - chronology.date(b) || String(a.id).localeCompare(String(b.id)); },
+    describe: function (r, format) { format = format || function (ms) { return new Date(ms).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }); }; var main = chronology.label(r) + " " + format(chronology.date(r)); return new Date(r.startTime).toDateString() === new Date(chronology.date(r)).toDateString() ? main : "Started " + format(r.startTime) + " · " + main; }
+  };
+  window.DeuceMateChronology = chronology;
+
   /* ---- Format configs (mirror MatchFormat.config in ScoreTypes.swift) ---- */
   function cfgFor(format) {
     switch (format) {
@@ -971,6 +999,7 @@
 
   // Footer elapsed timer (plan §G) and swipe/drag live-preview (plan §G).
   var matchStartTime = null;
+  var matchCompletionTime = null;
   var footerTimer = null;
   var livePreviewTarget = null; // "me" | "opponent" | null, while a touch/pointer drag is past the threshold
 
@@ -1368,6 +1397,8 @@
 
     matchStartTime = Date.now();
     recordStart = matchStartTime;
+    resumeEvents = []; priorFakeActivity = {steps:0,kcal:0,elapsed:0,points:0};
+    matchCompletionTime = null;
     resetClocks();
     if (footerTimer) clearInterval(footerTimer);
     footerTimer = setInterval(tickFooter, 1000);
@@ -1379,6 +1410,7 @@
      stats screens' "Duration" rows and the saved history record; the fake
      heart-rate/calorie readouts stand in for HealthKit, which a browser
      doesn't have. ---- */
+  var resumeEvents = [], priorFakeActivity = {steps:0,kcal:0,elapsed:0,points:0};
   var recordStart = 0;   // a resumed match keeps its original start date
   var endedAt = null, curSetIdx = -1, curSetStartedAt = 0, setSeconds = {};
   var fakeHR = 118, fakeCompassWobble = 0;
@@ -1475,6 +1507,7 @@
 
     var res = pointWon(prevState, player);
     state = res.state;
+    if (isMatchComplete(state)) matchCompletionTime = Date.now();
     isOnSecondServe = false;
     fakeHR = Math.min(172, fakeHR + 1 + Math.random() * 4);
     momentum.push(player);
@@ -1514,6 +1547,7 @@
     var prev = history.pop();
     prev.snapshot.cfg = state.cfg;
     state = prev.snapshot;
+    matchCompletionTime = null; endedAt = null;
     momentum = prev.momentum;
     isOnSecondServe = prev.secondServe;
     stats = stats.slice(0, prev.statsLen);
@@ -2185,7 +2219,7 @@
   api.complete = function () { return !!state && isMatchComplete(state); };
   api.hasProgress = function () {
     if (!state) return false;
-    return stats.length > 0 || history.length > 0 || state.currentPointsMe > 0 || state.currentPointsOpponent > 0 ||
+    return resumeEvents.length > 0 || stats.length > 0 || history.length > 0 || state.currentPointsMe > 0 || state.currentPointsOpponent > 0 ||
       state.sets.some(function (x) { return x.gamesMe > 0 || x.gamesOpponent > 0 || x.tieBreakPointsMe > 0 || x.tieBreakPointsOpponent > 0; });
   };
   api.modalKind = function () { return statsOpen ? "stats" : api.modalOpen() ? "other" : null; };
@@ -2196,7 +2230,8 @@
     state = null; history = []; momentum = []; stats = []; isOnSecondServe = false;
     resetOverlays();
     if (footerTimer) { clearInterval(footerTimer); footerTimer = null; }
-    matchStartTime = null; hasCompletedFirstGame = false;
+    matchStartTime = null; matchCompletionTime = null; hasCompletedFirstGame = false;
+    resumeEvents = []; priorFakeActivity = {steps:0,kcal:0,elapsed:0,points:0};
   };
   // A MatchRecord-shaped snapshot. Durations are floored at ~24 s a point so a
   // hurried demo still saves a believable match; steps/calories are invented.
@@ -2210,19 +2245,20 @@
     state.sets.forEach(function (_, i) { perSet[i] = Math.round(setElapsed(i)); tot += perSet[i]; });
     var scale = tot > 0 ? elapsed / tot : 1;
     Object.keys(perSet).forEach(function (k) { perSet[k] = Math.max(60, Math.round(perSet[k] * scale)); });
-    var mins = elapsed / 60;
+    var mins = Math.max(0, elapsed - priorFakeActivity.elapsed) / 60, newPlayed=Math.max(0,played-priorFakeActivity.points);
     return {
       id: "m" + Date.now() + Math.floor(Math.random() * 1000),
-      startTime: recordStart || matchStartTime || Date.now(), endTime: complete ? Date.now() : null,
+      startTime: recordStart || matchStartTime || Date.now(), endTime: complete ? (matchCompletionTime || Date.now()) : null,
+      resumeEvents: sessions.merge([],resumeEvents), parkedAt: null,
       iWon: complete ? (winner ? winner === "me" : null) : null,
       format: state.format, matchType: state.matchType,
       sets: clone(state).sets, currentPointsMe: state.currentPointsMe, currentPointsOpponent: state.currentPointsOpponent,
       stats: stats.map(function (p) { return Object.assign({}, p); }),
       trackingOn: trackingEnabled && !state.cfg.disablesPointTracking,
       elapsed: Math.round(elapsed), setElapsed: perSet,
-      steps: appSettings.health ? Math.round(mins * 36 + played * 4) : 0, kcal: appSettings.health ? Math.round(mins * 7.6 + played * 0.4) : 0,
+      steps: priorFakeActivity.steps + (appSettings.health ? Math.round(mins * 36 + newPlayed * 4) : 0), kcal: priorFakeActivity.kcal + (appSettings.health ? Math.round(mins * 7.6 + newPlayed * 0.4) : 0),
       pointsPlayed: played,
-      resume: { state: clone(state), momentum: momentum.slice(), secondServe: isOnSecondServe, trackingEnabled: trackingEnabled,
+      resume: { completionTime: matchCompletionTime, state: clone(state), momentum: momentum.slice(), secondServe: isOnSecondServe, trackingEnabled: trackingEnabled,
         pending: pendingStat ? Object.assign({}, pendingStat) : null, pendingOutcome: sheetOutcome,
         pendingEvents: deferredEvents ? deferredEvents.slice() : null,
         pendingUndo: pendingStat && history.length ? JSON.parse(JSON.stringify(history[history.length - 1])) : null }
@@ -2245,6 +2281,9 @@
     hasCompletedFirstGame = state.gameCount > 0;
     matchStartTime = Date.now() - rec.elapsed * 1000;
     recordStart = rec.startTime;
+    resumeEvents = sessions.merge([], rec.resumeEvents);
+    priorFakeActivity = {steps:Number(rec.steps||0),kcal:Number(rec.kcal||0),elapsed:Number(rec.elapsed||0),points:Number(rec.pointsPlayed||(rec.stats||[]).length)};
+    matchCompletionTime = rec.resume.completionTime || null;
     resetClocks();
     Object.keys(rec.setElapsed || {}).forEach(function (k) { setSeconds[k] = rec.setElapsed[k]; });
     if (footerTimer) clearInterval(footerTimer);

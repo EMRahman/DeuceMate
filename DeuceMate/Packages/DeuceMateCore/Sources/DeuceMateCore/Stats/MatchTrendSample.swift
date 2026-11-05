@@ -20,6 +20,8 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
 
     public let matchID: UUID
     public let startTime: Date
+    /// Finish date, or last recorded activity for provisional matches.
+    public let date: Date
     public let matchType: MatchType
     public let matchFormat: MatchFormat
     /// `nil` means a draw OR a still-in-progress match — check `isInProgress`
@@ -203,10 +205,12 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         pointsWithEndingShotOnServe: Int = 0, pointsWithEndingShotOnReturn: Int = 0,
         setSlices: [SetSlice] = [],
         competitionTypeRaw: String? = nil,
-        opponentIDs: Set<UUID> = []
+        opponentIDs: Set<UUID> = [],
+        date: Date? = nil
     ) {
         self.matchID = matchID
         self.startTime = startTime
+        self.date = date ?? startTime
         self.matchType = matchType
         self.matchFormat = matchFormat
         self.recorderWon = recorderWon
@@ -262,7 +266,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         guard !record.matchFormat.config.disablesPointTracking else { return nil }
 
         let summary = MatchStatsSummary(stats: record.stats, focal: .me,
-                                        setElapsedSeconds: record.setElapsedSeconds)
+                                        setElapsedSeconds: record.setElapsedSeconds, resumeEvents: record.resumeEvents)
         // MatchStatsSummary has no direct categorizedPoints field; derive it
         // from the two it does expose.
         let categorizedTotal = summary.totalPoints - summary.uncategorizedCount
@@ -320,7 +324,8 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
             pointsWithEndingShotOnReturn: summary.rallyDepthOnReturn.reduce(0) { $0 + $1.total },
             setSlices: Self.setSlices(record: record, summary: summary),
             competitionTypeRaw: record.tags?.competitionTypeRaw,
-            opponentIDs: Set(record.tags?.opponents.map(\.id) ?? [])
+            opponentIDs: Set(record.tags?.opponents.map(\.id) ?? []),
+            date: MatchChronology.date(record)
         )
     }
 
@@ -428,7 +433,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         let config = record.matchFormat.config
 
         // Bucket the timeline once rather than re-filtering it per set.
-        let stepsBySet = Dictionary(grouping: summary.stepsTimeline, by: \.setIndex)
+        let stepsBySet = Dictionary(grouping: record.resumeEvents.isEmpty ? summary.stepsTimeline : [], by: \.setIndex)
 
         // `decidingIndex` is the last set in scope, so for a live match it is
         // the last FINISHED one — never the decider, which the match has not

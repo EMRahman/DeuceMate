@@ -355,7 +355,11 @@ async function main() {
       const shell = window.DeuceMateShell;
       shell.popAll(); shell.push({ id: "history" }); shell.render();
     });
-    await page.locator("#watch-demo .hist-row").first().click();
+    // History is newest first by finish or last-activity date, so the manual
+    // checkpoint isn't necessarily the first row: open its own row.
+    const manualIndex = await page.evaluate(id => window.DeuceMateShell.history.findIndex(record => record.id === id), manualRecord.id);
+    check(manualIndex >= 0, "manual entry should be listed in Watch history before it is resumed");
+    await page.locator("#watch-demo .hist-row").nth(manualIndex).click();
     await page.getByRole("button", { name: "Resume this match" }).click();
     await page.waitForFunction(id => window.DeuceMateShell.liveId === id && window.DeuceMateShell.api.active(), manualRecord.id, { timeout: TIMEOUT });
 

@@ -95,7 +95,7 @@ struct TrendsView: View {
     /// though `chartXDomain` still spans that index (Codex review, PR
     /// #121). `scopedSamples` is oldest-first, matching `TrendPoint.index`.
     private var dateByIndex: [Int: Date] {
-        Dictionary(uniqueKeysWithValues: scopedSamples.enumerated().map { ($0.offset, $0.element.startTime) })
+        Dictionary(uniqueKeysWithValues: scopedSamples.enumerated().map { ($0.offset, $0.element.date) })
     }
 
     /// How many scoped matches can actually support the Fatigue comparison.
@@ -153,6 +153,13 @@ struct TrendsView: View {
                 .pickerStyle(.segmented)
             }
 
+            Section {
+                Text(includeInProgress
+                     ? "Completed matches are ordered by finish date. In-progress matches use last recorded activity and are provisional."
+                     : "Completed matches are ordered by finish date.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             // Re-enforces PerformanceTrends.minimumMatches AFTER filtering —
             // the archive screen's TrendsSection only gates on the unfiltered
             // total, so a filter combination that leaves 1-2 matches must be
@@ -189,7 +196,7 @@ struct TrendsView: View {
                     // empty charts.
                     if groupSeries.contains(where: { !$0.points.isEmpty }) {
                         Section {
-                            TrendChart(group: group, series: groupSeries, displayMode: displayMode, sampleCount: scopedSamples.count, dateByIndex: dateByIndex)
+                            TrendChart(group: group, series: groupSeries, displayMode: displayMode, sampleCount: scopedSamples.count, dateByIndex: dateByIndex, provisionalIndices: Set(scopedSamples.indices.filter { scopedSamples[$0].isInProgress }))
                         } header: {
                             Text(group.displayLabel)
                         } footer: {

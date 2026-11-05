@@ -6,7 +6,9 @@ class WorkoutManager: NSObject, ObservableObject {
     private let healthStore = HKHealthStore()
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
-    private var finalizingBuilder: HKLiveWorkoutBuilder?
+    /// Finalization remains tied to its own session even when another starts.
+    private var finalizingBuilders: [ObjectIdentifier: HKLiveWorkoutBuilder] = [:]
+    private let lifecycleLock = NSLock()
 
     @Published private(set) var isRunning = false
     @Published private(set) var currentHeartRate: Double? = nil
@@ -85,6 +87,8 @@ class WorkoutManager: NSObject, ObservableObject {
 
     func startWorkout(startDate: Date) {
         guard HKHealthStore.isHealthDataAvailable(), !isRunning else { return }
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
         let config = HKWorkoutConfiguration()
         config.activityType = .tennis
         config.locationType = .indoor
@@ -99,7 +103,7 @@ class WorkoutManager: NSObject, ObservableObject {
             builder?.delegate = self
             session?.startActivity(with: startDate)
             builder?.beginCollection(withStart: startDate) { _, _ in }
-            DispatchQueue.main.async { self.isRunning = true }
+            isRunning = true
         } catch {
             // Non-fatal: app continues without workout session
         }
@@ -107,9 +111,13 @@ class WorkoutManager: NSObject, ObservableObject {
 
     func stopWorkout() {
         guard isRunning else { return }
-        finalizingBuilder = builder
+        lifecycleLock.lock()
+        let stoppingSession = session
+        if let stoppingSession, let builder { finalizingBuilders[ObjectIdentifier(stoppingSession)] = builder }
         builder = nil
-        session?.end()
+        session = nil
+        lifecycleLock.unlock()
+        stoppingSession?.end()
         // Set synchronously — always called from main thread — so that a
         // subsequent startWorkout() call in the same turn sees isRunning = false.
         isRunning = false
@@ -119,11 +127,11 @@ class WorkoutManager: NSObject, ObservableObject {
         lastCaloriesPublishDate = nil
     }
 
-    /// Returns accumulated steps, distance, and calories from the current (or just-stopped) workout builder.
-    /// Safe to call synchronously right after `stopWorkout()` — the builder retains statistics
-    /// until `endCollection` is called asynchronously in the session delegate.
+    /// Returns accumulated steps, distance, and calories from the current workout builder.
+    /// Take this snapshot before stopping; a stopped builder can never contribute to
+    /// a later session or overwrite its values through a delayed callback.
     func snapshotActivity() -> (steps: Int, distanceMeters: Double, caloriesKcal: Double)? {
-        guard let b = finalizingBuilder ?? builder else { return nil }
+        guard let b = builder, isRunning else { return nil }
         let steps = b.statistics(for: HKQuantityType(.stepCount))?
             .sumQuantity()?.doubleValue(for: .count())
         let dist = b.statistics(for: HKQuantityType(.distanceWalkingRunning))?
@@ -155,14 +163,18 @@ extension WorkoutManager: HKWorkoutSessionDelegate {
                         from fromState: HKWorkoutSessionState,
                         date: Date) {
         guard toState == .ended else { return }
-        let b = finalizingBuilder
-        finalizingBuilder = nil
+        lifecycleLock.lock()
+        let b = finalizingBuilders.removeValue(forKey: ObjectIdentifier(session))
+        lifecycleLock.unlock()
         b?.endCollection(withEnd: date) { _, _ in
             b?.finishWorkout { _, _ in }
         }
     }
     func workoutSession(_ session: HKWorkoutSession, didFailWithError error: Error) {
-        DispatchQueue.main.async { self.isRunning = false }
+        DispatchQueue.main.async {
+            guard self.session === session else { return }
+            self.stopWorkout()
+        }
     }
 }
 
@@ -171,6 +183,11 @@ extension WorkoutManager: HKLiveWorkoutBuilderDelegate {
 
     func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder,
                         didCollectDataOf collectedTypes: Set<HKSampleType>) {
+        lifecycleLock.lock()
+        let originatingSession = session
+        let isCurrent = builder === workoutBuilder && originatingSession != nil
+        lifecycleLock.unlock()
+        guard isCurrent else { return }
         var bpmValue: Double?
         if collectedTypes.contains(HKQuantityType(.heartRate)),
            let heartRateStats = workoutBuilder.statistics(for: HKQuantityType(.heartRate)),
@@ -194,7 +211,7 @@ extension WorkoutManager: HKLiveWorkoutBuilderDelegate {
         }
 
         DispatchQueue.main.async {
-            if self.isRunning {
+            if self.isRunning, self.session === originatingSession, self.builder === workoutBuilder {
                 let now = Date()
                 if let bpmValue,
                    self.shouldPublish(at: now,

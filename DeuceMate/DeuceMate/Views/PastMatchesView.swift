@@ -128,7 +128,7 @@ struct PastMatchesView: View {
                 ? store.history.filter { $0.id != activeID }
                 : (store.history + watchOnly)
                     .filter { $0.id != activeID }
-                    .sorted { $0.startTime > $1.startTime }
+                    .sorted(by: MatchChronology.newestFirst)
 
             // Trends — reads store.history directly, not pastRecords,
             // since watch-mirror rows may carry no stats (§6.1 of
@@ -701,7 +701,7 @@ struct PastMatchesView: View {
     private func rowView(for record: MatchRecord, location: MatchStorageLocation) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center) {
-                Text(Self.dateFormatter.string(from: record.startTime))
+                Text(MatchChronology.caption(record, formatter: Self.dateFormatter))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Spacer()

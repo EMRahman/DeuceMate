@@ -58,6 +58,10 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
     /// its own clock on every completed-record merge path so an equal-`endTime`
     /// watch history push cannot revert a conversion.
     public var matchTypeRevision: MatchTypeRevision?
+    /// Confirmed history resumptions. Administrative session metadata, never Health data.
+    public var resumeEvents: [MatchResumeEvent]
+    /// Observed explicit park action; absent while live or completed.
+    public var parkedAt: Date?
 
     public init(
         id: UUID = UUID(),
@@ -89,7 +93,9 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
         recentPoints: [Player] = [],
         momentumEnabled: Bool = true,
         tags: MatchTags? = nil,
-        matchTypeRevision: MatchTypeRevision? = nil
+        matchTypeRevision: MatchTypeRevision? = nil,
+        resumeEvents: [MatchResumeEvent] = [],
+        parkedAt: Date? = nil
     ) {
         self.id = id
         self.startTime = startTime
@@ -121,6 +127,8 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
         self.momentumEnabled = momentumEnabled
         self.tags = tags
         self.matchTypeRevision = matchTypeRevision
+        self.resumeEvents = MatchResumeEvent.merged([], resumeEvents)
+        self.parkedAt = endTime == nil && iWon == nil ? parkedAt : nil
     }
 
     public init(from decoder: Decoder) throws {
@@ -159,6 +167,9 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
         // decode. `MatchTags.init(from:)` itself never throws on field contents.
         tags                     = try? c.decodeIfPresent(MatchTags.self, forKey: .tags)
         matchTypeRevision        = try? c.decodeIfPresent(MatchTypeRevision.self, forKey: .matchTypeRevision)
+        resumeEvents = MatchResumeEvent.merged([], try c.decodeIfPresent([MatchResumeEvent].self, forKey: .resumeEvents) ?? [])
+        parkedAt = try c.decodeIfPresent(Date.self, forKey: .parkedAt)
+        if !isInProgress { parkedAt = nil }
     }
 
     /// Converts raw game point counters (0–4+) to a tennis score string,
@@ -212,6 +223,7 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
         var completed = self
         completed.endTime = date
         completed.iWon = ScoringEngine.leaderWhenStopped(state).map { $0 == .me }
+        completed.parkedAt = nil
         return completed
     }
 

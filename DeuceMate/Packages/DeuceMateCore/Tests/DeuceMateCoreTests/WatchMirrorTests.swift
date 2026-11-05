@@ -99,11 +99,11 @@ final class WatchMirrorTests: XCTestCase {
         XCTAssertEqual(result.map(\.id), [newer.id, older.id])
     }
 
-    func test_merged_equalStartTime_tiebreaksByIDAscending() {
+    func test_merged_equalCompletionTime_tiebreaksByIDAscending() {
         let when = Date(timeIntervalSince1970: 1_000)
         let ids = [UUID(), UUID()].sorted { $0.uuidString < $1.uuidString }
-        let a = makeRecord(id: ids[0], startTime: when)
-        let b = makeRecord(id: ids[1], startTime: when)
+        let a = makeRecord(id: ids[0], startTime: when, endTime: when.addingTimeInterval(60))
+        let b = makeRecord(id: ids[1], startTime: when, endTime: when.addingTimeInterval(60))
         // Feed them in the "wrong" order to prove the sort, not input order, decides.
         let result = WatchMirror.merged(
             existing: [],

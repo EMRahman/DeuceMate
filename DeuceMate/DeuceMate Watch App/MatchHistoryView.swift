@@ -113,7 +113,7 @@ struct MatchHistoryView: View {
             + (record.matchType == .doubles ? " · Doubles" : " · Singles")
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text(MatchHistoryView.dateFormatter.string(from: record.startTime))
+                Text(MatchChronology.caption(record, formatter: MatchHistoryView.dateFormatter))
                     .font(.system(size: 11, weight: .semibold))
                 Spacer()
                 if isInProgress {
@@ -201,7 +201,7 @@ struct MatchHistoryView: View {
 
     private func title(for record: MatchRecord) -> String {
         if record.isInProgress {
-            return MatchHistoryView.dateFormatter.string(from: record.startTime)
+            return MatchChronology.caption(record, formatter: MatchHistoryView.dateFormatter)
         }
         return hasPointOutcomeStats(record) ? "Match Stats" : "Score Only Match"
     }

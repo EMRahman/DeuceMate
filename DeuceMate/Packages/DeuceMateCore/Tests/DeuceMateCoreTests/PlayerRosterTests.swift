@@ -272,7 +272,7 @@ final class PlayerRosterTests: XCTestCase {
             current,
             F.record(start: 100, iWon: true, tags: F.tags(opponents: [alex])),
             F.record(start: 200, iWon: false, tags: F.tags(opponents: [alex])),
-            F.record(start: 300, end: 60, iWon: nil, tags: F.tags(opponents: [alex])),   // completed draw
+            F.record(start: 300, end: 3_600, iWon: nil, tags: F.tags(opponents: [alex])),   // completed draw
             F.record(start: 400, end: nil, iWon: nil, tags: F.tags(opponents: [alex])),  // other live match
             F.record(start: 450, iWon: true, tags: F.tags(opponents: [jo]))
         ]

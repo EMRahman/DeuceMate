@@ -119,7 +119,7 @@ struct MatchDetailView: View {
 
     private var title: String {
         if record.isInProgress {
-            return Self.dateFormatter.string(from: record.startTime)
+            return MatchChronology.description(record, formatter: Self.dateFormatter)
         }
         switch record.matchFormat {
         case .superTiebreak: return "Super Tiebreak"
@@ -288,7 +288,8 @@ struct MatchDetailView: View {
             focal: .me,
             setElapsedSeconds: record.setElapsedSeconds,
             setScope: coachSetScope,
-            matchType: record.matchType
+            matchType: record.matchType,
+            resumeEvents: record.resumeEvents
         )
     }
 
@@ -314,7 +315,8 @@ struct MatchDetailView: View {
             stats: filteredStats,
             focal: .me,
             setElapsedSeconds: record.setElapsedSeconds,
-            maxHR: resolvedMaxHR
+            maxHR: resolvedMaxHR,
+            resumeEvents: record.resumeEvents, sessionPoints: record.stats
         )
     }
 
@@ -323,7 +325,8 @@ struct MatchDetailView: View {
             stats: filteredStats,
             focal: .opponent,
             setElapsedSeconds: record.setElapsedSeconds,
-            maxHR: resolvedMaxHR
+            maxHR: resolvedMaxHR,
+            resumeEvents: record.resumeEvents, sessionPoints: record.stats
         )
     }
 
@@ -482,7 +485,7 @@ struct MatchDetailView: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
-                        Text(Self.dateFormatter.string(from: record.startTime))
+                        Text(MatchChronology.description(record, formatter: Self.dateFormatter))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                         Text("·")
@@ -539,6 +542,14 @@ struct MatchDetailView: View {
                     }
                 }
                 .padding(.vertical, 6)
+            }
+
+            if !record.resumeEvents.isEmpty {
+                Section("Play sessions") {
+                    ForEach(Array(MatchSessions.descriptions(record, formatter: Self.sessionDateFormatter).enumerated()), id: \.offset) { _, line in
+                        Text(line).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
             }
 
             // Opponent / competition, private note, and the previous-match
@@ -1011,6 +1022,11 @@ struct MatchDetailView: View {
         dismiss()
     }
 
+    private static let sessionDateFormatter: DateFormatter = {
+        let formatter = DateFormatter(); formatter.dateStyle = .medium; formatter.timeStyle = .short
+        return formatter
+    }()
+
     // MARK: - Points list
 
     @ViewBuilder
@@ -1019,10 +1035,23 @@ struct MatchDetailView: View {
         let setIndices = grouped.keys.sorted()
         let matchScores = PointMatchScore.atStart(of: record.stats, record: record)
         let perPointSteps = perPointStepsByID
+        let markerByPointID = Dictionary(grouping: ResumeMarkers.derive(record).filter {
+            $0.beforePointIndex.map { record.stats.indices.contains($0) } ?? false
+        }, by: { record.stats[$0.beforePointIndex ?? 0].id })
         ForEach(setIndices, id: \.self) { setIdx in
             let points = grouped[setIdx] ?? []
             Section(SetFilter.set(setIdx).label(matchFormat: record.matchFormat)) {
                 ForEach(Array(points.enumerated()), id: \.element.id) { idx, pt in
+                    if let markers = markerByPointID[pt.id] {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(markers.count == 1 ? "Resumed" : "Resumed \(markers.count) times").font(.caption.weight(.semibold))
+                            ForEach(markers) { marker in
+                                Text(marker.event.resumedAt.formatted(date: .abbreviated, time: .shortened) + " · " + (marker.event.breakDuration.map { "Break: " + MatchSessions.breakDescription($0) } ?? "Break duration unknown"))
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
                     pointRow(
                         number: idx + 1,
                         point: pt,
@@ -1035,7 +1064,7 @@ struct MatchDetailView: View {
     }
 
     private var perPointStepsByID: [PointStat.ID: Int] {
-        let series = StepsSeries.make(stats: record.stats, totalSteps: record.totalSteps)
+        let series = StepsSeries.make(stats: record.stats, totalSteps: record.totalSteps, resumeEvents: record.resumeEvents)
         return Dictionary(uniqueKeysWithValues: series.compactMap { sample in
             guard record.stats.indices.contains(sample.pointIndex) else { return nil }
             return (record.stats[sample.pointIndex].id, sample.perPoint)

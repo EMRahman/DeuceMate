@@ -156,7 +156,7 @@ public enum PerformanceTrends {
     public static func samples(from records: [MatchRecord]) -> [MatchTrendSample] {
         records
             .compactMap { MatchTrendSample(record: $0) }
-            .sorted { $0.startTime < $1.startTime }
+            .sorted { $0.date != $1.date ? $0.date < $1.date : $0.matchID.uuidString < $1.matchID.uuidString }
     }
 
     /// Filter first, then window (§3.2) — "last 10 singles" means the last
@@ -183,7 +183,7 @@ public enum PerformanceTrends {
 
         let points: [TrendPoint] = samples.enumerated().compactMap { index, sample in
             guard let ratio = metric.ratio(in: sample) else { return nil }
-            return TrendPoint(id: sample.matchID, index: index, date: sample.startTime, ratio: ratio)
+            return TrendPoint(id: sample.matchID, index: index, date: sample.date, ratio: ratio)
         }
 
         let pooled = pooledRatio(for: metric, in: samples)

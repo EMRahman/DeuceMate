@@ -93,6 +93,7 @@ struct TrendChart: View {
     /// would otherwise leave that index dateless even though `chartXDomain`
     /// still spans it (Codex review, PR #121).
     let dateByIndex: [Int: Date]
+    let provisionalIndices: Set<Int>
 
     @State private var hiddenMetrics: Set<TrendMetric>
     @State private var rallyDepthMode: RallyDepthMode = .mix
@@ -109,12 +110,13 @@ struct TrendChart: View {
     /// choice across launches. Phone-local, no wire key — see CLAUDE.md §0.
     @AppStorage("trendsServeReturnFilter") private var serveReturnFilterRaw: String = ServeReturnFilter.servesIn.rawValue
 
-    init(group: TrendMetricGroup, series: [TrendSeries], displayMode: TrendDisplayMode, sampleCount: Int, dateByIndex: [Int: Date]) {
+    init(group: TrendMetricGroup, series: [TrendSeries], displayMode: TrendDisplayMode, sampleCount: Int, dateByIndex: [Int: Date], provisionalIndices: Set<Int> = []) {
         self.group = group
         self.series = series
         self.displayMode = displayMode
         self.sampleCount = sampleCount
         self.dateByIndex = dateByIndex
+        self.provisionalIndices = provisionalIndices
         // Opponent-framed metrics start hidden; everything else starts shown.
         _hiddenMetrics = State(initialValue: Set(series.map(\.metric).filter(\.startsHidden)))
     }
@@ -412,7 +414,7 @@ struct TrendChart: View {
     private func selectionSummary(for series: [TrendSeries]) -> some View {
         if let selectedIndex, let date = dateByIndex[selectedIndex] {
             HStack(spacing: 10) {
-                Text(date, format: Self.axisDateFormat)
+                Text(date.formatted(Self.axisDateFormat) + (provisionalIndices.contains(selectedIndex) ? " · Provisional" : ""))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 ForEach(series) { s in

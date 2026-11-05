@@ -159,10 +159,16 @@ private struct HRTimelineChart: View {
     let record: MatchRecord
     let filteredStats: [PointStat]
 
-    /// `filteredStats` sorted by timestamp. The x-axis indexes into this array
-    /// so all three series (raw / averaged / smoothed) share point positions.
+    /// Stored play order, preserved across clock adjustments. All three series
+    /// (raw / averaged / smoothed) share these point positions.
     private var orderedStats: [PointStat] {
-        filteredStats.sorted { $0.timestamp < $1.timestamp }
+        filteredStats
+    }
+
+    private var sessionByFilteredIndex: [Int] {
+        let sessions = ResumeMarkers.sessionIndices(events: record.resumeEvents, points: record.stats)
+        let byID = Dictionary(record.stats.enumerated().map { ($0.element.id, sessions[$0.offset]) }, uniquingKeysWith: { a, _ in a })
+        return orderedStats.map { byID[$0.id] ?? -1 }
     }
 
     @State private var mode: HRSeriesMode = .snapshot
@@ -207,6 +213,7 @@ private struct HRTimelineChart: View {
     @ViewBuilder
     private var chartBody: some View {
         let series = activeSeries
+        let sessions = sessionByFilteredIndex
         Chart {
             ForEach(zoneBands(domain: yDomain(series: series)), id: \.zone) { band in
                 RectangleMark(
@@ -220,7 +227,8 @@ private struct HRTimelineChart: View {
             ForEach(downsample(series), id: \.pointIndex) { hp in
                 LineMark(
                     x: .value("Point", hp.pointIndex),
-                    y: .value("BPM", hp.bpm)
+                    y: .value("BPM", hp.bpm),
+                    series: .value("Session", sessions.indices.contains(hp.pointIndex) ? sessions[hp.pointIndex] : -1)
                 )
                 .foregroundStyle(.primary)
                 .interpolationMethod(.monotone)
@@ -328,10 +336,11 @@ private struct HRTimelineChart: View {
         let raw = snapshotSeries
         guard raw.count >= 2 else { return raw }
         let half = 2
+        let sessions = sessionByFilteredIndex
         return raw.enumerated().map { i, hp in
             let lo = max(0, i - half)
             let hi = min(raw.count - 1, i + half)
-            let slice = raw[lo...hi]
+            let slice = raw[lo...hi].filter { sessions[$0.pointIndex] == sessions[hp.pointIndex] }
             let avg = Int((Double(slice.reduce(0) { $0 + $1.bpm }) / Double(slice.count)).rounded())
             return HRChartPoint(pointIndex: hp.pointIndex, bpm: avg, setIndex: hp.setIndex)
         }

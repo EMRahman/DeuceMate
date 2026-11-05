@@ -40,7 +40,7 @@ public struct MatchWebViewModel: Encodable, Sendable {
     /// match-detail `meta` fields — `competitionTypeLabel`, reader-framed
     /// `readerSideNames` / `otherSideNames` (empty unless the caller opted into
     /// names) and `privateNote` (only after the separate notes opt-in).
-    public static let currentSchemaVersion = 13
+    public static let currentSchemaVersion = 14
 
     public let schemaVersion: Int
     public let generatedAt: String
@@ -52,6 +52,8 @@ public struct MatchWebViewModel: Encodable, Sendable {
     public let perspectives: Perspectives
     public let points: [PointVM]
     public let setBands: [SetBandVM]
+    public let resumeEvents: [ResumeEventVM]
+    public let sessionSummary: [String]
     /// Recorder-only. Present only when heart-rate data exists.
     public let hr: HRBlock?
     /// Recorder-only. Present only when per-point cumulative step data exists.
@@ -222,6 +224,7 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public let cumulativeOpp: Int
         public let heartRateBPM: Int?    // recorder's HR (whichever perspective)
         public let stepsCumulative: Int?
+        public let sessionIndex: Int
     }
 
     public struct SetBandVM: Encodable, Sendable {
@@ -234,12 +237,25 @@ public struct MatchWebViewModel: Encodable, Sendable {
         public let label: String
     }
 
+    public struct ResumeEventVM: Encodable, Sendable {
+        public let id: String
+        public let resumedAt: String
+        public let pausedAt: String?
+        public let beforePointIndex: Int?
+        public let setIndex: Int?
+        public let breakSeconds: Double?
+        public let label: String
+        public let detail: String
+        public let accessibilityLabel: String
+    }
+
     public struct HRBlock: Encodable, Sendable {
         public struct Sample: Encodable, Sendable {
             public let pointIndex: Int
             public let bpm: Int
             public let setIndex: Int
             public let wonByMe: Bool     // won by the reader
+            public let sessionIndex: Int
         }
         public struct Zone: Encodable, Sendable {
             public let label: String
@@ -260,6 +276,7 @@ public struct MatchWebViewModel: Encodable, Sendable {
             public let pointIndex: Int
             public let cumulative: Int
             public let perPoint: Int
+            public let sessionIndex: Int
         }
         public let timeline: [Sample]
     }
@@ -395,7 +412,8 @@ public struct MatchWebViewModel: Encodable, Sendable {
         // outcome-derived sections — mirrors MatchExporter.dataSections.
         func summary(_ stats: [PointStat], focal: Player) -> MatchStatsSummary {
             MatchStatsSummary(stats: stats, focal: focal,
-                              setElapsedSeconds: record.setElapsedSeconds, maxHR: maxHR)
+                              setElapsedSeconds: record.setElapsedSeconds, maxHR: maxHR,
+                              resumeEvents: record.resumeEvents, sessionPoints: record.stats)
         }
         let fullMe  = summary(allStats, focal: .me)
         let fullOpp = summary(allStats, focal: .opponent)
@@ -405,8 +423,8 @@ public struct MatchWebViewModel: Encodable, Sendable {
         // Meta
         let durationSecs = Self.durationSeconds(record)
         let meta = Meta(
-            dateISO: Self.isoFormatter.string(from: record.startTime),
-            dateDisplay: Self.displayFormatter.string(from: record.startTime),
+            dateISO: Self.isoFormatter.string(from: MatchChronology.date(record)),
+            dateDisplay: MatchChronology.description(record, formatter: Self.displayFormatter),
             formatLabel: Self.formatLabel(record),
             matchTypeLabel: record.matchType == .doubles ? "Doubles" : "Singles",
             isDoubles: record.matchType == .doubles,
@@ -444,8 +462,8 @@ public struct MatchWebViewModel: Encodable, Sendable {
 
         // The recorder's HR / steps blocks (HR from the recorder's full
         // summary; zone win rates only in the recorder's own export).
-        let hrBlock = Self.hrBlock(fullMe, reader: reader)
-        let stepsBlock = Self.stepsBlock(stats: allStats, totalSteps: record.totalSteps)
+        let hrBlock = Self.hrBlock(fullMe, reader: reader, record: record)
+        let stepsBlock = Self.stepsBlock(stats: allStats, totalSteps: record.totalSteps, resumeEvents: record.resumeEvents)
 
         let palette = Palette(
             meLineHex: WebExportColors.meLineHex,
@@ -491,6 +509,8 @@ public struct MatchWebViewModel: Encodable, Sendable {
             perspectives: Perspectives(me: me, opponent: opponent),
             points: points,
             setBands: setBands,
+            resumeEvents: Self.resumeEventRows(record),
+            sessionSummary: MatchSessions.descriptions(record, formatter: Self.sessionDateFormatter),
             hr: hrBlock,
             steps: stepsBlock,
             palette: palette,

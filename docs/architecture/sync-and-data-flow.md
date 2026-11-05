@@ -13,6 +13,15 @@ and match data normally flows watch → phone.** Phone → watch traffic is requ
 and validated commands, plus two explicit archive actions: manual-entry records
 and **End at Current Score** completions.
 
+Display recency is derived by Core `MatchChronology`: finish date for completed
+records, latest recorded point (or original start) for unfinished records. Both
+stores, the Watch mirror, backup previews, imports and restores share it. Sorting
+never changes body-resolution authority, tags/revision clocks or tombstones, and
+existing archives are ordered on read without bulk rewriting. The stable final
+scoring instant lives only in Watch `AppState` until finalization; reversible live
+checkpoints continue to carry nil `endTime` and `iWon` so undo can replace them.
+No match-record or wire shape changes are needed for completion chronology.
+
 ## 1. Match data — one way, watch → phone
 
 ```mermaid
@@ -309,3 +318,22 @@ remote messages continue independently. If a real session becomes active while
 the guide is presented, Home dismisses the guide without changing the real match.
 The two version flags remain watch-local; the current theme is read through the
 normal environment. See the separate branch in [match-lifecycle.md](match-lifecycle.md).
+
+## Confirmed-session metadata
+
+`MatchRecord.resumeEvents` defaults to an empty list and `parkedAt` to nil when
+reading old records. No new transport key is required. Every merge/restore/import
+and store replacement unions immutable events by stable ID independently of the
+score-body winner, with deterministic duplicate-ID resolution. Point histories
+are never unioned. ParkedAt belongs to the winning body and is nil on completion.
+Tombstones, tags, match-type revisions and forgotten-player handling keep their
+existing authority. Updated peers preserve full metadata; an older app that alone
+rewrites a record can drop unknown fields. Session times survive health stripping,
+iCloud backup and manual transfer; activity measurements retain their existing
+sidecar/consent boundaries. Live state owns a resumed match, so the Watch removes
+the stored copy once the resume is durable and returns it at the next park/finalize.
+Full-history pushes leave out any in-progress copy of the live match that a failed
+write left behind, because the phone accepts any in-progress record. Pushes are
+queued and checkpoints are sent directly, so one queued before a resume can still
+arrive after newer checkpoints; `docs/features/TECHNICAL_DEBT.md` #2 tracks the
+revision that would let the phone reject it.

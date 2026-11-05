@@ -226,8 +226,10 @@ final class ManualMatchArchiveBackupTests: XCTestCase {
     }
 
     func test_importSnapshot_mergeAddsMissingRecordsAndClearsImportedTombstones() {
-        let existing = makeRecord(startTime: Date(timeIntervalSince1970: 1_000))
-        let imported = makeRecord(startTime: Date(timeIntervalSince1970: 2_000))
+        // Completion chronology needs distinct finish instants; the helper
+        // default gave both records the same end time and random UUID ties.
+        let existing = makeRecord(startTime: Date(timeIntervalSince1970: 1_000), endTime: Date(timeIntervalSince1970: 4_600))
+        let imported = makeRecord(startTime: Date(timeIntervalSince1970: 2_000), endTime: Date(timeIntervalSince1970: 5_600))
 
         let snapshot = ManualMatchArchiveBackup.importSnapshot(
             importing: [imported],

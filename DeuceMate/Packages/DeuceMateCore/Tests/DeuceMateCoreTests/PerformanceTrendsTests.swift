@@ -40,7 +40,7 @@ final class PerformanceTrendsTests: XCTestCase {
         }
         return MatchRecord(
             id: id, startTime: Date().addingTimeInterval(TimeInterval(-daysAgo * 86400)),
-            endTime: inProgress ? nil : Date(), setScores: [SetScore()], stats: points,
+            endTime: inProgress ? nil : Date().addingTimeInterval(TimeInterval(-daysAgo * 86400 + 3600)), setScores: [SetScore()], stats: points,
             iWon: inProgress ? nil : true,
             matchType: matchType, matchFormat: matchFormat
         )

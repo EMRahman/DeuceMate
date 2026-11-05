@@ -81,14 +81,14 @@
   }
   function headToHead(phone, rec) {
     var k = key(rec); if (!k) return null;
-    var all = phone.records().filter(function (r) { return r.id !== rec.id && r.endTime && key(r) === k; }).sort(function (a, b) { return b.startTime - a.startTime; });
+    var all = phone.records().filter(function (r) { return r.id !== rec.id && r.endTime && key(r) === k; }).sort(window.DeuceMateChronology.newest);
     if (!all.length) return null;
     var wins = all.filter(function (r) { return r.iWon === true; }).length, losses = all.filter(function (r) { return r.iWon === false; }).length;
     var form = all.slice(0, 3).map(function (r) { return r.iWon === true ? "W" : r.iWon === false ? "L" : "D"; }).join(" ");
     return wins + "–" + losses + " in " + all.length + " match" + (all.length === 1 ? "" : "es") + " · last " + Math.min(3, all.length) + ": " + form;
   }
   function previousMatch(phone, rec) {
-    var k = key(rec), list = phone.records().filter(function (r) { return r.id !== rec.id && r.startTime < rec.startTime; }).sort(function (a, b) { return b.startTime - a.startTime; });
+    var k = key(rec), list = phone.records().filter(function (r) { return r.id !== rec.id && !window.DeuceMateChronology.inProgress(r) && window.DeuceMateChronology.oldest(r, rec) < 0; }).sort(window.DeuceMateChronology.newest);
     var rematch = k ? list.find(function (r) { return key(r) === k; }) : null;
     if (rematch) return { rec: rematch, kind: "Previous match against the same opponent" };
     var same = list.find(function (r) { return r.matchType === rec.matchType; });
@@ -111,7 +111,7 @@
     var P = window.DeuceMatePhoneReports, b = phone.button("", onClick || function () {}, "mi-match-row");
     var c = h("span", "mi-match-copy"), res = h("span", "mi-match-res");
     res.append(h("strong", "", r.endTime ? resultWord(r) : "In Progress"), h("span", "", (r.matchType === "doubles" ? "Doubles" : "Singles") + " · " + ((window.DeuceMateShell && window.DeuceMateShell.formatInfo && window.DeuceMateShell.formatInfo(r.format) || { label: "Best of 3" }).label)));
-    c.append(h("span", "mi-match-date", dateTime(r.startTime)), h("strong", "mi-match-score", P.score(r, "me")), res);
+    c.append(h("span", "mi-match-date", window.DeuceMateChronology.describe(r, dateTime)), h("strong", "mi-match-score", P.score(r, "me")), res);
     b.append(c, phone.icon("chevron")); return b;
   }
   function openRecord(phone, r) { phone.closeSheet(); phone.navigate("detail", r); }
@@ -142,7 +142,7 @@
     var x = phone.button("", function () { phone.closeSheet(); }, "mi-search-x"); x.setAttribute("aria-label", "Close"); x.append(phone.icon("xCircle"));
     bar.append(field, x); body.append(bar, results);
     function matchesFor(p) { return playerMatchCount(phone, p); }
-    function line(p) { var ms = matchesFor(p), last = ms.reduce(function (m, r) { return Math.max(m, r.startTime); }, 0); return ms.length + " match" + (ms.length === 1 ? "" : "es") + (last ? " · last " + dateOnly(last) : ""); }
+    function line(p) { var ms = matchesFor(p), last = ms.reduce(function (m, r) { return Math.max(m, window.DeuceMateChronology.activity(r)); }, 0); return ms.length + " match" + (ms.length === 1 ? "" : "es") + (last ? " · last " + dateOnly(last) : ""); }
     function pickRow(p) {
       var wrap = h("div", "mi-row mi-pickrow"), main = phone.button("", function () { onPick(p); }, "mi-pickmain"), copy = h("span", "mi-row-copy");
       copy.append(h("span", "mi-row-title", p.name), h("span", "mi-row-sub", line(p))); main.append(copy);
@@ -289,7 +289,7 @@
     var head = prev.kind.replace("Previous match against the same opponent", opp && rec.tags.opponents.length ? "Previous match against " + rec.tags.opponents.map(function (p) { return p.name; }).join(" & ") : prev.kind);
     var choose = phone.button("", function () { openPicker(phone, rec); }, "mi-row mi-link"); choose.append(phone.icon("list"), h("span", "mi-row-title", "Choose Another Match"));
     body.append(group(null, [h("div", "mi-kv-head", head), choose]));
-    function colHead() { var r = h("div", "mi-cols"); [["This match", rec], ["Compared with", other]].forEach(function (c) { var d = h("div", ""); d.append(h("small", "", c[0].toUpperCase()), h("strong", "", dateOnly(c[1].startTime))); r.append(d); }); return r; }
+    function colHead() { var r = h("div", "mi-cols"); [["This match", rec], ["Compared with", other]].forEach(function (c) { var d = h("div", ""); d.append(h("small", "", c[0].toUpperCase()), h("strong", "", window.DeuceMateChronology.describe(c[1], dateOnly))); r.append(d); }); return r; }
     function pairRow(label, a, b2) { var r = h("div", "mi-cols mi-cols-row"); [a, b2].forEach(function (v, i) { var d = h("div", ""); if (i === 0) d.append(h("small", "", label)); else d.append(h("small", "", "\u00a0")); d.append(h("span", "", v)); r.append(d); }); return r; }
     function pts(r) { var n = (r.stats || []).length, c = (r.stats || []).filter(function (p) { return p.outcome !== "uncategorized"; }).length; return n ? n + " points · outcomes on " + Math.round(c * 100 / n) + "%" : "Not recorded"; }
     var overview = [colHead(), pairRow("Result", resultWord(rec), resultWord(other)), pairRow("Score", P.score(rec, "me"), P.score(other, "me")), pairRow("Duration", minutesText(rec.elapsed), minutesText(other.elapsed)), pairRow("Points tracked", pts(rec), pts(other))];
@@ -310,7 +310,7 @@
     phone.showSheet("Compare", body, { detent: "large" });
   }
   function openPicker(phone, rec) {
-    var body = h("div", "mi-page"), list = phone.records().filter(function (r) { return r.id !== rec.id && r.endTime; }).sort(function (a, b) { return b.startTime - a.startTime; });
+    var body = h("div", "mi-page"), list = phone.records().filter(function (r) { return r.id !== rec.id && r.endTime; }).sort(window.DeuceMateChronology.newest);
     body.append(group("Choose a match", list.map(function (r) { return matchRow(phone, r, function () { openComparison(phone, rec, r); }); })));
     phone.showSheet("Choose Match", body, { detent: "large", leading: backButton(phone, function () { openComparison(phone, rec); }), trailing: h("span", "phone-sheet-spacer") });
   }
@@ -429,7 +429,7 @@
     var body = h("div", "mi-page"), list = roster(phone);
     if (!list.length) body.append(group(null, h("div", "mi-kv-head", "No players yet")));
     else body.append(group(null, list.map(function (p) {
-      var ms = playerMatchCount(phone, p), last = ms.reduce(function (m, r) { return Math.max(m, r.startTime); }, 0);
+      var ms = playerMatchCount(phone, p), last = ms.reduce(function (m, r) { return Math.max(m, window.DeuceMateChronology.activity(r)); }, 0);
       var b = phone.button("", function () { playerDetail(phone, p); }, "mi-row"), copy = h("span", "mi-row-copy");
       copy.append(h("span", "mi-row-title", p.name), h("span", "mi-row-sub", ms.length + " match" + (ms.length === 1 ? "" : "es") + " · last " + dateOnly(last)));
       b.append(copy, phone.icon("chevron")); return b;
@@ -462,7 +462,7 @@
       (t.opponents || []).forEach(function (p) {
         var k = pid(p); if (!clean(p.name)) return;
         var e = map[k] || (map[k] = { id: p.id, name: p.name, hand: p.hand, backhand: p.backhand, style: p.style, count: 0, last: 0 });
-        e.count++; e.last = Math.max(e.last, r.startTime);
+        e.count++; e.last = Math.max(e.last, window.DeuceMateChronology.activity(r));
       });
     });
     return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return b.last - a.last; });
@@ -470,7 +470,7 @@
   function resultWord(r) { return r.iWon === true ? "Won" : r.iWon === false ? "Lost" : "Draw"; }
   function opponentSheet(phone, entry) {
     var body = h("div", "mi-page");
-    var matches = phone.records().filter(function (r) { return r.tags && (r.tags.opponents || []).some(function (p) { return samePlayer(p, entry); }); }).sort(function (a, b) { return b.startTime - a.startTime; });
+    var matches = phone.records().filter(function (r) { return r.tags && (r.tags.opponents || []).some(function (p) { return samePlayer(p, entry); }); }).sort(window.DeuceMateChronology.newest);
     var style = [];
     if (label(HAND, entry.hand)) style.push(kvRow("Handedness", label(HAND, entry.hand)));
     if (label(BACK, entry.backhand)) style.push(kvRow("Backhand", label(BACK, entry.backhand)));
@@ -484,7 +484,7 @@
       var form = singles.slice(0, 5).map(function (r) { return r.iWon === true ? "W" : r.iWon === false ? "L" : "D"; }).join(" ");
       sc.push(h("div", "mi-h2h-main", w + " " + (w === 1 ? "win" : "wins") + " \u00b7 " + l + " " + (l === 1 ? "loss" : "losses") + " \u00b7 " + d + " " + (d === 1 ? "draw" : "draws")),
         h("div", "mi-h2h-sub", w + "\u2013" + l + " in " + singles.length + " match" + (singles.length === 1 ? "" : "es") + " \u00b7 last " + Math.min(5, singles.length) + ": " + form),
-        h("div", "mi-h2h-sub", "Last played " + dateTime(singles[0].startTime)));
+        h("div", "mi-h2h-sub", "Last played " + dateTime(Math.max.apply(null, singles.map(window.DeuceMateChronology.activity)))));
     }
     body.append(group("Head to Head \u00b7 Singles", sc));
     var groups = {}; done.filter(function (r) { return r.matchType === "doubles" && key(r); }).forEach(function (r) { (groups[key(r)] = groups[key(r)] || []).push(r); });

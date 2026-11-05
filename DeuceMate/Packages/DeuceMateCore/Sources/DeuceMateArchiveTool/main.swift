@@ -56,7 +56,7 @@ func runList(_ arguments: [String]) {
     guard arguments.count >= 3 else { usage() }
     let archive = loadArchive(at: arguments[2])
     for (index, record) in archive.records.enumerated() {
-        let date = listDateFormatter.string(from: record.startTime)
+        let date = MatchChronology.caption(record, formatter: listDateFormatter)
         let won = record.isInProgress
             ? "?"
             : record.iWon.map { $0 ? "W" : "L" } ?? "D"

@@ -60,7 +60,8 @@ extension MatchWebViewModel {
             // coaching belongs only to the recorder's own export/perspective.
             let coaching = RecCoachInsights.generate(
                 stats: record.stats, focal: focal, setElapsedSeconds: record.setElapsedSeconds,
-                matchType: focal == .me && reader == .me ? record.matchType : nil
+                matchType: focal == .me && reader == .me ? record.matchType : nil,
+                resumeEvents: record.resumeEvents
             )
             if !coaching.isEmpty {
                 sections.append(StatSection(title: "Coaching Insights", rows: [],
@@ -257,6 +258,7 @@ extension MatchWebViewModel {
     /// score labels are the reader's side. HR and steps stay the recorder's.
     static func pointRows(_ record: MatchRecord, reader: Player) -> [PointVM] {
         let stats = record.stats
+        let sessions = ResumeMarkers.sessionIndices(events: record.resumeEvents, points: stats)
         var cumMe = 0
         var cumOpp = 0
         let matchScores = PointMatchScore.atStart(of: stats, record: record, focal: reader)
@@ -293,7 +295,8 @@ extension MatchWebViewModel {
                 cumulativeMe: cumMe,
                 cumulativeOpp: cumOpp,
                 heartRateBPM: pt.heartRateBPM,
-                stepsCumulative: pt.stepsCumulative
+                stepsCumulative: pt.stepsCumulative,
+                sessionIndex: sessions[idx]
             )
         }
     }
@@ -335,11 +338,13 @@ extension MatchWebViewModel {
     /// rates (recorder HR vs recorder results) exist only in the recorder's
     /// own export — mirroring `MatchExporter`, which drops them from the
     /// opponent's text export.
-    static func hrBlock(_ meFull: MatchStatsSummary, reader: Player) -> HRBlock? {
+    static func hrBlock(_ meFull: MatchStatsSummary, reader: Player, record: MatchRecord) -> HRBlock? {
         guard !meFull.hrTimeline.isEmpty else { return nil }
-        let timeline = meFull.hrTimeline.map {
-            HRBlock.Sample(pointIndex: $0.pointIndex, bpm: $0.bpm, setIndex: $0.setIndex,
-                           wonByMe: reader == .me ? $0.wonByFocal : !$0.wonByFocal)
+        let sessions = ResumeMarkers.sessionIndices(events: record.resumeEvents, points: record.stats)
+        let timeline = record.stats.enumerated().compactMap { index, point -> HRBlock.Sample? in
+            guard let bpm = point.heartRateBPM else { return nil }
+            return HRBlock.Sample(pointIndex: index, bpm: bpm, setIndex: point.setIndex,
+                wonByMe: point.winner == reader, sessionIndex: sessions[index])
         }
         guard reader == .me else {
             return HRBlock(timeline: timeline, zones: [], resolvedMaxHR: meFull.resolvedMaxHR)
@@ -357,15 +362,36 @@ extension MatchWebViewModel {
         return HRBlock(timeline: timeline, zones: zones, resolvedMaxHR: meFull.resolvedMaxHR)
     }
 
-    static func stepsBlock(stats: [PointStat], totalSteps: Int?) -> StepsBlock? {
+    static func stepsBlock(stats: [PointStat], totalSteps: Int?, resumeEvents: [MatchResumeEvent] = []) -> StepsBlock? {
         // Derivation lives in Core's StepsSeries so the iOS chart and this export
         // can't diverge; the JSON ships both the cumulative total and per-point
         // delta and the viewer only paints whichever the user toggles.
-        let series = StepsSeries.make(stats: stats, totalSteps: totalSteps)
+        let series = StepsSeries.make(stats: stats, totalSteps: totalSteps, resumeEvents: resumeEvents)
         guard !series.isEmpty else { return nil }
+        let sessions = ResumeMarkers.sessionIndices(events: resumeEvents, points: stats)
         return StepsBlock(timeline: series.map {
-            StepsBlock.Sample(pointIndex: $0.pointIndex, cumulative: $0.cumulative, perPoint: $0.perPoint)
+            StepsBlock.Sample(pointIndex: $0.pointIndex, cumulative: $0.cumulative, perPoint: $0.perPoint, sessionIndex: sessions[$0.pointIndex])
         })
+    }
+
+    static let sessionDateFormatter: DateFormatter = {
+        let formatter = DateFormatter(); formatter.dateStyle = .medium; formatter.timeStyle = .short
+        return formatter
+    }()
+
+    static func resumeEventRows(_ record: MatchRecord) -> [ResumeEventVM] {
+        ResumeMarkers.derive(record).map { marker in
+            let event = marker.event
+            let index = marker.beforePointIndex
+            let detail = event.breakDuration.map { "Break: " + MatchSessions.breakDescription($0) } ?? "Break duration unknown"
+            let label = "Resumed · " + sessionDateFormatter.string(from: event.resumedAt)
+            let placement = index.map { $0 < record.stats.count ? ", before recorded point \($0 + 1)" : ", awaiting a recorded point" } ?? ", point boundary unknown"
+            return ResumeEventVM(id: event.id.uuidString, resumedAt: isoFormatter.string(from: event.resumedAt),
+                pausedAt: event.pausedAt.map { isoFormatter.string(from: $0) }, beforePointIndex: index,
+                setIndex: index.flatMap { record.stats.indices.contains($0) ? record.stats[$0].setIndex : nil },
+                breakSeconds: event.breakDuration, label: label, detail: detail,
+                accessibilityLabel: label + placement + ", " + detail)
+        }
     }
 
     // MARK: - Meta helpers

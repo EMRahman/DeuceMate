@@ -38,9 +38,11 @@ extension MatchWebViewModel {
         let stats = setIndex.map { idx in record.stats.filter { $0.setIndex == idx } } ?? record.stats
         let other: Player = reader == .me ? .opponent : .me
         let meFull  = MatchStatsSummary(stats: stats, focal: reader,
-                                        setElapsedSeconds: record.setElapsedSeconds, maxHR: maxHR)
+                                        setElapsedSeconds: record.setElapsedSeconds, maxHR: maxHR,
+                                        resumeEvents: record.resumeEvents, sessionPoints: record.stats)
         let oppFull = MatchStatsSummary(stats: stats, focal: other,
-                                        setElapsedSeconds: record.setElapsedSeconds, maxHR: maxHR)
+                                        setElapsedSeconds: record.setElapsedSeconds, maxHR: maxHR,
+                                        resumeEvents: record.resumeEvents, sessionPoints: record.stats)
         return FilterVM(
             key: key, label: label,
             pointsWon: pointsWonVM(meFull),

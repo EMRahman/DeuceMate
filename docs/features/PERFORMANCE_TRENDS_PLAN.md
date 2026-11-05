@@ -74,6 +74,14 @@ open_questions:
 
 # Plan: iPhone Trends — Cross-Match Performance Over Time
 
+Completion chronology update (2026-11-04): samples retain original `startTime`
+and add derived `date` from `MatchChronology`. Completed results use finish date
+(legacy fallback: start); opted-in unfinished matches use latest recorded point
+(fallback: start) and are provisional. Sort ascending by date/UUID before the
+existing filter-before-window pipeline. Axis labels, selections, recent/previous
+blocks, deltas and sparklines share that order. See
+[MATCH_RESUME_MARKERS_PLAN.md](MATCH_RESUME_MARKERS_PLAN.md), Phase 1.
+
 ## 1. The report
 
 > "Currently where it states 'Past Matches' there should be a new top section called:
@@ -423,6 +431,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     // Identity and grouping
     public let matchID: UUID
     public let startTime: Date
+    public let date: Date // completion/activity chronology; preserves original start
     public let matchType: MatchType
     public let matchFormat: MatchFormat
     public let recorderWon: Bool?           // nil == draw OR still in-progress — check isInProgress

@@ -28,7 +28,8 @@ public enum RecCoachInsights {
         focal: Player,
         setElapsedSeconds: [Int: TimeInterval] = [:],
         setScope: SetScope = .all,
-        matchType: MatchType? = nil
+        matchType: MatchType? = nil,
+        resumeEvents: [MatchResumeEvent] = []
     ) -> [String] {
         let scoped: [PointStat]
         switch setScope {
@@ -53,9 +54,23 @@ public enum RecCoachInsights {
         if let value = ownErrors(scoped: scoped, cat: cat, focal: focal) { candidates.append(value) }
         candidates += pressure(scoped: scoped, cat: cat, focal: focal)
         if let value = rallies(scoped: scoped, cat: cat, focal: focal) { candidates.append(value) }
-        candidates += setChanges(stats, focal: focal, durations: setElapsedSeconds, scope: setScope)
+        if resumeEvents.isEmpty {
+            candidates += setChanges(stats, focal: focal, durations: setElapsedSeconds, scope: setScope)
+        }
         if focal == .me && matchType == .singles {
-            candidates += exertion(scoped)
+            if resumeEvents.isEmpty { candidates += exertion(scoped) }
+            else {
+                let sessions = ResumeMarkers.sessionIndices(events: resumeEvents, points: stats)
+                let grouped = Dictionary(grouping: stats.enumerated(), by: { sessions[$0.offset] })
+                for session in grouped.keys.sorted() {
+                    let scopedIDs = Set(scoped.map(\.id))
+                    let points = (grouped[session] ?? []).map(\.element).filter { scopedIDs.contains($0.id) }
+                    candidates += exertion(points).map { value in
+                        Candidate(id: "session\(session)-\(value.id)", score: value.score, topics: value.topics,
+                            line: "Session \(session + 1): " + value.line)
+                    }
+                }
+            }
         }
         var topics: Set<String> = []
         var result: [String] = []
