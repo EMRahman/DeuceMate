@@ -185,7 +185,8 @@ presentation/demo code; Swift remains the native behavior source.
 
 | File | What it does |
 |---|---|
-| `try.html`, `index.html` | Public Try entry, side-by-side Watch/iPhone hosts, script order and marketing navigation. |
+| `try.html`, `index.html` | Public Try entry, side-by-side Watch/iPhone hosts, script order and marketing navigation. The demo's markup and asset list live in `try.html` only. |
+| `assets/home-demo.js` | Loads the demo from `try.html` into the home page's Try section when asked, and opens a sample match at Coaching Insights. Falls back to `try.html`. |
 | `assets/watch-demo.js` | Existing scoring reducer and Watch UI, plus the gated phone command adapter and history snapshots. |
 | `assets/watch-demo-app.js` | Watch app shell, shared demo settings/themes and screens. |
 | `assets/watch-demo-history.js` | Deterministic sample matches, record formatting, Watch history and resume. |
