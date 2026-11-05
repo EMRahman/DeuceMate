@@ -422,6 +422,41 @@ Reports include player names unless you turn off **Include player names** in the
 share menu. AI Coach prompts leave names and the note out unless you turn them on.
 Spoken announcements never say names.
 
+### Prepare a game plan for a rematch
+
+On an opponent's page, **Prepare Game Plan** builds an evidence pack from the
+singles matches you recorded against them, ready to hand to an AI app (ChatGPT,
+Claude, Gemini and others) that writes the plan. DeuceMate prepares the pack;
+you read the plan in the AI app. Nothing is sent until you copy, share or open
+an app yourself, and opening an app doesn't mean it received anything.
+
+1. **Upcoming match** — set the competition (it starts unset, so the plan doesn't
+   assume another friendly), format, an optional date and an optional note about
+   surface, conditions or a worry. These are your statements, not tracked data.
+2. **Evidence** — the latest five matches are selected. Choose **Last 10**, any
+   **Count**, **All**, or pick matches yourself, and filter by date or
+   competition. Friendly, league, tournament and practice results stay separate;
+   for a league match the pack asks the AI to lead with league evidence. Doubles
+   matches are left out (this version prepares singles), and unfinished matches
+   are only included if you turn that on, as partial evidence.
+3. **Pack contents** — names and private notes are off each time. Turning notes
+   on shows each selected match's note so you can leave any out. Heart rate,
+   steps, calories and other Health data are never included.
+4. **Detail and size** — **Full detail** includes every saved point;
+   **Summary only** leaves the point rows out and says so. The **Estimated
+   input** figure is an approximate token count of exactly what you'll share;
+   AI services count slightly differently. For very large histories choose
+   numbered parts — the pack asks the AI to wait for the last part.
+5. **Hand off** — **Copy Prompt** copies the whole pack, **Share Evidence File**
+   sends it as a .txt file with a short message, or open an installed AI app
+   (the pack is copied for you to paste). **Preview Evidence Pack** shows the
+   exact text first.
+
+The plan comes back as a short courtside checklist — three priorities, warm-up
+checks, serve/return and rally plans, pressure routines, a plan B and what's
+still unknown — with each point tied to the matches it came from. Treat warm-up
+cues as things to test in the opening games, not proven weaknesses.
+
 ## Sharing a match as an interactive web page
 
 From the match detail view's Share menu, **Interactive Web Page** exports the whole

@@ -61,11 +61,14 @@ flowchart TB
         TTS["Score announcer<br/>text-to-speech, foreground only"]
         EXPORT["Match exporter<br/>text, AI coach prompt,<br/>interactive HTML page"]
         NOTES["Private match notes<br/>iPhone only, backup-excluded"]
+        GAMEPLAN["Opponent game plan<br/>multi-match evidence pack,<br/>no Health data"]
         PSYNC --> PSTORE
         PSYNC --> TTS
         PSTORE --> PUI
         NOTES --> PUI
         PUI --> EXPORT
+        PSTORE --> GAMEPLAN
+        NOTES -. "reviewed, opt-in" .-> GAMEPLAN
     end
 
     subgraph CORE["DeuceMateCore package — SHARED RULEBOOK, no screens"]
@@ -94,6 +97,7 @@ flowchart TB
 
     AIAPPS(["Third-party AI apps<br/>ChatGPT, Claude, Gemini, ...<br/>and the share sheet"])
     EXPORT --> AIAPPS
+    GAMEPLAN --> AIAPPS
 
     WATCH -. uses .-> CORE
     PHONE -. uses .-> CORE

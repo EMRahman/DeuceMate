@@ -99,6 +99,17 @@ enum AICoachLauncher {
         UIApplication.shared.open(url)
     }
 
+    /// Copies `text` and opens the app WITHOUT any URL pre-fill, so nothing
+    /// is ever truncated to fit a URL: the full text is on the clipboard for
+    /// the user to paste. Used by Prepare Game Plan, whose evidence packs are
+    /// far larger than any launch URL can carry. Returns whether the app opened.
+    @MainActor
+    static func openWithoutPrefill(_ app: AICoachApp, copying text: String) async -> Bool {
+        UIPasteboard.general.string = text
+        guard let url = app.probeURL else { return false }
+        return await UIApplication.shared.open(url)
+    }
+
     /// Copies the prompt to the clipboard without opening anything.
     @MainActor
     static func copyToClipboard(_ prompt: String) {
