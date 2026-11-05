@@ -533,6 +533,7 @@
     contextText: contextText, webMeta: webMeta, shareSwitches: shareSwitches, exportOptions: exportOptions, playersSheet: playersSheet, roster: roster,
     section: section, displayLine: displayLine, convertible: convertible, convertedTags: convertedTags,
     playersDroppedConvertingToSingles: playersDroppedConvertingToSingles, getNote: getNote, setNote: setNote,
-    headToHead: headToHead, previousMatch: previousMatch, key: key
+    headToHead: headToHead, previousMatch: previousMatch, key: key,
+    opponentEntries: opponentEntries, playerKey: pid, competitions: COMPETITIONS
   };
 })();
