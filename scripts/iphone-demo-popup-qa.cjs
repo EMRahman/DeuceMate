@@ -118,7 +118,9 @@ async function main() {
     await archiveDelete.hover(); await archiveDelete.getByRole("button", {name: /Match actions/}).click();
     await click(dialog, "Delete Permanently"); await deleteFits(archiveID);
     for (const viewport of [{width: 320, height: 740}, {width: 390, height: 844}]) {
-      await page.setViewportSize(viewport); await deleteFits(archiveID);
+      await page.setViewportSize(viewport);
+      // A narrower viewport can push the selected row below the fold; a person would scroll back to it, and the popover follows.
+      await archiveDelete.evaluate(el => el.scrollIntoView({block: "center"})); await deleteFits(archiveID);
       await root.locator(".phone-body").evaluate(el => {el.scrollTop += 40;}); await deleteFits(archiveID);
     }
     for (const scheme of ["light", "dark", "light"]) {

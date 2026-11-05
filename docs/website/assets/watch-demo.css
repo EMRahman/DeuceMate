@@ -648,3 +648,5 @@
 /* Full-width pill (3rd of 3) is inset 10.5 pt like Undo; step-2 pills start at y 71.5 (measured on the SE 3 sim). */
 .app-mode .sheet-btn.full { margin: 0 calc(4.5 * var(--pt)); }
 .app-mode .sheet-header:has(.sheet-back) + .sheet-buttons { margin-top: calc(4.8 * var(--pt)); }
+@keyframes watch-haptic-buzz { 0%,100% { transform:translateX(0); } 25% { transform:translateX(-2px); } 75% { transform:translateX(2px); } }
+@media (prefers-reduced-motion: no-preference) { .app-mode.haptic-buzz { animation:watch-haptic-buzz .2s linear; } }

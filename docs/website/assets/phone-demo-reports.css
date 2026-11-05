@@ -594,3 +594,5 @@
 .phone-device-dialog .mi-name-btn.mi-empty { color:var(--sheet-secondary); }
 .phone-device-dialog .mi-back { display:grid; place-items:center; width:36px; height:36px; padding:0; border:0; border-radius:50%; background:var(--sheet-card) !important; color:var(--sheet-text); }
 .phone-device-dialog .mi-back svg { width:20px; height:20px; }
+.pr-trend-tag-row { justify-content:space-between; gap:12px; }
+.pr-trend-tag-row .pr-trend-format-label { max-width:48%; }

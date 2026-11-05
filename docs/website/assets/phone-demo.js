@@ -116,6 +116,7 @@
       safari: '<circle cx="12" cy="12" r="9"/><path d="m16 8-2.5 5.5L8 16l2.5-5.5L16 8Z"/>',
       summary: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 7h8M8 11h8M8 15h3m-3 3h3m4-3h1m-1 3h1"/>',
       table: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20M2 15h20M9 4v16m6-16v16"/>',
+      trophy: '<path d="M7 4h10v5a5 5 0 0 1-10 0V4Zm0 2H3v2a4 4 0 0 0 4 4m10-6h4v2a4 4 0 0 1-4 4M12 14v4m-4 3h8m-6-3h4"/>',
       chevron: '<path d="m9 5 7 7-7 7"/>',
       chevronUp: '<path d="m5 15 7-7 7 7"/>',
       chevronDown: '<path d="m5 9 7 7 7-7"/>',
@@ -618,9 +619,18 @@
     if (persistenceError) out.append(note("Browser storage is unavailable. This session still works; export your demo archive to keep it."));
     return out;
   }
+  // Native LiveScoreboardStatus.commandFailureMessage: a send that was not confirmed (live commands are never retried), shown 5 s.
+  var COMMAND_FAILURE = "Not confirmed by the Watch. Check the score before retrying.", commandFailureTimer = 0, commandFailed = false;
+  function reportCommandFailure() {
+    commandFailed = true; clearTimeout(commandFailureTimer);
+    commandFailureTimer = setTimeout(function () { commandFailed = false; queueRender(); }, 5000);
+  }
   function send(command, value) {
-    if (!settings.iPhoneInput || !connection.paired || !connection.reachable || connection.activation !== "ready") return;
-    api.phoneCommand(command, value, displayedLiveId);
+    if (!settings.iPhoneInput || !connection.paired || !connection.reachable) return;
+    // Native handleSwipe blocks a scoring swipe locally while a categorization/changeover is open: no send, so no failure.
+    // Undo is not gated here: the category panel's own "Undo point" button must still reach the Watch.
+    if (command === "point" && !api.phoneState().canScore) return;
+    if (connection.activation !== "ready" || api.phoneCommand(command, value, displayedLiveId) === false) reportCommandFailure();
     queueRender();
   }
   function liveBoard() {
@@ -665,7 +675,7 @@
       var dx = e.clientX - gesture.x, dy = e.clientY - gesture.y, now = performance.now();
       if (now - lastPhoneSwipe < 250) return;
       if (Math.abs(dy) > 20 && Math.abs(dy) > Math.abs(dx)) { lastPhoneSwipe = now; send("point", dy < 0 ? "me" : "opponent"); }
-      else if (dx < -20 && Math.abs(dx) > Math.abs(dy)) { lastPhoneSwipe = now; send("undo"); }
+      else if (dx < -20 && Math.abs(dx) > Math.abs(dy)) { lastPhoneSwipe = now; if (!api.phoneState().pending) send("undo"); }
     }
     court.addEventListener("pointerdown", function (e) {
       if (e.button !== 0 || start) return;
@@ -678,7 +688,7 @@
     court.addEventListener("keydown", function (e) {
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "2"].indexOf(e.key) < 0) return;
       e.preventDefault(); e.stopPropagation();
-      if (e.key === "2") send("secondServe"); else if (e.key === "ArrowLeft") send("undo"); else send("point", e.key === "ArrowUp" ? "me" : "opponent");
+      if (e.key === "2") send("secondServe"); else if (e.key === "ArrowLeft") { if (!api.phoneState().pending) send("undo"); } else send("point", e.key === "ArrowUp" ? "me" : "opponent");
     });
     var recent = rec.resume.momentum.slice(-8), slots = h("div", { class: "phone-momentum" + (recent.length ? "" : " empty") });
     for (var slot = 0; slot < 8; slot++) { var who = recent[slot - (8 - recent.length)]; slots.append(h("i", { class: who === "me" ? "me" : who ? "opp" : "" })); }
@@ -710,7 +720,8 @@
     var status = h("div", { class: "phone-live-status", role: "status" });
     if (pending.changeover || pending.doublesDecision) status.append(note("Continue on the Watch to dismiss its open screen before scoring."));
     if (settings.announce) status.append(note("🔊 Score announcements enabled"));
-    if (connection.activation === "connecting") status.append(note("Connecting to Apple Watch… Commands are unavailable until connected."));
+    if (commandFailed) status.append(note(COMMAND_FAILURE));
+    else if (connection.activation === "connecting") status.append(note("Connecting to Apple Watch… Commands are unavailable until connected."));
     else if (connection.activation === "unavailable" || !connection.paired) status.append(note("Apple Watch unavailable. Commands are unavailable; the saved iPhone match is retained."));
     else if (!connection.reachable) status.append(note(settings.iPhoneInput ? "Last score shown. Open DeuceMate on the Watch to score here." : "Last score shown. Updates resume when the Watch reconnects."));
     extras.append(button("View Match Stats", function () { navigate("detail", rec); }));
@@ -773,7 +784,7 @@
   function viewSignature() {
     return JSON.stringify([S.liveId, api.stateRef(), api.phoneState(), S.history, settings,
       connection.paired, connection.reachable, connection.activation, connection.syncing,
-      connection.syncFailure, connection.archiveReadFailure, Array.from(watchOnlyIDs)]);
+      connection.syncFailure, connection.archiveReadFailure, Array.from(watchOnlyIDs), commandFailed]);
   }
   function queueRender() {
     if (renderQueued) return;

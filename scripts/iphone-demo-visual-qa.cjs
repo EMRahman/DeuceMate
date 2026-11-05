@@ -57,7 +57,9 @@ async function main() {
     await click(root.locator(".phone-nav"), "Cancel");
     await click(root, "Performance Trends");
     const trends = root.locator(".pr-trends"), filters = trends.locator(".pr-trend-filters");
-    assert.equal(await filters.locator("select").count(), 1, "only the native format menu uses a select; window/type/display are segments");
+    // 1.3.1: the native menus are format, competition type and (when opponents exist) opponent; window/type/display are segments.
+    assert.equal(await filters.locator("select").count(), 3, "only the native format, competition and opponent menus use a select");
+    for (const label of ["Match format", "Match type tag", "Opponent"]) assert.equal(await filters.getByLabel(label, {exact: true}).count(), 1);
     for (const name of ["Trend window", "Match type", "Display"]) assert.equal(await filters.getByRole("group", {name, exact: true}).count(), 1);
     const groups = await trends.locator(".pr-trend-section-title").allTextContents();
     assert.deepEqual(groups.slice(0, 3), ["Errors", "Serve & Return", "Attack"]);

@@ -234,6 +234,20 @@ async function main() {
     const trendBefore = await trendRoot.innerText();
     await trendRoot.getByRole("group", { name: "Match type", exact: true }).getByRole("button", { name: "Doubles", exact: true }).click();
     check((await trendRoot.innerText()) !== trendBefore, "changing Trends filters should update the view");
+    // 1.3.1: competition-type and opponent filters (TrendFilter.competitionType / opponentID).
+    await trendRoot.getByRole("group", { name: "Match type", exact: true }).getByRole("button", { name: "All", exact: true }).click();
+    const competition = trendRoot.getByLabel("Match type tag", { exact: true });
+    const opponentMenu = trendRoot.getByLabel("Opponent", { exact: true });
+    check(await competition.count() === 1 && await opponentMenu.count() === 1, "Trends should offer competition and opponent filters");
+    const allSamples = await page.evaluate(() => window.DeuceMatePhoneTrends.scoped(window.DeuceMatePhone.records(), { window: "all" }).length);
+    const leagueSamples = await page.evaluate(() => window.DeuceMatePhoneTrends.scoped(window.DeuceMatePhone.records(), { window: "all", competition: "league" }).length);
+    check(leagueSamples < allSamples, "competition filter should narrow the sample set");
+    const firstOpponent = await page.evaluate(() => { const e = window.DeuceMatePhoneMatchInfo.opponentEntries(window.DeuceMatePhone); return window.DeuceMatePhoneMatchInfo.playerKey(e[0]); });
+    const oppSamples = await page.evaluate((k) => window.DeuceMatePhoneTrends.scoped(window.DeuceMatePhone.records(), { window: "all", opponent: k }).length, firstOpponent);
+    check(oppSamples < allSamples, "opponent filter should narrow the sample set");
+    await competition.selectOption("league");
+    check(await competition.inputValue() === "league", "competition filter should keep its selection");
+    await competition.selectOption("all");
     process.stdout.write("[base QA] Trends filter checks passed\n");
 
     // Start one live match through the shared watch scorer, then verify phone

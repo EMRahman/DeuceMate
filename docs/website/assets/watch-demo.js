@@ -1217,6 +1217,15 @@
      undoes, >40 and >2:1 right opens stats). A tap on the scoreboard never
      scores — only the double-tap second-serve gesture lives there. */
   var lastSwipeAt = 0;
+  // Native ScoreInputHaptics: directionUp / directionDown / click, only after an applied input and only when
+  // "Swipe vibration" (shared with the iPhone toggle) is on. Browsers rarely vibrate, so the screen also nudges.
+  var swipeHaptic = function (action) {
+    var sh = window.DeuceMateShell;
+    if (!sh || !sh.settings || !sh.settings.swipeVibration || !el.screen) return;
+    try { if (navigator.vibrate) navigator.vibrate(action === "win" ? [30] : action === "lose" ? [20, 40, 20] : [12]); } catch (err) {}
+    el.screen.classList.remove("haptic-buzz"); void el.screen.offsetWidth; el.screen.classList.add("haptic-buzz");
+    setTimeout(function () { el.screen.classList.remove("haptic-buzz"); }, 220);
+  };
   if (appMode && el.screen) {
     el.screen.classList.add("app-mode");
     var previewing = null;
@@ -1269,9 +1278,10 @@
       var a = swipeAction(dx, dy);
       if (!a || (afterMatch && a !== "stats")) return;
       lastSwipeAt = Date.now();
-      if (a === "win") award("me");
-      else if (a === "lose") award("opponent");
-      else if (a === "undo") undo();
+      var hadHistory = history.length > 0;
+      if (a === "win") { award("me"); swipeHaptic(a); }
+      else if (a === "lose") { award("opponent"); swipeHaptic(a); }
+      else if (a === "undo") { undo(); if (hadHistory) swipeHaptic(a); }
       else toggleStatsGesture();
     };
     el.screen.addEventListener("pointerup", function (e) { endSwipe(e, false); });
@@ -2255,9 +2265,13 @@
     };
   };
   api.phoneCommand = function (command, value, matchID) {
-    if (!api.hooks.phoneInputEnabled || !api.hooks.phoneInputEnabled() || !state) return;
-    if (!matchID || !api.hooks.phoneMatchID || matchID !== api.hooks.phoneMatchID()) return;
-    if (command === "point" && (value === "me" || value === "opponent")) award(value, true);
+    if (!api.hooks.phoneInputEnabled || !api.hooks.phoneInputEnabled() || !state) return false;
+    if (!matchID || !api.hooks.phoneMatchID || matchID !== api.hooks.phoneMatchID()) return false;
+    if (command === "point" && (value === "me" || value === "opponent")) {
+      // The watch rejects a score command while it is categorizing, mid-changeover or complete (scoringBlocked).
+      if (scoringBlocked(true)) return false;
+      award(value, true);
+    }
     else if (command === "undo") { if (pendingStat) undoPoint(); else undo(true); }
     else if (command === "secondServe") toggleSecondServe(true);
     else if (command === "back" && pendingStat && sheetStep === 2) sheetBack();

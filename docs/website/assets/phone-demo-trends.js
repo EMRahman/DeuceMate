@@ -91,12 +91,17 @@
       returnedDepth: depth(points.filter(function (p) { return p.server !== "me"; })), sets: sets };
   }
   function samples(records) { return records.map(sample).filter(Boolean).sort(function (a, b) { return a.record.startTime - b.record.startTime; }); }
+  // Native TrendFilter.competitionType / opponentID: tags only; doubles match on either opponent.
+  function opponentKey(p) { var M = window.DeuceMatePhoneMatchInfo; return M && M.playerKey ? M.playerKey(p) : String(p && p.id || ""); }
+  function opponentList(records) { var M = window.DeuceMatePhoneMatchInfo; return M && M.opponentEntries ? M.opponentEntries({ records: function () { return records; } }) : []; }
   function scoped(records, filter) {
     var selected = samples(records).filter(function (s) {
       var r = s.record;
       return (filter.includeInProgress || r.endTime != null) &&
         (!filter.type || filter.type === "all" || r.matchType === filter.type) &&
-        (!filter.format || filter.format === "all" || r.format === filter.format);
+        (!filter.format || filter.format === "all" || r.format === filter.format) &&
+        (!filter.competition || filter.competition === "all" || (r.tags && r.tags.competition === filter.competition)) &&
+        (!filter.opponent || filter.opponent === "all" || (r.tags && (r.tags.opponents || []).some(function (p) { return opponentKey(p) === filter.opponent; })));
     });
     return !filter.window || filter.window === "all" ? selected : selected.slice(-Number(filter.window));
   }
@@ -122,7 +127,7 @@
     return { metric: m, points: points, pooled: pooled(m, samples), delta: delta };
   }
   function display(value, unit) { return unit === "percent" ? Math.round(value * 100) + "%" : value.toFixed(1) + (unit === "steps" ? " steps" : ""); }
-  var filters = { window: "10", type: "all", format: "all", includeInProgress: false };
+  var filters = { window: "10", type: "all", format: "all", competition: "all", opponent: "all", includeInProgress: false };
   var mode = "rate", serveMode = "servesIn", depthMode = "mix", depthSide = "served", visibility = {};
   try { Object.assign(filters, JSON.parse(localStorage.getItem("deucemate-demo-trend-filters") || "{}")); } catch (_) {}
   try { serveMode = localStorage.getItem("deucemate-demo-trends-serve-mode") || "servesIn"; } catch (_) {}
@@ -199,6 +204,22 @@
     [["all", "All Formats"]].concat(window.DeuceMateShell.FORMATS.filter(function (f) { return f.id !== "perpetualPoints"; }).map(function (f) { return [f.id, f.label]; })).forEach(function (o) { format.append(h("option", { value: o[0] }, o[1])); });
     format.value = filters.format; format.onchange = function () { filter("format", format.value); };
     typeRow.append(h("label", { class: "pr-trend-format-label" }, phone.icon("filter"), format)); controls.append(typeRow);
+    // Native competitionMenu / opponentMenu. A remembered opponent who has since been forgotten falls back to All.
+    var opponents = opponentList(phone.records());
+    if (filters.opponent !== "all" && !opponents.some(function (e) { return opponentKey(e) === filters.opponent; })) filters.opponent = "all";
+    var tagRow = h("div", { class: "pr-trend-type-row pr-trend-tag-row" });
+    var competition = h("select", { "aria-label": "Match type tag", class: "pr-trend-format" });
+    [["all", "All Match Types"]].concat(window.DeuceMatePhoneMatchInfo.competitions).forEach(function (o) { competition.append(h("option", { value: o[0] }, o[1])); });
+    competition.value = filters.competition; competition.onchange = function () { filter("competition", competition.value); };
+    tagRow.append(h("label", { class: "pr-trend-format-label pr-trend-competition" }, phone.icon("trophy"), competition));
+    if (opponents.length) {
+      var opponent = h("select", { "aria-label": "Opponent", class: "pr-trend-format" });
+      opponent.append(h("option", { value: "all" }, "All Opponents"));
+      opponents.forEach(function (e) { opponent.append(h("option", { value: opponentKey(e) }, "vs " + e.name)); });
+      opponent.value = filters.opponent; opponent.onchange = function () { filter("opponent", opponent.value); };
+      tagRow.append(h("label", { class: "pr-trend-format-label pr-trend-opponent" }, phone.icon("people"), opponent));
+    }
+    controls.append(tagRow);
     var include = h("input", { type: "checkbox", class: "phone-toggle", checked: filters.includeInProgress, onchange: function () { filter("includeInProgress", include.checked); } });
     controls.append(h("label", { class: "pr-live-toggle" }, h("span", {}, "Include In-Progress Matches"), include));
     controls.append(phone.segment("Display", mode, [["rate", "Rate"], ["count", "Count"]], function (v) { mode = v; paint(); }));
