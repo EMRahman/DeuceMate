@@ -5,6 +5,22 @@ Current pre-flight review of DeuceMate against the
 focused on upload blockers, likely rejection reasons, and the manual work needed
 in App Store Connect.
 
+## TestFlight candidate — 1.3.2 (build 16), 8 November 2026
+
+The iPhone app and embedded Apple Watch app are configured as
+`MARKETING_VERSION = 1.3.2` and `CURRENT_PROJECT_VERSION = 16` in both Debug and
+Release. This is the next device-testing candidate after `1.3.1 (15)`; it has
+not yet been archived, uploaded or tested on physical devices. Test targets keep
+their non-shipping version/build values. Build 16 is the next number recorded in
+this repository; confirm it is still unused in App Store Connect before upload,
+as Xcode has raised build numbers during previous uploads.
+
+Install it as an upgrade over `1.3.1 (15)`, confirm both apps report
+`1.3.2 (16)` (or the build number assigned at upload), and check that the existing
+archive is intact. Complete the manual gate below before preparing release notes
+or submitting to App Review. Also exercise Prepare Game Plan from an opponent's
+page (#182), including match selection, note inclusion and sharing.
+
 ## Next release — manual testing gate
 
 **Before writing release notes for the release after 1.3.1, confirm that every
@@ -89,7 +105,7 @@ Input on, open the iPhone's Live Scoreboard during a match:
 #174's PR notes that if the badge flickers on a device, a delay may be added to the
 badge only, never to the input gate.
 
-## Current release candidate — 1.3.1 (build 15), 4 November 2026
+## Submitted — 1.3.1 (build 15), 4 November 2026
 
 The iPhone app and embedded Apple Watch app are both configured as
 `MARKETING_VERSION = 1.3.1` and `CURRENT_PROJECT_VERSION = 15` in their Debug and
