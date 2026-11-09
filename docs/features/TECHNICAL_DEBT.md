@@ -957,7 +957,7 @@ automated results separately from physical Health/Fitness persistence and sync
 evidence. The 24 passing tests above are the review baseline.
 
 **Implemented and verified, 9 November 2026:** `WorkoutManagerTests` exercises
-25 scenarios through the real manager/finalizer with injected system handles.
+36 scenarios through the real manager/finalizer with injected system handles.
 `WorkoutWarningUITests` adds two production-screen UI cases using the isolated
 DEBUG-only `--workout-ui-test` fixture. Recovery tests cover active/completed
 live play, stopped sessions with an idle/live file, absent/rejected recovery,
@@ -969,7 +969,7 @@ production-default paths caused parallel resume tests to read another test's
 checkpoint. Existing assertions are unchanged.
 
 Full Watch unit suite plus the two warning UI tests passed on Xcode 27.1 /
-watchOS 27.0 / Apple Watch Series 12 (46mm): **145 test cases, 160 runs including
+watchOS 27.0 / Apple Watch Series 12 (46mm): **151 test cases, 171 runs including
 parameterized cases, zero failures or skips**. Exact local command (result path
 must be unused for a new run):
 
@@ -978,11 +978,21 @@ xcodebuild test -project DeuceMate/DeuceMate.xcodeproj \
   -scheme 'DeuceMate Watch App' \
   -destination 'platform=watchOS Simulator,id=BA26EB36-CF39-49A2-BC31-7784453C3BFA' \
   -derivedDataPath /tmp/deucemate-workout-review-derived \
-  -resultBundlePath /tmp/deucemate-workout-pr.xcresult \
+  -resultBundlePath /tmp/deucemate-workout-review-feedback.xcresult \
   -only-testing:'DeuceMate Watch AppTests' \
   -only-testing:'DeuceMate Watch AppUITests/WorkoutWarningUITests' \
   CODE_SIGNING_ALLOWED=NO
 ```
+
+**PR #187 review follow-up:** Setup starts requested during launch recovery or
+transient `.notDetermined` authorization are retained, coalesced and replayed once
+ready. The recovered identity is adopted/finalized before replay; cancellation,
+recovery failure, denial/unavailability and bounded retry exhaustion clear pending
+intent. Authorization polling waits for the system sheet to close. Eleven added
+regression scenarios cover warmup/tiebreak setup before server selection, duplicate
+requests, cancellation/recovery errors, delayed authorization, an open permission
+sheet, terminal outcomes and waiting on both conditions. The 171-run result above
+includes these cases and both warning UI tests; existing assertions are unchanged.
 
 The remaining manager callback and persistence-retry checklists stay open.
 Physical HealthKit save/crash recovery and iPhone Fitness syncing remain unverified;

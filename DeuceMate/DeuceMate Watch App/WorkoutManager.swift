@@ -7,6 +7,10 @@ class WorkoutManager: NSObject, ObservableObject {
     private let store: WorkoutSessionStore
     private var session: WorkoutRecordingSession?
     private var requestedStartDate: Date?
+    private var deferredStartDate: Date?
+    private var authorizationRequestsInFlight = 0
+    private var healthAccessSettleGeneration: UUID?
+    private let scheduleHealthAccessRetry: (TimeInterval, @escaping () -> Void) -> Void
     private lazy var finalizer = WorkoutFinalizer { [weak self] error in
         self?.reportWorkoutFailure(error, saving: true)
     }
@@ -22,15 +26,22 @@ class WorkoutManager: NSObject, ObservableObject {
     private var lastCaloriesPublishDate: Date?
     var workoutStartDate: Date? { session?.startDate ?? requestedStartDate }
 
-    init(store: WorkoutSessionStore = HealthKitWorkoutStore()) {
+    init(store: WorkoutSessionStore = HealthKitWorkoutStore(),
+         scheduleHealthAccessRetry: @escaping (TimeInterval, @escaping () -> Void) -> Void = { delay, action in
+             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: action)
+         }) {
         self.store = store
+        self.scheduleHealthAccessRetry = scheduleHealthAccessRetry
         super.init()
     }
 
     func requestAuthorization(completion: @escaping (Bool) -> Void) {
+        authorizationRequestsInFlight += 1
+        healthAccessSettleGeneration = nil
         store.requestAuthorization { success in
             DispatchQueue.main.async {
-                self.settleHealthAccessAfterAuthorization()
+                self.authorizationRequestsInFlight -= 1
+                self.beginHealthAccessSettlementIfNeeded()
                 completion(success)
             }
         }
@@ -38,19 +49,49 @@ class WorkoutManager: NSObject, ObservableObject {
 
     /// The authorization sheet need not change scenePhase, and its share status
     /// can lag the completion. Keep the bounded retry schedule after a fresh grant.
-    private func settleHealthAccessAfterAuthorization(attempt: Int = 0) {
+    private func beginHealthAccessSettlementIfNeeded() {
+        guard authorizationRequestsInFlight == 0, healthAccessSettleGeneration == nil else { return }
+        let generation = UUID()
+        healthAccessSettleGeneration = generation
+        settleHealthAccessAfterAuthorization(generation: generation, attempt: 0)
+    }
+
+    private func settleHealthAccessAfterAuthorization(generation: UUID, attempt: Int) {
+        guard healthAccessSettleGeneration == generation else { return }
         refreshHealthAccess()
-        guard let delay = HealthAccessSettlePolicy.nextRetryDelay(attempt: attempt, access: healthAccess) else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            self?.settleHealthAccessAfterAuthorization(attempt: attempt + 1)
+        guard let delay = HealthAccessSettlePolicy.nextRetryDelay(attempt: attempt, access: healthAccess) else {
+            healthAccessSettleGeneration = nil
+            if healthAccess == .notDetermined, deferredStartDate != nil, !isRecovering {
+                deferredStartDate = nil
+                reportWorkoutFailure(nil, saving: false)
+            }
+            return
+        }
+        scheduleHealthAccessRetry(delay) { [weak self] in
+            self?.settleHealthAccessAfterAuthorization(generation: generation, attempt: attempt + 1)
         }
     }
 
-    func refreshHealthAccess() { healthAccess = store.healthAccess }
+    func refreshHealthAccess() {
+        healthAccess = store.healthAccess
+        if deferredStartDate != nil, healthAccess != .notDetermined { startDeferredWorkoutIfReady() }
+    }
 
     func startWorkout(startDate: Date) {
-        guard !isRunning, !isRecovering else { return }
-        refreshHealthAccess()
+        guard !isRunning else { return }
+        // Coalesce duplicate setup/launch requests; stopping cancels this intent.
+        deferredStartDate = deferredStartDate ?? startDate
+        startDeferredWorkoutIfReady()
+    }
+
+    private func startDeferredWorkoutIfReady() {
+        guard !isRunning, !isRecovering, let startDate = deferredStartDate else { return }
+        healthAccess = store.healthAccess
+        if healthAccess == .notDetermined {
+            beginHealthAccessSettlementIfNeeded()
+            return
+        }
+        deferredStartDate = nil
         guard healthAccess == .authorized else {
             reportWorkoutFailure(nil, saving: false)
             return
@@ -87,14 +128,21 @@ class WorkoutManager: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.isRecovering = false
-                if let error { self.reportWorkoutFailure(error, saving: false) }
+                if let error {
+                    self.deferredStartDate = nil
+                    self.reportWorkoutFailure(error, saving: false)
+                }
+                // The owner must adopt/finalize the recovered identity BEFORE a
+                // queued setup request can create a replacement workout.
                 completion(recovered, error)
+                if error == nil { self.startDeferredWorkoutIfReady() }
             }
         }
     }
 
     func adoptRecoveredWorkout(_ recovered: WorkoutRecordingSession) {
         guard session == nil else { return }
+        deferredStartDate = nil
         session = recovered
         requestedStartDate = recovered.startDate
         recovered.observer = self
@@ -124,6 +172,7 @@ class WorkoutManager: NSObject, ObservableObject {
     }
 
     func stopWorkout() {
+        deferredStartDate = nil
         guard let stopping = session else { return }
         session = nil
         requestedStartDate = nil

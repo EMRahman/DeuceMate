@@ -684,7 +684,13 @@ a visible warning and scoring available without automatically creating a competi
 session. Backup-excluded AppState additionally stores the active workout start date
 and its prior-activity baseline, so a matching recovered builder is counted once.
 An unmatched/legacy recovered workout is saved separately; a missing workout starts
-fresh only for unfinished live play. Aggregate prior activity is combined with the
+fresh for unfinished live play. Setup start requests made while recovery or a fresh
+Health authorization grant is pending are coalesced and replayed after the recovered
+identity is handled and permission becomes readable. `stopWorkout` cancels pending
+intent; adopting a recovered session consumes it, and recovery errors discard it.
+Health status uses the bounded settle policy, with no timeout while the system
+permission sheet is open. Exhaustion/denial remains a visible recording failure.
+Aggregate prior activity is combined with the
 active builder without mutating the baseline on retries. These optional AppState
 fields use `decodeIfPresent`; no new Health fields belong on MatchRecord.
 `WorkoutFinalizer` retains each stopping session and builder through saving:

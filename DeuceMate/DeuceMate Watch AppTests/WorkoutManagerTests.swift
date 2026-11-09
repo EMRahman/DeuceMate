@@ -51,13 +51,32 @@ struct WorkoutManagerTests {
         var creationError: Error?
         var recoveries = 0
         var recoveryCompletion: ((WorkoutRecordingSession?, Error?) -> Void)?
-        func requestAuthorization(completion: @escaping (Bool) -> Void) { completion(true) }
+        var completesAuthorizationImmediately = true
+        var authorizationCompletion: ((Bool) -> Void)?
+        func requestAuthorization(completion: @escaping (Bool) -> Void) {
+            if completesAuthorizationImmediately { completion(true) }
+            else { authorizationCompletion = completion }
+        }
         func makeSession() throws -> WorkoutRecordingSession {
             if let creationError { throw creationError }
             let session = Session(); sessions.append(session); return session
         }
         func recoverSession(completion: @escaping (WorkoutRecordingSession?, Error?) -> Void) {
             recoveries += 1; recoveryCompletion = completion
+        }
+    }
+
+    final class Scheduler {
+        var delays: [TimeInterval] = []
+        var actions: [() -> Void] = []
+        func schedule(_ delay: TimeInterval, action: @escaping () -> Void) {
+            delays.append(delay)
+            actions.append(action)
+        }
+        func runNext() throws {
+            let action = try #require(actions.first)
+            actions.removeFirst()
+            action()
         }
     }
 
@@ -68,12 +87,16 @@ struct WorkoutManagerTests {
         let history: StatsStore
         let vm: ScoreViewModel
         let defaults: UserDefaults
-        init() throws {
+        init(scheduler: Scheduler? = nil) throws {
             directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             defaults = try #require(UserDefaults(suiteName: "workout-tests-\(UUID())"))
             history = StatsStore(fileURL: directory.appendingPathComponent("history.json"))
-            manager = WorkoutManager(store: store)
+            if let scheduler {
+                manager = WorkoutManager(store: store, scheduleHealthAccessRetry: scheduler.schedule)
+            } else {
+                manager = WorkoutManager(store: store)
+            }
             vm = ScoreViewModel(statsStore: history, stateFileURL: directory.appendingPathComponent("state.json"),
                                 userDefaults: defaults, workoutManager: manager)
             vm.statsTrackingEnabled = false
@@ -397,5 +420,138 @@ struct WorkoutManagerTests {
         delegate.handleActiveWorkoutRecovery()
         await drain()
         #expect(requested)
+    }
+
+    @Test(arguments: [MatchFormat.standard, .superTiebreak])
+    func setupStartDuringRecoveryRecordsBeforeServerSelection(format: MatchFormat) async throws {
+        let f = try Fixture()
+        f.vm.matchFormat = format
+        f.vm.restoreWorkoutAfterLaunch()
+        #expect(f.manager.isRecovering)
+        // Both Warm Up Complete and direct tiebreak setup use this entry point.
+        f.vm.beginMatchSession(); f.vm.beginMatchSession()
+        #expect(f.store.sessions.isEmpty)
+        #expect(f.vm.sessionStartTime == nil)
+        let callback = try #require(f.store.recoveryCompletion)
+        callback(nil, nil)
+        await drain()
+        #expect(f.manager.isRunning)
+        #expect(f.store.sessions.count == 1)
+        #expect(f.vm.sessionStartTime == nil, "Recovery completed before server selection")
+        #expect(f.manager.workoutError == nil)
+        f.vm.currentServer = .me
+        if f.vm.isTiebreakOnlyFormat { f.vm.prepareTiebreakOnlySet() }
+        f.vm.syncMatchStart()
+        f.vm.winPoint(player: .me)
+        #expect(f.store.sessions.count == 1)
+        f.vm.resetMatch()
+        let session = try #require(f.store.sessions.first)
+        session.stopped(); try session.finish()
+    }
+
+    @Test(arguments: [false, true])
+    func cancellationOrRecoveryFailureCannotReplayDeferredSetupStart(cancel: Bool) async throws {
+        let f = try Fixture()
+        f.vm.restoreWorkoutAfterLaunch()
+        f.vm.beginMatchSession()
+        if cancel { f.manager.stopWorkout() } // Dismiss setup before choosing a server.
+        let callback = try #require(f.store.recoveryCompletion)
+        callback(nil, cancel ? nil : CocoaError(.fileReadUnknown))
+        await drain()
+        #expect(f.store.sessions.isEmpty)
+        #expect(!f.manager.isRunning)
+        #expect((f.manager.workoutError != nil) == !cancel)
+        // Later permission refreshes must not revive cancelled/failed recovery intent.
+        f.manager.refreshHealthAccess()
+        #expect(f.store.sessions.isEmpty)
+    }
+
+    @Test func authorizationSettlementReplaysTheOriginalStartExactlyOnce() async throws {
+        let scheduler = Scheduler(), f = try Fixture(scheduler: scheduler)
+        f.store.healthAccess = .notDetermined
+        f.manager.requestAuthorization { _ in }
+        await drain()
+        let requested = Date(timeIntervalSince1970: 12345)
+        f.manager.startWorkout(startDate: requested)
+        f.manager.startWorkout(startDate: requested.addingTimeInterval(1))
+        #expect(f.store.sessions.isEmpty)
+        #expect(f.manager.workoutError == nil)
+        try scheduler.runNext() // The first reread is still undecided.
+        #expect(f.store.sessions.isEmpty)
+        f.store.healthAccess = .authorized
+        try scheduler.runNext()
+        await drain()
+        #expect(f.store.sessions.count == 1)
+        #expect(f.store.sessions.first?.startDate == requested)
+        #expect(scheduler.delays == Array(HealthAccessSettlePolicy.retryDelays.prefix(2)))
+        f.manager.refreshHealthAccess()
+        #expect(f.store.sessions.count == 1)
+        #expect(f.manager.workoutError == nil)
+        f.manager.stopWorkout()
+        let session = try #require(f.store.sessions.first)
+        session.stopped(); try session.finish()
+    }
+
+    @Test func aStartRequestedWhileTheAuthorizationSheetIsOpenWaitsForItsAnswer() async throws {
+        let scheduler = Scheduler(), f = try Fixture(scheduler: scheduler)
+        f.store.healthAccess = .notDetermined
+        f.store.completesAuthorizationImmediately = false
+        f.manager.requestAuthorization { _ in }
+        f.vm.beginMatchSession()
+        #expect(scheduler.actions.isEmpty, "Do not time out while the person is reading the system sheet")
+        #expect(f.store.sessions.isEmpty)
+        let authorized = try #require(f.store.authorizationCompletion)
+        f.store.authorizationCompletion = nil
+        authorized(true)
+        await drain()
+        #expect(scheduler.delays == [HealthAccessSettlePolicy.retryDelays[0]])
+        f.store.healthAccess = .authorized
+        try scheduler.runNext()
+        #expect(f.manager.isRunning)
+        #expect(f.store.sessions.count == 1)
+        f.manager.stopWorkout()
+        let session = try #require(f.store.sessions.first)
+        session.stopped(); try session.finish()
+    }
+
+    @Test(arguments: ["cancel", "denied", "unavailable", "exhausted"])
+    func deferredAuthorizationStartHasBoundedRetriesAndHonorsCancellation(result: String) async throws {
+        let scheduler = Scheduler(), f = try Fixture(scheduler: scheduler)
+        f.store.healthAccess = .notDetermined
+        f.manager.startWorkout(startDate: Date())
+        if result == "cancel" { f.manager.stopWorkout(); f.store.healthAccess = .authorized }
+        if result == "denied" { f.store.healthAccess = .denied }
+        if result == "unavailable" { f.store.healthAccess = .unavailable }
+        for _ in HealthAccessSettlePolicy.retryDelays { if !scheduler.actions.isEmpty { try scheduler.runNext() } }
+        await drain()
+        #expect(scheduler.actions.isEmpty)
+        #expect(f.store.sessions.isEmpty)
+        #expect(!f.manager.isRunning)
+        #expect((f.manager.workoutError != nil) == (result != "cancel"))
+        if result == "exhausted" { #expect(scheduler.delays == HealthAccessSettlePolicy.retryDelays) }
+        f.store.healthAccess = .authorized
+        f.manager.refreshHealthAccess()
+        #expect(f.store.sessions.isEmpty, "A cancelled or terminally failed request is no longer pending")
+    }
+
+    @Test func aStartCanWaitForBothRecoveryAndAuthorizationWithoutBeingLost() async throws {
+        let scheduler = Scheduler(), f = try Fixture(scheduler: scheduler)
+        f.store.healthAccess = .notDetermined
+        f.vm.restoreWorkoutAfterLaunch()
+        f.vm.beginMatchSession()
+        f.manager.requestAuthorization { _ in }
+        await drain()
+        f.store.healthAccess = .authorized
+        try scheduler.runNext()
+        #expect(f.store.sessions.isEmpty, "Authorization must not bypass recovery")
+        let recovered = try #require(f.store.recoveryCompletion)
+        recovered(nil, nil)
+        await drain()
+        #expect(f.manager.isRunning)
+        #expect(f.store.sessions.count == 1)
+        #expect(f.manager.workoutError == nil)
+        f.manager.stopWorkout()
+        let session = try #require(f.store.sessions.first)
+        session.stopped(); try session.finish()
     }
 }
