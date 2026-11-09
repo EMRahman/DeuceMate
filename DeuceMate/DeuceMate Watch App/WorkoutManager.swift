@@ -4,42 +4,31 @@ import OSLog
 import DeuceMateCore
 
 class WorkoutManager: NSObject, ObservableObject {
-    private let healthStore = HKHealthStore()
-    private var session: HKWorkoutSession?
-    private var builder: HKLiveWorkoutBuilder?
+    private let store: WorkoutSessionStore
+    private var session: WorkoutRecordingSession?
+    private var requestedStartDate: Date?
     private lazy var finalizer = WorkoutFinalizer { [weak self] error in
         self?.reportWorkoutFailure(error, saving: true)
     }
     @Published var workoutError: String?
     private let logger = Logger(subsystem: "ehsan.DeuceMate.watchkitapp", category: "Workout")
-    private let lifecycleLock = NSLock()
-
     @Published private(set) var isRunning = false
-    @Published private(set) var currentHeartRate: Double? = nil
-    @Published private(set) var totalKilocalories: Double? = nil
-    /// Whether a match will record heart rate, steps, and calories. There is no
-    /// in-app toggle for this — it is the system HealthKit permission — so the
-    /// pre-match tracking strip reads it from here. Refreshed after the
-    /// authorization request and whenever the app returns to the foreground,
-    /// since the user can revoke access from the iPhone while the app is away.
+    @Published private(set) var isRecovering = false
+    @Published private(set) var currentHeartRate: Double?
+    @Published private(set) var totalKilocalories: Double?
+    /// Share authorization is the observable proxy; HealthKit hides read permission.
     @Published private(set) var healthAccess: HealthAccess = .notDetermined
     private var lastHeartRatePublishDate: Date?
     private var lastCaloriesPublishDate: Date?
-    private let heartRatePublishInterval: TimeInterval = 2.0
-    private let caloriesPublishInterval: TimeInterval = 5.0
+    var workoutStartDate: Date? { session?.startDate ?? requestedStartDate }
+
+    init(store: WorkoutSessionStore = HealthKitWorkoutStore()) {
+        self.store = store
+        super.init()
+    }
 
     func requestAuthorization(completion: @escaping (Bool) -> Void) {
-        guard HKHealthStore.isHealthDataAvailable() else { completion(false); return }
-        let share: Set<HKSampleType> = [HKQuantityType.workoutType()]
-        let read: Set<HKObjectType> = [
-            HKQuantityType.workoutType(),
-            HKQuantityType(.heartRate),
-            HKQuantityType(.activeEnergyBurned),
-            HKQuantityType(.basalEnergyBurned),
-            HKQuantityType(.stepCount),
-            HKQuantityType(.distanceWalkingRunning)
-        ]
-        healthStore.requestAuthorization(toShare: share, read: read) { success, _ in
+        store.requestAuthorization { success in
             DispatchQueue.main.async {
                 self.settleHealthAccessAfterAuthorization()
                 completion(success)
@@ -47,104 +36,108 @@ class WorkoutManager: NSObject, ObservableObject {
         }
     }
 
-    /// Re-reads the share status until it stops saying `.notDetermined`.
-    ///
-    /// This completion is the *only* chance the app gets to notice a fresh
-    /// grant: the scene never leaves `.active` for a system sheet, so
-    /// `DeuceMateApp`'s `scenePhase` refresh doesn't fire, and the start
-    /// screen's `onAppear` already ran before the sheet was answered. When the
-    /// status isn't readable yet at this instant, a single read here leaves the
-    /// tracking strip showing a yellow "Ask" until the next launch — the
-    /// reported bug. `HealthAccessSettlePolicy` (Core, tested) owns the bounded
-    /// schedule; re-reading also republishes `healthAccess`, so the strip
-    /// redraws even if it somehow missed the first value.
+    /// The authorization sheet need not change scenePhase, and its share status
+    /// can lag the completion. Keep the bounded retry schedule after a fresh grant.
     private func settleHealthAccessAfterAuthorization(attempt: Int = 0) {
         refreshHealthAccess()
-        guard let delay = HealthAccessSettlePolicy.nextRetryDelay(
-            attempt: attempt,
-            access: healthAccess
-        ) else { return }
+        guard let delay = HealthAccessSettlePolicy.nextRetryDelay(attempt: attempt, access: healthAccess) else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             self?.settleHealthAccessAfterAuthorization(attempt: attempt + 1)
         }
     }
 
-    /// Re-reads the HealthKit permission into `healthAccess`.
-    ///
-    /// Only *share* authorization can be queried — HealthKit deliberately hides
-    /// read authorization so an app cannot infer what the user is hiding. The
-    /// workout share status is the honest proxy: without it no workout session
-    /// is saved, and with it the session runs and collects the samples the user
-    /// allowed. Call on foreground; permissions change outside the app.
-    func refreshHealthAccess() {
-        guard HKHealthStore.isHealthDataAvailable() else {
-            healthAccess = .unavailable
-            return
-        }
-        switch healthStore.authorizationStatus(for: HKQuantityType.workoutType()) {
-        case .sharingAuthorized: healthAccess = .authorized
-        case .sharingDenied:     healthAccess = .denied
-        case .notDetermined:     healthAccess = .notDetermined
-        @unknown default:        healthAccess = .notDetermined
-        }
-    }
+    func refreshHealthAccess() { healthAccess = store.healthAccess }
 
     func startWorkout(startDate: Date) {
-        guard HKHealthStore.isHealthDataAvailable(), !isRunning else { return }
-        lifecycleLock.lock()
-        defer { lifecycleLock.unlock() }
-        let config = HKWorkoutConfiguration()
-        config.activityType = .tennis
-        config.locationType = .indoor
+        guard !isRunning, !isRecovering else { return }
+        refreshHealthAccess()
+        guard healthAccess == .authorized else {
+            reportWorkoutFailure(nil, saving: false)
+            return
+        }
         do {
-            session = try HKWorkoutSession(healthStore: healthStore, configuration: config)
-            builder = session?.associatedWorkoutBuilder()
-            let dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: config)
-            dataSource.enableCollection(for: HKQuantityType(.stepCount), predicate: nil)
-            dataSource.enableCollection(for: HKQuantityType(.distanceWalkingRunning), predicate: nil)
-            builder?.dataSource = dataSource
-            session?.delegate = self
-            builder?.delegate = self
-            // Initialize on the caller's queue before HealthKit can call back.
+            let starting = try store.makeSession()
+            session = starting
+            requestedStartDate = startDate
+            starting.observer = self
             _ = finalizer
-            session?.startActivity(with: startDate)
-            let startingSession = session
-            builder?.beginCollection(withStart: startDate) { [weak self] success, error in
+            isRunning = true
+            starting.startActivity(with: startDate)
+            starting.beginCollection(at: startDate) { [weak self, weak starting] success, error in
                 guard !success || error != nil else { return }
-                self?.reportWorkoutFailure(error, saving: false)
                 DispatchQueue.main.async {
-                    guard let self, self.session === startingSession else { return }
+                    guard let self, let starting, self.session === starting else { return }
+                    self.reportWorkoutFailure(error, saving: false)
                     self.stopWorkout()
                 }
             }
-            isRunning = true
         } catch {
             session = nil
-            builder = nil
+            requestedStartDate = nil
             reportWorkoutFailure(error, saving: false)
         }
     }
 
-    func stopWorkout() {
-        guard isRunning else { return }
-        lifecycleLock.lock()
-        let stoppingSession = session
-        let stoppingBuilder = builder
-        builder = nil
-        session = nil
-        lifecycleLock.unlock()
-        if let stoppingSession, let stoppingBuilder {
-            finalizer.stop(session: stoppingSession, builder: stoppingBuilder, at: Date())
-        } else {
-            stoppingSession?.end()
+    /// The caller decides whether this recovered identity belongs to its live match.
+    /// While recovery is pending, a start cannot create a competing workout.
+    func recoverWorkout(completion: @escaping (WorkoutRecordingSession?, Error?) -> Void) {
+        guard !isRecovering, session == nil else { return }
+        isRecovering = true
+        store.recoverSession { [weak self] recovered, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.isRecovering = false
+                if let error { self.reportWorkoutFailure(error, saving: false) }
+                completion(recovered, error)
+            }
         }
-        // Set synchronously — always called from main thread — so that a
-        // subsequent startWorkout() call in the same turn sees isRunning = false.
+    }
+
+    func adoptRecoveredWorkout(_ recovered: WorkoutRecordingSession) {
+        guard session == nil else { return }
+        session = recovered
+        requestedStartDate = recovered.startDate
+        recovered.observer = self
+        _ = finalizer
+        isRunning = true
+        recordingSession(recovered, collected: recovered.measurements)
+    }
+
+    /// Snapshotting a stopped recovery precedes handing it to the finalizer.
+    func detachRecoveredWorkout() {
+        session = nil
+        requestedStartDate = nil
+        isRunning = false
+        currentHeartRate = nil
+        totalKilocalories = nil
+    }
+
+    /// Finish orphaned/stopped workouts even when the live file is already idle.
+    func finishRecoveredWorkout(_ recovered: WorkoutRecordingSession) {
+        recovered.observer = self
+        _ = finalizer
+        if recovered.state == .stopped || recovered.state == .ended {
+            finalizer.resumeStopped(session: recovered, builder: recovered, at: recovered.endDate ?? Date())
+        } else {
+            finalizer.stop(session: recovered, builder: recovered, at: Date())
+        }
+    }
+
+    func stopWorkout() {
+        guard let stopping = session else { return }
+        session = nil
+        requestedStartDate = nil
+        // Clear synchronously so a replacement can start in the same turn.
         isRunning = false
         currentHeartRate = nil
         totalKilocalories = nil
         lastHeartRatePublishDate = nil
         lastCaloriesPublishDate = nil
+        if stopping.state == .stopped || stopping.state == .ended {
+            finalizer.resumeStopped(session: stopping, builder: stopping, at: stopping.endDate ?? Date())
+        } else {
+            finalizer.stop(session: stopping, builder: stopping, at: Date())
+        }
     }
 
     private func reportWorkoutFailure(_ error: Error?, saving: Bool) {
@@ -157,120 +150,48 @@ class WorkoutManager: NSObject, ObservableObject {
         }
     }
 
-    /// Returns accumulated steps, distance, and calories from the current workout builder.
-    /// Take this snapshot before stopping; a stopped builder can never contribute to
-    /// a later session or overwrite its values through a delayed callback.
     func snapshotActivity() -> (steps: Int, distanceMeters: Double, caloriesKcal: Double)? {
-        guard let b = builder, isRunning else { return nil }
-        let steps = b.statistics(for: HKQuantityType(.stepCount))?
-            .sumQuantity()?.doubleValue(for: .count())
-        let dist = b.statistics(for: HKQuantityType(.distanceWalkingRunning))?
-            .sumQuantity()?.doubleValue(for: .meter())
-        let kcalUnit = HKUnit.kilocalorie()
-        let active = b.statistics(for: HKQuantityType(.activeEnergyBurned))?
-            .sumQuantity()?.doubleValue(for: kcalUnit) ?? 0
-        let basal = b.statistics(for: HKQuantityType(.basalEnergyBurned))?
-            .sumQuantity()?.doubleValue(for: kcalUnit) ?? 0
-        let calories = active + basal
-        guard steps != nil || dist != nil || calories > 0 else { return nil }
-        return (steps: steps.map { Int($0) } ?? 0, distanceMeters: dist ?? 0, caloriesKcal: calories)
+        guard let values = session?.measurements, isRunning,
+              values.steps != nil || values.distanceMeters != nil || (values.caloriesKcal ?? 0) > 0 else { return nil }
+        return (values.steps ?? 0, values.distanceMeters ?? 0, values.caloriesKcal ?? 0)
     }
 
-    /// Cumulative step count accumulated by the live workout builder so far.
-    /// Returns nil when no workout is running or before HealthKit has produced
-    /// any step samples. Called per-point to stamp `PointStat.stepsCumulative`.
-    func currentTotalStepsForStat() -> Int? {
-        guard let b = builder else { return nil }
-        guard let v = b.statistics(for: HKQuantityType(.stepCount))?
-            .sumQuantity()?.doubleValue(for: .count()) else { return nil }
-        return Int(v)
-    }
+    func currentTotalStepsForStat() -> Int? { session?.measurements.steps }
 }
 
-extension WorkoutManager: HKWorkoutSessionDelegate {
-    func workoutSession(_ session: HKWorkoutSession,
-                        didChangeTo toState: HKWorkoutSessionState,
-                        from fromState: HKWorkoutSessionState,
-                        date: Date) {
-        if toState == .stopped {
-            finalizer.didStop(session: session, at: date)
-        }
+extension WorkoutManager: WorkoutRecordingObserver {
+    func recordingSession(_ originating: WorkoutRecordingSession, changedTo state: HKWorkoutSessionState, at date: Date) {
+        if state == .stopped { finalizer.didStop(session: originating, at: date) }
     }
 
-    func workoutSession(_ session: HKWorkoutSession, didFailWithError error: Error) {
-        if finalizer.didFail(session: session, error: error) { return }
+    func recordingSession(_ originating: WorkoutRecordingSession, failedWith error: Error) {
+        if finalizer.didFail(session: originating, error: error) { return }
         DispatchQueue.main.async {
-            guard self.session === session else { return }
+            guard self.session === originating else { return }
             self.reportWorkoutFailure(error, saving: false)
-            self.lifecycleLock.lock()
             self.session = nil
-            self.builder = nil
-            self.lifecycleLock.unlock()
-            session.end()
+            self.requestedStartDate = nil
+            originating.end()
             self.isRunning = false
             self.currentHeartRate = nil
             self.totalKilocalories = nil
         }
     }
-}
 
-extension WorkoutManager: HKLiveWorkoutBuilderDelegate {
-    func workoutBuilderDidCollectEvent(_ workoutBuilder: HKLiveWorkoutBuilder) {}
-
-    func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder,
-                        didCollectDataOf collectedTypes: Set<HKSampleType>) {
-        lifecycleLock.lock()
-        let originatingSession = session
-        let isCurrent = builder === workoutBuilder && originatingSession != nil
-        lifecycleLock.unlock()
-        guard isCurrent else { return }
-        var bpmValue: Double?
-        if collectedTypes.contains(HKQuantityType(.heartRate)),
-           let heartRateStats = workoutBuilder.statistics(for: HKQuantityType(.heartRate)),
-           let quantity = heartRateStats.mostRecentQuantity() {
-            let bpmUnit = HKUnit.count().unitDivided(by: .minute())
-            bpmValue = quantity.doubleValue(for: bpmUnit)
-        }
-
-        let activeEnergyType = HKQuantityType(.activeEnergyBurned)
-        let basalEnergyType = HKQuantityType(.basalEnergyBurned)
-        var totalKilocalories: Double?
-        if collectedTypes.contains(activeEnergyType) || collectedTypes.contains(basalEnergyType) {
-            let kcalUnit = HKUnit.kilocalorie()
-            let active = workoutBuilder.statistics(for: activeEnergyType)?
-                .sumQuantity()?
-                .doubleValue(for: kcalUnit) ?? 0
-            let basal = workoutBuilder.statistics(for: basalEnergyType)?
-                .sumQuantity()?
-                .doubleValue(for: kcalUnit) ?? 0
-            totalKilocalories = active + basal
-        }
-
+    func recordingSession(_ originating: WorkoutRecordingSession, collected values: WorkoutMeasurements) {
         DispatchQueue.main.async {
-            if self.isRunning, self.session === originatingSession, self.builder === workoutBuilder {
-                let now = Date()
-                if let bpmValue,
-                   self.shouldPublish(at: now,
-                                      lastPublishDate: self.lastHeartRatePublishDate,
-                                      minInterval: self.heartRatePublishInterval) {
-                    self.currentHeartRate = bpmValue
-                    self.lastHeartRatePublishDate = now
-                }
-                if let totalKilocalories,
-                   self.shouldPublish(at: now,
-                                      lastPublishDate: self.lastCaloriesPublishDate,
-                                      minInterval: self.caloriesPublishInterval) {
-                    self.totalKilocalories = totalKilocalories
-                    self.lastCaloriesPublishDate = now
-                }
+            guard self.isRunning, self.session === originating else { return }
+            let now = Date()
+            if let bpm = values.heartRate,
+               self.lastHeartRatePublishDate.map({ now.timeIntervalSince($0) >= 2 }) ?? true {
+                self.currentHeartRate = bpm
+                self.lastHeartRatePublishDate = now
+            }
+            if let kcal = values.caloriesKcal,
+               self.lastCaloriesPublishDate.map({ now.timeIntervalSince($0) >= 5 }) ?? true {
+                self.totalKilocalories = kcal
+                self.lastCaloriesPublishDate = now
             }
         }
-    }
-
-    private func shouldPublish(at now: Date,
-                               lastPublishDate: Date?,
-                               minInterval: TimeInterval) -> Bool {
-        guard let lastPublishDate else { return true }
-        return now.timeIntervalSince(lastPublishDate) >= minInterval
     }
 }

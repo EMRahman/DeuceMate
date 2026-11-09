@@ -9,6 +9,18 @@ import Testing
 @testable import DeuceMate_Watch_App
 
 struct DeuceMate_Watch_AppTests {
+    // Each test owns its live file. Parallel scoring/resume cases must never
+    // restore another test's checkpoint through the production default URL.
+    private final class StateFiles {
+        var urls: [URL] = []
+        func next() -> URL {
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("scoring-\(UUID()).json")
+            urls.append(url)
+            return url
+        }
+        deinit { for url in urls { try? FileManager.default.removeItem(at: url) } }
+    }
+    private let stateFiles = StateFiles()
 
     @Test func superTiebreakMatchFinishesToTen() throws {
         let viewModel = makeViewModel(startingServer: .me)
@@ -70,7 +82,7 @@ struct DeuceMate_Watch_AppTests {
 
     @Test func doublesServiceRotationInSuperTiebreak() throws {
         // Verify that doublesServer advances correctly during the super tiebreak.
-        let viewModel = ScoreViewModel()
+        let viewModel = ScoreViewModel(stateFileURL: stateFiles.next())
         viewModel.startDoublesMatch(firstServer: .me)
         // Service order is [me, opponentS1, partner, opponentS2]
 
@@ -422,7 +434,7 @@ struct DeuceMate_Watch_AppTests {
     // MARK: - Helpers
 
     private func makeViewModel(startingServer: ScoreViewModel.Player) -> ScoreViewModel {
-        let viewModel = ScoreViewModel()
+        let viewModel = ScoreViewModel(stateFileURL: stateFiles.next())
         viewModel.currentServer = startingServer
         return viewModel
     }
@@ -503,7 +515,7 @@ struct DeuceMate_Watch_AppTests {
 
     private func makeStatsViewModel(startingServer: ScoreViewModel.Player,
                                     store: MockStatsStore = MockStatsStore()) -> (ScoreViewModel, MockStatsStore) {
-        let viewModel = ScoreViewModel(statsStore: store)
+        let viewModel = ScoreViewModel(statsStore: store, stateFileURL: stateFiles.next())
         viewModel.statsTrackingEnabled = true
         viewModel.currentServer = startingServer
         viewModel.matchStartTime = Date()
@@ -649,7 +661,7 @@ struct DeuceMate_Watch_AppTests {
 
     @Test func resetMatchWithNoStatsStillWritesSessionToStore() throws {
         let store = MockStatsStore()
-        let viewModel = ScoreViewModel(statsStore: store)
+        let viewModel = ScoreViewModel(statsStore: store, stateFileURL: stateFiles.next())
         viewModel.statsTrackingEnabled = false
         viewModel.currentServer = .me
 
@@ -665,7 +677,7 @@ struct DeuceMate_Watch_AppTests {
 
     @Test func resetMatchParksEndlessFormatForLaterChoice() throws {
         let store = MockStatsStore()
-        let viewModel = ScoreViewModel(statsStore: store)
+        let viewModel = ScoreViewModel(statsStore: store, stateFileURL: stateFiles.next())
         viewModel.statsTrackingEnabled = false
         viewModel.matchFormat = .perpetualSuperTiebreak
         viewModel.prepareTiebreakOnlySet()
@@ -744,7 +756,7 @@ struct DeuceMate_Watch_AppTests {
 
     @Test func endStoredMatchCompletesFriendlyAtCurrentScore() throws {
         let store = MockStatsStore()
-        let viewModel = ScoreViewModel(statsStore: store)
+        let viewModel = ScoreViewModel(statsStore: store, stateFileURL: stateFiles.next())
         viewModel.statsTrackingEnabled = false
         viewModel.currentServer = .me
 
@@ -771,7 +783,7 @@ struct DeuceMate_Watch_AppTests {
 
     @Test func endStoredMatchAtLevelScoreCompletesAsDraw() throws {
         let store = MockStatsStore()
-        let viewModel = ScoreViewModel(statsStore: store)
+        let viewModel = ScoreViewModel(statsStore: store, stateFileURL: stateFiles.next())
         viewModel.statsTrackingEnabled = false
         viewModel.currentServer = .me
 
@@ -789,7 +801,7 @@ struct DeuceMate_Watch_AppTests {
 
     @Test func endStoredMatchUsesLatestCheckpointRatherThanOpenSheetSnapshot() throws {
         let store = MockStatsStore()
-        let viewModel = ScoreViewModel(statsStore: store)
+        let viewModel = ScoreViewModel(statsStore: store, stateFileURL: stateFiles.next())
         viewModel.statsTrackingEnabled = false
         viewModel.currentServer = .me
         viewModel.winPoint(player: .me)
@@ -809,7 +821,7 @@ struct DeuceMate_Watch_AppTests {
 
     @Test func phoneCompletionFinalizesMatchingLiveMatchAtWatchScore() throws {
         let store = MockStatsStore()
-        let viewModel = ScoreViewModel(statsStore: store)
+        let viewModel = ScoreViewModel(statsStore: store, stateFileURL: stateFiles.next())
         viewModel.statsTrackingEnabled = false
         viewModel.currentServer = .me
         viewModel.winPoint(player: .me)
@@ -826,7 +838,7 @@ struct DeuceMate_Watch_AppTests {
 
     @Test func resumeWithDifferentLiveMatchParksStatsOffSession() throws {
         let store = MockStatsStore()
-        let viewModel = ScoreViewModel(statsStore: store)
+        let viewModel = ScoreViewModel(statsStore: store, stateFileURL: stateFiles.next())
         viewModel.statsTrackingEnabled = false
         viewModel.currentServer = .me
 
@@ -1179,7 +1191,7 @@ struct DeuceMate_Watch_AppTests {
     @Test func simulateFullDoublesMatch() throws {
         // Service order seeded by startDoublesMatch(firstServer: .me):
         //   [me, opponentS1, partner, opponentS2]  (teams alternate A-B-A-B)
-        let vm = ScoreViewModel()
+        let vm = ScoreViewModel(stateFileURL: stateFiles.next())
         vm.startDoublesMatch(firstServer: .me)
 
         #expect(vm.matchType == .doubles)

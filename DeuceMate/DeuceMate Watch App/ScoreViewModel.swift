@@ -337,6 +337,9 @@ class ScoreViewModel: ObservableObject {
     private(set) var resumeEvents: [MatchResumeEvent] = []
     /// Health-bearing private state; written only to the backup-excluded live file.
     private var priorActivity = MatchActivityTotals()
+    private var restoredWorkoutStartDate: Date?
+    private var restoredWorkoutBaseline: MatchActivityTotals?
+    private var workoutRestorationStarted = false
     @Published private(set) var persistenceError: String?
     private var stateWritesBlocked = false
     @Published private(set) var tiebreakStartServer: Player? = nil
@@ -492,6 +495,9 @@ class ScoreViewModel: ObservableObject {
         let resumeEvents: [MatchResumeEvent]
         let activityTotals: MatchActivityTotals
         let clockSavedAt: Date?
+        // Backup-excluded recovery identity and activity BEFORE the active builder.
+        let workoutStartDate: Date?
+        let workoutBaseline: MatchActivityTotals?
 
         init(version: Int,
              sets: [SetScore],
@@ -524,7 +530,11 @@ class ScoreViewModel: ObservableObject {
              currentMatchTags: MatchTags? = nil,
              resumeEvents: [MatchResumeEvent] = [],
              activityTotals: MatchActivityTotals = MatchActivityTotals(),
-             clockSavedAt: Date? = nil) {
+             clockSavedAt: Date? = nil,
+             workoutStartDate: Date? = nil,
+             workoutBaseline: MatchActivityTotals? = nil) {
+            self.workoutStartDate = workoutStartDate
+            self.workoutBaseline = workoutBaseline
             self.resumeEvents = resumeEvents
             self.activityTotals = activityTotals
             self.clockSavedAt = clockSavedAt
@@ -594,6 +604,8 @@ class ScoreViewModel: ObservableObject {
             resumeEvents = try c.decodeIfPresent([MatchResumeEvent].self, forKey: .resumeEvents) ?? []
             activityTotals = try c.decodeIfPresent(MatchActivityTotals.self, forKey: .activityTotals) ?? MatchActivityTotals()
             clockSavedAt = try c.decodeIfPresent(Date.self, forKey: .clockSavedAt)
+            workoutStartDate = try c.decodeIfPresent(Date.self, forKey: .workoutStartDate)
+            workoutBaseline = try c.decodeIfPresent(MatchActivityTotals.self, forKey: .workoutBaseline)
         }
     }
     
@@ -718,6 +730,45 @@ class ScoreViewModel: ObservableObject {
     func resumeWorkoutIfMatchInProgress() {
         guard sessionStartTime != nil, !isMatchComplete() else { return }
         workoutManager.startWorkout(startDate: Date())
+    }
+
+    /// Run once after loading live state and authorization, including a launch
+    /// requested by WatchKit's active-workout recovery delegate.
+    func restoreWorkoutAfterLaunch(completion: @escaping () -> Void = {}) {
+        guard !workoutRestorationStarted else { completion(); return }
+        workoutRestorationStarted = true
+        guard !workoutManager.isRunning else { completion(); return }
+        let restoringID = currentMatchID
+        workoutManager.recoverWorkout { [weak self] recovered, error in
+            guard let self else { completion(); return }
+            defer { completion() }
+            // An error does not prove that the old workout is gone. Do not start
+            // a competing session; the manager keeps the recording warning visible.
+            guard error == nil else { return }
+            if let recovered {
+                let matchesLive = !self.stateWritesBlocked && restoringID != nil
+                    && restoringID == self.currentMatchID
+                    && recovered.startDate != nil
+                    && recovered.startDate == self.restoredWorkoutStartDate
+                if matchesLive, let baseline = self.restoredWorkoutBaseline {
+                    self.priorActivity = baseline
+                    self.workoutManager.adoptRecoveredWorkout(recovered)
+                    if recovered.state == .running || recovered.state == .paused {
+                        _ = self.saveState()
+                        return
+                    }
+                    // Collection stopped before the crash. Retain its full total
+                    // before finishing it and creating any fresh builder.
+                    self.priorActivity = self.activitySnapshot()
+                    self.workoutManager.detachRecoveredWorkout()
+                }
+                self.workoutManager.finishRecoveredWorkout(recovered)
+            }
+            self.restoredWorkoutStartDate = nil
+            self.restoredWorkoutBaseline = nil
+            if !self.stateWritesBlocked { self.resumeWorkoutIfMatchInProgress() }
+            _ = self.saveState()
+        }
     }
 
     /// Resolved player max HR using the same precedence chain as the iPhone:
@@ -1582,6 +1633,8 @@ class ScoreViewModel: ObservableObject {
         liveMatchTags = nil
         resumeEvents = []
         priorActivity = MatchActivityTotals()
+        restoredWorkoutStartDate = nil
+        restoredWorkoutBaseline = nil
         matchElapsedSeconds = 0
         setElapsedSeconds = [:]
         currentSetSessionStart = nil
@@ -1781,7 +1834,9 @@ class ScoreViewModel: ObservableObject {
             currentMatchTags: liveMatchTags,
             resumeEvents: resumeEvents,
             activityTotals: activitySnapshot(),
-            clockSavedAt: now
+            clockSavedAt: now,
+            workoutStartDate: workoutManager.workoutStartDate ?? restoredWorkoutStartDate,
+            workoutBaseline: workoutManager.workoutStartDate != nil ? priorActivity : restoredWorkoutBaseline
         )
         do {
             // Class B (until-first-unlock): the live-match state must stay writable
@@ -1883,6 +1938,8 @@ class ScoreViewModel: ObservableObject {
             liveMatchTags = state.currentMatchTags
             resumeEvents = state.resumeEvents
             priorActivity = state.activityTotals
+            restoredWorkoutStartDate = state.workoutStartDate
+            restoredWorkoutBaseline = state.workoutBaseline
             matchElapsedSeconds = state.matchElapsedSeconds
             setElapsedSeconds = state.setElapsedSeconds
             if let symbol = state.pendingAnnouncementMessage {

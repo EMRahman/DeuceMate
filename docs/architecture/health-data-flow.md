@@ -330,8 +330,13 @@ fields are added to MatchRecord: the existing five fields remain the stripping,
 sidecar and export-consent contract. `MatchActivityTotals` is an aggregate baseline
 inside backup-excluded Watch AppState, never an iCloud-backed session payload.
 
-Each resumed/relaunched workout begins at the current session start, never the
-original match date. Saved prior activity plus the active builder snapshot forms
+Each fresh resumed/relaunched workout begins at the current session start, never
+the original match date. On launch, HealthKit recovery first attempts to reconnect
+the existing session and builder. Backup-excluded AppState stores the workout start
+date and the aggregate baseline before that builder; a matching recovery restores
+that baseline so the recovered builder is counted once. Legacy/unmatched recovered
+workouts are saved separately. No new Health fields are added to MatchRecord or
+backup/export payloads. Saved prior activity plus the active builder snapshot forms
 the current aggregate. Snapshotting repeatedly does not add it repeatedly; a fresh
 builder may restart its step counter and per-point steps receive the prior offset.
 Stopping a workout never exposes its builder as the new workout's source. Callback
