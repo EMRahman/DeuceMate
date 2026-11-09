@@ -21,6 +21,25 @@ archive is intact. Complete the manual gate below before preparing release notes
 or submitting to App Review. Also exercise Prepare Game Plan from an opponent's
 page (#182), including match selection, note inclusion and sharing.
 
+## Workout save investigation — 9 November 2026
+
+The owner reported a fresh explicitly parked session missing from both Health
+and Fitness after enabling the Watch app's Workouts permission. Sensor values
+and the green Health indicator alone do not prove the workout was saved.
+The follow-up fix retains sessions/builders through the HealthKit save callback,
+uses stop → save → end ordering and displays failures on the Watch. This is a
+code-level fix for a lifecycle risk, not confirmed reproduction of the owner's
+HealthKit failure.
+
+- [ ] On the updated build, start a fresh session with Watch Workouts permission
+  enabled, play for a few minutes, then explicitly park it. Confirm a Tennis
+  workout in Health and Fitness while the match remains In Progress.
+- [ ] Resume and park again. Confirm a second workout with no break time and no
+  duplicate; finish the match in a third session and check its workout too.
+- [ ] Repeat with Workouts permission denied, then re-enabled for a fresh session.
+  Failed recording/saving must show a Watch warning; scoring remains available.
+- [ ] Record devices/OS/build and whether any failure is absent from Health too.
+
 ## Next release — manual testing gate
 
 **Before writing release notes for the release after 1.3.1, confirm that every

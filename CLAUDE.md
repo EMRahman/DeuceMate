@@ -675,8 +675,11 @@ uses `appendMatchDurably` and must succeed before clearing/replacing live state.
 Unreadable/newer live state blocks writes and scoring rather than becoming empty.
 Each workout starts at its own start/resume/relaunch time; aggregate prior activity
 is snapshotted in backup-excluded AppState and combined with the active builder
-without mutating the baseline on retries. Stopped builders finalize by originating
-session identity, and stale callbacks cannot publish into the current session.
+without mutating the baseline on retries. `WorkoutFinalizer` retains each
+stopping session and builder through saving:
+stop activity → `.stopped` → end collection → finish/save → end session. Recording
+and save errors appear through `WorkoutStatusView`; HealthKit errors must never
+be silently ignored. Stale callbacks cannot publish into the current session.
 Preserve events on undo; unresolved anchors disable physiological continuity.
 Graph health lines/smoothing and HR queries respect sessions; continuous Pulse/
 Steps coaching is withheld for interrupted records. Exertion comparisons stay

@@ -394,6 +394,7 @@ struct HomeView: View {
         VStack {
             Spacer()
             VStack(alignment: .leading, spacing: 10) {
+                WorkoutStatusView(manager: viewModel.workoutManager)
                 if let error = viewModel.persistenceError {
                     Text(error).font(.caption2).foregroundStyle(.orange)
                         .accessibilityLabel("Storage warning: \(error)")

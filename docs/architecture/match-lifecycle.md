@@ -293,3 +293,14 @@ saves do not advance the baseline. Match/set play clocks exclude explicit parked
 time and stop at normal completion, including delayed categorization. No historical
 breaks are inferred. See [health-data-flow.md](health-data-flow.md) for physiological
 window and privacy rules, and the feature plan for pending hardware validation.
+
+### Workout save completion
+
+Parking or finalizing stops the current play session's workout independently of
+whether the tennis match has a final result. `WorkoutFinalizer` retains the
+session and builder until collection ends and HealthKit's save callback returns,
+then ends the session. A newly resumed workout cannot be finalized by an older
+callback. Failure is shown on the Watch Home/live screen without removing the
+saved match score. A saved Health workout, rather than a DeuceMate archive row,
+is what Fitness can display after device syncing. Physical-device save/sync
+verification remains required.
