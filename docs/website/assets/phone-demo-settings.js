@@ -246,7 +246,7 @@
   function validRecord(r) {
     if (!r || typeof r !== "object" || typeof r.id !== "string" || !r.id || !Number.isFinite(r.startTime) ||
         !(r.endTime == null || Number.isFinite(r.endTime)) ||
-        ["standard", "bestOf3FullFinalSet", "quick4Games", "fast4", "superTiebreak", "perpetualSuperTiebreak", "perpetualPoints"].indexOf(r.format) < 0 ||
+        ["standard", "bestOf3FullFinalSet", "quick4Games", "shortSets", "fast4", "superTiebreak", "perpetualSuperTiebreak", "perpetualPoints"].indexOf(r.format) < 0 ||
         ["singles", "doubles"].indexOf(r.matchType) < 0 || !Array.isArray(r.sets) || !Array.isArray(r.stats) ||
         !(r.iWon == null || typeof r.iWon === "boolean") || !Number.isFinite(r.currentPointsMe) || !Number.isFinite(r.currentPointsOpponent) ||
         !Number.isFinite(r.elapsed) || !r.setElapsed || typeof r.setElapsed !== "object" || !Number.isFinite(r.steps) || !Number.isFinite(r.kcal) || !Number.isFinite(r.pointsPlayed) ||

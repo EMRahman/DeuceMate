@@ -101,7 +101,29 @@ final class PointMatchScoreTests: XCTestCase {
         XCTAssertEqual(snapshot.games, GamesScoreSnapshot(me: 0, opponent: 0))
     }
 
-    func test_quickFourFormatsTiebreakAsGamesPlusTiebreakPoints() throws {
+    func test_quickFourFormatsSuddenDeathAsGamesPlusTiebreakPoints() throws {
+        let points = pointsEnteringTiebreak(setIndex: 0, gamesEach: 2)
+        let selected = points[points.count - 1]
+        let record = makeRecord(
+            format: .quick4Games,
+            setScores: [SetScore(
+                gamesMe: 3,
+                gamesOpponent: 2,
+                isTieBreak: true,
+                tieBreakPointsMe: 1,
+                tieBreakPointsOpponent: 0
+            )],
+            stats: points
+        )
+
+        let snapshot = try XCTUnwrap(PointMatchScore.atStart(of: points, record: record)[selected.id])
+
+        XCTAssertEqual(snapshot.currentSet, "2–2 (0–0)")
+        XCTAssertEqual(snapshot.games, GamesScoreSnapshot(me: 2, opponent: 2))
+        XCTAssertEqual(PointGamesScore.atStart(of: points, setIndex: 0, matchFormat: .quick4Games, setScores: record.setScores).count, points.count)
+    }
+
+    func test_shortSetsFormatsTiebreakAsGamesPlusTiebreakPoints() throws {
         var points = pointsEnteringTiebreak(setIndex: 0, gamesEach: 4)
         let firstTBPoint = points[points.count - 1]
         let decidingTBPoint = makePoint(
@@ -114,7 +136,7 @@ final class PointMatchScoreTests: XCTestCase {
         )
         points.append(decidingTBPoint)
         let record = makeRecord(
-            format: .quick4Games,
+            format: .shortSets,
             setScores: [SetScore(
                 gamesMe: 5,
                 gamesOpponent: 4,
@@ -299,6 +321,12 @@ final class PointMatchScoreTests: XCTestCase {
         XCTAssertEqual(after[record.stats[48].id]?.gameScoreLabel, "1–0")
         XCTAssertEqual(after[record.stats[54].id]?.gameScoreLabel, "7–0")
         XCTAssertEqual(after[record.stats[54].id]?.matchScoreLabel, "7–6 (7–0)  0–0")
+
+        let quick = playedRecord(Array(games.prefix(16)) + [.opponent], format: .quick4Games)
+        XCTAssertEqual(PointGamesScore.atStart(of: quick.stats, setIndex: 0, matchFormat: .quick4Games, setScores: quick.setScores).count, 17)
+        let quickAfter = PointMatchScore.afterEachPoint(of: quick.stats, record: quick)
+        XCTAssertEqual(quickAfter[quick.stats[16].id]?.gameScoreLabel, "0–1")
+        XCTAssertEqual(quickAfter[quick.stats[16].id]?.matchScoreLabel, "2–3 (0–1)")
 
         let fast4 = playedRecord(Array(games.prefix(24)) + Array(repeating: .opponent, count: 5), format: .fast4)
         let fast4After = PointMatchScore.afterEachPoint(of: fast4.stats, record: fast4)

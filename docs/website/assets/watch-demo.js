@@ -52,6 +52,8 @@
       case "perpetualSuperTiebreak":
         return base({ setsToWin: 1, playRegularSets: false, regularSetTiebreakPoints: 10, finalSetStyle: "superTiebreak", finalSetTiebreakPoints: 10, isEndless: true });
       case "quick4Games":
+        return base({ setsToWin: 1, playRegularSets: true, regularSetWinAtGames: 3, regularSetTiebreakAtGames: 2, regularSetTiebreakPoints: 1, finalSetStyle: "fullSetWithTiebreak", finalSetTiebreakPoints: 1, tiebreakRequiresTwoPointLead: false, isEndless: false });
+      case "shortSets":
         return base({ setsToWin: 1, playRegularSets: true, regularSetWinAtGames: 4, regularSetTiebreakAtGames: 4, regularSetTiebreakPoints: 7, finalSetStyle: "fullSetWithTiebreak", finalSetTiebreakPoints: 7, tiebreakRequiresTwoPointLead: true, noAdScoring: true, isEndless: false });
       case "fast4":
         return base({ setsToWin: 1, playRegularSets: true, regularSetWinAtGames: 4, regularSetTiebreakAtGames: 3, regularSetTiebreakPoints: 5, finalSetStyle: "fullSetWithTiebreak", finalSetTiebreakPoints: 5, tiebreakRequiresTwoPointLead: false, noAdScoring: true, isEndless: false });
@@ -520,7 +522,8 @@
     bestOf3FullFinalSet: "Best of 3 · full final set",
     superTiebreak: "10-point tiebreak",
     perpetualSuperTiebreak: "Perpetual tiebreak",
-    quick4Games: "Short Sets",
+    quick4Games: "Quick 4 games",
+    shortSets: "Short Sets",
     fast4: "FAST4",
     perpetualPoints: "Perpetual points"
   };

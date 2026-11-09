@@ -399,7 +399,7 @@ struct DeuceMate_Watch_AppTests {
     }
 
     @Test func receiverChoosesSidePointShownAtDeuceInNoAdFormatsAndClearedOnDecidingPoint() throws {
-        for format in [ScoreViewModel.MatchFormat.quick4Games, .fast4] {
+        for format in [ScoreViewModel.MatchFormat.shortSets, .fast4] {
             let viewModel = makeViewModel(startingServer: .me)
             viewModel.statsTrackingEnabled = false
             viewModel.matchFormat = format

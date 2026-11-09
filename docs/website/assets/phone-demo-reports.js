@@ -18,7 +18,7 @@
   function fmtDate(ms) { return new Date(ms).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }); }
   function detailTitle(record) {
     if (record.endTime == null) return window.DeuceMateChronology.describe(record, fmtDate);
-    var formats = { superTiebreak: "Super Tiebreak", perpetualSuperTiebreak: "Perpetual Tiebreak", quick4Games: "Short Sets", fast4: "FAST4", perpetualPoints: "Perpetual Points" };
+    var formats = { superTiebreak: "Super Tiebreak", perpetualSuperTiebreak: "Perpetual Tiebreak", quick4Games: "Quick 4 Games", shortSets: "Short Sets", fast4: "FAST4", perpetualPoints: "Perpetual Points" };
     if (formats[record.format]) return formats[record.format];
     return (record.stats || []).some(function (point) { return point.outcome !== "uncategorized"; }) ? "Match Stats" : "Score Only Match";
   }

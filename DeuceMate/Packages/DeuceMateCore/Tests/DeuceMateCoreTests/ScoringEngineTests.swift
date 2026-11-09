@@ -330,17 +330,40 @@ final class ScoringEngineTests: XCTestCase {
                       "6-1 set (7 total games, odd) should emit setCompletePlayers")
     }
 
-    // MARK: - Format: quick4Games (Short Sets) & fast4 (FAST4)
+    // MARK: - Format: quick4Games (legacy), shortSets (Short Sets) & fast4 (FAST4)
 
-    func test_quick4GamesShortSetsAndNoAdDeuce() {
-        // Win 4-0 outright
+    func test_quick4GamesFirstToThreeGamesSuddenDeath() {
+        // Win 3-0 outright
         var s1 = ScoringState(currentServer: .me, matchFormat: .quick4Games)
+        winGame(&s1, player: .me, count: 3)
+        XCTAssertTrue(ScoringEngine.isMatchComplete(s1))
+        XCTAssertEqual(ScoringEngine.matchWinner(s1), .me)
+
+        // 2-2 triggers the sudden-death tiebreak
+        var s2 = ScoringState(currentServer: .me, matchFormat: .quick4Games)
+        winGame(&s2, player: .me)
+        winGame(&s2, player: .me)
+        winGame(&s2, player: .opponent)
+        winGame(&s2, player: .opponent)
+        XCTAssertEqual(s2.sets.first?.isTieBreak, true, "Tiebreak should start at 2-2")
+        XCTAssertFalse(ScoringEngine.isMatchComplete(s2))
+
+        // A single point ends the match (sudden death — no two-point lead required)
+        let r = ScoringEngine.pointWon(by: .me, in: s2)
+        XCTAssertTrue(ScoringEngine.isMatchComplete(r.state),
+                      "Single sudden-death point should complete the match")
+        XCTAssertEqual(ScoringEngine.matchWinner(r.state), .me)
+    }
+
+    func test_shortSetsAndNoAdDeuce() {
+        // Win 4-0 outright
+        var s1 = ScoringState(currentServer: .me, matchFormat: .shortSets)
         winGame(&s1, player: .me, count: 4)
         XCTAssertTrue(ScoringEngine.isMatchComplete(s1))
         XCTAssertEqual(ScoringEngine.matchWinner(s1), .me)
 
         // At 3-3, play continues to 5-3 if a player wins two games in a row
-        var s2 = ScoringState(currentServer: .me, matchFormat: .quick4Games)
+        var s2 = ScoringState(currentServer: .me, matchFormat: .shortSets)
         for _ in 0..<3 {
             winGame(&s2, player: .me)
             winGame(&s2, player: .opponent)
@@ -353,7 +376,7 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertEqual(ScoringEngine.matchWinner(s2), .me)
 
         // At 4-4, a 7-point tiebreak (win by 2) decides the set 5-4
-        var s3 = ScoringState(currentServer: .me, matchFormat: .quick4Games)
+        var s3 = ScoringState(currentServer: .me, matchFormat: .shortSets)
         for _ in 0..<4 {
             winGame(&s3, player: .me)
             winGame(&s3, player: .opponent)
@@ -371,7 +394,7 @@ final class ScoringEngineTests: XCTestCase {
     }
 
     func test_noAdDecidingPointAtDeuceAndReceiverChoosesSide() {
-        var state = ScoringState(currentServer: .me, matchFormat: .quick4Games)
+        var state = ScoringState(currentServer: .me, matchFormat: .shortSets)
         for _ in 0..<3 {
             point(&state, player: .me)
             point(&state, player: .opponent)

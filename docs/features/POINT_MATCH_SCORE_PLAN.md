@@ -191,7 +191,8 @@ every point of every set in every archived match would render its own set as unk
 |---|---|---|
 | `.standard` (best-of-3, deciding super-TB) | `6–4`, `7–6 (7–5)` | games `2–2`; in a breaker `6–6 (3–2)`; in the deciding super-TB, raw points `7–5` |
 | `.bestOf3FullFinalSet` | same | same, but the final set is a regular set (no super-TB case) |
-| `.quick4Games` ("Short Sets": win at 4 by 2, 7-pt TB at 4–4) | `4–1`, `5–3`, `5–4 (7–5)` | same rules — the derivation is format-driven, not special-cased |
+| `.quick4Games` (legacy: win at 3, TB at 2, 1-pt TB) | `3–1`, `3–2 (1–0)` | same rules — the derivation is format-driven, not special-cased |
+| `.shortSets` ("Short Sets": win at 4 by 2, 7-pt TB at 4–4) | `4–1`, `5–3`, `5–4 (7–5)` | same rules — the derivation is format-driven, not special-cased |
 | `.fast4` ("FAST4": win at 4, 5-pt TB at 3–3) | `4–1`, `4–3 (5–4)` | same rules — the derivation is format-driven, not special-cased |
 | `.superTiebreak` (one TB to 10) | none | raw TB points `6–4` |
 | `.perpetualSuperTiebreak` (endless TB sets) | prior TB scores `10–8  10–7` | raw TB points of the live breaker |

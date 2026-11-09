@@ -124,7 +124,8 @@ struct MatchDetailView: View {
         switch record.matchFormat {
         case .superTiebreak: return "Super Tiebreak"
         case .perpetualSuperTiebreak: return "Perpetual Tiebreak"
-        case .quick4Games: return "Short Sets"
+        case .quick4Games: return "Quick 4 Games"
+        case .shortSets: return "Short Sets"
         case .fast4: return "FAST4"
         case .perpetualPoints: return "Perpetual Points"
         case .standard, .bestOf3FullFinalSet:
@@ -141,7 +142,8 @@ struct MatchDetailView: View {
         case .bestOf3FullFinalSet:    parts.append("Best of 3 (Full Final Set)")
         case .superTiebreak:          parts.append("Super Tiebreak")
         case .perpetualSuperTiebreak: parts.append("Perpetual Tiebreak")
-        case .quick4Games:            parts.append("Short Sets")
+        case .quick4Games:            parts.append("Quick 4 Games")
+        case .shortSets:              parts.append("Short Sets")
         case .fast4:                  parts.append("FAST4")
         case .perpetualPoints:        parts.append("Perpetual Points")
         }

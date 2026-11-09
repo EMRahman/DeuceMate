@@ -56,7 +56,7 @@ struct TrendsView: View {
     /// can never contribute a sample (§3.5) — offering it would be a filter
     /// that always empties the screen.
     private let selectableFormats: [MatchFormat] = [
-        .standard, .bestOf3FullFinalSet, .superTiebreak, .perpetualSuperTiebreak, .quick4Games, .fast4
+        .standard, .bestOf3FullFinalSet, .superTiebreak, .perpetualSuperTiebreak, .shortSets, .fast4
     ]
 
     /// Display order for the grouped sections — a presentation preference
@@ -280,7 +280,8 @@ struct TrendsView: View {
         case .bestOf3FullFinalSet:    return "Best of 3 (Full Final Set)"
         case .superTiebreak:          return "Super Tiebreak"
         case .perpetualSuperTiebreak: return "Perpetual Tiebreak"
-        case .quick4Games:            return "Short Sets"
+        case .quick4Games:            return "Quick 4 Games"
+        case .shortSets:              return "Short Sets"
         case .fast4:                  return "FAST4"
         case .perpetualPoints:        return "Perpetual Points"
         }

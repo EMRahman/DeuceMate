@@ -7,7 +7,7 @@ final class MatchSetupDefaultsTests: XCTestCase {
 
     private let allFormats: [MatchFormat] = [
         .standard, .bestOf3FullFinalSet, .superTiebreak,
-        .perpetualSuperTiebreak, .quick4Games, .fast4, .perpetualPoints
+        .perpetualSuperTiebreak, .shortSets, .fast4, .perpetualPoints
     ]
     private let allTypes: [MatchType] = [.singles, .doubles]
 
@@ -29,9 +29,18 @@ final class MatchSetupDefaultsTests: XCTestCase {
         XCTAssertEqual(resolved, .fallback)
     }
 
+    func test_resolve_retiredQuick4GamesFormat_fallsBackToStandard() {
+        let resolved = MatchSetupDefaults.resolve(
+            formatRaw: MatchFormat.quick4Games.rawValue,
+            typeRaw: MatchType.doubles.rawValue
+        )
+        XCTAssertEqual(resolved.format, .standard)
+        XCTAssertEqual(resolved.type, .doubles)
+    }
+
     func test_resolve_onlyTheInvalidHalfFallsBack() {
-        let formatOnly = MatchSetupDefaults.resolve(formatRaw: MatchFormat.quick4Games.rawValue, typeRaw: "unknown")
-        XCTAssertEqual(formatOnly.format, .quick4Games)
+        let formatOnly = MatchSetupDefaults.resolve(formatRaw: MatchFormat.shortSets.rawValue, typeRaw: "unknown")
+        XCTAssertEqual(formatOnly.format, .shortSets)
         XCTAssertEqual(formatOnly.type, .singles)
 
         let typeOnly = MatchSetupDefaults.resolve(formatRaw: "unknown", typeRaw: MatchType.doubles.rawValue)

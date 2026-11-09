@@ -18,11 +18,20 @@ public enum MatchType: String, Codable, Sendable {
 /// - `.bestOf3FullFinalSet`: best-of-3 sets, deciding set is a full set with 7-pt tiebreak at 6–6 (ATP tour).
 /// - `.superTiebreak`: the entire match is a single 10-pt tiebreak.
 /// - `.perpetualSuperTiebreak`: continuous series of 10-pt tiebreaks ("Perpetual Tiebreak").
-/// - `.quick4Games`: single short set ("Short Sets"), first to 4 games by 2 (up to 5–3); 7-pt tiebreak at 4–4; deciding point at deuce (receiver chooses side).
+/// - `.quick4Games`: legacy single short set ("Quick 4 Games"), first to 3 games; at 2–2 a single sudden-death point decides the match. Retired from the match setup picker; kept permanently for archive and live-state decoding.
+/// - `.shortSets`: single short set ("Short Sets"), first to 4 games by 2 (up to 5–3); 7-pt tiebreak at 4–4; deciding point at deuce (receiver chooses side).
 /// - `.fast4`: single FAST4 set, first to 4 games; 5-pt tiebreak at 3–3 (sudden death at 4–4); deciding point at deuce (receiver chooses side).
 /// - `.perpetualPoints`: simple running point counter with tiebreak-style server rotation; no games/sets, no auto-completion, no post-point categorisation.
 public enum MatchFormat: String, Codable, Sendable {
-    case standard, bestOf3FullFinalSet, superTiebreak, perpetualSuperTiebreak, quick4Games, fast4, perpetualPoints
+    case standard, bestOf3FullFinalSet, superTiebreak, perpetualSuperTiebreak, quick4Games, shortSets, fast4, perpetualPoints
+
+    /// Formats offered for starting or planning a new match, in picker order.
+    /// Excludes `.quick4Games`, which is retired from new match setup but
+    /// remains decodable with its original rules for saved matches.
+    public static let userSelectable: [MatchFormat] = [
+        .standard, .bestOf3FullFinalSet, .shortSets, .fast4,
+        .superTiebreak, .perpetualSuperTiebreak, .perpetualPoints
+    ]
 }
 
 /// How the deciding set is played when both players need one more set to win.
@@ -118,6 +127,15 @@ extension MatchFormat {
                                      finalSetStyle: .superTiebreak,
                                      finalSetTiebreakPoints: 10, isEndless: true)
         case .quick4Games:
+            return MatchFormatConfig(setsToWin: 1, playRegularSets: true,
+                                     regularSetWinAtGames: 3,
+                                     regularSetTiebreakAtGames: 2,
+                                     regularSetTiebreakPoints: 1,
+                                     finalSetStyle: .fullSetWithTiebreak,
+                                     finalSetTiebreakPoints: 1,
+                                     tiebreakRequiresTwoPointLead: false,
+                                     isEndless: false)
+        case .shortSets:
             return MatchFormatConfig(setsToWin: 1, playRegularSets: true,
                                      regularSetWinAtGames: 4,
                                      regularSetTiebreakAtGames: 4,

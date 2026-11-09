@@ -27,7 +27,10 @@ public struct MatchSetupDefaults: Sendable, Equatable {
 
     /// Total decode — unknown / absent / retired raw values fall back.
     public static func resolve(formatRaw: String?, typeRaw: String?) -> MatchSetupDefaults {
-        let format = formatRaw.flatMap(MatchFormat.init(rawValue:)) ?? fallback.format
+        let format = formatRaw
+            .flatMap(MatchFormat.init(rawValue:))
+            .flatMap { MatchFormat.userSelectable.contains($0) ? $0 : nil }
+            ?? fallback.format
         let type = typeRaw.flatMap(MatchType.init(rawValue:)) ?? fallback.type
         return MatchSetupDefaults(format: format, type: type)
     }

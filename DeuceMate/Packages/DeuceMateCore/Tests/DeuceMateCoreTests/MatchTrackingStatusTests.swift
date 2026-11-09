@@ -33,7 +33,7 @@ final class MatchTrackingStatusTests: XCTestCase {
     }
 
     func test_pointTracking_everyOtherFormat_stillReflectsTheToggle() {
-        for format: MatchFormat in [.standard, .bestOf3FullFinalSet, .superTiebreak, .perpetualSuperTiebreak, .quick4Games, .fast4] {
+        for format: MatchFormat in [.standard, .bestOf3FullFinalSet, .superTiebreak, .perpetualSuperTiebreak, .quick4Games, .shortSets, .fast4] {
             XCTAssertFalse(format.config.disablesPointTracking, "\(format) unexpectedly suppresses point tracking")
             let status = MatchTrackingStatus.pointTracking(isEnabled: true, matchFormat: format)
             XCTAssertEqual(status.readiness, .on, "\(format)")
