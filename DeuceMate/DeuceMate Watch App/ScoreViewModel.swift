@@ -622,6 +622,13 @@ class ScoreViewModel: ObservableObject {
         return ScoringEngine.nextSetRequiresEndsSwitch(scoringState())
     }
 
+    /// True on a No-Ad deciding point at deuce (40–40), where the receiver
+    /// chooses which side of the court the server serves from. Replaces the
+    /// momentum strip for that point.
+    var isReceiverChoosesSidePoint: Bool {
+        ScoringEngine.receiverChoosesServiceSide(scoringState())
+    }
+
     private(set) var history: [HistoryEntry] = []
     /// Momentum points inherited from the record snapshot at resume time.
     /// Merged with live history so the strip doesn't blank out after a resume.

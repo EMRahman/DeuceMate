@@ -157,7 +157,7 @@ Create `docs/website/llms.txt` following the standard `llms.txt` specification s
 
 ## Core Capabilities
 1. **Gesture-First Apple Watch Scoring:** Swipe up (win point), swipe down (lose point), swipe left (infinite undo across games/sets), swipe right (live stats), double-tap (2nd serve).
-2. **Full Tennis & Padel Rules:** 6 match formats (Best of 3 with 10-pt super tiebreak, Best of 3 full final set, single Super Tiebreak, Perpetual Super Tiebreak, Quick 4 Games, Perpetual Points). Singles and doubles with automatic 4-player service rotation, break-point detection, sticky changeover reminders, and a GPS-free watch compass court-end indicator.
+2. **Full Tennis & Padel Rules:** 7 match formats (Best of 3 with 10-pt super tiebreak, Best of 3 full final set, Short Sets, FAST4, single Super Tiebreak, Perpetual Super Tiebreak, Perpetual Points). Singles and doubles with automatic 4-player service rotation, break-point detection, sticky changeover reminders, and a GPS-free watch compass court-end indicator.
 3. **iPhone Companion & No-Watch Mode:** Real-time stadium scoreboard, spoken umpire announcements, optional court-side iPhone scoring input, and manual match entry (usable even without an Apple Watch).
 4. **Deep Match Analytics (20+ Stats):** Serve/return percentages, winners, unforced/forced errors, W:UE ratio, break-point conversion/save rates, rally depth (serve, return, serve+1, 4+ rally), and interactive points-momentum charts filterable by set.
 5. **Cross-Match Performance Trends & Head-to-Head Records:** Track metric trends across match history (including set-by-set fatigue and steps per point) and maintain an opponent directory with singles/doubles head-to-head records, playing styles, match comparisons, and private match notes.

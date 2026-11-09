@@ -261,7 +261,8 @@ private struct OpponentDetailView: View {
         case .bestOf3FullFinalSet: "Best of 3 (Full Final Set)"
         case .superTiebreak: "Super Tiebreak"
         case .perpetualSuperTiebreak: "Perpetual Tiebreak"
-        case .quick4Games: "Quick 4 Games"
+        case .quick4Games: "Short Sets"
+        case .fast4: "FAST4"
         case .perpetualPoints: "Perpetual Points"
         }
     }

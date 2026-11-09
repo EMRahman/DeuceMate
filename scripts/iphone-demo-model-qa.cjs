@@ -56,7 +56,7 @@ assert.ok(records.some(record => record.endTime != null && record.iWon != null &
 assert.ok(records.some(record => record.endTime == null &&
   context.window.DeuceMateScoring.completedSets(record.resume.state).length < record.resume.state.sets.length),
 "in-progress fixtures should retain an unfinished set");
-for (const format of ["standard", "bestOf3FullFinalSet", "quick4Games", "superTiebreak", "perpetualSuperTiebreak", "perpetualPoints"]) {
+for (const format of ["standard", "bestOf3FullFinalSet", "quick4Games", "fast4", "superTiebreak", "perpetualSuperTiebreak", "perpetualPoints"]) {
   assert.equal(context.window.DeuceMateScoring.freshState(format, "me").format, format,
     `scoring engine should generate fresh state for ${format}`);
 }
@@ -150,7 +150,7 @@ assert.equal(timelineMe.length, completed.stats.length, "full tracked history sh
 
 // MatchDetailView titles depend on format and collected outcomes, not simply
 // whether a points array exists. Uncategorized histories are score-only.
-for (const [format, title] of [["superTiebreak", "Super Tiebreak"], ["perpetualSuperTiebreak", "Perpetual Tiebreak"], ["quick4Games", "Quick 4 Games"], ["perpetualPoints", "Perpetual Points"]]) {
+for (const [format, title] of [["superTiebreak", "Super Tiebreak"], ["perpetualSuperTiebreak", "Perpetual Tiebreak"], ["quick4Games", "Short Sets"], ["fast4", "FAST4"], ["perpetualPoints", "Perpetual Points"]]) {
   assert.equal(reports.detailTitle({...completed, format}), title);
 }
 assert.equal(reports.detailTitle({...completed, format: "standard", stats: []}), "Score Only Match");

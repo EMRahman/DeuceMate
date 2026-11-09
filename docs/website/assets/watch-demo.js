@@ -52,7 +52,9 @@
       case "perpetualSuperTiebreak":
         return base({ setsToWin: 1, playRegularSets: false, regularSetTiebreakPoints: 10, finalSetStyle: "superTiebreak", finalSetTiebreakPoints: 10, isEndless: true });
       case "quick4Games":
-        return base({ setsToWin: 1, playRegularSets: true, regularSetWinAtGames: 3, regularSetTiebreakAtGames: 2, regularSetTiebreakPoints: 1, finalSetStyle: "fullSetWithTiebreak", finalSetTiebreakPoints: 1, tiebreakRequiresTwoPointLead: false, isEndless: false });
+        return base({ setsToWin: 1, playRegularSets: true, regularSetWinAtGames: 4, regularSetTiebreakAtGames: 4, regularSetTiebreakPoints: 7, finalSetStyle: "fullSetWithTiebreak", finalSetTiebreakPoints: 7, tiebreakRequiresTwoPointLead: true, noAdScoring: true, isEndless: false });
+      case "fast4":
+        return base({ setsToWin: 1, playRegularSets: true, regularSetWinAtGames: 4, regularSetTiebreakAtGames: 3, regularSetTiebreakPoints: 5, finalSetStyle: "fullSetWithTiebreak", finalSetTiebreakPoints: 5, tiebreakRequiresTwoPointLead: false, noAdScoring: true, isEndless: false });
       case "perpetualPoints":
         return base({ setsToWin: 1, playRegularSets: false, regularSetTiebreakPoints: 10, finalSetStyle: "superTiebreak", finalSetTiebreakPoints: 10, isEndless: true, disablesPointTracking: true, fixedDeuceSide: true });
       default:
@@ -69,6 +71,7 @@
       finalSetStyle: o.finalSetStyle,
       finalSetTiebreakPoints: o.finalSetTiebreakPoints,
       tiebreakRequiresTwoPointLead: o.tiebreakRequiresTwoPointLead != null ? o.tiebreakRequiresTwoPointLead : true,
+      noAdScoring: !!o.noAdScoring,
       isEndless: o.isEndless,
       disablesPointTracking: !!o.disablesPointTracking,
       fixedDeuceSide: !!o.fixedDeuceSide,
@@ -159,7 +162,12 @@
     if (lastSet(state) && lastSet(state).isTieBreak) return false;
     var sp = state.currentServer === "me" ? state.currentPointsMe : state.currentPointsOpponent;
     var rp = state.currentServer === "me" ? state.currentPointsOpponent : state.currentPointsMe;
-    return rp >= 3 && rp > sp;
+    return rp >= 3 && (state.cfg && state.cfg.noAdScoring ? rp >= sp : rp > sp);
+  }
+  function receiverChoosesServiceSide(state) {
+    if (!state || !state.currentServer || !state.cfg || !state.cfg.noAdScoring || isMatchComplete(state)) return false;
+    if (lastSet(state) && lastSet(state).isTieBreak) return false;
+    return state.currentPointsMe === 3 && state.currentPointsOpponent === 3;
   }
 
   /* ---- The reducer (mirrors ScoringEngine.Engine.updateScore) ---- */
@@ -178,8 +186,9 @@
     var pm = state.currentPointsMe, po = state.currentPointsOpponent;
     if (player === "me") pm++; else po++;
 
-    if (pm >= 4 && pm - po >= 2) { gameWon(state, "me", set, events); }
-    else if (po >= 4 && po - pm >= 2) { gameWon(state, "opponent", set, events); }
+    var noAd = !!(state.cfg && state.cfg.noAdScoring);
+    if (pm >= 4 && (noAd || pm - po >= 2)) { gameWon(state, "me", set, events); }
+    else if (po >= 4 && (noAd || po - pm >= 2)) { gameWon(state, "opponent", set, events); }
     else {
       state.currentPointsMe = pm; state.currentPointsOpponent = po;
       state.sets.push(set);
@@ -209,9 +218,10 @@
       state.tiebreakStartServer = state.currentServer;
       state.tiebreakFirstPointReceiver = other(state.currentServer);
       if (state.matchType === "doubles") state.doublesTiebreakStartIndex = state.doublesServiceIndex;
+      var isSingleSuddenDeath = !cfg.tiebreakRequiresTwoPointLead && cfg.regularSetTiebreakPoints === 1;
       events.push({
         t: "changeover", symbol: "Tiebreak 🔁 🎾",
-        reason: cfg.tiebreakRequiresTwoPointLead ? "tiebreakBegins" : "suddenDeathBegins", games: tbAt
+        reason: isSingleSuddenDeath ? "suddenDeathBegins" : "tiebreakBegins", games: tbAt
       });
       state.sets.push(set);
       return;
@@ -510,7 +520,8 @@
     bestOf3FullFinalSet: "Best of 3 · full final set",
     superTiebreak: "10-point tiebreak",
     perpetualSuperTiebreak: "Perpetual tiebreak",
-    quick4Games: "Quick 4 games",
+    quick4Games: "Short Sets",
+    fast4: "FAST4",
     perpetualPoints: "Perpetual points"
   };
 
@@ -541,6 +552,7 @@
       isDecidingSuperTiebreak: isDecidingSuperTiebreak,
       applyDoublesSetup: applyDoublesSetup, resolveDoublesTeamServer: resolveDoublesTeamServer,
       leaderWhenStopped: leaderWhenStopped, nextSetRequiresEndsSwitch: nextSetRequiresEndsSwitch,
+      receiverChoosesServiceSide: receiverChoosesServiceSide,
       cfgFor: cfgFor, setsWon: setsWon, FORMAT_LABELS: FORMAT_LABELS, clone: clone, changeoverReasonText: changeoverReasonText,
       DOUBLES_TEAM: DOUBLES_TEAM, DOUBLES_DISPLAY_NAME: DOUBLES_DISPLAY_NAME
     };
@@ -2179,14 +2191,19 @@
   function renderApp() {
     var over = isMatchComplete(state);
     var rem = state.cfg.fixedDeuceSide ? null : nextSetRequiresEndsSwitch(state);
+    var recSide = rem === null && receiverChoosesServiceSide(state);
+    var showBanner = !over && (rem !== null || recSide);
     if (el.reminder) {
-      el.reminder.hidden = over || rem === null;
+      el.reminder.hidden = !showBanner;
       if (rem !== null) {
         el.reminder.className = "w-reminder " + (rem ? "players" : "balls");
         el.reminder.textContent = (rem ? "\uD83D\uDD01 \uD83D\uDC65  Players change ends" : "\uD83D\uDD01 \uD83C\uDFBE  Balls change ends");
+      } else if (recSide) {
+        el.reminder.className = "w-reminder balls";
+        el.reminder.textContent = "\uD83C\uDFBE  Receiver chooses side";
       }
     }
-    if (el.momentum) el.momentum.hidden = over || rem !== null;
+    if (el.momentum) el.momentum.hidden = over || showBanner;
     if (el.info) el.info.hidden = over;
     renderInfo();
     if (el.complete) {

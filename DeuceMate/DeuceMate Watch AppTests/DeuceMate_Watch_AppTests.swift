@@ -398,6 +398,27 @@ struct DeuceMate_Watch_AppTests {
         #expect(viewModel.pendingEndsSwitchReminder == nil)
     }
 
+    @Test func receiverChoosesSidePointShownAtDeuceInNoAdFormatsAndClearedOnDecidingPoint() throws {
+        for format in [ScoreViewModel.MatchFormat.quick4Games, .fast4] {
+            let viewModel = makeViewModel(startingServer: .me)
+            viewModel.statsTrackingEnabled = false
+            viewModel.matchFormat = format
+
+            for _ in 0..<3 {
+                viewModel.winPoint(player: .me)
+                viewModel.losePoint(player: .me)
+            }
+            #expect(viewModel.isReceiverChoosesSidePoint == true)
+
+            // Winning the deciding point immediately wins the game and clears the banner
+            viewModel.winPoint(player: .me)
+            #expect(viewModel.isReceiverChoosesSidePoint == false)
+            #expect(viewModel.sets.first?.gamesMe == 1)
+            #expect(viewModel.currentPointsMe == 0)
+            #expect(viewModel.currentPointsOpponent == 0)
+        }
+    }
+
     // MARK: - Helpers
 
     private func makeViewModel(startingServer: ScoreViewModel.Player) -> ScoreViewModel {

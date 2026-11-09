@@ -18,10 +18,11 @@ public enum MatchType: String, Codable, Sendable {
 /// - `.bestOf3FullFinalSet`: best-of-3 sets, deciding set is a full set with 7-pt tiebreak at 6–6 (ATP tour).
 /// - `.superTiebreak`: the entire match is a single 10-pt tiebreak.
 /// - `.perpetualSuperTiebreak`: continuous series of 10-pt tiebreaks ("Perpetual Tiebreak").
-/// - `.quick4Games`: single short set, first to 3 games; at 2–2 a single sudden-death point decides the match.
+/// - `.quick4Games`: single short set ("Short Sets"), first to 4 games by 2 (up to 5–3); 7-pt tiebreak at 4–4; deciding point at deuce (receiver chooses side).
+/// - `.fast4`: single FAST4 set, first to 4 games; 5-pt tiebreak at 3–3 (sudden death at 4–4); deciding point at deuce (receiver chooses side).
 /// - `.perpetualPoints`: simple running point counter with tiebreak-style server rotation; no games/sets, no auto-completion, no post-point categorisation.
 public enum MatchFormat: String, Codable, Sendable {
-    case standard, bestOf3FullFinalSet, superTiebreak, perpetualSuperTiebreak, quick4Games, perpetualPoints
+    case standard, bestOf3FullFinalSet, superTiebreak, perpetualSuperTiebreak, quick4Games, fast4, perpetualPoints
 }
 
 /// How the deciding set is played when both players need one more set to win.
@@ -35,12 +36,13 @@ public enum FinalSetStyle: Equatable, Sendable {
 public struct MatchFormatConfig: Sendable {
     public let setsToWin: Int
     public let playRegularSets: Bool        // false = entire match is tiebreak(s)
-    public let regularSetWinAtGames: Int    // games needed to win a regular set (6 normally, 3 for Quick 4)
-    public let regularSetTiebreakAtGames: Int // games at which a tiebreak triggers (6 normally, 2 for Quick 4)
+    public let regularSetWinAtGames: Int    // games needed to win a regular set (6 normally, 4 for Short Sets / FAST4)
+    public let regularSetTiebreakAtGames: Int // games at which a tiebreak triggers (6 normally, 4 for Short Sets, 3 for FAST4)
     public let regularSetTiebreakPoints: Int
     public let finalSetStyle: FinalSetStyle
     public let finalSetTiebreakPoints: Int
-    public let tiebreakRequiresTwoPointLead: Bool // false = sudden death (single decisive point)
+    public let tiebreakRequiresTwoPointLead: Bool // false = sudden death at target - 1 all
+    public let noAdScoring: Bool            // true = deciding point at deuce (40–40); receiver chooses service side
     public let isEndless: Bool              // true = match never ends automatically
     public let disablesPointTracking: Bool  // true = never present the post-point categorisation sheet
     public let fixedDeuceSide: Bool         // true = always display the server on the deuce side (no side toggle)
@@ -53,6 +55,7 @@ public struct MatchFormatConfig: Sendable {
                 finalSetStyle: FinalSetStyle,
                 finalSetTiebreakPoints: Int,
                 tiebreakRequiresTwoPointLead: Bool = true,
+                noAdScoring: Bool = false,
                 isEndless: Bool,
                 disablesPointTracking: Bool = false,
                 fixedDeuceSide: Bool = false) {
@@ -64,13 +67,14 @@ public struct MatchFormatConfig: Sendable {
         self.finalSetStyle = finalSetStyle
         self.finalSetTiebreakPoints = finalSetTiebreakPoints
         self.tiebreakRequiresTwoPointLead = tiebreakRequiresTwoPointLead
+        self.noAdScoring = noAdScoring
         self.isEndless = isEndless
         self.disablesPointTracking = disablesPointTracking
         self.fixedDeuceSide = fixedDeuceSide
     }
 
     /// Game count recorded for the winner of a regular-set tiebreak
-    /// (e.g. 7 for a standard 6–6 tiebreak set, 3 for the Quick 4 sudden death).
+    /// (e.g. 7 for a standard 6–6 tiebreak set, 5 for Short Sets at 4–4, 4 for FAST4 at 3–3).
     public var regularSetTiebreakWinAtGames: Int { regularSetTiebreakAtGames + 1 }
 
     /// True when a regular (non-pure-tiebreak) set is complete given its game counts.
@@ -115,12 +119,23 @@ extension MatchFormat {
                                      finalSetTiebreakPoints: 10, isEndless: true)
         case .quick4Games:
             return MatchFormatConfig(setsToWin: 1, playRegularSets: true,
-                                     regularSetWinAtGames: 3,
-                                     regularSetTiebreakAtGames: 2,
-                                     regularSetTiebreakPoints: 1,
+                                     regularSetWinAtGames: 4,
+                                     regularSetTiebreakAtGames: 4,
+                                     regularSetTiebreakPoints: 7,
                                      finalSetStyle: .fullSetWithTiebreak,
-                                     finalSetTiebreakPoints: 1,
+                                     finalSetTiebreakPoints: 7,
+                                     tiebreakRequiresTwoPointLead: true,
+                                     noAdScoring: true,
+                                     isEndless: false)
+        case .fast4:
+            return MatchFormatConfig(setsToWin: 1, playRegularSets: true,
+                                     regularSetWinAtGames: 4,
+                                     regularSetTiebreakAtGames: 3,
+                                     regularSetTiebreakPoints: 5,
+                                     finalSetStyle: .fullSetWithTiebreak,
+                                     finalSetTiebreakPoints: 5,
                                      tiebreakRequiresTwoPointLead: false,
+                                     noAdScoring: true,
                                      isEndless: false)
         case .perpetualPoints:
             // Single endless point counter. Server rotates with tiebreak-style

@@ -176,6 +176,9 @@ struct ContentView: View {
                         if let shouldSwitch = viewModel.pendingEndsSwitchReminder {
                             EndsSwitchReminderBanner(shouldSwitch: shouldSwitch)
                                 .transition(.opacity)
+                        } else if viewModel.isReceiverChoosesSidePoint {
+                            ReceiverChoosesSideBanner()
+                                .transition(.opacity)
                         } else {
                             MomentumBadgeView(recentPoints: viewModel.history.suffix(8).map { $0.player })
                                 .transition(.opacity)
@@ -184,6 +187,7 @@ struct ContentView: View {
                     .padding(.top, 4)
                     .padding(.horizontal, 8)
                     .animation(.easeInOut(duration: 0.25), value: viewModel.pendingEndsSwitchReminder)
+                    .animation(.easeInOut(duration: 0.25), value: viewModel.isReceiverChoosesSidePoint)
                 }
 
                 VStack(spacing: 4) {
@@ -629,6 +633,36 @@ struct EndsSwitchReminderBanner: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke((shouldSwitch ? Color.orange : Color.yellow).opacity(0.55), lineWidth: 1)
+                )
+        )
+    }
+}
+
+// MARK: - ReceiverChoosesSideBanner
+
+/// Shown in the momentum strip's slot on a No-Ad deciding point at deuce
+/// (40–40), reminding players that the receiver chooses the service side.
+/// Matches `EndsSwitchReminderBanner`'s 15 pt height so swapping with the
+/// momentum strip does not reflow the scoreboard.
+struct ReceiverChoosesSideBanner: View {
+    var body: some View {
+        HStack(spacing: 5) {
+            Text("🎾")
+                .font(.system(size: 10))
+            Text("Receiver chooses side")
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .foregroundStyle(Color.yellow)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 1)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.yellow.opacity(0.16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.yellow.opacity(0.55), lineWidth: 1)
                 )
         )
     }

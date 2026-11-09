@@ -7,7 +7,7 @@ final class MatchSetupDefaultsTests: XCTestCase {
 
     private let allFormats: [MatchFormat] = [
         .standard, .bestOf3FullFinalSet, .superTiebreak,
-        .perpetualSuperTiebreak, .quick4Games, .perpetualPoints
+        .perpetualSuperTiebreak, .quick4Games, .fast4, .perpetualPoints
     ]
     private let allTypes: [MatchType] = [.singles, .doubles]
 

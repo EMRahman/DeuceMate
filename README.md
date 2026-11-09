@@ -69,7 +69,7 @@ This project also showcases my ability to ship production-quality native iOS/wat
 | Swipe left | Undo last point (full game-state rollback) |
 | Swipe right | Open live stats view |
 
-- **Complete tennis scoring** — games, sets, tiebreaks, deuce/advantage, automatic server rotation, break-point detection, and side-change prompts with a compass court-end badge. Six match formats; singles and doubles with full service-order management.
+- **Complete tennis scoring** — games, sets, tiebreaks, deuce/advantage, automatic server rotation, break-point detection, and side-change prompts with a compass court-end badge. Seven match formats; singles and doubles with full service-order management.
 - **Straight into the match** — the watch remembers your last format and singles/doubles choice, so Start Match goes directly to who serves first, and a pre-match strip states up front whether point tracking, Health, and Pulse Coach will record this match.
 - **A changeover reminder that stays put** — after a set, the "change ends" notice persists on the scoreboard until the first point of the next set, so you can check it whenever you look down instead of undoing a point to see it again.
 - **Bulletproof state** — full undo stack across game and set boundaries; in-progress matches survive backgrounding, notifications, and overnight pauses.

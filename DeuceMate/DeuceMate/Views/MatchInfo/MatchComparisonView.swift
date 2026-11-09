@@ -327,7 +327,8 @@ struct MatchComparisonView: View {
         case .bestOf3FullFinalSet:    return "Best of 3, full final set"
         case .superTiebreak:          return "Super Tiebreak"
         case .perpetualSuperTiebreak: return "Perpetual Tiebreak"
-        case .quick4Games:            return "Quick 4 Games"
+        case .quick4Games:            return "Short Sets"
+        case .fast4:                  return "FAST4"
         case .perpetualPoints:        return "Perpetual Points"
         }
     }

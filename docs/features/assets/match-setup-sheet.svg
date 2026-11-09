@@ -18,9 +18,9 @@
 <text x="86" y="225" font-size="11" font-weight="600" fill="#e6edf3">Best of 3 (ATP)</text>
 <text x="86" y="239" font-size="8.5" fill="#8b949e">Final set: full set, tiebreak to 7</text>
 <rect x="76" y="257" width="166" height="42" rx="10" fill="#1b2029" stroke="#333c48" stroke-width="1"/>
-<text x="86" y="275" font-size="11" font-weight="600" fill="#e6edf3">Quick 4 Games</text>
-<text x="86" y="289" font-size="8.5" fill="#8b949e">First to 3 · sudden death at 2–2</text>
-<path d="M120,310 L124,314 L128,310" fill="none" stroke="#6e7681" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><text x="166" y="316" font-size="9.5" fill="#6e7681" text-anchor="middle">3 more formats</text>
+<text x="86" y="275" font-size="11" font-weight="600" fill="#e6edf3">Short Sets</text>
+<text x="86" y="289" font-size="8.5" fill="#8b949e">First to 4 (by 2) · 7-pt TB at 4–4</text>
+<path d="M120,310 L124,314 L128,310" fill="none" stroke="#6e7681" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><text x="166" y="316" font-size="9.5" fill="#6e7681" text-anchor="middle">4 more formats</text>
 <rect x="250" y="112" width="3" height="96" rx="1.5" fill="#3a424e"/>
 <text x="300" y="96" font-size="12.5" font-weight="700" fill="#e6edf3">One sheet, not two screens</text>
 <text x="300" y="114" font-size="11.5" fill="#8b949e">Singles/Doubles moves here from its own full-screen step.</text>
