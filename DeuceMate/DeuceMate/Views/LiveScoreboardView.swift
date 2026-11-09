@@ -546,6 +546,8 @@ struct LiveScoreboardView: View {
         case .superTiebreak:          parts.append("Super Tiebreak")
         case .perpetualSuperTiebreak: parts.append("Perpetual Tiebreak")
         case .quick4Games:            parts.append("Quick 4 Games")
+        case .shortSets:              parts.append("Short Sets")
+        case .fast4:                  parts.append("FAST4")
         case .perpetualPoints:        parts.append("Perpetual Points")
         }
         parts.append(record.matchType == .doubles ? "Doubles" : "Singles")

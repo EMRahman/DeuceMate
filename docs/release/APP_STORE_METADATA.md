@@ -102,8 +102,8 @@ DeuceMate tracks the details that are easy to forget:
 • Court changes, prompts, and break points
 • Singles and doubles matches
 
-Choose from six formats: best of three with a super tiebreak or full final set,
-Quick 4, single or perpetual super tiebreaks, or continuous points.
+Choose from seven formats: best of three with a super tiebreak or full final set,
+Short Sets, FAST4, single or perpetual super tiebreaks, or continuous points.
 
 FOLLOW LIVE ON IPHONE
 

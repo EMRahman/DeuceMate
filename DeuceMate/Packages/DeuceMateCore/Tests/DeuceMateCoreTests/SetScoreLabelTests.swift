@@ -33,6 +33,24 @@ final class SetScoreLabelTests: XCTestCase {
             tieBreakPointsOpponent: 0
         )
         XCTAssertEqual(label(quick, index: 0, format: .quick4Games), "3–2 (1–0)")
+
+        let shortSets = SetScore(
+            gamesMe: 5,
+            gamesOpponent: 4,
+            isTieBreak: true,
+            tieBreakPointsMe: 7,
+            tieBreakPointsOpponent: 5
+        )
+        XCTAssertEqual(label(shortSets, index: 0, format: .shortSets), "5–4 (7–5)")
+
+        let fast4 = SetScore(
+            gamesMe: 4,
+            gamesOpponent: 3,
+            isTieBreak: true,
+            tieBreakPointsMe: 5,
+            tieBreakPointsOpponent: 4
+        )
+        XCTAssertEqual(label(fast4, index: 0, format: .fast4), "4–3 (5–4)")
     }
 
     func test_tiebreakOnlyScores_useRawPointsForEveryApplicableFormat() {

@@ -262,6 +262,8 @@ private struct OpponentDetailView: View {
         case .superTiebreak: "Super Tiebreak"
         case .perpetualSuperTiebreak: "Perpetual Tiebreak"
         case .quick4Games: "Quick 4 Games"
+        case .shortSets: "Short Sets"
+        case .fast4: "FAST4"
         case .perpetualPoints: "Perpetual Points"
         }
     }

@@ -344,7 +344,7 @@ with this overlay, using the watch strings (symbols from `ScoringEngine.swift`
 | `🔁 🎾` | "Even games – balls change ends" / "Set complete – balls change ends" |
 | `🔁 🎾` | "Odd tiebreak point – balls change ends" — after every tiebreak point where `pointCountInTiebreak % 2 == 1`, unless the 6-point branch below fired (`ScoringEngine.swift` ~L339–349, reason `.tiebreakOddPoint`) |
 | `🔁 🎾 👥` | "Every 6 tiebreak points – players & balls change ends" / "Set complete – players & balls change ends" |
-| `Tiebreak 🔁 🎾` | "Games at 6-6 – tiebreak begins" (or "Games at 2-2 – sudden death point" for Quick 4) |
+| `Tiebreak 🔁 🎾` | "Games at 6-6 – tiebreak begins" (or "Games at 4-4 – tiebreak begins" for Short Sets, "Games at 3-3 – tiebreak begins" for FAST4) |
 
 The demo engine's changeover events currently carry demo-invented text
 ("Change ends", "New balls soon", "Tiebreak!", "Sudden death!") — map each
@@ -424,8 +424,7 @@ the new capability) to mention outcome tracking and the new gestures. Align
 the setup card's format labels with the watch's own setup sheet (HomeView
 ~L413–476): "Best of 3 Sets (Club / League)" / "3 sets · Final set: Super
 Tiebreak to 10", "Best of 3 Sets (ATP)" / "3 sets · Final set: Full set,
-tiebreak to 7", "Quick 4 Games" / "First to 3 games · Sudden death point at
-2-2", "Super Tiebreak" / "1 set · Single tiebreak to 10 pts", "Perpetual
+tiebreak to 7", "Short Sets" / "First to 4 games (by 2) · 7-pt tiebreak at 4-4 · Deciding point at deuce", "FAST4" / "First to 4 games · 5-pt tiebreak at 3-3 · Deciding point at deuce", "Super Tiebreak" / "1 set · Single tiebreak to 10 pts", "Perpetual
 Tiebreak" / "Continuous tiebreak until stopping", "Perpetual Points" / "Just
 count points · server alternates every point · no stats or changeovers".
 **Accept when:** owner proof-reads the page.

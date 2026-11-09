@@ -12,13 +12,15 @@ public enum GamePlanText {
         case .superTiebreak:          return "Super Tiebreak"
         case .perpetualSuperTiebreak: return "Perpetual Tiebreak"
         case .quick4Games:            return "Quick 4 Games"
+        case .shortSets:              return "Short Sets"
+        case .fast4:                  return "FAST4"
         case .perpetualPoints:        return "Perpetual Points"
         }
     }
 
     /// Formats offered for the upcoming match, in picker order.
     public static let selectableFormats: [MatchFormat] = [
-        .standard, .bestOf3FullFinalSet, .superTiebreak, .perpetualSuperTiebreak, .quick4Games, .perpetualPoints
+        .standard, .bestOf3FullFinalSet, .superTiebreak, .perpetualSuperTiebreak, .shortSets, .fast4, .perpetualPoints
     ]
 
     /// "2026-10-03" in `timeZone` — unambiguous for any reader or AI.

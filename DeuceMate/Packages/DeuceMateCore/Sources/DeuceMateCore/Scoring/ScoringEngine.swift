@@ -235,7 +235,20 @@ public enum ScoringEngine {
         guard state.sets.last?.isTieBreak != true else { return false }
         let serverPts = server == .me ? state.currentPointsMe : state.currentPointsOpponent
         let receiverPts = server == .me ? state.currentPointsOpponent : state.currentPointsMe
+        if state.matchFormat.config.noAdScoring {
+            return receiverPts >= 3 && receiverPts >= serverPts
+        }
         return receiverPts >= 3 && receiverPts > serverPts
+    }
+
+    /// True when the upcoming point is a No-Ad deciding point at deuce (40–40),
+    /// where the receiver chooses which service court to receive on.
+    public static func receiverChoosesServiceSide(_ state: ScoringState) -> Bool {
+        guard state.currentServer != nil else { return false }
+        guard state.matchFormat.config.noAdScoring else { return false }
+        guard !isMatchComplete(state) else { return false }
+        guard state.sets.last?.isTieBreak != true else { return false }
+        return state.currentPointsMe == 3 && state.currentPointsOpponent == 3
     }
 
     /// Whether players must switch ends for the set that's about to start.
@@ -283,15 +296,19 @@ public enum ScoringEngine {
         return reached && abs(mePoints - oppPoints) >= 2
     }
 
-    /// True once either side has at least four points and a two-point lead.
-    /// The parameters are deliberately perspective-neutral so score
-    /// derivations can apply the same rule to server/returner snapshots.
+    /// True once either side has won the regular game: at least four points
+    /// with a two-point lead, or any four-point reach under No-Ad scoring
+    /// (deciding point at deuce). The parameters are deliberately
+    /// perspective-neutral so score derivations can apply the same rule to
+    /// server/returner snapshots.
     public static func isRegularGameComplete(
         playerOnePoints: Int,
-        playerTwoPoints: Int
+        playerTwoPoints: Int,
+        noAdScoring: Bool = false
     ) -> Bool {
-        max(playerOnePoints, playerTwoPoints) >= 4
-            && abs(playerOnePoints - playerTwoPoints) >= 2
+        guard max(playerOnePoints, playerTwoPoints) >= 4 else { return false }
+        if noAdScoring { return true }
+        return abs(playerOnePoints - playerTwoPoints) >= 2
     }
 
     private struct Engine {
@@ -317,7 +334,8 @@ public enum ScoringEngine {
 
             if ScoringEngine.isRegularGameComplete(
                 playerOnePoints: pointsMe,
-                playerTwoPoints: pointsOpponent
+                playerTwoPoints: pointsOpponent,
+                noAdScoring: state.matchFormat.config.noAdScoring
             ) {
                 gameWon(by: pointsMe > pointsOpponent ? .me : .opponent, in: &set)
             } else {
@@ -489,12 +507,13 @@ public enum ScoringEngine {
                     state.tiebreakStartDoublesIndex = state.doublesServiceIndex
                 }
 
-                let tbReason: ScoringChangeoverReason = cfg.tiebreakRequiresTwoPointLead
-                    ? .tiebreakBegins(games: tbAt)
-                    : .suddenDeathBegins(games: tbAt)
+                let isSingleSuddenDeathPoint = !cfg.tiebreakRequiresTwoPointLead && cfg.regularSetTiebreakPoints == 1
+                let tbReason: ScoringChangeoverReason = isSingleSuddenDeathPoint
+                    ? .suddenDeathBegins(games: tbAt)
+                    : .tiebreakBegins(games: tbAt)
                 events.append(.changeover(ScoringChangeover(symbol: "Tiebreak 🔁 🎾", reason: tbReason)))
                 events.append(.announcement(.tiebreakStarted(
-                    requiresTwoPointLead: cfg.tiebreakRequiresTwoPointLead
+                    requiresTwoPointLead: !isSingleSuddenDeathPoint
                 )))
                 state.sets.append(set)
                 return

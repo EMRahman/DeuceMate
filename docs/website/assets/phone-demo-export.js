@@ -47,7 +47,7 @@
   function stepLoads(points,record) {
     var sessions=window.DeuceMateSessions.indices(record||{stats:points},points),previousSession=null,previous=null,loads={};points.map(function(p,i){return {point:p,index:i};}).filter(function(x){return x.point.stepsCumulative!=null;}).sort(function(a,b){return (a.point.timestamp||a.index)-(b.point.timestamp||b.index);}).forEach(function(x){var value=Number(x.point.stepsCumulative),session=sessions[x.index];if(previousSession!==session)previous=null;loads[x.index]=previous==null?0:Math.max(0,value-previous);previousSession=session;previous=Math.max(previous==null?value:previous,value);});return loads;
   }
-  function format(r) {return ({standard:"Best of 3",bestOf3FullFinalSet:"Best of 3 (Full Final Set)",superTiebreak:"Super Tiebreak",perpetualSuperTiebreak:"Perpetual Tiebreak",quick4Games:"Quick 4 Games",perpetualPoints:"Perpetual Points"}[r.format]||r.format)+(r.matchType==="doubles"?" · Doubles":"");}
+  function format(r) {return ({standard:"Best of 3",bestOf3FullFinalSet:"Best of 3 (Full Final Set)",superTiebreak:"Super Tiebreak",perpetualSuperTiebreak:"Perpetual Tiebreak",quick4Games:"Quick 4 Games",shortSets:"Short Sets",fast4:"FAST4",perpetualPoints:"Perpetual Points"}[r.format]||r.format)+(r.matchType==="doubles"?" · Doubles":"");}
   function result(r,focal) {return r.endTime==null?"inProgress":r.iWon==null?"draw":(focal==="me"?r.iWon:!r.iWon)?"won":"lost";}
   function text(r,pts,focal,kind,settings,c) {
     focal=focal||"me";kind=kind||"full";settings=settings||{};

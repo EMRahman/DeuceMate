@@ -330,7 +330,7 @@ final class ScoringEngineTests: XCTestCase {
                       "6-1 set (7 total games, odd) should emit setCompletePlayers")
     }
 
-    // MARK: - Format: quick4Games
+    // MARK: - Format: quick4Games (legacy), shortSets (Short Sets) & fast4 (FAST4)
 
     func test_quick4GamesFirstToThreeGamesSuddenDeath() {
         // Win 3-0 outright
@@ -353,6 +353,90 @@ final class ScoringEngineTests: XCTestCase {
         XCTAssertTrue(ScoringEngine.isMatchComplete(r.state),
                       "Single sudden-death point should complete the match")
         XCTAssertEqual(ScoringEngine.matchWinner(r.state), .me)
+    }
+
+    func test_shortSetsAndNoAdDeuce() {
+        // Win 4-0 outright
+        var s1 = ScoringState(currentServer: .me, matchFormat: .shortSets)
+        winGame(&s1, player: .me, count: 4)
+        XCTAssertTrue(ScoringEngine.isMatchComplete(s1))
+        XCTAssertEqual(ScoringEngine.matchWinner(s1), .me)
+
+        // At 3-3, play continues to 5-3 if a player wins two games in a row
+        var s2 = ScoringState(currentServer: .me, matchFormat: .shortSets)
+        for _ in 0..<3 {
+            winGame(&s2, player: .me)
+            winGame(&s2, player: .opponent)
+        }
+        XCTAssertEqual(s2.sets.first?.isTieBreak, false, "Short Sets continues at 3-3")
+        winGame(&s2, player: .me) // 4-3
+        XCTAssertFalse(ScoringEngine.isMatchComplete(s2), "4-3 does not complete Short Sets")
+        winGame(&s2, player: .me) // 5-3
+        XCTAssertTrue(ScoringEngine.isMatchComplete(s2), "5-3 completes Short Sets")
+        XCTAssertEqual(ScoringEngine.matchWinner(s2), .me)
+
+        // At 4-4, a 7-point tiebreak (win by 2) decides the set 5-4
+        var s3 = ScoringState(currentServer: .me, matchFormat: .shortSets)
+        for _ in 0..<4 {
+            winGame(&s3, player: .me)
+            winGame(&s3, player: .opponent)
+        }
+        XCTAssertEqual(s3.sets.first?.isTieBreak, true, "Tiebreak should start at 4-4")
+        winTiebreakPoints(&s3, player: .me, points: 6)
+        winTiebreakPoints(&s3, player: .opponent, points: 6)
+        XCTAssertFalse(ScoringEngine.isMatchComplete(s3), "6-6 in 7-pt tiebreak requires 2-point lead")
+        winTiebreakPoints(&s3, player: .me, points: 2)
+        XCTAssertTrue(ScoringEngine.isMatchComplete(s3))
+        XCTAssertEqual(s3.sets.first?.gamesMe, 5)
+        XCTAssertEqual(s3.sets.first?.gamesOpponent, 4)
+        XCTAssertEqual(s3.sets.first?.tieBreakPointsMe, 8)
+        XCTAssertEqual(s3.sets.first?.tieBreakPointsOpponent, 6)
+    }
+
+    func test_noAdDecidingPointAtDeuceAndReceiverChoosesSide() {
+        var state = ScoringState(currentServer: .me, matchFormat: .shortSets)
+        for _ in 0..<3 {
+            point(&state, player: .me)
+            point(&state, player: .opponent)
+        }
+        // At 40-40 (3-3) in a No-Ad format:
+        XCTAssertTrue(ScoringEngine.receiverChoosesServiceSide(state),
+                      "Receiver chooses service side at 40-40 in No-Ad formats")
+        XCTAssertTrue(ScoringEngine.isCurrentPointBreakPoint(state),
+                      "Deciding point at 40-40 is also a break point for the receiver")
+
+        // Standard format at 40-40 does not show receiver chooses side
+        let stdDeuce = ScoringState(currentPointsMe: 3, currentPointsOpponent: 3, currentServer: .me, matchFormat: .standard)
+        XCTAssertFalse(ScoringEngine.receiverChoosesServiceSide(stdDeuce))
+
+        // Winning the single deciding point at 40-40 completes the game immediately
+        let r = ScoringEngine.pointWon(by: .opponent, in: state)
+        XCTAssertEqual(r.state.sets.first?.gamesOpponent, 1)
+        XCTAssertEqual(r.state.currentPointsMe, 0)
+        XCTAssertEqual(r.state.currentPointsOpponent, 0)
+        XCTAssertFalse(ScoringEngine.receiverChoosesServiceSide(r.state))
+    }
+
+    func test_fast4TiebreakAtThreeAllFirstToFivePoints() {
+        var state = ScoringState(currentServer: .me, matchFormat: .fast4)
+        for _ in 0..<3 {
+            winGame(&state, player: .me)
+            winGame(&state, player: .opponent)
+        }
+        XCTAssertEqual(state.sets.first?.isTieBreak, true, "FAST4 tiebreak should start at 3-3")
+
+        // Reach 4-4 in tiebreak points: next point wins immediately (sudden death at 4-4)
+        winTiebreakPoints(&state, player: .me, points: 4)
+        winTiebreakPoints(&state, player: .opponent, points: 4)
+        XCTAssertFalse(ScoringEngine.isMatchComplete(state))
+
+        let r = ScoringEngine.pointWon(by: .opponent, in: state)
+        XCTAssertTrue(ScoringEngine.isMatchComplete(r.state))
+        XCTAssertEqual(ScoringEngine.matchWinner(r.state), .opponent)
+        XCTAssertEqual(r.state.sets.first?.gamesMe, 3)
+        XCTAssertEqual(r.state.sets.first?.gamesOpponent, 4)
+        XCTAssertEqual(r.state.sets.first?.tieBreakPointsMe, 4)
+        XCTAssertEqual(r.state.sets.first?.tieBreakPointsOpponent, 5)
     }
 
     // MARK: - Format: bestOf3FullFinalSet

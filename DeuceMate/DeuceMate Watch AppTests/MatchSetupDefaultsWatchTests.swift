@@ -99,13 +99,13 @@ struct MatchSetupDefaultsWatchTests {
     @Test func loadState_absentFile_hydratesFromRememberedDefaults() throws {
         let (defaults, suiteName) = makeIsolatedDefaults()
         defer { teardown(suiteName) }
-        defaults.set(MatchFormat.quick4Games.rawValue, forKey: MatchSetupDefaults.formatKey)
+        defaults.set(MatchFormat.shortSets.rawValue, forKey: MatchSetupDefaults.formatKey)
         defaults.set(MatchType.doubles.rawValue, forKey: MatchSetupDefaults.typeKey)
 
         // Deliberately does not exist on disk — exercises the catch path.
         let viewModel = makeViewModel(stateURL: makeTempURL("loadstate-absent"), defaults: defaults)
         viewModel.loadState()
-        #expect(viewModel.matchFormat == .quick4Games)
+        #expect(viewModel.matchFormat == .shortSets)
         #expect(viewModel.matchType == .doubles)
     }
 
@@ -170,7 +170,7 @@ struct MatchSetupDefaultsWatchTests {
     @Test func resetMatch_persistsRememberedPair_notHardFallback() throws {
         let (defaults, suiteName) = makeIsolatedDefaults()
         defer { teardown(suiteName) }
-        defaults.set(MatchFormat.quick4Games.rawValue, forKey: MatchSetupDefaults.formatKey)
+        defaults.set(MatchFormat.shortSets.rawValue, forKey: MatchSetupDefaults.formatKey)
         defaults.set(MatchType.doubles.rawValue, forKey: MatchSetupDefaults.typeKey)
 
         let url = makeTempURL("resetmatch")
@@ -181,7 +181,7 @@ struct MatchSetupDefaultsWatchTests {
 
         viewModel.resetMatch()
 
-        #expect(viewModel.matchFormat == .quick4Games, "resetMatch() must reseed from the remembered pair, not hard-code .standard")
+        #expect(viewModel.matchFormat == .shortSets, "resetMatch() must reseed from the remembered pair, not hard-code .standard")
         #expect(viewModel.matchType == .doubles, "resetMatch() must reseed from the remembered pair, not hard-code .singles")
 
         // The persisted AppState (written by resetMatch()'s own saveState())
@@ -192,7 +192,7 @@ struct MatchSetupDefaultsWatchTests {
             ScoreViewModel.AppState.self,
             from: Data(contentsOf: url)
         )
-        #expect(saved.matchFormat == .quick4Games)
+        #expect(saved.matchFormat == .shortSets)
         #expect(saved.matchType == .doubles)
     }
 
@@ -223,7 +223,7 @@ struct MatchSetupDefaultsWatchTests {
     @Test func init_neverHydratesFromRememberedDefaults() throws {
         let (defaults, suiteName) = makeIsolatedDefaults()
         defer { teardown(suiteName) }
-        defaults.set(MatchFormat.quick4Games.rawValue, forKey: MatchSetupDefaults.formatKey)
+        defaults.set(MatchFormat.shortSets.rawValue, forKey: MatchSetupDefaults.formatKey)
         defaults.set(MatchType.doubles.rawValue, forKey: MatchSetupDefaults.typeKey)
 
         let viewModel = ScoreViewModel(

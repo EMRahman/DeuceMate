@@ -109,7 +109,8 @@ public enum PointGamesScore {
 
         return ScoringEngine.isRegularGameComplete(
             playerOnePoints: serverPoints,
-            playerTwoPoints: returnerPoints
+            playerTwoPoints: returnerPoints,
+            noAdScoring: matchFormat.config.noAdScoring
         )
     }
 }

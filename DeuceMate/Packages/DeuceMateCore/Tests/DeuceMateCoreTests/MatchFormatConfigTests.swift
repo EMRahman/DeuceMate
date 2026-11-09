@@ -64,6 +64,35 @@ final class MatchFormatConfigTests: XCTestCase {
         XCTAssertEqual(c.finalSetStyle, .fullSetWithTiebreak)
         XCTAssertEqual(c.finalSetTiebreakPoints, 1)
         XCTAssertFalse(c.tiebreakRequiresTwoPointLead)   // sudden death
+        XCTAssertFalse(c.noAdScoring)
+        XCTAssertFalse(c.isEndless)
+    }
+
+    func test_shortSets_config() {
+        let c = MatchFormat.shortSets.config
+        XCTAssertEqual(c.setsToWin, 1)
+        XCTAssertTrue(c.playRegularSets)
+        XCTAssertEqual(c.regularSetWinAtGames, 4)
+        XCTAssertEqual(c.regularSetTiebreakAtGames, 4)
+        XCTAssertEqual(c.regularSetTiebreakPoints, 7)
+        XCTAssertEqual(c.finalSetStyle, .fullSetWithTiebreak)
+        XCTAssertEqual(c.finalSetTiebreakPoints, 7)
+        XCTAssertTrue(c.tiebreakRequiresTwoPointLead)
+        XCTAssertTrue(c.noAdScoring)
+        XCTAssertFalse(c.isEndless)
+    }
+
+    func test_fast4_config() {
+        let c = MatchFormat.fast4.config
+        XCTAssertEqual(c.setsToWin, 1)
+        XCTAssertTrue(c.playRegularSets)
+        XCTAssertEqual(c.regularSetWinAtGames, 4)
+        XCTAssertEqual(c.regularSetTiebreakAtGames, 3)
+        XCTAssertEqual(c.regularSetTiebreakPoints, 5)
+        XCTAssertEqual(c.finalSetStyle, .fullSetWithTiebreak)
+        XCTAssertEqual(c.finalSetTiebreakPoints, 5)
+        XCTAssertFalse(c.tiebreakRequiresTwoPointLead)   // sudden death at 4–4
+        XCTAssertTrue(c.noAdScoring)
         XCTAssertFalse(c.isEndless)
     }
 
@@ -81,6 +110,8 @@ final class MatchFormatConfigTests: XCTestCase {
     func test_regularSetTiebreakWinAtGames() {
         XCTAssertEqual(MatchFormat.standard.config.regularSetTiebreakWinAtGames, 7)
         XCTAssertEqual(MatchFormat.quick4Games.config.regularSetTiebreakWinAtGames, 3)
+        XCTAssertEqual(MatchFormat.shortSets.config.regularSetTiebreakWinAtGames, 5)
+        XCTAssertEqual(MatchFormat.fast4.config.regularSetTiebreakWinAtGames, 4)
     }
 
     // MARK: - isNormalSetComplete
@@ -101,6 +132,24 @@ final class MatchFormatConfigTests: XCTestCase {
         XCTAssertTrue(c.isNormalSetComplete(gamesMe: 3, gamesOpponent: 2))   // 3–2, won via sudden death (game 3)
         XCTAssertFalse(c.isNormalSetComplete(gamesMe: 2, gamesOpponent: 2))  // sudden-death point pending
         XCTAssertFalse(c.isNormalSetComplete(gamesMe: 2, gamesOpponent: 1))
+    }
+
+    func test_isNormalSetComplete_shortSets() {
+        let c = MatchFormat.shortSets.config
+        XCTAssertTrue(c.isNormalSetComplete(gamesMe: 4, gamesOpponent: 2))   // 4–2, two-game lead
+        XCTAssertFalse(c.isNormalSetComplete(gamesMe: 4, gamesOpponent: 3))  // 4–3, must continue to 5–3 or 4–4
+        XCTAssertTrue(c.isNormalSetComplete(gamesMe: 5, gamesOpponent: 3))   // 5–3, two-game lead
+        XCTAssertTrue(c.isNormalSetComplete(gamesMe: 5, gamesOpponent: 4))   // 5–4, won via 4–4 tiebreak
+        XCTAssertFalse(c.isNormalSetComplete(gamesMe: 4, gamesOpponent: 4))  // tiebreak pending
+        XCTAssertFalse(c.isNormalSetComplete(gamesMe: 3, gamesOpponent: 3))
+    }
+
+    func test_isNormalSetComplete_fast4() {
+        let c = MatchFormat.fast4.config
+        XCTAssertTrue(c.isNormalSetComplete(gamesMe: 4, gamesOpponent: 2))   // 4–2, two-game lead
+        XCTAssertTrue(c.isNormalSetComplete(gamesMe: 4, gamesOpponent: 3))   // 4–3, won via 3–3 tiebreak
+        XCTAssertFalse(c.isNormalSetComplete(gamesMe: 3, gamesOpponent: 3))  // tiebreak pending
+        XCTAssertFalse(c.isNormalSetComplete(gamesMe: 3, gamesOpponent: 2))
     }
 
     // MARK: - isDecidingSuperTiebreak

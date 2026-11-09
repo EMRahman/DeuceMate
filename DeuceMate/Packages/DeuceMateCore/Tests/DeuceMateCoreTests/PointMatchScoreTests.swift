@@ -120,6 +120,40 @@ final class PointMatchScoreTests: XCTestCase {
 
         XCTAssertEqual(snapshot.currentSet, "2–2 (0–0)")
         XCTAssertEqual(snapshot.games, GamesScoreSnapshot(me: 2, opponent: 2))
+        XCTAssertEqual(PointGamesScore.atStart(of: points, setIndex: 0, matchFormat: .quick4Games, setScores: record.setScores).count, points.count)
+    }
+
+    func test_shortSetsFormatsTiebreakAsGamesPlusTiebreakPoints() throws {
+        var points = pointsEnteringTiebreak(setIndex: 0, gamesEach: 4)
+        let firstTBPoint = points[points.count - 1]
+        let decidingTBPoint = makePoint(
+            setIndex: 0,
+            server: .me,
+            winner: .me,
+            serverPoints: 6,
+            returnerPoints: 5,
+            isTiebreak: true
+        )
+        points.append(decidingTBPoint)
+        let record = makeRecord(
+            format: .shortSets,
+            setScores: [SetScore(
+                gamesMe: 5,
+                gamesOpponent: 4,
+                isTieBreak: true,
+                tieBreakPointsMe: 7,
+                tieBreakPointsOpponent: 5
+            )],
+            stats: points
+        )
+
+        let startOfTB = try XCTUnwrap(PointMatchScore.atStart(of: points, record: record)[firstTBPoint.id])
+        XCTAssertEqual(startOfTB.currentSet, "4–4 (0–0)")
+        XCTAssertEqual(startOfTB.games, GamesScoreSnapshot(me: 4, opponent: 4))
+
+        let atMatchPoint = try XCTUnwrap(PointMatchScore.atStart(of: points, record: record)[decidingTBPoint.id])
+        XCTAssertEqual(atMatchPoint.currentSet, "4–4 (6–5)")
+        XCTAssertEqual(atMatchPoint.games, GamesScoreSnapshot(me: 4, opponent: 4))
     }
 
     func test_superTiebreakFormatUsesRawPoints() throws {
@@ -289,9 +323,15 @@ final class PointMatchScoreTests: XCTestCase {
         XCTAssertEqual(after[record.stats[54].id]?.matchScoreLabel, "7–6 (7–0)  0–0")
 
         let quick = playedRecord(Array(games.prefix(16)) + [.opponent], format: .quick4Games)
+        XCTAssertEqual(PointGamesScore.atStart(of: quick.stats, setIndex: 0, matchFormat: .quick4Games, setScores: quick.setScores).count, 17)
         let quickAfter = PointMatchScore.afterEachPoint(of: quick.stats, record: quick)
         XCTAssertEqual(quickAfter[quick.stats[16].id]?.gameScoreLabel, "0–1")
         XCTAssertEqual(quickAfter[quick.stats[16].id]?.matchScoreLabel, "2–3 (0–1)")
+
+        let fast4 = playedRecord(Array(games.prefix(24)) + Array(repeating: .opponent, count: 5), format: .fast4)
+        let fast4After = PointMatchScore.afterEachPoint(of: fast4.stats, record: fast4)
+        XCTAssertEqual(fast4After[fast4.stats[28].id]?.gameScoreLabel, "0–5")
+        XCTAssertEqual(fast4After[fast4.stats[28].id]?.matchScoreLabel, "3–4 (0–5)")
     }
 
     func test_afterPoint_handlesSuperTiebreakAndDecidingSet() {

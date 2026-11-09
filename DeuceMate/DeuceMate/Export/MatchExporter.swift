@@ -608,6 +608,8 @@ nonisolated struct MatchExporter {
         case .superTiebreak:          parts.append("Super Tiebreak")
         case .perpetualSuperTiebreak: parts.append("Perpetual Tiebreak")
         case .quick4Games:            parts.append("Quick 4 Games")
+        case .shortSets:              parts.append("Short Sets")
+        case .fast4:                  parts.append("FAST4")
         case .perpetualPoints:        parts.append("Perpetual Points")
         }
         if record.matchType == .doubles { parts.append("Doubles") }

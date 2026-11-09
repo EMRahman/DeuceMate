@@ -340,6 +340,8 @@ struct HomeView: View {
         case .standard:               return "Best of 3 (Club/League)"
         case .bestOf3FullFinalSet:    return "Best of 3 (ATP)"
         case .quick4Games:            return "Quick 4 Games"
+        case .shortSets:              return "Short Sets"
+        case .fast4:                  return "FAST4"
         case .superTiebreak:          return "Super Tiebreak"
         case .perpetualSuperTiebreak: return "Perpetual Tiebreak"
         case .perpetualPoints:        return "Perpetual Points"
@@ -529,9 +531,15 @@ struct HomeView: View {
                             background: viewModel.selectedTheme.colors.buttonPrimary
                         )
                         matchFormatOption(
-                            .quick4Games,
-                            title: "Quick 4 Games",
-                            details: "First to 3 games · Sudden death point at 2-2",
+                            .shortSets,
+                            title: "Short Sets",
+                            details: "First to 4 games (by 2) · 7-pt tiebreak at 4-4 · Deciding point at deuce",
+                            background: ButtonGradients.support
+                        )
+                        matchFormatOption(
+                            .fast4,
+                            title: "FAST4",
+                            details: "First to 4 games · 5-pt tiebreak at 3-3 · Deciding point at deuce",
                             background: ButtonGradients.support
                         )
                         matchFormatOption(
