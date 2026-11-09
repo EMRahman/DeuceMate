@@ -16,7 +16,7 @@ as a size signal — a "small helper" that is suddenly 800 lines deserves a look
 
 ---
 
-## 1. Apple Watch app — `DeuceMate/DeuceMate Watch App/` (20 files)
+## 1. Apple Watch app — `DeuceMate/DeuceMate Watch App/` (22 Swift files)
 
 The scorer. Everything about running a live match happens here.
 
@@ -36,7 +36,9 @@ The scorer. Everything about running a live match happens here.
 | `PointCategorySheet.swift` | 368 | Production wrapper plus callback-based `PointCategoryControls`, used by live scoring; guide uses read-only previews. Preserves contextual outcome/ending-shot choices and 0.4-second confirmation, using tasks cancelled when the controls disappear. | Point categorisation, walkthrough |
 | `MatchHistoryView.swift` | 212 | The watch's recent-matches list (newest 25): open stats, resume an in-progress match, show completed draws distinctly, swipe to delete. | Match history |
 | `AppTheme.swift` | 220 | The watch's five court-inspired colour themes; the chosen theme syncs to the phone. | Theming |
-| `WorkoutManager.swift` | 240 | Runs a fresh workout per resumed/relaunched play session with session/builder callback identity guards: live heart rate, calories, steps, distance per set. Also publishes `healthAccess` (the workout share permission, mapped onto Core's `HealthAccess`) so the start screen can say whether the next match will record health data; refreshed after authorization and on foreground. | Health/workout tracking, tracking status |
+| `WorkoutManager.swift` | ~275 | Runs one HealthKit tennis workout per play session and guards live sensor callbacks by identity. Publishes workout permission and recording/save failures; logs only error domain/code. Stops through `WorkoutFinalizer` so HealthKit saves before the session ends. | Health/workout tracking, tracking status |
+| `WorkoutFinalizer.swift` | ~85 | Retains each stopping session and builder until its save callback; follows stop → stopped callback → end collection → save → end session. Rejects duplicate stop callbacks and isolates overlapping sessions. Reports failures without claiming a saved workout. Protocol boundaries support deterministic lifecycle tests. | Health/workout saving |
+| `WorkoutStatusView.swift` | ~20 | Dismissible recording/save warning on Home and the live scoreboard; directly observes the workout manager so asynchronous failures remain visible after parking. | Health/workout feedback |
 | `Sync/WatchMatchSyncService.swift` | ~350 | The watch's end of the watch↔phone bridge: sends match checkpoints, full history (leaving out an in-progress copy of the live match), manifests and announcements; receives settings, score commands, delete commands, explicit archived-match completion, and metadata-only `matchTagsUpdate` / `matchTypeUpdate` payloads from the phone. | Sync |
 | `StatsStore.swift` | 247 | Saves backup-excluded match history to a JSON file on the watch; orders existing archives on read and trims to the newest 25 by completion/activity date; thread-safe. Defines Watch-only `WatchStatsStoring` and its serial read/update/save transactions for completing an existing checkpoint or converting a completed record's `MatchType`, returning the saved snapshot only on success. Rejects unreadable archives, missing/invalid IDs and failed writes without a stale-record fallback. `appendMatchDurably` reports actual write success; store replacement carries immutable resume events, match tags and `matchTypeRevision` forward, and `updateTags` / `updateMatchType` apply peer metadata updates by their own revision clocks. | Match history (persistence) |
 | `BackupExcludedFileWriter.swift` | ~30 | Shared watch helper for atomic Class B JSON writes that reapplies and verifies device-backup exclusion. Used by match history and transient live-match state. | Match history, live state, health/privacy |

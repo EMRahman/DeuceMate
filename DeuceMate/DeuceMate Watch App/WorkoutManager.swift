@@ -1,13 +1,17 @@
 import Foundation
 import HealthKit
+import OSLog
 import DeuceMateCore
 
 class WorkoutManager: NSObject, ObservableObject {
     private let healthStore = HKHealthStore()
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
-    /// Finalization remains tied to its own session even when another starts.
-    private var finalizingBuilders: [ObjectIdentifier: HKLiveWorkoutBuilder] = [:]
+    private lazy var finalizer = WorkoutFinalizer { [weak self] error in
+        self?.reportWorkoutFailure(error, saving: true)
+    }
+    @Published var workoutError: String?
+    private let logger = Logger(subsystem: "ehsan.DeuceMate.watchkitapp", category: "Workout")
     private let lifecycleLock = NSLock()
 
     @Published private(set) var isRunning = false
@@ -101,11 +105,23 @@ class WorkoutManager: NSObject, ObservableObject {
             builder?.dataSource = dataSource
             session?.delegate = self
             builder?.delegate = self
+            // Initialize on the caller's queue before HealthKit can call back.
+            _ = finalizer
             session?.startActivity(with: startDate)
-            builder?.beginCollection(withStart: startDate) { _, _ in }
+            let startingSession = session
+            builder?.beginCollection(withStart: startDate) { [weak self] success, error in
+                guard !success || error != nil else { return }
+                self?.reportWorkoutFailure(error, saving: false)
+                DispatchQueue.main.async {
+                    guard let self, self.session === startingSession else { return }
+                    self.stopWorkout()
+                }
+            }
             isRunning = true
         } catch {
-            // Non-fatal: app continues without workout session
+            session = nil
+            builder = nil
+            reportWorkoutFailure(error, saving: false)
         }
     }
 
@@ -113,11 +129,15 @@ class WorkoutManager: NSObject, ObservableObject {
         guard isRunning else { return }
         lifecycleLock.lock()
         let stoppingSession = session
-        if let stoppingSession, let builder { finalizingBuilders[ObjectIdentifier(stoppingSession)] = builder }
+        let stoppingBuilder = builder
         builder = nil
         session = nil
         lifecycleLock.unlock()
-        stoppingSession?.end()
+        if let stoppingSession, let stoppingBuilder {
+            finalizer.stop(session: stoppingSession, builder: stoppingBuilder, at: Date())
+        } else {
+            stoppingSession?.end()
+        }
         // Set synchronously — always called from main thread — so that a
         // subsequent startWorkout() call in the same turn sees isRunning = false.
         isRunning = false
@@ -125,6 +145,16 @@ class WorkoutManager: NSObject, ObservableObject {
         totalKilocalories = nil
         lastHeartRatePublishDate = nil
         lastCaloriesPublishDate = nil
+    }
+
+    private func reportWorkoutFailure(_ error: Error?, saving: Bool) {
+        let nsError = error as NSError?
+        logger.error("Workout operation failed: domain=\(nsError?.domain ?? "unknown", privacy: .public) code=\(nsError?.code ?? 0)")
+        DispatchQueue.main.async {
+            self.workoutError = saving
+                ? "Workout couldn’t be saved to Health. Your match score is kept. Check DeuceMate’s Workouts access in Health."
+                : "Fitness recording couldn’t start or continue. Scoring is still available. Check DeuceMate’s Workouts access in Health."
+        }
     }
 
     /// Returns accumulated steps, distance, and calories from the current workout builder.
@@ -162,18 +192,24 @@ extension WorkoutManager: HKWorkoutSessionDelegate {
                         didChangeTo toState: HKWorkoutSessionState,
                         from fromState: HKWorkoutSessionState,
                         date: Date) {
-        guard toState == .ended else { return }
-        lifecycleLock.lock()
-        let b = finalizingBuilders.removeValue(forKey: ObjectIdentifier(session))
-        lifecycleLock.unlock()
-        b?.endCollection(withEnd: date) { _, _ in
-            b?.finishWorkout { _, _ in }
+        if toState == .stopped {
+            finalizer.didStop(session: session, at: date)
         }
     }
+
     func workoutSession(_ session: HKWorkoutSession, didFailWithError error: Error) {
+        if finalizer.didFail(session: session, error: error) { return }
         DispatchQueue.main.async {
             guard self.session === session else { return }
-            self.stopWorkout()
+            self.reportWorkoutFailure(error, saving: false)
+            self.lifecycleLock.lock()
+            self.session = nil
+            self.builder = nil
+            self.lifecycleLock.unlock()
+            session.end()
+            self.isRunning = false
+            self.currentHeartRate = nil
+            self.totalKilocalories = nil
         }
     }
 }
