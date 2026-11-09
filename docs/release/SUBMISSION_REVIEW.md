@@ -5,21 +5,24 @@ Current pre-flight review of DeuceMate against the
 focused on upload blockers, likely rejection reasons, and the manual work needed
 in App Store Connect.
 
-## TestFlight candidate — 1.3.2 (build 16), 8 November 2026
+## TestFlight candidate — 1.3.3 (build 17), 9 November 2026
 
 The iPhone app and embedded Apple Watch app are configured as
-`MARKETING_VERSION = 1.3.2` and `CURRENT_PROJECT_VERSION = 16` in both Debug and
-Release. This is the next device-testing candidate after `1.3.1 (15)`; it has
-not yet been archived, uploaded or tested on physical devices. Test targets keep
-their non-shipping version/build values. Build 16 is the next number recorded in
-this repository; confirm it is still unused in App Store Connect before upload,
-as Xcode has raised build numbers during previous uploads.
+`MARKETING_VERSION = 1.3.3` and `CURRENT_PROJECT_VERSION = 17` in both Debug and
+Release. This replaces the repository's `1.3.2 (16)` testing candidate and includes
+workout saving/recovery fixes (#185, #187), updated Short Sets rules and FAST4
+(#186). This candidate has not yet been archived, uploaded or tested on physical
+devices. Test targets keep their non-shipping version/build values. Build 17 is
+the next number recorded in this repository; confirm it is still unused in
+App Store Connect before upload, as Xcode has raised build numbers during
+previous uploads.
 
-Install it as an upgrade over `1.3.1 (15)`, confirm both apps report
-`1.3.2 (16)` (or the build number assigned at upload), and check that the existing
-archive is intact. Complete the manual gate below before preparing release notes
-or submitting to App Review. Also exercise Prepare Game Plan from an opponent's
-page (#182), including match selection, note inclusion and sharing.
+Install it as an upgrade over the currently installed build, confirm both apps
+report `1.3.3 (17)` (or the build number assigned at upload), and check that the
+existing archive is intact. Complete the manual gate below before preparing
+release notes or submitting to App Review. Also exercise Prepare Game Plan from
+an opponent's page (#182), including match selection, note inclusion and sharing,
+and check the updated Short Sets and FAST4 formats (#186).
 
 ## Workout save investigation — 9 November 2026
 
