@@ -66,6 +66,16 @@ final class WorkoutFinalizer {
         }
     }
 
+    /// Recovery can return a session which had stopped before this process existed.
+    func resumeStopped(session: WorkoutFinalizationSession, builder: WorkoutFinalizationBuilder, at date: Date) {
+        let id = ObjectIdentifier(session)
+        lock.lock()
+        guard pending[id] == nil else { lock.unlock(); return }
+        pending[id] = Pending(session: session, builder: builder)
+        lock.unlock()
+        didStop(session: session, at: date)
+    }
+
     @discardableResult
     func didFail(session: WorkoutFinalizationSession, error: Error) -> Bool {
         complete(id: ObjectIdentifier(session), error: error)

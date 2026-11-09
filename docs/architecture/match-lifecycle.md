@@ -287,7 +287,20 @@ missing/ambiguous anchors stay unplaced. Trailing/no-point events remain visible
 session summaries without inventing a point. Coincident markers coalesce visually.
 The full-history boundary determines set membership before display filtering.
 
-Workouts restart at the current session time. Prior aggregate activity survives
+Fresh workouts restart at the current session time. Launch first attempts HealthKit
+recovery, shared with the WatchKit active-workout recovery delegate. A matching
+recovered session reuses its builder and the saved baseline before that workout,
+including when the match-winning point was already recorded. Stopped recovered
+sessions finish saving even if the live file is idle; unrelated/legacy recovered
+workouts finish separately. No recovered workout starts activity/collection again.
+Recovery failure shows a warning without automatically starting a competing session;
+no recovered session restarts unfinished play. An explicit setup start requested
+before server selection is also retained while recovery is pending. Requests
+coalesce and replay once recovery has handled the old identity and authorization
+has settled; a successful adoption consumes the request, while setup dismissal or
+a recovery error cancels it. Undecided authorization follows the bounded Health
+access retry policy and never times out while its system sheet is open.
+Prior aggregate activity survives
 AppState save/relaunch and is added once to each fresh builder snapshot; repeated
 saves do not advance the baseline. Match/set play clocks exclude explicit parked
 time and stop at normal completion, including delayed categorization. No historical

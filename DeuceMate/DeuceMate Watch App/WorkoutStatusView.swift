@@ -8,10 +8,12 @@ struct WorkoutStatusView: View {
         if let message = manager.workoutError {
             VStack(alignment: .leading, spacing: 4) {
                 Text(message)
+                    .accessibilityIdentifier("workoutWarning")
                     .font(.caption2)
                     .foregroundStyle(.orange)
                 Button("Dismiss") { manager.workoutError = nil }
                     .font(.caption2)
+                    .accessibilityIdentifier("dismissWorkoutWarning")
             }
             .accessibilityElement(children: .contain)
         }

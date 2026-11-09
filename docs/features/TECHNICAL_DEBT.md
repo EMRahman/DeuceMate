@@ -55,6 +55,7 @@ when the item should constrain future changes.
 |---|------|------|------------------|---------------------|--------|
 | [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact; low–medium likelihood** | **Now** | Medium, staged |
 | [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | **High** | **Now**, in the persistence-safety programme | Medium — PR #108 exists to re-read |
+| [27](#27--prevent-unrecorded-fitness-workouts-with-manager-tests-and-crash-recovery) | Health / Reliability | Prevent unrecorded Fitness workouts with manager tests and crash recovery | High impact when a workout is lost; remaining likelihood unverified | **Now**; physical-Watch save/sync checks before release | Medium, staged |
 | [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | **High when schemas diverge** | **Before any persisted-model, enum, or wire-shape change** | Medium |
 | [3](#3--replace-stringly-typed-settings-keys-with-typed-keys) | Settings | Replace stringly-typed settings keys with typed keys | Medium today; **high change risk** | Next engineering-risk cleanup after persistence containment | Large, splittable per setting category |
 | [20](#20--make-health-derived-field-classification-mechanically-exhaustive) | Health/Privacy | Make Health-derived field classification mechanically exhaustive | No current bug; **high privacy risk on expansion** | Before adding any Health-derived field or export surface | Medium design; small first guards |
@@ -870,6 +871,138 @@ away, a failed save shows no error because the screen has gone.
 
 **Key files:** `MatchInfoEditorView.swift`, `DraftDismissalProtection.swift`,
 `PlayersSettingsView.swift`, `MatchDetailsUITests.swift`.
+
+---
+
+### 27 — Prevent unrecorded Fitness workouts with manager tests and crash recovery
+
+**Classification:** Existing-feature reliability and regression-test debt, plus
+missing HealthKit workout recovery after a crash.
+
+**Review baseline, 9 November 2026:** `WorkoutFinalizerTests` and
+`MatchSessionsWatchTests` passed locally: **24 tests, no failures or skips**, on
+the Apple Watch Series 12 (46mm) simulator, watchOS 27.0, Xcode 27.1. Existing
+tests cover finalizer ordering, retaining session/builder references through
+saving, duplicate stops, overlapping finalizations, and activity accumulation.
+At review, the workout-specific match tests replaced `WorkoutManager` with
+spies, so they could pass even if the production manager never reached
+HealthKit's save call. The manager integration tests added below close that gap.
+An archived DeuceMate match does not establish that a Health workout was saved
+or that it reached iPhone Fitness.
+
+The review also found that `resumeWorkoutIfMatchInProgress()` started a fresh
+workout on relaunch and skipped completed matches, with no HealthKit recovery
+path. Launch now uses `restoreWorkoutAfterLaunch()` and the WatchKit recovery
+delegate to reconnect an existing workout before falling back to fresh recording.
+This required production recovery support alongside the tests. See
+[Apple's workout recovery guidance](https://developer.apple.com/documentation/healthkit/running-workout-sessions)
+to reconnect the recovered session, builder, data source and delegates.
+
+**Application risk and priority:** Lost workout recording has high user impact;
+the existing simulator tests do not establish the remaining likelihood on a
+physical Watch. Work through the high-priority items first and retain explicit
+device verification as a release gate. Keep the save ordering and visible-error
+behavior introduced by PR #185.
+
+**Work checklist / acceptance criteria:**
+
+- [x] **High — Test the production manager's save path.** Add injectable
+  HealthKit session/builder creation so tests exercise `WorkoutManager` and its
+  delegate routing without replacing the manager with a spy. Parking, normal
+  completion, End at Current Score, phone-triggered live completion, and
+  switching matches must each reach stop activity → stopped callback → end
+  collection → finish/save → end session exactly once. Include point tracking
+  disabled and an explicit resume followed by parking without scoring. Assert
+  the session/builder survive delayed save completion. Preserve the current
+  collection-until-successful-clear behavior after a provisional winning point;
+  this item does not change completion/undo semantics.
+- [x] **High — Implement and test crash recovery.** Recover the existing
+  HealthKit session and builder when available instead of starting a competing
+  workout. Cover relaunch during play, after the winning point but before
+  finalization, and during stopping/saving. Reattach collection and callbacks
+  as appropriate to the recovered state; eventually save once, with prior
+  activity included exactly once. Test no recoverable session and recovery
+  failure explicitly, including visible errors and a deliberate fallback.
+- [x] **High — Verify recording/save failures stay visible.** Inject session
+  creation failure, denied Health access, collection-start failure,
+  collection-end failure and save failure. Assert scoring remains usable and
+  the manager publishes the appropriate recording/save warning. Add UI
+  coverage for warnings on the live screen and Home, including an asynchronous
+  save failure arriving after navigation. Dismissing a warning must not hide a
+  later failure.
+- [ ] **Medium — Test delayed callbacks through the manager.** While workout
+  B records, deliver A's delayed collection, sensor, session-failure and save
+  callbacks. A cannot stop B or replace B's heart rate/calories; A's save
+  failure still appears. Include failure after saving starts followed by a
+  late save completion, with one session end and one failure report.
+- [ ] **Medium — Connect persistence retry tests to workout assertions.** A
+  failed archive write or idle live-state write must leave the current workout
+  recording. A successful retry must stop/save it once and preserve activity
+  totals without double counting. Extend existing injected-write-failure tests
+  to assert the workout lifecycle through the production manager.
+- [ ] **Release gate — Verify actual saved workouts on a physical Watch.**
+  Complete the existing
+  [physical-Watch checklist](MATCH_RESUME_MARKERS_PLAN.md#pending-physical-watch-checklist-required-before-release).
+  For play → park → wait → resume → finish, confirm two saved tennis workouts
+  attributed to DeuceMate, correct intervals excluding the parked break, and
+  eventual appearance in iPhone Fitness after syncing. Repeat with
+  backgrounding, wrist lowering/locking and crash/relaunch; check missing or
+  duplicate workouts explicitly. Record device/OS/build and observed results.
+  Automated callbacks and archive rows do not complete this gate.
+
+**Verification:** Keep the existing finalizer tests and add manager integration
+and warning UI coverage in the Watch targets. Record exact local commands,
+destinations and results under #21; do not add paid GitHub macOS CI. Report
+automated results separately from physical Health/Fitness persistence and sync
+evidence. The 24 passing tests above are the review baseline.
+
+**Implemented and verified, 9 November 2026:** `WorkoutManagerTests` exercises
+36 scenarios through the real manager/finalizer with injected system handles.
+`WorkoutWarningUITests` adds two production-screen UI cases using the isolated
+DEBUG-only `--workout-ui-test` fixture. Recovery tests cover active/completed
+live play, stopped sessions with an idle/live file, absent/rejected recovery,
+unmatched identities, earlier-session totals, repeated saves, and WatchKit
+handler delivery. Optional backup-excluded AppState workout identity/baseline
+fields preserve legacy decoding and prevent recovered activity being added twice.
+The existing scoring suite now gives each test its own live-state file; shared
+production-default paths caused parallel resume tests to read another test's
+checkpoint. Existing assertions are unchanged.
+
+Full Watch unit suite plus the two warning UI tests passed on Xcode 27.1 /
+watchOS 27.0 / Apple Watch Series 12 (46mm): **151 test cases, 171 runs including
+parameterized cases, zero failures or skips**. Exact local command (result path
+must be unused for a new run):
+
+```sh
+xcodebuild test -project DeuceMate/DeuceMate.xcodeproj \
+  -scheme 'DeuceMate Watch App' \
+  -destination 'platform=watchOS Simulator,id=BA26EB36-CF39-49A2-BC31-7784453C3BFA' \
+  -derivedDataPath /tmp/deucemate-workout-review-derived \
+  -resultBundlePath /tmp/deucemate-workout-review-feedback.xcresult \
+  -only-testing:'DeuceMate Watch AppTests' \
+  -only-testing:'DeuceMate Watch AppUITests/WorkoutWarningUITests' \
+  CODE_SIGNING_ALLOWED=NO
+```
+
+**PR #187 review follow-up:** Setup starts requested during launch recovery or
+transient `.notDetermined` authorization are retained, coalesced and replayed once
+ready. The recovered identity is adopted/finalized before replay; cancellation,
+recovery failure, denial/unavailability and bounded retry exhaustion clear pending
+intent. Authorization polling waits for the system sheet to close. Eleven added
+regression scenarios cover warmup/tiebreak setup before server selection, duplicate
+requests, cancellation/recovery errors, delayed authorization, an open permission
+sheet, terminal outcomes and waiting on both conditions. The 171-run result above
+includes these cases and both warning UI tests; existing assertions are unchanged.
+
+The remaining manager callback and persistence-retry checklists stay open.
+Physical HealthKit save/crash recovery and iPhone Fitness syncing remain unverified;
+the release gate above is still required.
+
+**Key files:** Watch `WorkoutSession.swift`, `WorkoutManager.swift`, `WorkoutFinalizer.swift`,
+`WorkoutStatusView.swift`, `ScoreViewModel.swift`, `DeuceMateApp.swift`,
+`HomeView.swift`, `ContentView.swift`; `WorkoutFinalizerTests.swift`,
+`MatchSessionsWatchTests.swift`, and Watch UI tests. Related design and release
+checks: [`MATCH_RESUME_MARKERS_PLAN.md`](MATCH_RESUME_MARKERS_PLAN.md).
 
 ---
 

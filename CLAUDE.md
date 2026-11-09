@@ -171,7 +171,7 @@ anything portable; no `.pbxproj` change needed — the package globs its sources
 
 | File | Lines | What |
 |------|------:|------|
-| `ScoreViewModel.swift` | ~1960 | Live match state + synced settings; delegates scoring rules to Core's `ScoringEngine` (see §1); `resetMatch` parks the live match as resumable while `endStoredMatchAtCurrentScore` completes a chosen history checkpoint and `completeCurrentMatchIfMatching` reconciles the phone ending that same live identity; seeds/persists the remembered match setup (`applyRememberedSetupIfIdle()`/`persistMatchSetupDefaults()`, called from `loadState()`/`resetMatch()` tails and `HomeView`'s `commitServerSelection()` — never from `init`, which runs before either restore path); `trackingStatuses` resolves Core's `MatchTrackingStatus.all(...)` and forwards `WorkoutManager.$healthAccess` (not its whole `objectWillChange` — that would also fire on every live-match HR/calorie tick) into its own `objectWillChange` in `init`, so views watching only the view model still redraw on Health-access changes without extra redraws during play. ⚠️ Almost no `MARK:` anchors yet — `Grep` for the symbol and read a bounded range. |
+| `ScoreViewModel.swift` | ~2215 | Live match state + synced settings; delegates scoring rules to Core's `ScoringEngine` (see §1); `resetMatch` parks the live match as resumable while `endStoredMatchAtCurrentScore` completes a chosen history checkpoint and `completeCurrentMatchIfMatching` reconciles the phone ending that same live identity; seeds/persists the remembered match setup (`applyRememberedSetupIfIdle()`/`persistMatchSetupDefaults()`, called from `loadState()`/`resetMatch()` tails and `HomeView`'s `commitServerSelection()` — never from `init`, which runs before either restore path); `trackingStatuses` resolves Core's `MatchTrackingStatus.all(...)` and forwards `WorkoutManager.$healthAccess` (not its whole `objectWillChange` — that would also fire on every live-match HR/calorie tick) into its own `objectWillChange` in `init`, so views watching only the view model still redraw on Health-access changes without extra redraws during play. ⚠️ Almost no `MARK:` anchors yet — `Grep` for the symbol and read a bounded range. |
 | `HomeView.swift` | ~1010 | Match setup / start screen: a pre-match card states the remembered Singles/Doubles + format setup (hidden mid-match) and taps through to a combined Match Setup sheet, so Start Match skips straight to who-serves-first; the same card carries the Points/Health/Pulse tracking strip, and the Settings sheet opens with the always-three row form. ⚠️ No `MARK:` anchors yet. |
 | `ScoreInputHaptics.swift` | ~40 | Optional wrist tap confirming an applied swipe (off by default; `swipeHapticsEnabled` syncs both ways with the iPhone Settings > Apple Watch toggle, `storeIncoming` persists the phone's value without echoing it back). Called from `ContentView.performInput` after the score changes, so iPhone score commands don't buzz and a tap always means the input counted. |
 | `TrackingStatusStrip.swift` | ~140 | Paints Core's `MatchTrackingStatus`: the pre-match strip (single-line icon+state chips, each tapping to its corresponding row under "What This Match Records" in Settings, which in turn carries shortcuts to the actual controls via Core's `MatchTrackingStatus.destination(access:)`; Health prompts only while undetermined; Pulse collapsed out when Health is off) and the full-width Settings rows (always all three). |
@@ -180,6 +180,7 @@ anything portable; no `.pbxproj` change needed — the package globs its sources
 | `Scoring/ScoringScoreRow.swift`, `Scoring/MatchStatsContent.swift` | ~50 / ~350 | Shared row/point feedback and stats body; values and callbacks only, no live view model. The existing court, sticky banner and changeover overlay in `ContentView` are reused too. |
 | `Walkthrough/WalkthroughView.swift`, `WalkthroughViewModel.swift`, `WalkthroughCoordinator.swift` | ~534 / ~21 / ~22 | Animated guide UI/adapter and two local flags. Guide entry and first-use offer live in `HomeView`; readiness follows successful state/history reads and completion of the launch authorization callback in `DeuceMateApp`. Adapter has no production dependencies. Navigation/dismissal cancels animation tasks; fixture generations and disposal reject stale beats. |
 | `Sync/WatchMatchSyncService.swift` | ~300 | Watch side of `WatchConnectivity`, including completion reconciliation sent from the phone. |
+| `WorkoutSession.swift`, `WorkoutUITestRoot.swift` | | Injectable HealthKit store/session adapters for the real workout manager, including recovered builders; DEBUG-only isolated warning UI fixture (`--workout-ui-test`), no real Health/sync services. |
 | `PointCategorySheet.swift`, `WorkoutManager.swift`, `MatchHistoryView.swift`, `StatsStore.swift`, `BackupExcludedFileWriter.swift`, `AppTheme.swift` | | Categorisation UI, HealthKit workout (`WorkoutManager` also publishes `healthAccess`, refreshed on foreground and in `HomeView.onAppear`), backup-excluded history/live-state persistence, theming. |
 
 Watch history completion uses `WatchStatsStoring.completeStoredMatch` (declared in
@@ -192,7 +193,10 @@ failures, preserved bytes, and success-only sync through the real store.
 
 Watch tests: `DeuceMate Watch AppTests/` — includes `WalkthroughWatchTests`
 for launch/restore eligibility, local flags, production isolation and stale callbacks. `DeuceMate_Watch_AppTests.swift` (~1.3k lines, 45 tests) holds the
-high-level `ScoreViewModel` scenarios; `StatsStoreTests`,
+high-level `ScoreViewModel` scenarios (each test owns its live-state file);
+`WorkoutManagerTests`, `WorkoutFinalizerTests`, `MatchSessionsWatchTests` cover
+production-manager save/recovery/error paths and session accumulation;
+`WorkoutWarningUITests` uses `--workout-ui-test` for live/Home warnings. `StatsStoreTests`,
 `MatchSetupDefaultsWatchTests`, `TrackingStatusWatchTests`, `MatchTagsWatchTests`,
 `MatchTypeWatchTests` and `ScoreInputHapticsTests` cover the rest.
 All need `import DeuceMateCore` (see §0).
@@ -673,10 +677,23 @@ arrive late (TECHNICAL_DEBT #2). Reopening the same live identity or
 background/foreground creates no event. Park/finalize
 uses `appendMatchDurably` and must succeed before clearing/replacing live state.
 Unreadable/newer live state blocks writes and scoring rather than becoming empty.
-Each workout starts at its own start/resume/relaunch time; aggregate prior activity
-is snapshotted in backup-excluded AppState and combined with the active builder
-without mutating the baseline on retries. `WorkoutFinalizer` retains each
-stopping session and builder through saving:
+Each fresh workout starts at its own start/resume/relaunch time. Launch and the
+WatchKit recovery delegate share `restoreWorkoutAfterLaunch`: recover the existing
+HealthKit session/builder before creating a fresh workout; a recovery error leaves
+a visible warning and scoring available without automatically creating a competing
+session. Backup-excluded AppState additionally stores the active workout start date
+and its prior-activity baseline, so a matching recovered builder is counted once.
+An unmatched/legacy recovered workout is saved separately; a missing workout starts
+fresh for unfinished live play. Setup start requests made while recovery or a fresh
+Health authorization grant is pending are coalesced and replayed after the recovered
+identity is handled and permission becomes readable. `stopWorkout` cancels pending
+intent; adopting a recovered session consumes it, and recovery errors discard it.
+Health status uses the bounded settle policy, with no timeout while the system
+permission sheet is open. Exhaustion/denial remains a visible recording failure.
+Aggregate prior activity is combined with the
+active builder without mutating the baseline on retries. These optional AppState
+fields use `decodeIfPresent`; no new Health fields belong on MatchRecord.
+`WorkoutFinalizer` retains each stopping session and builder through saving:
 stop activity → `.stopped` → end collection → finish/save → end session. Recording
 and save errors appear through `WorkoutStatusView`; HealthKit errors must never
 be silently ignored. Stale callbacks cannot publish into the current session.

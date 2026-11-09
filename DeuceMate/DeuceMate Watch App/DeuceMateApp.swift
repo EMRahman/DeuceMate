@@ -4,6 +4,7 @@ import WatchKit
 
 @main
 struct DeuceMateApp: App {
+    @WKApplicationDelegateAdaptor(WorkoutRecoveryDelegate.self) private var recoveryDelegate
     @StateObject private var viewModel = ScoreViewModel()
     @State private var didStart = false
     @Environment(\.scenePhase) private var scenePhase
@@ -11,7 +12,9 @@ struct DeuceMateApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("--walkthrough-ui-test") {
+            if ProcessInfo.processInfo.arguments.contains("--workout-ui-test") {
+                WorkoutUITestRoot()
+            } else if ProcessInfo.processInfo.arguments.contains("--walkthrough-ui-test") {
                 WalkthroughUITestRoot()
             } else {
                 productionRoot
@@ -32,8 +35,12 @@ struct DeuceMateApp: App {
                 viewModel.loadState()
                 viewModel.workoutManager.requestAuthorization { _ in
                     DispatchQueue.main.async {
-                        viewModel.resumeWorkoutIfMatchInProgress()
-                        viewModel.launchPresentationReady = true
+                        recoveryDelegate.recoverWorkout = { [weak viewModel] in
+                            viewModel?.restoreWorkoutAfterLaunch()
+                        }
+                        viewModel.restoreWorkoutAfterLaunch {
+                            viewModel.launchPresentationReady = true
+                        }
                     }
                 }
                 // Start WatchConnectivity so completed/in-progress matches
@@ -80,6 +87,16 @@ struct DeuceMateApp: App {
                     viewModel.workoutManager.refreshHealthAccess()
                 }
             }
+    }
+}
+
+final class WorkoutRecoveryDelegate: NSObject, WKApplicationDelegate {
+    var recoverWorkout: (() -> Void)?
+
+    func handleActiveWorkoutRecovery() {
+        // If delivered before onAppear/authorization, normal launch restoration
+        // still queries HealthKit. Later delivery shares the one-shot path.
+        DispatchQueue.main.async { self.recoverWorkout?() }
     }
 }
 
