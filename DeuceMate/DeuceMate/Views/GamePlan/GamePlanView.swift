@@ -41,6 +41,8 @@ struct GamePlanView: View {
     // Inclusion choices — off every session.
     @State private var includeNames = false
     @State private var includeNotes = false
+    /// The opponent's Playing Style notes. On by default: the player wrote them as scouting for exactly this.
+    @State private var includePlayingNotes = true
     /// Note text as it was when the player approved it, by match.
     @State private var reviewedNotes: [UUID: String] = [:]
     /// Notes the player chose to leave out at their last review.
@@ -132,6 +134,7 @@ struct GamePlanView: View {
             includeNotes: includeNotes && !notesUnreadable,
             omittedNoteMatchIDs: omittedNoteIDs,
             includeNames: includeNames,
+            includePlayingNotes: includePlayingNotes,
             detailMode: detailMode,
             delivery: delivery,
             selectionDescription: selection.manifestDescription(timeZone: .current)
@@ -427,6 +430,10 @@ struct GamePlanView: View {
         Section {
             Toggle("Include player names", isOn: $includeNames)
                 .accessibilityIdentifier("game-plan-include-names")
+            if opponent?.playingNotes != nil {
+                Toggle("Include playing style notes", isOn: $includePlayingNotes)
+                    .accessibilityIdentifier("game-plan-include-playing-notes")
+            }
             if notesUnreadable {
                 Label("Private notes couldn’t be read, so none can be included. Your notes haven’t been changed.",
                       systemImage: "exclamationmark.triangle")
@@ -452,6 +459,9 @@ struct GamePlanView: View {
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
                 Text(MatchExportDisclosure.namesCaption(isOn: includeNames, forAI: true))
+                if includePlayingNotes, opponent?.playingNotes != nil {
+                    Text("Your Playing Style notes for this opponent are quoted exactly as written. They may mention names or health.")
+                }
                 if includeNotes && !notesUnreadable {
                     Text("\(selectedNotes.count - omittedNoteIDs.count) of \(selectedNotes.count) notes included, quoted exactly as written. A note added or edited after review stays out until you review it.")
                     if !includeNames {

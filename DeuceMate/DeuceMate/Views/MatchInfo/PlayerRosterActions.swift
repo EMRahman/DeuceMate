@@ -35,13 +35,15 @@ struct PlayerRosterActions {
         _ playerID: UUID,
         handednessRaw: String?,
         backhandRaw: String?,
-        playStyleRaw: String?
+        playStyleRaw: String?,
+        playingNotes: String?
     ) throws {
         let affected = try store.updatePlayerDetails(
             playerID,
             handednessRaw: handednessRaw,
             backhandRaw: backhandRaw,
-            playStyleRaw: playStyleRaw
+            playStyleRaw: playStyleRaw,
+            playingNotes: playingNotes
         )
         syncService.pushTagUpdates(forMatchIDs: affected)
     }

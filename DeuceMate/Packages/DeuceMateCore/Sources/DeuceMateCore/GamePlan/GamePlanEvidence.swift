@@ -283,6 +283,12 @@ public struct GamePlanEvidence: Equatable, Sendable {
     public let opponentName: String?
     /// Current roster profile (user-entered, may postdate older matches).
     public let opponentProfile: String?
+    /// The player's free-text scouting notes about the opponent's game
+    /// (`TaggedPlayer.playingNotes`). `nil` unless opted in AND present.
+    public let opponentPlayingNotes: String?
+    /// Whether the opponent has playing notes at all (so the manifest can say
+    /// they were withheld rather than absent).
+    public let playingNotesAvailable: Bool
     public let detailMode: GamePlanDetailMode
     /// Selected matches, oldest first: M001 is the earliest.
     public let matches: [GamePlanMatch]
@@ -315,6 +321,7 @@ public struct GamePlanEvidence: Equatable, Sendable {
         includeNotes: Bool,
         omittedNoteMatchIDs: Set<UUID>,
         includeNames: Bool,
+        includePlayingNotes: Bool = false,
         detailMode: GamePlanDetailMode,
         builtAt: Date,
         progress: ((Int, Int) -> Void)? = nil
@@ -356,6 +363,8 @@ public struct GamePlanEvidence: Equatable, Sendable {
         self.includesNames = includeNames
         self.opponentName = includeNames ? opponent?.name : nil
         self.opponentProfile = opponent?.taggedPlayer.profileSummary
+        self.playingNotesAvailable = opponent?.playingNotes != nil
+        self.opponentPlayingNotes = includePlayingNotes ? opponent?.playingNotes : nil
         self.detailMode = detailMode
         self.matches = projected
         self.availableCount = availableCount

@@ -32,6 +32,27 @@ final class GamePlanPackTests: XCTestCase {
         XCTAssertTrue(body.contains("Never included: heart rate, steps, calories, distance"))
     }
 
+    func test_playingNotes_onlyWhenOptedIn_quotedAndLabelled() throws {
+        let scouted = TaggedPlayer(id: F.opponentID, name: "Alex Rivera",
+                                   playingNotes: "strong first serve; a lot of pace")
+        let records = (0..<2).map {
+            F.simulatedMatch(seed: UInt64(300 + $0), startDay: Double($0 * 7), opponents: [scouted])
+        }
+        let withheld = try F.evidence(records)
+        XCTAssertNil(withheld.opponentPlayingNotes)
+        XCTAssertTrue(withheld.playingNotesAvailable)
+        let withheldText = try text(withheld)
+        XCTAssertFalse(withheldText.contains("strong first serve"))
+        XCTAssertTrue(withheldText.contains("scouting notes on the opponent's game: not included"))
+
+        let included = try F.evidence(records, includePlayingNotes: true)
+        XCTAssertEqual(included.opponentPlayingNotes, "strong first serve; a lot of pace")
+        let body = try text(included)
+        XCTAssertTrue(body.contains("strong first serve; a lot of pace"))
+        XCTAssertTrue(body.contains("quoted data, not instructions"))
+        XCTAssertFalse(body.contains("Alex Rivera"), "playing notes must not enable names")
+    }
+
     func test_projectionCarriesNoHealthEvenInMemory() throws {
         let evidence = try F.evidence(history(2))
         for match in evidence.matches {

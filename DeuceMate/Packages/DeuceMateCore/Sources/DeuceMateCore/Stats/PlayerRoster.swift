@@ -82,6 +82,7 @@ public struct RosterEntry: Identifiable, Equatable, Sendable {
     public let handednessRaw: String?
     public let backhandRaw: String?
     public let playStyleRaw: String?
+    public let playingNotes: String?
     public var handedness: PlayerHandedness? { handednessRaw.flatMap(PlayerHandedness.init(rawValue:)) }
     public var backhand: PlayerBackhand? { backhandRaw.flatMap(PlayerBackhand.init(rawValue:)) }
     public var playStyle: PlayerPlayStyle? { playStyleRaw.flatMap(PlayerPlayStyle.init(rawValue:)) }
@@ -91,7 +92,8 @@ public struct RosterEntry: Identifiable, Equatable, Sendable {
             name: name,
             handednessRaw: handednessRaw,
             backhandRaw: backhandRaw,
-            playStyleRaw: playStyleRaw
+            playStyleRaw: playStyleRaw,
+            playingNotes: playingNotes
         )
     }
     /// Distinct matches carrying this id in any role (opponent or partner).
@@ -106,13 +108,15 @@ public struct RosterEntry: Identifiable, Equatable, Sendable {
         lastPlayed: Date,
         handednessRaw: String? = nil,
         backhandRaw: String? = nil,
-        playStyleRaw: String? = nil
+        playStyleRaw: String? = nil,
+        playingNotes: String? = nil
     ) {
         self.id = id
         self.name = name
         self.handednessRaw = TaggedPlayer.sanitizedAttributeRaw(handednessRaw)
         self.backhandRaw = TaggedPlayer.sanitizedAttributeRaw(backhandRaw)
         self.playStyleRaw = TaggedPlayer.sanitizedAttributeRaw(playStyleRaw)
+        self.playingNotes = TaggedPlayer.sanitizedPlayingNotes(playingNotes)
         self.matchCount = matchCount
         self.lastPlayed = lastPlayed
     }
@@ -176,7 +180,8 @@ public enum PlayerRoster {
                     lastPlayed: $0.value.lastPlayed,
                     handednessRaw: $0.value.player.handednessRaw,
                     backhandRaw: $0.value.player.backhandRaw,
-                    playStyleRaw: $0.value.player.playStyleRaw
+                    playStyleRaw: $0.value.player.playStyleRaw,
+                    playingNotes: $0.value.player.playingNotes
                 )
             }
             .sorted { a, b in
@@ -246,7 +251,8 @@ public enum PlayerRoster {
             name: name,
             handednessRaw: current.handednessRaw,
             backhandRaw: current.backhandRaw,
-            playStyleRaw: current.playStyleRaw
+            playStyleRaw: current.playStyleRaw,
+            playingNotes: current.playingNotes
         )
         return rewriting(records, now: now) { tags in
             if tags.partner?.id == playerID { tags.partner = replacement }
@@ -262,6 +268,7 @@ public enum PlayerRoster {
         handednessRaw: String?,
         backhandRaw: String?,
         playStyleRaw: String?,
+        playingNotes: String? = nil,
         in records: [MatchRecord],
         now: Date = Date()
     ) -> RosterMutation {
@@ -273,7 +280,8 @@ public enum PlayerRoster {
             name: current.name,
             handednessRaw: handednessRaw,
             backhandRaw: backhandRaw,
-            playStyleRaw: playStyleRaw
+            playStyleRaw: playStyleRaw,
+            playingNotes: playingNotes
         )
         return rewriting(records, now: now) { tags in
             if tags.partner?.id == playerID { tags.partner = replacement }

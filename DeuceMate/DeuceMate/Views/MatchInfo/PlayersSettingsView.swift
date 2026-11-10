@@ -76,6 +76,8 @@ struct PlayerManageView: View {
     @State private var handednessDraft = ""
     @State private var backhandDraft = ""
     @State private var playStyleDraft = ""
+    @State private var notesDraft = ""
+    @FocusState private var isNotesFocused: Bool
     @State private var didInitializeDetailsDraft = false
     @State private var showMergePicker = false
     @State private var pendingMerge: RosterEntry?
@@ -214,10 +216,32 @@ struct PlayerManageView: View {
                     }
                 }
                 .accessibilityIdentifier("player-play-style-picker")
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Notes")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    TextField(
+                        "e.g. strong first serve; a lot of pace",
+                        text: $notesDraft,
+                        axis: .vertical
+                    )
+                    .lineLimit(2...6)
+                    .focused($isNotesFocused)
+                    .accessibilityIdentifier("player-playing-notes-field")
+                    .onChange(of: isNotesFocused) { _, focused in
+                        if !focused { saveDetailsIfChanged() }
+                    }
+                    .onChange(of: notesDraft) { _, value in
+                        if value.count > TaggedPlayer.maxPlayingNotesLength {
+                            notesDraft = String(value.prefix(TaggedPlayer.maxPlayingNotesLength))
+                        }
+                    }
+                }
             } header: {
                 Text("Playing Style")
             } footer: {
-                Text("Saves automatically. Optional tennis profile shown on the opponent detail screen and included in AI Coach match context.")
+                Text("Saves automatically. Optional tennis profile and notes are shown on the opponent detail screen. The profile is included in AI Coach match context. Notes are used only in an Opponent Game Plan, and you can turn them off there.")
             }
 
             Section {
@@ -245,6 +269,7 @@ struct PlayerManageView: View {
         .onChange(of: handednessDraft) { saveDetailsIfChanged() }
         .onChange(of: backhandDraft) { saveDetailsIfChanged() }
         .onChange(of: playStyleDraft) { saveDetailsIfChanged() }
+        .onDisappear { saveDetailsIfChanged() }
         .sheet(isPresented: $showMergePicker) {
             mergePicker(for: entry)
         }
@@ -334,12 +359,14 @@ struct PlayerManageView: View {
         (handednessDraft.isEmpty ? nil : handednessDraft) != entry.handednessRaw
             || (backhandDraft.isEmpty ? nil : backhandDraft) != entry.backhandRaw
             || (playStyleDraft.isEmpty ? nil : playStyleDraft) != entry.playStyleRaw
+            || TaggedPlayer.sanitizedPlayingNotes(notesDraft) != entry.playingNotes
     }
 
     private func loadDetailsDraft(from entry: RosterEntry) {
         handednessDraft = entry.handednessRaw ?? ""
         backhandDraft = entry.backhandRaw ?? ""
         playStyleDraft = entry.playStyleRaw ?? ""
+        notesDraft = entry.playingNotes ?? ""
     }
 
     /// Autosaves a picked value. A failed save puts the pickers back to what is
@@ -351,7 +378,8 @@ struct PlayerManageView: View {
                 playerID,
                 handednessRaw: handednessDraft.isEmpty ? nil : handednessDraft,
                 backhandRaw: backhandDraft.isEmpty ? nil : backhandDraft,
-                playStyleRaw: playStyleDraft.isEmpty ? nil : playStyleDraft
+                playStyleRaw: playStyleDraft.isEmpty ? nil : playStyleDraft,
+                playingNotes: TaggedPlayer.sanitizedPlayingNotes(notesDraft)
             )
         } catch {
             errorMessage = error.localizedDescription

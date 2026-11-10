@@ -94,18 +94,6 @@ private struct OpponentDetailView: View {
         Group {
             if let opponent {
                 List {
-                    Section {
-                        NavigationLink {
-                            GamePlanView(opponentID: opponentID)
-                                .environmentObject(store)
-                        } label: {
-                            Label("Prepare Game Plan", systemImage: "list.bullet.clipboard")
-                        }
-                        .accessibilityIdentifier("opponent-prepare-game-plan")
-                    } footer: {
-                        Text("Build an evidence pack from your singles matches against \(opponent.name) to ask an AI app for a pre-match plan.")
-                    }
-
                     Section("Head to Head · Singles") {
                         headToHeadRow(HeadToHead.record(vs: opponentID, in: store.history, excluding: nil, matchType: .singles))
                     }
@@ -135,18 +123,51 @@ private struct OpponentDetailView: View {
                         }
                     }
 
-                    if opponent.handedness != nil || opponent.backhand != nil || opponent.playStyle != nil {
-                        Section("Playing Style") {
-                            if let handedness = opponent.handedness {
-                                LabeledContent("Handedness", value: handedness.displayLabel)
-                            }
-                            if let backhand = opponent.backhand {
-                                LabeledContent("Backhand", value: backhand.displayLabel)
-                            }
-                            if let playStyle = opponent.playStyle {
-                                LabeledContent("Play Style", value: playStyle.displayLabel)
-                            }
+                    Section {
+                        if opponent.handedness == nil && opponent.backhand == nil
+                            && opponent.playStyle == nil && opponent.playingNotes == nil {
+                            Text("No playing style added yet")
+                                .foregroundStyle(.secondary)
                         }
+                        if let handedness = opponent.handedness {
+                            LabeledContent("Handedness", value: handedness.displayLabel)
+                        }
+                        if let backhand = opponent.backhand {
+                            LabeledContent("Backhand", value: backhand.displayLabel)
+                        }
+                        if let playStyle = opponent.playStyle {
+                            LabeledContent("Play Style", value: playStyle.displayLabel)
+                        }
+                        if let notes = opponent.playingNotes {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Notes")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                Text(notes)
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
+                        NavigationLink {
+                            PlayerManageView(playerID: opponentID)
+                                .environmentObject(syncService)
+                        } label: {
+                            Label("Edit Playing Style & Notes", systemImage: "pencil")
+                        }
+                        .accessibilityIdentifier("opponent-edit-playing-style")
+                    } header: {
+                        Text("Playing Style")
+                    }
+
+                    Section {
+                        NavigationLink {
+                            GamePlanView(opponentID: opponentID)
+                                .environmentObject(store)
+                        } label: {
+                            Label("Prepare Game Plan", systemImage: "list.bullet.clipboard")
+                        }
+                        .accessibilityIdentifier("opponent-prepare-game-plan")
+                    } footer: {
+                        Text("Build an evidence pack from your singles matches against \(opponent.name) to ask an AI app for a pre-match plan.")
                     }
 
                     if !pendingMatches.isEmpty {
