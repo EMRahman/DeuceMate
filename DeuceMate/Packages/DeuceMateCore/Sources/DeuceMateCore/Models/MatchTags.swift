@@ -84,6 +84,12 @@ public struct TaggedPlayer: Codable, Equatable, Hashable, Sendable, Identifiable
     public var handednessRaw: String?
     public var backhandRaw: String?
     public var playStyleRaw: String?
+    /// Free-text scouting notes about how this person plays ("strong first
+    /// serve; a lot of pace"). `nil` = none. Kept out of `profileSummary` so it
+    /// never reaches an export that only opted into the structured profile.
+    public var playingNotes: String?
+
+    public static let maxPlayingNotesLength = 280
 
     public var handedness: PlayerHandedness? {
         get { handednessRaw.flatMap(PlayerHandedness.init(rawValue:)) }
@@ -117,13 +123,24 @@ public struct TaggedPlayer: Codable, Equatable, Hashable, Sendable, Identifiable
         name: String,
         handednessRaw: String? = nil,
         backhandRaw: String? = nil,
-        playStyleRaw: String? = nil
+        playStyleRaw: String? = nil,
+        playingNotes: String? = nil
     ) {
         self.id = id
         self.name = name
         self.handednessRaw = Self.sanitizedAttributeRaw(handednessRaw)
         self.backhandRaw = Self.sanitizedAttributeRaw(backhandRaw)
         self.playStyleRaw = Self.sanitizedAttributeRaw(playStyleRaw)
+        self.playingNotes = Self.sanitizedPlayingNotes(playingNotes)
+    }
+
+    /// Trims, turns line breaks into spaces, drops control and bidirectional
+    /// override characters, collapses whitespace and caps at
+    /// `maxPlayingNotesLength`. Empty ⇒ `nil`.
+    public static func sanitizedPlayingNotes(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let cleaned = MatchTags.sanitizedName(raw, maxLength: maxPlayingNotesLength)
+        return cleaned.isEmpty ? nil : cleaned
     }
 
     static func sanitizedAttributeRaw(_ raw: String?) -> String? {
@@ -139,6 +156,7 @@ public struct TaggedPlayer: Codable, Equatable, Hashable, Sendable, Identifiable
         handednessRaw = Self.sanitizedAttributeRaw(try? c.decodeIfPresent(String.self, forKey: .handednessRaw))
         backhandRaw = Self.sanitizedAttributeRaw(try? c.decodeIfPresent(String.self, forKey: .backhandRaw))
         playStyleRaw = Self.sanitizedAttributeRaw(try? c.decodeIfPresent(String.self, forKey: .playStyleRaw))
+        playingNotes = Self.sanitizedPlayingNotes(try? c.decodeIfPresent(String.self, forKey: .playingNotes))
     }
 }
 
@@ -324,6 +342,7 @@ public struct MatchTags: Codable, Equatable, Sendable {
                 + field(value.handednessRaw)
                 + field(value.backhandRaw)
                 + field(value.playStyleRaw)
+                + field(value.playingNotes)
         }
         return field(competitionTypeRaw) + field(partner.map(player))
             + "\(opponents.count):" + opponents.map(player).joined()
@@ -390,7 +409,8 @@ public struct MatchTags: Codable, Equatable, Sendable {
             name: name,
             handednessRaw: player.handednessRaw,
             backhandRaw: player.backhandRaw,
-            playStyleRaw: player.playStyleRaw
+            playStyleRaw: player.playStyleRaw,
+            playingNotes: player.playingNotes
         )
     }
 
@@ -398,7 +418,7 @@ public struct MatchTags: Codable, Equatable, Sendable {
     /// bidirectional-override characters (spoofing), collapse internal
     /// whitespace runs to one space, cap at `maxNameLength` characters.
     /// Emoji sequences (ZWJ) survive.
-    public static func sanitizedName(_ raw: String) -> String {
+    public static func sanitizedName(_ raw: String, maxLength: Int = maxNameLength) -> String {
         var scalars = String.UnicodeScalarView()
         for scalar in raw.unicodeScalars {
             if isLineBreak(scalar) {
@@ -412,7 +432,7 @@ public struct MatchTags: Codable, Equatable, Sendable {
         let collapsed = String(scalars)
             .split(whereSeparator: { $0.isWhitespace })
             .joined(separator: " ")
-        return String(collapsed.prefix(maxNameLength))
+        return String(collapsed.prefix(maxLength))
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

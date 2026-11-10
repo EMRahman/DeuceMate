@@ -30,7 +30,8 @@ public enum OpponentDirectory {
                 lastPlayed: appearance.lastPlayed,
                 handednessRaw: roster.handednessRaw,
                 backhandRaw: roster.backhandRaw,
-                playStyleRaw: roster.playStyleRaw
+                playStyleRaw: roster.playStyleRaw,
+                playingNotes: roster.playingNotes
             )
         }.sorted { a, b in
             if a.lastPlayed != b.lastPlayed { return a.lastPlayed > b.lastPlayed }

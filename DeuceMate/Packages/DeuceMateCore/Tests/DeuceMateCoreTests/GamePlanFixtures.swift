@@ -133,6 +133,7 @@ enum GamePlanFixtures {
         includeNotes: Bool = false,
         omitted: Set<UUID> = [],
         includeNames: Bool = false,
+        includePlayingNotes: Bool = false,
         detail: GamePlanDetailMode = .full,
         includeInProgress: Bool = false
     ) throws -> GamePlanEvidence {
@@ -150,6 +151,7 @@ enum GamePlanFixtures {
             includeNotes: includeNotes,
             omittedNoteMatchIDs: omitted,
             includeNames: includeNames,
+            includePlayingNotes: includePlayingNotes,
             detailMode: detail,
             builtAt: TagFixtures.base.addingTimeInterval(400 * day)
         )

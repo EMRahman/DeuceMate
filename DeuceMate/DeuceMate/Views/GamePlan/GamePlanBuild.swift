@@ -25,6 +25,7 @@ nonisolated struct GamePlanBuildInputs: Equatable, Sendable {
     let includeNotes: Bool
     let omittedNoteMatchIDs: Set<UUID>
     let includeNames: Bool
+    let includePlayingNotes: Bool
     let detailMode: GamePlanDetailMode
     let delivery: GamePlanDelivery
     let selectionDescription: String
@@ -61,6 +62,7 @@ nonisolated enum GamePlanBuild {
             includeNotes: inputs.includeNotes,
             omittedNoteMatchIDs: inputs.omittedNoteMatchIDs,
             includeNames: inputs.includeNames,
+            includePlayingNotes: inputs.includePlayingNotes,
             detailMode: inputs.detailMode,
             builtAt: builtAt,
             progress: { done, total in progress?(total == 0 ? 0.8 : 0.8 * Double(done) / Double(total)) }

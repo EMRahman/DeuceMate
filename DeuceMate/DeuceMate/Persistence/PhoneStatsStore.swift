@@ -473,6 +473,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         handednessRaw: String?,
         backhandRaw: String?,
         playStyleRaw: String?,
+        playingNotes: String? = nil,
         now: Date = Date()
     ) throws -> Set<UUID> {
         try applyRosterMutation {
@@ -481,6 +482,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 handednessRaw: handednessRaw,
                 backhandRaw: backhandRaw,
                 playStyleRaw: playStyleRaw,
+                playingNotes: playingNotes,
                 in: $0,
                 now: now
             )
