@@ -97,6 +97,14 @@ struct PlayerManageView: View {
         return !sanitized.isEmpty && sanitized != entry.name
     }
 
+    private var hasUnsavedNotes: Bool {
+        guard didInitializeDetailsDraft, let entry else { return false }
+        return TaggedPlayer.sanitizedPlayingNotes(notesDraft) != entry.playingNotes
+    }
+
+    /// Typed text that hasn't reached the archive yet (name or playing notes).
+    private var hasUnsavedText: Bool { hasUnsavedName || hasUnsavedNotes }
+
     /// Matches mentioning this player that carry a private note — notes can
     /// mention the person in prose, which forgetting cannot reliably remove.
     private var affectedNoteIDs: Set<UUID> {
@@ -126,11 +134,11 @@ struct PlayerManageView: View {
         }
         // While a typed name is unsaved, this Back replaces the system one (which
         // also turns off swipe-back) so a failed save can keep the screen open.
-        .navigationBarBackButtonHidden(hasUnsavedName)
+        .navigationBarBackButtonHidden(hasUnsavedText)
         .toolbar {
-            if hasUnsavedName {
+            if hasUnsavedText {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button { saveNameAndLeave() } label: {
+                    Button { saveAndLeave() } label: {
                         Image(systemName: "chevron.backward")
                     }
                     .accessibilityLabel("Back")
@@ -139,12 +147,15 @@ struct PlayerManageView: View {
             }
         }
         .alert(
-            "Couldn't Save Name",
+            "Couldn't Save Changes",
             isPresented: Binding(get: { nameSaveFailure != nil }, set: { if !$0 { nameSaveFailure = nil } })
         ) {
             Button("Keep Editing", role: .cancel) {}
             Button("Discard Change", role: .destructive) {
-                if let entry { newName = entry.name }
+                if let entry {
+                    newName = entry.name
+                    notesDraft = entry.playingNotes ?? ""
+                }
                 dismiss()
             }
         } message: {
@@ -269,7 +280,11 @@ struct PlayerManageView: View {
         .onChange(of: handednessDraft) { saveDetailsIfChanged() }
         .onChange(of: backhandDraft) { saveDetailsIfChanged() }
         .onChange(of: playStyleDraft) { saveDetailsIfChanged() }
-        .onDisappear { saveDetailsIfChanged() }
+        .onDisappear {
+            // Best-effort fallback when a parent closes this screen (Back is
+            // guarded while text is unsaved). No UI: the view is going away.
+            try? persistDetails()
+        }
         .sheet(isPresented: $showMergePicker) {
             mergePicker(for: entry)
         }
@@ -372,19 +387,29 @@ struct PlayerManageView: View {
     /// Autosaves a picked value. A failed save puts the pickers back to what is
     /// stored, so the screen never shows a value that wasn't saved.
     private func saveDetailsIfChanged() {
-        guard didInitializeDetailsDraft, let entry, detailsChanged(entry) else { return }
         do {
-            try actions.updateDetails(
-                playerID,
-                handednessRaw: handednessDraft.isEmpty ? nil : handednessDraft,
-                backhandRaw: backhandDraft.isEmpty ? nil : backhandDraft,
-                playStyleRaw: playStyleDraft.isEmpty ? nil : playStyleDraft,
-                playingNotes: TaggedPlayer.sanitizedPlayingNotes(notesDraft)
-            )
+            try persistDetails()
         } catch {
             errorMessage = error.localizedDescription
-            loadDetailsDraft(from: entry)
+            // Put the pickers back to what is stored; typed notes stay so the
+            // player can retry.
+            if let entry {
+                handednessDraft = entry.handednessRaw ?? ""
+                backhandDraft = entry.backhandRaw ?? ""
+                playStyleDraft = entry.playStyleRaw ?? ""
+            }
         }
+    }
+
+    private func persistDetails() throws {
+        guard didInitializeDetailsDraft, let entry, detailsChanged(entry) else { return }
+        try actions.updateDetails(
+            playerID,
+            handednessRaw: handednessDraft.isEmpty ? nil : handednessDraft,
+            backhandRaw: backhandDraft.isEmpty ? nil : backhandDraft,
+            playStyleRaw: playStyleDraft.isEmpty ? nil : playStyleDraft,
+            playingNotes: TaggedPlayer.sanitizedPlayingNotes(notesDraft)
+        )
     }
 
     /// Autosaves the name when editing ends rather than on each keystroke,
@@ -398,9 +423,12 @@ struct PlayerManageView: View {
         }
     }
 
-    private func saveNameAndLeave() {
+    /// Saves the name and the playing notes; Back only completes when both are
+    /// durable, otherwise the screen stays open with the typed text.
+    private func saveAndLeave() {
         do {
             try persistName()
+            try persistDetails()
             dismiss()
         } catch {
             nameSaveFailure = error.localizedDescription
