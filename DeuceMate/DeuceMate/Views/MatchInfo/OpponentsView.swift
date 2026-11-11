@@ -373,7 +373,7 @@ private struct ChipFlowLayout: Layout {
         for (index, origin) in result.origins.enumerated() {
             subviews[index].place(
                 at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
-                proposal: .unspecified
+                proposal: ProposedViewSize(width: bounds.width, height: nil)
             )
         }
     }
@@ -382,7 +382,9 @@ private struct ChipFlowLayout: Layout {
         var origins: [CGPoint] = []
         var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, maxX: CGFloat = 0
         for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
+            // Cap each chip at the row width so an oversized label wraps its
+            // text instead of overflowing (accessibility Dynamic Type sizes).
+            let size = subview.sizeThatFits(ProposedViewSize(width: width.isFinite ? width : nil, height: nil))
             if x > 0, x + size.width > width {
                 x = 0
                 y += rowHeight + spacing
