@@ -477,7 +477,7 @@
     if (label(STYLE, entry.style)) chips.push(label(STYLE, entry.style));
     if (chips.length) {
       var chipRow = h("div", "mi-chip-row");
-      chipRow.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;padding:12px 16px";
+      chipRow.style.cssText = "display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:12px 16px";
       chips.forEach(function (c) { chipRow.append(h("span", "mi-chip", c)); });
       body.append(group(null, [chipRow]));
     }
