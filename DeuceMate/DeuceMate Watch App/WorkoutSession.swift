@@ -112,7 +112,7 @@ private final class HealthKitWorkoutSession: NSObject, WorkoutRecordingSession,
     func beginCollection(at date: Date, completion: @escaping (Bool, Error?) -> Void) {
         builder.beginCollection(withStart: date, completion: completion)
     }
-    func endCollection(withEnd date: Date, completion: @escaping (Bool, Error?) -> Void) {
+    func endCollection(withEnd date: Date, completion: @escaping @Sendable (Bool, Error?) -> Void) {
         // A recovered stopped builder may already have ended collection before the crash.
         if builder.endDate != nil { completion(true, nil) }
         else { builder.endCollection(withEnd: date, completion: completion) }

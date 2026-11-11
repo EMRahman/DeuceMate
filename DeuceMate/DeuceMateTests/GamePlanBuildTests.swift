@@ -40,7 +40,7 @@ struct GamePlanBuildTests {
             availableCount: selection.filtered(candidates).count,
             upcoming: GamePlanUpcomingMatch(competition: .league),
             notes: [:], includeNotes: false, omittedNoteMatchIDs: [],
-            includeNames: includeNames, detailMode: .full, delivery: delivery,
+            includeNames: includeNames, includePlayingNotes: false, detailMode: .full, delivery: delivery,
             selectionDescription: selection.manifestDescription(timeZone: .current)
         )
     }

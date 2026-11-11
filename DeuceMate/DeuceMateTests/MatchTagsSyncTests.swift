@@ -36,7 +36,7 @@ private final class RecordingSession: MatchSyncSessing {
 
 @MainActor
 struct MatchTagsSyncTests {
-    private struct Harness {
+    @MainActor private struct Harness {
         let root: URL
         let store: PhoneStatsStore
         let session: RecordingSession

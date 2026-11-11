@@ -32,45 +32,50 @@ struct DeuceMateApp: App {
             .onAppear {
                 guard !didStart else { return }
                 didStart = true
-                viewModel.loadState()
-                viewModel.workoutManager.requestAuthorization { _ in
+                // Bind the view model to a local so every long-lived callback
+                // below captures it weakly; implicitly capturing the
+                // property strongly in this scope would defeat `[weak …]`.
+                let model = viewModel
+                model.loadState()
+                model.workoutManager.requestAuthorization { [weak model] _ in
                     DispatchQueue.main.async {
-                        recoveryDelegate.recoverWorkout = { [weak viewModel] in
-                            viewModel?.restoreWorkoutAfterLaunch()
+                        guard let model else { return }
+                        recoveryDelegate.recoverWorkout = { [weak model] in
+                            model?.restoreWorkoutAfterLaunch()
                         }
-                        viewModel.restoreWorkoutAfterLaunch {
-                            viewModel.launchPresentationReady = true
+                        model.restoreWorkoutAfterLaunch {
+                            model.launchPresentationReady = true
                         }
                     }
                 }
                 // Start WatchConnectivity so completed/in-progress matches
                 // are delivered to the paired iPhone companion app.
                 let sync = WatchMatchSyncService.shared
-                sync.onThemeReceived = { [weak viewModel] rawValue in
-                    viewModel?.applyIncomingTheme(rawValue)
+                sync.onThemeReceived = { [weak model] rawValue in
+                    model?.applyIncomingTheme(rawValue)
                 }
                 // Watch-only settings (bidirectional) pushed from phone
-                sync.onStatsTrackingReceived = { [weak viewModel] v in viewModel?.applyIncomingStatsTracking(v) }
-                sync.onChangeoverReceived = { [weak viewModel] v in viewModel?.applyIncomingChangeover(v) }
+                sync.onStatsTrackingReceived = { [weak model] v in model?.applyIncomingStatsTracking(v) }
+                sync.onChangeoverReceived = { [weak model] v in model?.applyIncomingChangeover(v) }
                 // Shared settings pushed from phone
-                sync.onAnnouncementsReceived = { [weak viewModel] v in viewModel?.applyIncomingAnnouncements(v) }
-                sync.onIPhoneInputReceived = { [weak viewModel] v in viewModel?.applyIncomingIPhoneInput(v) }
-                sync.onPlayerNameReceived = { [weak viewModel] v in viewModel?.applyIncomingPlayerName(v) }
+                sync.onAnnouncementsReceived = { [weak model] v in model?.applyIncomingAnnouncements(v) }
+                sync.onIPhoneInputReceived = { [weak model] v in model?.applyIncomingIPhoneInput(v) }
+                sync.onPlayerNameReceived = { [weak model] v in model?.applyIncomingPlayerName(v) }
                 // Spectator score commands from the iPhone live scoreboard
-                sync.onScoreCommandReceived = { [weak viewModel] cmd, matchID in
-                    viewModel?.applyRemoteScoreCommand(cmd, matchID: matchID)
+                sync.onScoreCommandReceived = { [weak model] cmd, matchID in
+                    model?.applyRemoteScoreCommand(cmd, matchID: matchID)
                 }
                 // Spectator categorization actions from the iPhone live scoreboard
-                sync.onStatActionReceived = { [weak viewModel] action, outcome, endingShot in
-                    viewModel?.applyRemoteStatAction(action, outcome: outcome, endingShot: endingShot)
+                sync.onStatActionReceived = { [weak model] action, outcome, endingShot in
+                    model?.applyRemoteStatAction(action, outcome: outcome, endingShot: endingShot)
                 }
-                sync.onCompletedMatchReceived = { [weak viewModel] record in
-                    viewModel?.completeCurrentMatchIfMatching(record.id)
+                sync.onCompletedMatchReceived = { [weak model] record in
+                    model?.completeCurrentMatchIfMatching(record.id)
                 }
-                sync.onMatchTagsReceived = { [weak viewModel] id, tags in
-                    viewModel?.applyIncomingMatchTags(tags, matchID: id)
+                sync.onMatchTagsReceived = { [weak model] id, tags in
+                    model?.applyIncomingMatchTags(tags, matchID: id)
                 }
-                viewModel.syncService = sync
+                model.syncService = sync
                 // Register all inbound handlers before activation. An already
                 // available phone payload can arrive immediately on start.
                 sync.start()

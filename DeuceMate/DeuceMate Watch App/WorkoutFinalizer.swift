@@ -7,7 +7,7 @@ protocol WorkoutFinalizationSession: AnyObject {
 }
 
 protocol WorkoutFinalizationBuilder: AnyObject {
-    func endCollection(withEnd date: Date, completion: @escaping (Bool, Error?) -> Void)
+    func endCollection(withEnd date: Date, completion: @escaping @Sendable (Bool, Error?) -> Void)
     func finishSaving(completion: @escaping (Error?) -> Void)
 }
 
@@ -51,7 +51,8 @@ final class WorkoutFinalizer {
         item.saving = true
         pending[id] = item
         lock.unlock()
-        item.builder.endCollection(withEnd: date) { [self] success, error in
+        let builder = item.builder
+        builder.endCollection(withEnd: date) { [self] success, error in
             lock.lock()
             let stillPending = pending[id] != nil
             lock.unlock()
@@ -60,7 +61,7 @@ final class WorkoutFinalizer {
                 complete(id: id, error: error ?? CocoaError(.fileWriteUnknown))
                 return
             }
-            item.builder.finishSaving { [self] error in
+            builder.finishSaving { [self] error in
                 complete(id: id, error: error)
             }
         }

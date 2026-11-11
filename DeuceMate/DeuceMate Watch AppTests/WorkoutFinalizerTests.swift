@@ -21,7 +21,7 @@ struct WorkoutFinalizerTests {
         var collectionCompletion: ((Bool, Error?) -> Void)?
         var saveCompletion: ((Error?) -> Void)?
         init(_ trace: Trace) { self.trace = trace }
-        func endCollection(withEnd date: Date, completion: @escaping (Bool, Error?) -> Void) {
+        func endCollection(withEnd date: Date, completion: @escaping @Sendable (Bool, Error?) -> Void) {
             trace.events.append("collection.end")
             endDate = date
             collectionCompletion = completion
@@ -56,8 +56,8 @@ struct WorkoutFinalizerTests {
         let finalizer = WorkoutFinalizer { trace.errors.append($0) }
         var session: Session? = Session(trace)
         var builder: Builder? = Builder(trace)
-        weak var retainedSession = session
-        weak var retainedBuilder = builder
+        weak let retainedSession = session
+        weak let retainedBuilder = builder
         finalizer.stop(session: try #require(session), builder: try #require(builder), at: Date())
         session = nil; builder = nil
         #expect(retainedSession != nil)

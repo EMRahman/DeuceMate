@@ -81,7 +81,7 @@ private final class WorkoutUITestSession: WorkoutRecordingSession {
         endDate = date
         observer?.recordingSession(self, changedTo: .stopped, at: date ?? Date())
     }
-    func endCollection(withEnd date: Date, completion: @escaping (Bool, Error?) -> Void) { completion(true, nil) }
+    func endCollection(withEnd date: Date, completion: @escaping @Sendable (Bool, Error?) -> Void) { completion(true, nil) }
     func finishSaving(completion: @escaping (Error?) -> Void) { saveCompletion = completion }
     func end() {}
 }
