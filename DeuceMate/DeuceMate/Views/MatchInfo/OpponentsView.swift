@@ -65,7 +65,7 @@ private struct OpponentDetailView: View {
     @State private var selectedMatch: MatchRecord?
     @State private var notesExpanded = false
 
-    /// Condensed playing style: chips (tap → editor) and notes (tap → expand).
+    /// Condensed playing style: centred chips (display only) and notes (tap → expand).
     @ViewBuilder
     private func playingStyleSection(for opponent: RosterEntry) -> some View {
         let chips = [
@@ -87,21 +87,20 @@ private struct OpponentDetailView: View {
                 .accessibilityIdentifier("opponent-edit-playing-style")
             } else {
                 if !chips.isEmpty {
-                    NavigationLink {
-                        PlayerManageView(playerID: opponentID)
-                            .environmentObject(syncService)
-                    } label: {
-                        ChipFlowLayout(spacing: 6) {
-                            ForEach(chips, id: \.self) { chip in
-                                Text(chip)
-                                    .font(.subheadline)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 4)
-                                    .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-                            }
+                    // Display only: editing lives behind the toolbar gear
+                    // (`opponent-manage-player`), so no row chevron here.
+                    ChipFlowLayout(spacing: 6) {
+                        ForEach(chips, id: \.self) { chip in
+                            Text(chip)
+                                .font(.subheadline)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(Color.accentColor.opacity(0.15)))
                         }
                     }
-                    .accessibilityIdentifier("opponent-edit-playing-style")
+                    .frame(maxWidth: .infinity)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("opponent-playing-style-chips")
                 }
                 if let notes {
                     Button {
@@ -360,7 +359,8 @@ private struct OpponentDetailView: View {
     }()
 }
 
-/// Wrapping row of small chips; wraps onto extra lines at large text sizes.
+/// Wrapping row of small chips, each row centred; wraps onto extra lines at
+/// large text sizes.
 private struct ChipFlowLayout: Layout {
     var spacing: CGFloat = 6
 
@@ -370,31 +370,48 @@ private struct ChipFlowLayout: Layout {
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let result = arrange(in: bounds.width, subviews: subviews)
-        for (index, origin) in result.origins.enumerated() {
+        for (index, frame) in result.frames.enumerated() {
             subviews[index].place(
-                at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
-                proposal: ProposedViewSize(width: bounds.width, height: nil)
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                proposal: ProposedViewSize(width: frame.width, height: frame.height)
             )
         }
     }
 
-    private func arrange(in width: CGFloat, subviews: Subviews) -> (origins: [CGPoint], size: CGSize) {
-        var origins: [CGPoint] = []
-        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, maxX: CGFloat = 0
-        for subview in subviews {
+    private func arrange(in width: CGFloat, subviews: Subviews) -> (frames: [CGRect], size: CGSize) {
+        // First pass: break subviews into rows.
+        var rows: [[(index: Int, size: CGSize)]] = [[]]
+        var x: CGFloat = 0
+        for (index, subview) in subviews.enumerated() {
             // Cap each chip at the row width so an oversized label wraps its
             // text instead of overflowing (accessibility Dynamic Type sizes).
             let size = subview.sizeThatFits(ProposedViewSize(width: width.isFinite ? width : nil, height: nil))
             if x > 0, x + size.width > width {
+                rows.append([])
                 x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
             }
-            origins.append(CGPoint(x: x, y: y))
+            rows[rows.count - 1].append((index, size))
             x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-            maxX = max(maxX, x - spacing)
         }
-        return (origins, CGSize(width: maxX, height: y + rowHeight))
+
+        // Second pass: centre each row within the available width.
+        let rowWidths = rows.map { row in
+            row.reduce(0) { $0 + $1.size.width } + spacing * CGFloat(max(row.count - 1, 0))
+        }
+        let maxRowWidth = rowWidths.max() ?? 0
+        let containerWidth = width.isFinite ? width : maxRowWidth
+        var frames = [CGRect](repeating: .zero, count: subviews.count)
+        var y: CGFloat = 0
+        for (row, rowWidth) in zip(rows, rowWidths) where !row.isEmpty {
+            var rowX = max((containerWidth - rowWidth) / 2, 0)
+            let rowHeight = row.map(\.size.height).max() ?? 0
+            for item in row {
+                frames[item.index] = CGRect(origin: CGPoint(x: rowX, y: y), size: item.size)
+                rowX += item.size.width + spacing
+            }
+            y += rowHeight + spacing
+        }
+        let height = max(y - spacing, 0)
+        return (frames, CGSize(width: containerWidth, height: height))
     }
 }
