@@ -229,7 +229,7 @@ struct DeuceMateTests {
     /// in-progress checkpoints, which the mirror excludes and which the Watch's
     /// manifest cannot list until the match finishes — so nothing knew the Watch
     /// held it. A received record is proof, so it must badge as on-Watch at once.
-    @Test func inProgressCheckpointMarksTheMatchAsHeldOnTheWatch() async {
+    @MainActor @Test func inProgressCheckpointMarksTheMatchAsHeldOnTheWatch() async {
         let service = PhoneMatchSyncService(
             isSessionSupported: { true },
             activateSession: { _ in },
@@ -248,7 +248,7 @@ struct DeuceMateTests {
 
     /// The optimism must not outlive the evidence: once the match is no longer
     /// live, a manifest that omits it means it was deleted on the Watch.
-    @Test func manifestRetiresAReportedMatchTheWatchNoLongerHolds() async {
+    @MainActor @Test func manifestRetiresAReportedMatchTheWatchNoLongerHolds() async {
         let service = PhoneMatchSyncService(
             isSessionSupported: { true },
             activateSession: { _ in },
@@ -271,7 +271,7 @@ struct DeuceMateTests {
 
     /// …but a manifest arriving *during* the match must not retire the live one,
     /// which is legitimately absent from the Watch's saved history.
-    @Test func manifestDuringALiveMatchKeepsItBadgedOnTheWatch() async {
+    @MainActor @Test func manifestDuringALiveMatchKeepsItBadgedOnTheWatch() async {
         let service = PhoneMatchSyncService(
             isSessionSupported: { true },
             activateSession: { _ in },

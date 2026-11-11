@@ -9,7 +9,7 @@ import DeuceMateCore
 /// Watch checkpoint, match completion or health backfill can arrive while the
 /// sheet is open and would otherwise leave Copy/Share/Launch sending a stale
 /// score. Equality is by value, so an unchanged re-render never rebuilds.
-struct AICoachSourceIdentity: Equatable {
+nonisolated struct AICoachSourceIdentity: Equatable {
     let record: MatchRecord
     let maxHR: Int
     let playerNTRP: String

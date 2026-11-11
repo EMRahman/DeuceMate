@@ -120,7 +120,7 @@ struct MatchInfoSection: View {
 
     @ViewBuilder
     private var notesRow: some View {
-        let note = notesStore.note(for: record.id)
+        let hasNote = notesStore.note(for: record.id) != nil
         Button {
             showNotesEditor = true
         } label: {
@@ -129,7 +129,7 @@ struct MatchInfoSection: View {
                     .foregroundStyle(.tint)
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
-                    if let note {
+                    if hasNote {
                         Text("Private note saved")
                             .foregroundStyle(.primary)
                         Text("Private note · on this iPhone only")

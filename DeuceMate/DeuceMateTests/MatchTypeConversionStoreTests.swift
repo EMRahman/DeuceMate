@@ -179,6 +179,7 @@ private func makeInProgressMatch(id: UUID = UUID()) -> MatchRecord {
 
 // MARK: - Tests
 
+@MainActor
 struct MatchTypeConversionStoreTests {
 
     // MARK: 1. PhoneStatsStore.convertMatchType

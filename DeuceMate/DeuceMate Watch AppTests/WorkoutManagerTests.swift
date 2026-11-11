@@ -24,7 +24,7 @@ struct WorkoutManagerTests {
             events.append("begin"); beginCompletion = completion
         }
         func stopActivity(with date: Date?) { events.append("stop") }
-        func endCollection(withEnd date: Date, completion: @escaping (Bool, Error?) -> Void) {
+        func endCollection(withEnd date: Date, completion: @escaping @Sendable (Bool, Error?) -> Void) {
             events.append("endCollection"); collectionEndDate = date; endCompletion = completion
         }
         func finishSaving(completion: @escaping (Error?) -> Void) {
@@ -191,7 +191,7 @@ struct WorkoutManagerTests {
         // Use a separate manager whose store can release its test-only references.
         let subject = WorkoutManager(store: store)
         subject.startWorkout(startDate: Date())
-        weak var retained = store.sessions.first
+        weak let retained = store.sessions.first
         subject.stopWorkout()
         store.sessions.removeAll()
         #expect(retained != nil)
