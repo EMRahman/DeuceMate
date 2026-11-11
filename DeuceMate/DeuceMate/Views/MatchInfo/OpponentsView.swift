@@ -63,6 +63,64 @@ private struct OpponentDetailView: View {
     @EnvironmentObject private var store: PhoneStatsStore
     @EnvironmentObject private var syncService: PhoneMatchSyncService
     @State private var selectedMatch: MatchRecord?
+    @State private var notesExpanded = false
+
+    /// Condensed playing style: chips (tap → editor) and notes (tap → expand).
+    @ViewBuilder
+    private func playingStyleSection(for opponent: RosterEntry) -> some View {
+        let chips = [
+            opponent.handedness?.displayLabel,
+            opponent.backhand.map { "\($0.displayLabel) backhand" },
+            opponent.playStyle?.displayLabel
+        ].compactMap { $0 }
+        let notes = opponent.playingNotes
+
+        Section {
+            if chips.isEmpty && notes == nil {
+                NavigationLink {
+                    PlayerManageView(playerID: opponentID)
+                        .environmentObject(syncService)
+                } label: {
+                    Text("Add handedness, backhand, style or notes")
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityIdentifier("opponent-edit-playing-style")
+            } else {
+                if !chips.isEmpty {
+                    NavigationLink {
+                        PlayerManageView(playerID: opponentID)
+                            .environmentObject(syncService)
+                    } label: {
+                        ChipFlowLayout(spacing: 6) {
+                            ForEach(chips, id: \.self) { chip in
+                                Text(chip)
+                                    .font(.subheadline)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("opponent-edit-playing-style")
+                }
+                if let notes {
+                    Button {
+                        withAnimation { notesExpanded.toggle() }
+                    } label: {
+                        Text(notes)
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(notesExpanded ? nil : 3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint(notesExpanded ? "Collapses the notes" : "Expands the notes")
+                    .accessibilityIdentifier("opponent-playing-notes")
+                }
+            }
+        }
+    }
 
     private var roster: [RosterEntry] {
         PlayerRoster.entries(from: store.history, forgotten: store.forgottenPlayers)
@@ -94,6 +152,8 @@ private struct OpponentDetailView: View {
         Group {
             if let opponent {
                 List {
+                    playingStyleSection(for: opponent)
+
                     Section("Head to Head · Singles") {
                         headToHeadRow(HeadToHead.record(vs: opponentID, in: store.history, excluding: nil, matchType: .singles))
                     }
@@ -121,41 +181,6 @@ private struct OpponentDetailView: View {
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
-                    }
-
-                    Section {
-                        if opponent.handedness == nil && opponent.backhand == nil
-                            && opponent.playStyle == nil && opponent.playingNotes == nil {
-                            Text("No playing style added yet")
-                                .foregroundStyle(.secondary)
-                        }
-                        if let handedness = opponent.handedness {
-                            LabeledContent("Handedness", value: handedness.displayLabel)
-                        }
-                        if let backhand = opponent.backhand {
-                            LabeledContent("Backhand", value: backhand.displayLabel)
-                        }
-                        if let playStyle = opponent.playStyle {
-                            LabeledContent("Play Style", value: playStyle.displayLabel)
-                        }
-                        if let notes = opponent.playingNotes {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Notes")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                Text(notes)
-                            }
-                            .accessibilityElement(children: .combine)
-                        }
-                        NavigationLink {
-                            PlayerManageView(playerID: opponentID)
-                                .environmentObject(syncService)
-                        } label: {
-                            Label("Edit Playing Style & Notes", systemImage: "pencil")
-                        }
-                        .accessibilityIdentifier("opponent-edit-playing-style")
-                    } header: {
-                        Text("Playing Style")
                     }
 
                     Section {
@@ -194,7 +219,7 @@ private struct OpponentDetailView: View {
                             PlayerManageView(playerID: opponentID)
                                 .environmentObject(syncService)
                         } label: {
-                            Text("Manage")
+                            Image(systemName: "gear")
                         }
                         .accessibilityLabel("Rename or Manage Player")
                         .accessibilityIdentifier("opponent-manage-player")
@@ -333,4 +358,41 @@ private struct OpponentDetailView: View {
         formatter.timeStyle = .short
         return formatter
     }()
+}
+
+/// Wrapping row of small chips; wraps onto extra lines at large text sizes.
+private struct ChipFlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(in: proposal.width ?? .infinity, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = arrange(in: bounds.width, subviews: subviews)
+        for (index, origin) in result.origins.enumerated() {
+            subviews[index].place(
+                at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
+                proposal: .unspecified
+            )
+        }
+    }
+
+    private func arrange(in width: CGFloat, subviews: Subviews) -> (origins: [CGPoint], size: CGSize) {
+        var origins: [CGPoint] = []
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, maxX: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            origins.append(CGPoint(x: x, y: y))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+            maxX = max(maxX, x - spacing)
+        }
+        return (origins, CGSize(width: maxX, height: y + rowHeight))
+    }
 }
