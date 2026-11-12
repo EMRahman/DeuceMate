@@ -313,7 +313,7 @@ final class MatchExportsUITests: XCTestCase {
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         editor.tap()
         editor.typeText(note)
-        app.buttons["done-match-note"].tap()
+        app.buttons["save-match-note"].tap()
         XCTAssertTrue(waitForLabel(row, contains: "Private note saved"))
         return second
     }
@@ -386,22 +386,11 @@ final class MatchExportsUITests: XCTestCase {
         let allow = app.buttons["Allow Paste"]
         if allow.waitForExistence(timeout: 2) { allow.tap() }
         let value = (editor.value as? String) ?? ""
-        // The note editor autosaves, so remove what was pasted to read it.
-        app.buttons["done-match-note"].tap()
+        // Only Save writes the note, so discard what was pasted to read it.
+        app.buttons["cancel-match-note"].tap()
+        let discard = app.buttons["Discard Changes"]
+        if discard.waitForExistence(timeout: 3) { discard.tap() }
         XCTAssertTrue(editor.waitForNonExistence(timeout: 5))
-        if !value.isEmpty {
-            row.tap()
-            XCTAssertTrue(editor.waitForExistence(timeout: 5))
-            let delete = app.buttons["delete-match-note"]
-            for _ in 0..<4 where !delete.isHittable { app.swipeUp() }
-            delete.tap()
-            let confirm = app.sheets.buttons["Delete Note"].firstMatch.exists
-                ? app.sheets.buttons["Delete Note"].firstMatch
-                : app.buttons.matching(identifier: "Delete Note").element(boundBy: 1)
-            XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-            confirm.tap()
-            XCTAssertTrue(editor.waitForNonExistence(timeout: 5))
-        }
         closeDetail()
         openMatch(tagged)
         return value

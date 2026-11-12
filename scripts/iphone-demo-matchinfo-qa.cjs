@@ -35,7 +35,7 @@ const path = require("path"), { pathToFileURL } = require("url"), assert = requi
   await ph.getByRole("button", { name: /Match Info, .*Alex/ }).waitFor();
   // note
   await ph.getByRole("button", { name: /Add private note/ }).click();
-  await ph.locator("textarea.mi-note-area").fill("tired legs"); await page.screenshot({ path: "/tmp/mi-note.png" }); await ph.locator(".phone-sheet-head button", { hasText: "Done" }).click();
+  await ph.locator("textarea.mi-note-area").fill("tired legs"); await page.screenshot({ path: "/tmp/mi-note.png" }); await ph.locator(".phone-sheet-head button", { hasText: "Save" }).click();
   assert.equal(await page.evaluate(id => window.DeuceMatePhoneMatchInfo.getNote(id), rec.id), "tired legs");
   // compare
   await ph.getByRole("button", { name: /Compare with Previous/ }).click();

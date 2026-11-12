@@ -253,18 +253,55 @@
     phone.showSheet("Match Info", body, { detent: "large", leading: cancel, trailing: save });
   }
 
-  function openNote(phone, rec) {
-    var body = h("div", "mi-notepage"), area = h("textarea", "mi-note-area"), count = h("span", "mi-note-count"), status = h("span", "mi-note-status", "Changes save automatically.");
-    area.value = getNote(rec.id); area.maxLength = NOTE_LIMIT; area.setAttribute("aria-label", "Private note");
-    function update() { count.textContent = area.value.length.toLocaleString("en-US") + " / " + NOTE_LIMIT.toLocaleString("en-US"); }
-    var timer = null; function save() { setNote(rec.id, area.value); }
-    area.addEventListener("input", function () { update(); clearTimeout(timer); timer = setTimeout(save, 500); }); update();
+  // Mirrors MatchNotesEditorView: nothing is written until Save. Cancel, a
+  // swipe/backdrop/Escape close ask before discarding unsaved text, and saving
+  // an emptied note (or Delete Note) asks before deleting it.
+  function openNote(phone, rec, draftText) {
+    var saved = getNote(rec.id), leaving = false;
+    var body = h("div", "mi-notepage"), area = h("textarea", "mi-note-area"), count = h("span", "mi-note-count"), status = h("span", "mi-note-status");
+    area.value = draftText != null ? draftText : saved; area.maxLength = NOTE_LIMIT; area.setAttribute("aria-label", "Private note");
+    function draft() { var v = area.value.slice(0, NOTE_LIMIT); return v.trim() ? v : ""; }
+    function dirty() { return draft() !== saved; }
+    function update() {
+      count.textContent = area.value.length.toLocaleString("en-US") + " / " + NOTE_LIMIT.toLocaleString("en-US");
+      status.textContent = dirty() ? "Unsaved changes. Tap Save to keep them." : "";
+      save.disabled = !dirty();
+    }
+    function prompt(title, message, actionLabel, action, keepLabel) {
+      var text = area.value, chosen = false; leaving = true;
+      var content = h("div", "phone-confirmation");
+      content.append(
+        h("p", "phone-note", message),
+        phone.button(actionLabel, function () { chosen = true; phone.closeSheet(); action(); phone.render(); }, "phone-danger"),
+        phone.button(keepLabel, function () { chosen = true; openNote(phone, rec, text); }, "")
+      );
+      // Escape closes an alert without a choice: treat that as Keep, so only an
+      // explicit Discard or Delete can lose the draft.
+      phone.showSheet(title, content, { presentation: "alert", cleanup: function () {
+        if (!chosen) setTimeout(function () { openNote(phone, rec, text); }, 0);
+      } });
+    }
+    function askDiscard() { prompt("Discard changes to this note?", "Your changes haven’t been saved.", "Discard Changes", function () {}, "Keep Editing"); }
+    function askDelete() { prompt("Delete this note?", "The note is removed from this iPhone. This can’t be undone.", "Delete Note", function () { setNote(rec.id, ""); }, "Keep Note"); }
+    var cancel = phone.button("Cancel", function () {
+      if (!dirty()) { leaving = true; phone.closeSheet(); return; }
+      askDiscard();
+    }, "");
+    var save = phone.button("Save", function () {
+      if (!dirty()) return;
+      if (saved && !draft()) { askDelete(); return; }
+      leaving = true; setNote(rec.id, draft()); phone.closeSheet(); phone.render();
+    }, "mi-save");
+    area.addEventListener("input", update);
     var foot = h("div", "mi-note-foot"); foot.append(status, count);
     var privacy = phone.button("", function () { phone.notify ? phone.notify("Private notes stay on this iPhone only. They are never synced, backed up to iCloud, or added to a report unless you opt in when sharing.") : null; }, "mi-privacy"); privacy.append(phone.icon("info"), h("span", "", "Privacy and storage"));
-    var del = phone.button("Delete Note", function () { area.value = ""; save(); update(); phone.closeSheet(); phone.render(); }, "mi-delete-note");
-    var done = phone.button("Done", function () { clearTimeout(timer); save(); phone.closeSheet(); phone.render(); }, "");
-    body.append(area, foot, privacy, del);
-    phone.showSheet("Private Note", body, { detent: "large", trailing: done, cleanup: function () { clearTimeout(timer); save(); } });
+    body.append(area, foot, privacy);
+    if (saved) body.append(phone.button("Delete Note", askDelete, "mi-delete-note"));
+    update();
+    phone.showSheet("Private Note", body, { detent: "large", leading: cancel, trailing: save, cleanup: function () {
+      // A swipe, backdrop tap or Escape with unsaved text asks instead of losing it.
+      if (!leaving && dirty()) { var text = area.value; setTimeout(function () { area.value = text; askDiscard(); }, 0); }
+    } });
   }
 
   function rates(rec) {
