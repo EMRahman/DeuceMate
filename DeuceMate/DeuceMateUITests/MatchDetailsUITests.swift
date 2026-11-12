@@ -405,6 +405,62 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertTrue(matchInfoRow(contains: "vs \(renamed)"), "The name survives a relaunch")
     }
 
+    /// Playing notes save only through Save Notes. Clearing the field and
+    /// leaving asks first and keeps the saved notes unless deletion is chosen.
+    @MainActor
+    func testPlayingNotesSaveOnlyWhenAskedAndClearingIsConfirmed() throws {
+        launch()
+        let alex = "Alex \(token)", notes = "Big lefty serve \(token)"
+        let match = createMatch(gamesMe: 2, complete: true)
+        openMatch(match)
+        editMatchInfo(competition: nil, opponents: [.new(alex)])
+
+        // Typed notes wait for Save Notes; Back asks about them.
+        openManagedOpponent()
+        var field = playingNotesField()
+        field.tap()
+        field.typeText(notes)
+        let save = app.buttons["player-notes-save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5), "Unsaved notes offer Save Notes")
+        app.buttons["player-manage-back"].tap()
+        XCTAssertTrue(app.staticTexts["Save changes to notes?"].waitForExistence(timeout: 5))
+        // Tap outside the dialog to keep editing (its Cancel button is hidden).
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)).tap()
+        XCTAssertTrue(waitForNonExistence(app.buttons["Discard Changes"], timeout: 5))
+        XCTAssertEqual(playingNotesField().value as? String, notes, "Keep Editing keeps the typed notes")
+        save.tap()
+        XCTAssertTrue(waitForNonExistence(save, timeout: 5), "Saved notes leave nothing to save")
+        goBack(from: alex)
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+
+        app.terminate()
+        launch()
+        openMatch(match)
+        openManagedOpponent()
+        field = playingNotesField()
+        XCTAssertEqual(field.value as? String, notes, "Saved notes survive a relaunch")
+
+        // Clearing the field and leaving keeps the saved notes when asked to.
+        clearPlayingNotes(field)
+        app.buttons["player-manage-back"].tap()
+        XCTAssertTrue(app.staticTexts["Delete these notes?"].waitForExistence(timeout: 5))
+        app.buttons["Keep Saved Notes"].tap()
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+        let manage = app.buttons["manage-slot-opponent-0"]
+        for _ in 0..<4 where !manage.isHittable { app.swipeUp() }
+        manage.tap()
+        field = playingNotesField()
+        XCTAssertEqual(field.value as? String, notes, "Leaving a cleared field doesn't delete the notes")
+
+        // Deleting is a deliberate, confirmed action.
+        clearPlayingNotes(field)
+        XCTAssertTrue(waitForLabel(save, contains: "Delete Notes"))
+        save.tap()
+        dialogButton("Delete Notes", notIdentifier: "player-notes-save").tap()
+        XCTAssertTrue(waitForNonExistence(save, timeout: 5), "Confirmed deletion is saved")
+        XCTAssertNotEqual(playingNotesField().value as? String, notes)
+    }
+
     /// A player not yet in the archive keeps the picked profile on the Match
     /// Info draft, and Match Info's Save writes it.
     @MainActor
@@ -537,7 +593,7 @@ final class MatchDetailsUITests: XCTestCase {
         editor.typeText("Attack the backhand \(token).\nServe wide on deuce.")
         XCTAssertTrue(app.buttons["private-note-storage"].exists)
         capture("13-notes-editor")
-        app.buttons["done-match-note"].tap()
+        app.buttons["save-match-note"].tap()
         XCTAssertTrue(notesRow.waitForExistence(timeout: 5))
         XCTAssertTrue(waitForLabel(notesRow, contains: "Private note saved"))
         XCTAssertFalse(notesRow.label.contains("Attack the backhand"), "The detail row never previews private note text")
@@ -573,14 +629,15 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertTrue(anyElement(containing: "Stored on this iPhone").waitForExistence(timeout: 5))
         XCTAssertTrue(anyElement(containing: "Private notes aren't synced").waitForExistence(timeout: 5))
         app.alerts.buttons["OK"].tap()
-        app.buttons["done-match-note"].tap()
+        XCTAssertFalse(app.buttons["save-match-note"].isEnabled, "Nothing changed, so nothing to save")
+        app.buttons["cancel-match-note"].tap()
 
         // Edit, then delete.
         app.buttons["match-notes-row"].tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         editor.tap()
         editor.typeText(" Edited.")
-        app.buttons["done-match-note"].tap()
+        app.buttons["save-match-note"].tap()
         XCTAssertTrue(waitForLabel(app.buttons["match-notes-row"], contains: "Private note saved"))
         XCTAssertFalse(app.buttons["match-notes-row"].label.contains("Edited."))
         app.buttons["match-notes-row"].tap()
@@ -691,10 +748,10 @@ final class MatchDetailsUITests: XCTestCase {
         closeDetail()
     }
 
-    /// The note saves itself: there is no Save or Cancel, and each way of
-    /// leaving keeps what was typed.
+    /// The note is written only by Save. Cancel and swipe-down ask before
+    /// discarding, and saving an emptied note asks before deleting it.
     @MainActor
-    func testPrivateNoteAutosavesHoweverItIsLeft() throws {
+    func testPrivateNoteSavesOnlyWhenAskedAndConfirmsDiscardOrDelete() throws {
         launch()
         let match = createMatch(complete: true)
         openMatch(match)
@@ -703,56 +760,53 @@ final class MatchDetailsUITests: XCTestCase {
         let editor = app.textViews["match-notes-editor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         let bar = app.navigationBars["Private Note"]
-        XCTAssertFalse(bar.buttons["Cancel"].exists, "There is nothing to cancel")
-        XCTAssertFalse(bar.buttons["Save"].exists, "There is nothing to save by hand")
+        let save = app.buttons["save-match-note"]
+        let cancel = app.buttons["cancel-match-note"]
+        XCTAssertFalse(save.isEnabled, "Nothing to save yet")
 
-        // The save during a pause must not disturb typing: the caret stays put
-        // when the store publishes and Delete Note appears below the editor.
+        // Typing and pausing writes nothing.
         let first = "First \(token)"
         editor.typeText(first)
-        XCTAssertTrue(app.buttons["delete-match-note"].waitForExistence(timeout: 5),
-                      "A pause in typing saved the note")
-        XCTAssertTrue(app.buttons["delete-match-note"].isHittable,
-                      "Delete remains visible above the keyboard")
-        XCTAssertTrue(app.staticTexts["match-note-character-count"].isHittable,
-                      "The character count stays visible while typing")
-        Thread.sleep(forTimeInterval: 1)
-        editor.typeText(" more")
-        XCTAssertEqual(editor.value as? String, "\(first) more")
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertFalse(app.buttons["delete-match-note"].exists, "A pause in typing doesn't save")
+        XCTAssertTrue(app.staticTexts["match-note-unsaved"].exists, "Unsaved changes are stated")
+        XCTAssertTrue(save.isEnabled)
 
-        // Swipe-down works once the pause has saved the latest text.
-        Thread.sleep(forTimeInterval: 1)
+        // Cancel asks; Keep Editing keeps the text.
+        cancel.tap()
+        XCTAssertTrue(app.buttons["Discard Changes"].waitForExistence(timeout: 5))
+        app.buttons["Keep Editing"].tap()
+        XCTAssertTrue(waitForNonExistence(app.buttons["Discard Changes"], timeout: 5))
+        XCTAssertEqual(editor.value as? String, first)
+
+        // Swipe-down never closes with unsaved text (it may also ask).
         dragNavigationBarDown("Private Note")
-        XCTAssertTrue(waitForNonExistence(bar, timeout: 5), "Swipe-down closes without a prompt")
-        XCTAssertFalse(app.buttons["Keep Editing"].exists)
+        if app.buttons["Discard Changes"].waitForExistence(timeout: 3) {
+            app.buttons["Keep Editing"].tap()
+        }
+        XCTAssertTrue(bar.waitForExistence(timeout: 3), "Swipe-down didn't close the editor")
+        XCTAssertEqual(editor.value as? String, first, "Swipe-down kept the unsaved text")
+
+        // Save writes it and closes.
+        save.tap()
+        XCTAssertTrue(waitForNonExistence(bar, timeout: 5))
         XCTAssertTrue(waitForLabel(row, contains: "Private note saved"))
 
-        // Done straight after typing.
+        // An edit that is discarded leaves the saved note as it was.
         row.tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        XCTAssertEqual(editor.value as? String, "\(first) more", "Swipe-down saved the latest text")
-        editor.tap()
-        editor.typeText("second")
-        app.buttons["done-match-note"].tap()
+        editor.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.9)).tap()
+        editor.typeText(" more")
+        cancel.tap()
+        app.buttons["Discard Changes"].tap()
         XCTAssertTrue(waitForNonExistence(bar, timeout: 5))
-
-        // Pausing is enough, even if the app is then killed from the editor.
         row.tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        XCTAssertTrue((editor.value as? String)?.contains("second") == true, "Done saved the latest text")
-        editor.tap()
-        editor.typeText("third")
-        Thread.sleep(forTimeInterval: 2)
-        app.terminate()
-        launch()
-        openMatch(match)
-        row.tap()
-        XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        XCTAssertTrue((editor.value as? String)?.contains("third") == true, "A pause in typing saved the note")
+        XCTAssertEqual(editor.value as? String, first, "Discarded text was never saved")
 
-        // Going to the background saves at once, with no pause.
-        editor.tap()
-        editor.typeText("fourth")
+        // Backgrounding and relaunching doesn't save unsaved text either.
+        editor.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.9)).tap()
+        editor.typeText(" background")
         XCUIDevice.shared.press(.home)
         Thread.sleep(forTimeInterval: 0.5)
         app.terminate()
@@ -760,13 +814,27 @@ final class MatchDetailsUITests: XCTestCase {
         openMatch(match)
         row.tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        XCTAssertTrue((editor.value as? String)?.contains("fourth") == true, "Backgrounding saved the note")
+        XCTAssertEqual(editor.value as? String, first, "Only Save writes the note")
 
-        // Emptying the text clears the note. Tapping low in the editor puts the
-        // caret after the text, so the deletes remove all of it.
+        // Emptying the text and saving asks before deleting; Keep Note keeps it.
+        // Tapping low in the editor puts the caret after the text.
         editor.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.9)).tap()
         editor.clearAndType("")
-        app.buttons["done-match-note"].tap()
+        save.tap()
+        XCTAssertTrue(app.buttons["Keep Note"].waitForExistence(timeout: 5))
+        app.buttons["Keep Note"].tap()
+        cancel.tap()
+        app.buttons["Discard Changes"].tap()
+        XCTAssertTrue(waitForNonExistence(bar, timeout: 5))
+        XCTAssertTrue(waitForLabel(row, contains: "Private note saved"), "Keep Note kept the saved note")
+
+        // Confirming deletes it.
+        row.tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.9)).tap()
+        editor.clearAndType("")
+        save.tap()
+        dialogButton("Delete Note", notIdentifier: "delete-match-note").tap()
         XCTAssertTrue(waitForLabel(row, contains: "Add private note"))
         closeDetail()
     }
@@ -1299,6 +1367,24 @@ final class MatchDetailsUITests: XCTestCase {
 
     private func uuid(_ rowIdentifier: String) -> String {
         String(rowIdentifier.dropFirst("match-row-".count))
+    }
+
+    /// A vertical-axis TextField may surface as a text field or a text view.
+    @MainActor
+    private func playingNotesField() -> XCUIElement {
+        let id = "player-playing-notes-field"
+        let field = app.textFields[id].exists ? app.textFields[id] : app.textViews[id]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Playing notes field")
+        return field
+    }
+
+    /// Puts the cursor after the text (a tap on a multi-line field can leave it
+    /// at the start, where backspace removes nothing), then deletes it all.
+    @MainActor
+    private func clearPlayingNotes(_ field: XCUIElement) {
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.25)).tap()
+        let count = (field.value as? String)?.count ?? 0
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: count + 2))
     }
 
     /// Any element whose (possibly combined) accessibility label contains `text`.

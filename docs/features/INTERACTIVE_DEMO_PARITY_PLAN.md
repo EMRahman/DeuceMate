@@ -558,7 +558,7 @@ are the map; the strings are copied verbatim from `HomeView.swift`,
 
 Brought the browser demo up to the 1.3.0 builds: `phone-demo-matchinfo.js` adds the detail
 screen's collapsible Match Info block (competition grid, opponent/partner editors with
-handedness/backhand/play-style, autosaved private note stored outside the record, Compare with
+handedness/backhand/play-style, private note stored outside the record (autosaved at the time; now Save/Cancel like native), Compare with
 Previous Match, head-to-head, "Change to Singles/Doubles" with the native confirmation copy),
 plus the tags caption on archive rows. The Watch replica shows the read-only caption and the
 conversion button on completed matches; conversions propagate to the phone copy, and

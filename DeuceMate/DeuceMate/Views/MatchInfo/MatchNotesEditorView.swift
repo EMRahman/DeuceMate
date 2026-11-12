@@ -1,29 +1,23 @@
 // MatchNotesEditorView.swift — private notes for one match (MATCH_TAGS_PLAN.md
 // §4.1). Multiline, up to `MatchNotesPolicy.maxLength` characters, paragraph
-// breaks kept. Typing autosaves after a short pause, and any remaining text is
-// saved on Done and when the app leaves the foreground. The sheet can't be
-// swiped away while any text is unsaved, and if a save fails Done asks whether
-// to keep editing or discard. Notes are stored only on this iPhone, excluded from device and
-// iCloud backups, and persist independently of match details (tags).
+// breaks kept. Nothing is written until Save: a stray edit or an emptied
+// field can't silently replace or delete a note. Cancel and swipe-down ask
+// before discarding unsaved changes, and saving an emptied note asks first
+// (it deletes the note). Notes are stored only on this iPhone, excluded from
+// device and iCloud backups, and persist independently of match details (tags).
 import SwiftUI
 import DeuceMateCore
 
 struct MatchNotesEditorView: View {
     let matchID: UUID
 
-    /// The pause in typing before a save, and so also how long swipe-down
-    /// stays blocked after the last keystroke. Done saves straight away.
-    private static let autosaveDelay: Duration = .milliseconds(500)
-
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var notesStore: MatchNotesStore = .shared
     @State private var draft: String
     @State private var saveError: String?
     @State private var showDeleteConfirmation = false
-    @State private var showSaveFailedConfirmation = false
+    @State private var showDiscardConfirmation = false
     @State private var showStorageInfo = false
-    @State private var isDiscarding = false
     @FocusState private var isEditorFocused: Bool
 
     init(matchID: UUID) {
@@ -34,6 +28,10 @@ struct MatchNotesEditorView: View {
     private var savedText: String { notesStore.note(for: matchID)?.text ?? "" }
     private var isUnavailable: Bool { notesStore.loadFailure != nil }
     private var hasUnsavedText: Bool { MatchNotesPolicy.sanitizedText(draft) != savedText }
+    /// Saving now would delete the stored note, so Save asks first.
+    private var draftClearsSavedNote: Bool {
+        !savedText.isEmpty && MatchNotesPolicy.sanitizedText(draft).isEmpty
+    }
 
     var body: some View {
         NavigationStack {
@@ -80,8 +78,9 @@ struct MatchNotesEditorView: View {
                             Label(saveError, systemImage: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.orange)
                                 .accessibilityIdentifier("match-note-save-error")
-                        } else if !isUnavailable {
-                            Text("Changes save automatically.")
+                        } else if hasUnsavedText && !isUnavailable {
+                            Text("Unsaved changes. Tap Save to keep them.")
+                                .accessibilityIdentifier("match-note-unsaved")
                         }
                     }
                     Spacer(minLength: 8)
@@ -94,11 +93,11 @@ struct MatchNotesEditorView: View {
                 .foregroundStyle(.secondary)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    dismissKeyboardAndSave()
+                    dismissKeyboard()
                 }
 
                 Button {
-                    dismissKeyboardAndSave()
+                    dismissKeyboard()
                     showStorageInfo = true
                 } label: {
                     Label("Privacy and storage", systemImage: "info.circle")
@@ -108,7 +107,7 @@ struct MatchNotesEditorView: View {
 
                 if !savedText.isEmpty && !isUnavailable {
                     Button(role: .destructive) {
-                        dismissKeyboardAndSave()
+                        dismissKeyboard()
                         showDeleteConfirmation = true
                     } label: {
                         Text("Delete Note")
@@ -127,15 +126,21 @@ struct MatchNotesEditorView: View {
                 Color(uiColor: .systemGroupedBackground)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        dismissKeyboardAndSave()
+                        dismissKeyboard()
                     }
             )
             .navigationTitle("Private Note")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { cancel() }
+                        .accessibilityIdentifier("cancel-match-note")
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { finish() }
-                        .accessibilityIdentifier("done-match-note")
+                    Button("Save") { save() }
+                        .fontWeight(.semibold)
+                        .disabled(!hasUnsavedText || isUnavailable)
+                        .accessibilityIdentifier("save-match-note")
                 }
             }
             .onChange(of: draft) { _, newValue in
@@ -143,16 +148,6 @@ struct MatchNotesEditorView: View {
                     draft = String(newValue.prefix(MatchNotesPolicy.maxLength))
                 }
             }
-            // Restarts on each change, so it saves once typing pauses.
-            .task(id: draft) {
-                try? await Task.sleep(for: Self.autosaveDelay)
-                guard !Task.isCancelled else { return }
-                saveIfNeeded()
-            }
-            .onChange(of: scenePhase) { _, phase in
-                if phase != .active { saveIfNeeded() }
-            }
-            .onDisappear { saveIfNeeded() }
             .alert("Privacy and storage", isPresented: $showStorageInfo) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -164,7 +159,8 @@ struct MatchNotesEditorView: View {
                 titleVisibility: .visible
             ) {
                 Button("Delete Note", role: .destructive) { deleteNote() }
-                Button("Cancel", role: .cancel) {}
+                // Not `role: .cancel`, which iOS 26+ hides in popover dialogs.
+                Button("Keep Note") {}
             } message: {
                 Text("The note is removed from this iPhone. This can't be undone.")
             }
@@ -173,58 +169,58 @@ struct MatchNotesEditorView: View {
             }
         }
         .confirmationDialog(
-            "Couldn't save your note",
-            isPresented: $showSaveFailedConfirmation,
+            "Discard changes to this note?",
+            isPresented: $showDiscardConfirmation,
             titleVisibility: .visible
         ) {
             // Not `role: .cancel`: iOS 26+ hides a cancel button when this dialog
             // shows as a popover, leaving Discard as the only visible choice.
             Button("Keep Editing") {}
-            Button("Discard Changes", role: .destructive) {
-                isDiscarding = true
-                dismiss()
-            }
+            Button("Discard Changes", role: .destructive) { dismiss() }
         } message: {
-            Text(saveError ?? "Your latest changes haven't been saved.")
+            Text("Your changes haven't been saved.")
         }
-        // A save that first runs in onDisappear can't keep the sheet open if it
-        // fails, so swipe-down waits for the text to be saved. Done is always
-        // available, and it stays open with choices if its save fails.
-        .interactiveDismissDisabled(hasUnsavedText)
+        // Swipe-down can never discard unsaved text: the system block is what
+        // guarantees it (the delegate hook alone didn't hold on iOS 27), and
+        // where the hook is installed the attempt also asks, like Cancel.
+        .interactiveDismissDisabled(hasUnsavedText && !isUnavailable)
+        .protectDraftDismissal(
+            isDirty: Binding(get: { self.hasUnsavedText && !self.isUnavailable }, set: { _ in }),
+            isDiscardPromptPresented: $showDiscardConfirmation
+        )
     }
 
-    private func dismissKeyboardAndSave() {
+    private func dismissKeyboard() {
         if isEditorFocused {
             isEditorFocused = false
         }
-        saveIfNeeded()
     }
 
-    /// Writes the draft if it differs from the stored note (empty text clears
-    /// it). Returns `false` only when a needed write failed; the draft stays on
-    /// screen and the footer shows why.
-    @discardableResult
-    private func saveIfNeeded() -> Bool {
-        guard !isDiscarding, !isUnavailable else { return true }
-        guard hasUnsavedText else {
-            saveError = nil
-            return true
+    private func cancel() {
+        if hasUnsavedText && !isUnavailable {
+            dismissKeyboard()
+            showDiscardConfirmation = true
+        } else {
+            dismiss()
+        }
+    }
+
+    /// Writes the draft and closes. An emptied note is a deletion, so it is
+    /// confirmed first. A failed write keeps the sheet open with the draft and
+    /// shows why in the footer.
+    private func save() {
+        guard hasUnsavedText, !isUnavailable else { return }
+        if draftClearsSavedNote {
+            dismissKeyboard()
+            showDeleteConfirmation = true
+            return
         }
         do {
             try notesStore.save(text: draft, for: matchID)
             saveError = nil
-            return true
+            dismiss()
         } catch {
             saveError = error.localizedDescription
-            return false
-        }
-    }
-
-    private func finish() {
-        if saveIfNeeded() {
-            dismiss()
-        } else {
-            showSaveFailedConfirmation = true
         }
     }
 

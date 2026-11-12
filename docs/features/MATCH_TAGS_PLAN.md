@@ -205,10 +205,11 @@ the automatic iCloud snapshot, the HTML model or an AI prompt implicitly.
   reapply exclusion after every replacement. Surface save/read failures; an
   unreadable sidecar must never be treated as empty and overwritten.
 - The editor allows multiline text up to 4,000 characters, preserves paragraph
-  breaks, and strips nonprinting control characters. It autosaves after a pause
-  in typing and on Done and backgrounding, with no Save or Cancel. Swipe-down is
-  blocked while any text is unsaved, and if a save fails Done offers Keep Editing
-  or Discard Changes. The input fills the available height, with its character
+  breaks, and strips nonprinting control characters. It has Cancel and Save and
+  never autosaves (changed after a user emptied a note by accident with no way
+  back): Cancel asks Discard Changes / Keep Editing and swipe-down is blocked
+  while text is unsaved, saving an emptied note asks Delete Note / Keep Note, and a failed save
+  keeps the sheet open with the draft and the reason. The input fills the available height, with its character
   count directly below it and Delete Note at the bottom above the keyboard.
   Privacy and storage opens the storage and backup explanation. Tag edits and notes edits persist independently.
 - A watch refresh, tag change, match completion, health backfill, or ordinary

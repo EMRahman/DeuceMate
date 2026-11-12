@@ -84,6 +84,8 @@ struct PlayerManageView: View {
     @State private var showForgetConfirmation = false
     @State private var errorMessage: String?
     @State private var nameSaveFailure: String?
+    @State private var showNotesLeaveConfirmation = false
+    @State private var showClearNotesConfirmation = false
 
     private var entries: [RosterEntry] {
         PlayerRoster.entries(from: store.history, forgotten: store.forgottenPlayers)
@@ -100,6 +102,12 @@ struct PlayerManageView: View {
     private var hasUnsavedNotes: Bool {
         guard didInitializeDetailsDraft, let entry else { return false }
         return TaggedPlayer.sanitizedPlayingNotes(notesDraft) != entry.playingNotes
+    }
+
+    /// Saving now would delete notes that exist, so it is confirmed first.
+    private var notesDraftClearsSavedNotes: Bool {
+        guard let entry else { return false }
+        return entry.playingNotes != nil && TaggedPlayer.sanitizedPlayingNotes(notesDraft) == nil
     }
 
     /// Typed text that hasn't reached the archive yet (name or playing notes).
@@ -138,7 +146,13 @@ struct PlayerManageView: View {
         .toolbar {
             if hasUnsavedText {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button { saveAndLeave() } label: {
+                    Button {
+                        if hasUnsavedNotes {
+                            showNotesLeaveConfirmation = true
+                        } else {
+                            saveAndLeave()
+                        }
+                    } label: {
                         Image(systemName: "chevron.backward")
                     }
                     .accessibilityLabel("Back")
@@ -161,6 +175,41 @@ struct PlayerManageView: View {
         } message: {
             Text(nameSaveFailure ?? "")
         }
+        .confirmationDialog(
+            notesDraftClearsSavedNotes ? "Delete these notes?" : "Save changes to notes?",
+            isPresented: $showNotesLeaveConfirmation,
+            titleVisibility: .visible
+        ) {
+            if notesDraftClearsSavedNotes {
+                Button("Delete Notes", role: .destructive) { leaveSavingNotes() }
+            } else {
+                Button("Save Notes") { leaveSavingNotes() }
+            }
+            Button(notesDraftClearsSavedNotes ? "Keep Saved Notes" : "Discard Changes",
+                   role: notesDraftClearsSavedNotes ? nil : .destructive) {
+                leaveDiscardingNotes()
+            }
+            // Not `role: .cancel`: iOS 26+ hides a cancel button when this dialog
+            // shows as a popover, leaving the destructive choices on their own.
+            Button("Keep Editing") {}
+        } message: {
+            Text(notesDraftClearsSavedNotes
+                 ? "The notes field is empty. Deleting removes this player's saved notes and can't be undone."
+                 : "Your changes to this player's notes haven't been saved.")
+        }
+        .confirmationDialog(
+            "Delete these notes?",
+            isPresented: $showClearNotesConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Notes", role: .destructive) { saveNotes() }
+            Button("Keep Notes") {}
+        } message: {
+            Text("This removes this player's saved notes and can't be undone.")
+        }
+        // A sheet holding this screen can't be swiped away with unsaved notes;
+        // Back asks instead.
+        .interactiveDismissDisabled(hasUnsavedNotes)
         // The fallback when a parent closes this screen, such as its sheet being
         // dismissed. The store ignores a player already merged away or forgotten.
         .onDisappear { saveNameIfChanged() }
@@ -240,19 +289,38 @@ struct PlayerManageView: View {
                     .lineLimit(2...6)
                     .focused($isNotesFocused)
                     .accessibilityIdentifier("player-playing-notes-field")
-                    .onChange(of: isNotesFocused) { _, focused in
-                        if !focused { saveDetailsIfChanged() }
-                    }
                     .onChange(of: notesDraft) { _, value in
                         if value.count > TaggedPlayer.maxPlayingNotesLength {
                             notesDraft = String(value.prefix(TaggedPlayer.maxPlayingNotesLength))
                         }
                     }
+                    // Notes are saved only by Save Notes, so a cleared field
+                    // can never delete them just by losing focus.
+                    if hasUnsavedNotes {
+                        HStack {
+                            Button("Revert") { revertNotes() }
+                                .accessibilityIdentifier("player-notes-revert")
+                            Spacer()
+                            Button(notesDraftClearsSavedNotes ? "Delete Notes" : "Save Notes") {
+                                if notesDraftClearsSavedNotes {
+                                    showClearNotesConfirmation = true
+                                } else {
+                                    saveNotes()
+                                }
+                            }
+                            .fontWeight(.semibold)
+                            .foregroundStyle(notesDraftClearsSavedNotes ? Color.red : Color.accentColor)
+                            .accessibilityIdentifier("player-notes-save")
+                        }
+                        // Two buttons in one Form row: each must take only its own taps.
+                        .buttonStyle(.borderless)
+                        .padding(.top, 4)
+                    }
                 }
             } header: {
                 Text("Playing Style")
             } footer: {
-                Text("Saves automatically. Optional tennis profile and notes are shown on the opponent detail screen. The profile is included in AI Coach match context. Notes are used only in an Opponent Game Plan, and you can turn them off there.")
+                Text("Handedness, backhand and play style save automatically; notes save when you tap Save Notes. Optional tennis profile and notes are shown on the opponent detail screen. The profile is included in AI Coach match context. Notes are used only in an Opponent Game Plan, and you can turn them off there.")
             }
 
             Section {
@@ -281,9 +349,10 @@ struct PlayerManageView: View {
         .onChange(of: backhandDraft) { saveDetailsIfChanged() }
         .onChange(of: playStyleDraft) { saveDetailsIfChanged() }
         .onDisappear {
-            // Best-effort fallback when a parent closes this screen (Back is
-            // guarded while text is unsaved). No UI: the view is going away.
-            try? persistDetails()
+            // Best-effort fallback for the pickers when a parent closes this
+            // screen. Unsaved notes are never written here: they only save on
+            // Save Notes, and Back and swipe-down ask while they're unsaved.
+            try? persistDetails(includingNotes: false)
         }
         .sheet(isPresented: $showMergePicker) {
             mergePicker(for: entry)
@@ -370,13 +439,6 @@ struct PlayerManageView: View {
         PlayerRosterActions(store: store, notesStore: notesStore, syncService: syncService)
     }
 
-    private func detailsChanged(_ entry: RosterEntry) -> Bool {
-        (handednessDraft.isEmpty ? nil : handednessDraft) != entry.handednessRaw
-            || (backhandDraft.isEmpty ? nil : backhandDraft) != entry.backhandRaw
-            || (playStyleDraft.isEmpty ? nil : playStyleDraft) != entry.playStyleRaw
-            || TaggedPlayer.sanitizedPlayingNotes(notesDraft) != entry.playingNotes
-    }
-
     private func loadDetailsDraft(from entry: RosterEntry) {
         handednessDraft = entry.handednessRaw ?? ""
         backhandDraft = entry.backhandRaw ?? ""
@@ -388,7 +450,7 @@ struct PlayerManageView: View {
     /// stored, so the screen never shows a value that wasn't saved.
     private func saveDetailsIfChanged() {
         do {
-            try persistDetails()
+            try persistDetails(includingNotes: false)
         } catch {
             errorMessage = error.localizedDescription
             // Put the pickers back to what is stored; typed notes stay so the
@@ -401,15 +463,43 @@ struct PlayerManageView: View {
         }
     }
 
-    private func persistDetails() throws {
-        guard didInitializeDetailsDraft, let entry, detailsChanged(entry) else { return }
+    /// Saves the picked profile. The notes draft is written only when
+    /// `includingNotes` (Save Notes); otherwise the stored notes are kept as-is,
+    /// so a picker change can't save half-typed or cleared notes.
+    private func persistDetails(includingNotes: Bool) throws {
+        guard didInitializeDetailsDraft, let entry else { return }
+        let handedness = handednessDraft.isEmpty ? nil : handednessDraft
+        let backhand = backhandDraft.isEmpty ? nil : backhandDraft
+        let playStyle = playStyleDraft.isEmpty ? nil : playStyleDraft
+        let notes = includingNotes ? TaggedPlayer.sanitizedPlayingNotes(notesDraft) : entry.playingNotes
+        guard handedness != entry.handednessRaw
+                || backhand != entry.backhandRaw
+                || playStyle != entry.playStyleRaw
+                || notes != entry.playingNotes else { return }
         try actions.updateDetails(
             playerID,
-            handednessRaw: handednessDraft.isEmpty ? nil : handednessDraft,
-            backhandRaw: backhandDraft.isEmpty ? nil : backhandDraft,
-            playStyleRaw: playStyleDraft.isEmpty ? nil : playStyleDraft,
-            playingNotes: TaggedPlayer.sanitizedPlayingNotes(notesDraft)
+            handednessRaw: handedness,
+            backhandRaw: backhand,
+            playStyleRaw: playStyle,
+            playingNotes: notes
         )
+    }
+
+    /// Save Notes. A failed save keeps the typed text so the player can retry.
+    private func saveNotes() {
+        let saved = TaggedPlayer.sanitizedPlayingNotes(notesDraft)
+        do {
+            try persistDetails(includingNotes: true)
+            notesDraft = saved ?? ""
+            isNotesFocused = false
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func revertNotes() {
+        notesDraft = entry?.playingNotes ?? ""
+        isNotesFocused = false
     }
 
     /// Autosaves the name when editing ends rather than on each keystroke,
@@ -423,16 +513,36 @@ struct PlayerManageView: View {
         }
     }
 
-    /// Saves the name and the playing notes; Back only completes when both are
-    /// durable, otherwise the screen stays open with the typed text.
+    /// Saves the name (and any picker change); Back only completes when that is
+    /// durable, otherwise the screen stays open with the typed text. Unsaved
+    /// notes never reach here: Back asks about them first.
     private func saveAndLeave() {
         do {
             try persistName()
-            try persistDetails()
+            try persistDetails(includingNotes: false)
             dismiss()
         } catch {
             nameSaveFailure = error.localizedDescription
         }
+    }
+
+    /// Back → Save Notes (or Delete Notes): saves the name and the notes, and
+    /// leaves only when both are durable.
+    private func leaveSavingNotes() {
+        do {
+            try persistName()
+            try persistDetails(includingNotes: true)
+            dismiss()
+        } catch {
+            nameSaveFailure = error.localizedDescription
+        }
+    }
+
+    /// Back → Discard Changes / Keep Saved Notes: drops the notes draft, then
+    /// leaves as Back normally does (the name still autosaves).
+    private func leaveDiscardingNotes() {
+        revertNotes()
+        saveAndLeave()
     }
 
     /// A blank name isn't a rename, so the field returns to the current one.
