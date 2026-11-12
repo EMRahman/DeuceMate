@@ -915,9 +915,11 @@ final class MatchDetailsUITests: XCTestCase {
         closeSettings()
     }
 
-    /// Prepare Game Plan opens from an opponent's profile, starts on Last 5
-    /// with names off and the upcoming competition unset, shows a size
-    /// estimate that follows the selection, and previews the exact pack.
+    /// Prepare Game Plan opens from an opponent's profile ready to hand off:
+    /// Last 5, names on, and the upcoming match pre-filled from the previous
+    /// match. The size estimate follows the selection and the contents, each
+    /// of which is edited on its own pushed screen, and the preview shows the
+    /// exact pack.
     @MainActor
     func testPrepareGamePlanFromOpponentProfile() throws {
         launch()
@@ -944,38 +946,43 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertTrue(prepare.waitForExistence(timeout: 5), "The entry point sits on the opponent's profile")
         capture("30-opponent-prepare-entry")
         prepare.tap()
-        XCTAssertTrue(app.navigationBars["Prepare Game Plan"].waitForExistence(timeout: 5))
+        let mainBar = app.navigationBars["Prepare Game Plan"]
+        XCTAssertTrue(mainBar.waitForExistence(timeout: 5))
 
+        // Ready on arrival: the estimate and the hand-off sit on the first screen.
         let estimate = app.descendants(matching: .any)["game-plan-estimate"]
-        for _ in 0..<6 where !estimate.exists { app.swipeUp() }
         XCTAssertTrue(estimate.waitForExistence(timeout: 15), "The size estimate appears once the pack is built")
         XCTAssertTrue(waitForLabel(estimate, contains: "2 matches selected"))
         XCTAssertTrue(estimate.label.contains("Estimated input: ~"), "VoiceOver hears the count and the estimate together")
-        XCTAssertEqual(app.switches["game-plan-include-names"].value as? String, "0", "Names start off")
+        XCTAssertTrue((estimate.value as? String ?? "").hasPrefix("Names included"), "Names start on")
+        XCTAssertTrue(app.buttons["game-plan-share"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["game-plan-upcoming"].label.contains("Friendly"),
+                      "The upcoming match is pre-filled from the previous match")
         capture("31-game-plan-estimate")
 
         // A smaller selection rebuilds the estimate.
-        for _ in 0..<6 where !app.buttons["game-plan-choose-matches"].isHittable { app.swipeDown() }
+        app.buttons["game-plan-evidence"].tap()
+        XCTAssertTrue(app.navigationBars["Matches"].waitForExistence(timeout: 5))
         app.buttons["game-plan-choose-matches"].tap()
         XCTAssertTrue(app.navigationBars["Choose Matches"].waitForExistence(timeout: 5))
         app.buttons["game-plan-match-\(uuid(league))"].tap()
         capture("32-game-plan-choose-matches")
         app.navigationBars["Choose Matches"].buttons.firstMatch.tap()
         XCTAssertTrue(app.staticTexts["Custom selection"].waitForExistence(timeout: 5))
-        for _ in 0..<6 where !estimate.exists { app.swipeUp() }
+        app.navigationBars["Matches"].buttons.firstMatch.tap()
+        XCTAssertTrue(mainBar.waitForExistence(timeout: 5))
         XCTAssertTrue(waitForLabel(estimate, contains: "1 match selected", timeout: 15))
 
-        // Bring the switch clear of the navigation bar before tapping it.
-        let namesSwitch = app.switches["game-plan-include-names"]
-        let navigationBar = app.navigationBars["Prepare Game Plan"]
-        for _ in 0..<6 where !namesSwitch.exists || namesSwitch.frame.minY < navigationBar.frame.maxY + 20 {
-            app.swipeDown()
-        }
+        // Names off rebuilds the pack without them.
+        app.buttons["game-plan-contents"].tap()
+        XCTAssertTrue(app.navigationBars["Pack Contents"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.switches["game-plan-include-names"].value as? String, "1", "Names start on")
         flipSwitch("game-plan-include-names")
-        for _ in 0..<6 where !estimate.exists { app.swipeUp() }
+        app.navigationBars["Pack Contents"].buttons.firstMatch.tap()
+        XCTAssertTrue(mainBar.waitForExistence(timeout: 5))
         let rebuilt = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value BEGINSWITH %@", "Names included"), object: estimate)
-        XCTAssertEqual(XCTWaiter().wait(for: [rebuilt], timeout: 15), .completed, "The pack rebuilds with names")
+            predicate: NSPredicate(format: "value BEGINSWITH %@", "Names not included"), object: estimate)
+        XCTAssertEqual(XCTWaiter().wait(for: [rebuilt], timeout: 15), .completed, "The pack rebuilds without names")
         let preview = app.buttons["game-plan-preview"]
         for _ in 0..<6 where !(preview.exists && preview.isHittable) { app.swipeUp() }
         XCTAssertTrue(preview.waitForExistence(timeout: 15))
@@ -987,9 +994,9 @@ final class MatchDetailsUITests: XCTestCase {
         let text = app.textViews["game-plan-text"]
         XCTAssertTrue(text.waitForExistence(timeout: 5))
         let contents = text.value as? String ?? ""
-        XCTAssertTrue(contents.contains("\"\(opponent)\""), "Names were switched on")
+        XCTAssertFalse(contents.contains("\"\(opponent)\""), "Names were switched off")
         XCTAssertTrue(contents.contains("## 7. Coaching Request"))
-        XCTAssertTrue(contents.contains("competition not set"), "The upcoming competition starts unset")
+        XCTAssertTrue(contents.contains("competition Friendly;"), "The upcoming competition comes from the previous match")
         capture("35-game-plan-text")
     }
 

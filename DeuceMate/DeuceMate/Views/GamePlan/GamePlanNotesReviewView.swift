@@ -1,8 +1,9 @@
-// GamePlanNotesReviewView.swift — review the exact private notes a game plan
-// pack would quote, match by match, and leave any of them out. Mirrors
+// GamePlanNotesReviewView.swift — read the exact private notes a game plan
+// pack quotes, match by match, and leave any of them out. Notes are included
+// by default; this sheet is where the player excludes one. Mirrors
 // `NotesExportReviewSheet`'s disclosure: notes may contain personal or health
-// information, and may name people even with player names off. Nothing is
-// included until "Include Notes"; Cancel changes nothing.
+// information, and may name people even with player names off. Done applies
+// the choices; Cancel changes nothing.
 import SwiftUI
 import DeuceMateCore
 
@@ -16,11 +17,10 @@ struct GamePlanNotesReviewView: View {
 
     let notes: [Item]
     let includeNames: Bool
-    /// Notes the player left out in an earlier review; they start left out.
-    /// Every other note starts included, because the player is reviewing it now.
+    /// Notes the player left out earlier; they start left out.
     let initiallyExcluded: Set<UUID>
-    /// The approved notes, as reviewed, by match.
-    let onConfirm: ([UUID: String]) -> Void
+    /// The notes now left out, by match.
+    let onConfirm: (Set<UUID>) -> Void
     let onCancel: () -> Void
 
     @State private var excluded: Set<UUID> = []
@@ -66,20 +66,14 @@ struct GamePlanNotesReviewView: View {
                     }
                 }
             }
-            .navigationTitle("Review Notes")
+            .navigationTitle("Choose Notes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", action: onCancel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Include Notes") {
-                        var approved: [UUID: String] = [:]
-                        for note in notes where !excluded.contains(note.matchID) {
-                            approved[note.matchID] = note.text
-                        }
-                        onConfirm(approved)
-                    }
+                    Button("Done") { onConfirm(excluded) }
                     .accessibilityIdentifier("game-plan-confirm-notes")
                 }
             }

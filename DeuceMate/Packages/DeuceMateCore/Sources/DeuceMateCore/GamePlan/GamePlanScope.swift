@@ -83,8 +83,10 @@ public enum GamePlanCompetition: Hashable, Sendable, Identifiable {
 // MARK: - Upcoming match
 
 /// What the player says about the match they are preparing for. These are
-/// user statements, not tracked measurements. Everything starts unset: the
-/// app must not assume the next match is another friendly.
+/// user statements, not tracked measurements. A bare value starts unset; the
+/// iPhone screen pre-fills competition and format from the previous match
+/// against the opponent (`init(prefilledFrom:)`) and shows them on its first
+/// row, so the statement the pack makes is always visible and editable.
 public struct GamePlanUpcomingMatch: Equatable, Sendable {
     public var competition: CompetitionType?
     public var format: MatchFormat?
@@ -101,6 +103,17 @@ public struct GamePlanUpcomingMatch: Equatable, Sendable {
         self.format = format
         self.date = date
         self.preparationText = preparationText
+    }
+
+    /// The previous match's competition and format, as a starting point for
+    /// the next one. An untagged or unrecognised competition stays unset (it
+    /// is never guessed as Friendly or League), and a format the upcoming
+    /// picker doesn't offer stays unset. Date and preparation text never carry over.
+    public init(prefilledFrom record: MatchRecord) {
+        self.init(
+            competition: record.tags?.competitionTypeRaw.flatMap(CompetitionType.init(rawValue:)),
+            format: GamePlanText.selectableFormats.contains(record.matchFormat) ? record.matchFormat : nil
+        )
     }
 
     /// Same cleaning as private notes (control and bidi characters, line
@@ -140,6 +153,13 @@ public struct GamePlanCandidates: Equatable, Sendable {
                                 untaggedSingles: untaggedSinglesCount)
     }
     public var completedEligibleCount: Int { eligible.filter { !$0.isInProgress }.count }
+
+    /// The most recent singles match against this opponent by start time,
+    /// finished or not, and whether or not unfinished matches are opted in as
+    /// evidence. It pre-fills the upcoming match; it is not evidence itself.
+    public var latestMatch: MatchRecord? {
+        (eligible + excludedInProgress).min(by: GamePlanEligibility.newestFirst)
+    }
 }
 
 public struct GamePlanCandidateCounts: Equatable, Sendable {

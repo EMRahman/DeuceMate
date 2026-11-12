@@ -6,11 +6,17 @@
 // AI app the player chooses; nothing is sent automatically, and opening an
 // app does not mean it received or analysed anything.
 //
-// Session-local by design: the upcoming context, selection and inclusion
-// choices live in @State and are gone when the screen closes. Names and notes
-// start OFF every time. Each note must be reviewed before it can be included;
-// a note that changes after review, or a newly selected match's note, is left
-// out until it is reviewed again.
+// Ready on arrival: the main screen is one summary row per choice (upcoming
+// match, matches, pack contents), the optional preparation text, then the
+// hand-off. Each row pushes the full controls (`GamePlanUpcomingView`,
+// `GamePlanEvidenceView`, `GamePlanContentsView`, `GamePlanAdvancedView`).
+// The upcoming competition and format are pre-filled from the previous match
+// against the opponent; names, playing style notes and private notes start
+// on, and any note can be left out. The summaries state all of it before
+// anything is copied or shared.
+//
+// Session-local by design: everything lives in @State and is gone when the
+// screen closes.
 import SwiftUI
 import UIKit
 import DeuceMateCore
@@ -21,33 +27,22 @@ struct GamePlanView: View {
     @EnvironmentObject private var store: PhoneStatsStore
     @ObservedObject private var notesStore: MatchNotesStore = .shared
 
-    // Upcoming match (user statements, all unset to begin with).
+    // Upcoming match — pre-filled once from the previous match.
     @State private var upcoming = GamePlanUpcomingMatch()
     @State private var hasUpcomingDate = false
     @State private var upcomingDate = Date()
+    @State private var didPrefill = false
+    @State private var prefilledFrom: Date?
 
     // Evidence selection.
-    @State private var selection = GamePlanSelection()
-    @State private var customCount = 3
-    /// The Count preset is on, so 5 or 10 chosen with the stepper stays a count.
-    @State private var usesCustomCount = false
-    @State private var includeInProgress = false
-    @State private var useFromDate = false
-    @State private var fromDate = Date()
-    @State private var useThroughDate = false
-    @State private var throughDate = Date()
-    @State private var competitionFilter: Set<GamePlanCompetition>?
+    @State private var evidence = GamePlanEvidenceChoices()
 
-    // Inclusion choices — off every session.
-    @State private var includeNames = false
-    @State private var includeNotes = false
-    /// The opponent's Playing Style notes. On by default: the player wrote them as scouting for exactly this.
+    // Inclusion choices — on by default; the player prepares this for their own AI app.
+    @State private var includeNames = true
+    @State private var includeNotes = true
     @State private var includePlayingNotes = true
-    /// Note text as it was when the player approved it, by match.
-    @State private var reviewedNotes: [UUID: String] = [:]
-    /// Notes the player chose to leave out at their last review.
+    /// Notes the player chose to leave out, by match.
     @State private var notesLeftOut: Set<UUID> = []
-    @State private var showNotesReview = false
 
     // Output.
     @State private var detailMode: GamePlanDetailMode = .full
@@ -62,7 +57,7 @@ struct GamePlanView: View {
     @State private var toast: String?
     @State private var toastWork: DispatchWorkItem?
 
-    private static let dayFormatter: DateFormatter = {
+    static let dayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .medium
         f.timeStyle = .none
@@ -76,26 +71,16 @@ struct GamePlanView: View {
             .first { $0.id == opponentID }
     }
 
+    private var opponentName: String { opponent?.name ?? "this opponent" }
+
     private var candidates: GamePlanCandidates {
         GamePlanEligibility.candidates(for: opponentID, in: store.history,
                                        forgotten: store.forgottenPlayers,
-                                       includeInProgress: includeInProgress)
+                                       includeInProgress: evidence.includeInProgress)
     }
 
-    private var filter: GamePlanFilter {
-        GamePlanFilter(from: useFromDate ? fromDate : nil,
-                       through: useThroughDate ? throughDate : nil,
-                       competitions: competitionFilter)
-    }
-
-    private var pool: [MatchRecord] { selection.filtered(candidates) }
-    private var selected: [MatchRecord] { selection.resolve(candidates) }
-
-    /// Competition contexts present among eligible matches, for the filter.
-    private var availableCompetitions: [GamePlanCompetition] {
-        Set(candidates.eligible.map(GamePlanCompetition.init(record:)))
-            .sorted { GamePlanCompetition.ordered($0, $1) }
-    }
+    private var pool: [MatchRecord] { evidence.selection.filtered(candidates) }
+    private var selected: [MatchRecord] { evidence.selection.resolve(candidates) }
 
     private var notesUnreadable: Bool { notesStore.loadFailure != nil }
 
@@ -110,14 +95,18 @@ struct GamePlanView: View {
         return notes
     }
 
-    /// Notes left out of the pack: everything the player has not approved in
-    /// its current form.
-    private var omittedNoteIDs: Set<UUID> {
-        Set(selectedNotes.compactMap { id, text in reviewedNotes[id] == text ? nil : id })
-    }
+    /// Selected matches' notes the player left out.
+    private var omittedNoteIDs: Set<UUID> { notesLeftOut.intersection(selectedNotes.keys) }
 
-    private var unreviewedNoteCount: Int {
-        selectedNotes.filter { id, text in reviewedNotes[id] == nil || reviewedNotes[id] != text }.count
+    private var reviewableNotes: [GamePlanNotesReviewView.Item] {
+        selected.compactMap { record in
+            guard let text = selectedNotes[record.id] else { return nil }
+            return GamePlanNotesReviewView.Item(
+                matchID: record.id,
+                title: "\(Self.dayFormatter.string(from: record.startTime)) · \(GamePlanCompetition(record: record).label)",
+                text: text
+            )
+        }
     }
 
     private var buildInputs: GamePlanBuildInputs {
@@ -137,7 +126,7 @@ struct GamePlanView: View {
             includePlayingNotes: includePlayingNotes,
             detailMode: detailMode,
             delivery: delivery,
-            selectionDescription: selection.manifestDescription(timeZone: .current)
+            selectionDescription: evidence.selection.manifestDescription(timeZone: .current)
         )
     }
 
@@ -145,13 +134,10 @@ struct GamePlanView: View {
 
     var body: some View {
         List {
-            introSection
-            upcomingSection
-            evidenceSection
-            privacySection
-            detailSection
-            estimateSection
+            setupSection
+            contextSection
             handOffSection
+            moreSection
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Prepare Game Plan")
@@ -159,9 +145,12 @@ struct GamePlanView: View {
         .accessibilityIdentifier("game-plan")
         .overlay(alignment: .bottom) { toastView }
         .animation(.easeInOut(duration: 0.2), value: toast)
-        .onAppear { installedApps = AICoachLauncher.installedApps() }
-        .onChange(of: filter) { _, newFilter in
-            selection.setFilter(newFilter, candidates: candidates)
+        .onAppear {
+            installedApps = AICoachLauncher.installedApps()
+            prefillUpcomingOnce()
+        }
+        .onChange(of: evidence.filter) { _, newFilter in
+            evidence.selection.setFilter(newFilter, candidates: candidates)
         }
         .onChange(of: upcoming.preparationText) { _, text in
             if text.count > GamePlanUpcomingMatch.maxPreparationLength {
@@ -171,383 +160,94 @@ struct GamePlanView: View {
         // A rebuild whenever anything the pack depends on changes: records,
         // roster, notes, upcoming context, selection or inclusion choices.
         .task(id: buildInputs) { await rebuild(buildInputs) }
-        .sheet(isPresented: $showNotesReview) {
-            GamePlanNotesReviewView(
-                notes: reviewableNotes,
-                includeNames: includeNames,
-                initiallyExcluded: notesLeftOut,
-                onConfirm: { approved in
-                    notesLeftOut = Set(reviewableNotes.map(\.matchID)).subtracting(approved.keys)
-                    reviewedNotes = approved
-                    includeNotes = true
-                    showNotesReview = false
-                },
-                onCancel: { showNotesReview = false }
-            )
-        }
         .sheet(item: $shareRequest, onDismiss: releaseHeldGenerations) { request in
             GamePlanShareSheet(activityItems: request.items) { shareRequest = nil }
         }
     }
 
+    /// Competition and format from the previous match against this opponent,
+    /// once per visit, so a later edit is never overwritten.
+    private func prefillUpcomingOnce() {
+        guard !didPrefill else { return }
+        didPrefill = true
+        guard let latest = candidates.latestMatch else { return }
+        let prefill = GamePlanUpcomingMatch(prefilledFrom: latest)
+        upcoming.competition = prefill.competition
+        upcoming.format = prefill.format
+        prefilledFrom = latest.startTime
+    }
+
     // MARK: - Sections
 
-    private var introSection: some View {
+    private var setupSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Prepare Game Plan", systemImage: "list.bullet.clipboard")
-                    .font(.headline)
-                Text("Builds an evidence pack from the matches you recorded against \(opponent?.name ?? "this opponent"). You hand it to an AI app of your choice, which writes the game plan. DeuceMate never sends it anywhere itself.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            NavigationLink {
+                GamePlanUpcomingView(upcoming: $upcoming, hasDate: $hasUpcomingDate,
+                                     date: $upcomingDate, prefilledFrom: prefilledFrom)
+            } label: {
+                LabeledContent("Upcoming", value: GamePlanUpcomingView.summary(
+                    upcoming, date: hasUpcomingDate ? upcomingDate : nil))
             }
-            .padding(.vertical, 4)
+            .accessibilityIdentifier("game-plan-upcoming")
+
+            NavigationLink {
+                GamePlanEvidenceView(choices: $evidence, candidates: candidates,
+                                     opponentName: opponentName, noteMatchIDs: Set(selectedNotes.keys))
+            } label: {
+                LabeledContent("Matches", value: candidates.eligible.isEmpty
+                               ? "None yet"
+                               : "\(evidence.selection.label) · \(selected.count) of \(pool.count)")
+            }
+            .accessibilityIdentifier("game-plan-evidence")
+
+            NavigationLink {
+                GamePlanContentsView(includeNames: $includeNames, includePlayingNotes: $includePlayingNotes,
+                                     includeNotes: $includeNotes, notesLeftOut: $notesLeftOut,
+                                     hasPlayingNotes: opponent?.playingNotes != nil,
+                                     notesUnreadable: notesUnreadable, notes: reviewableNotes)
+            } label: {
+                LabeledContent("Includes", value: GamePlanContentsView.summary(
+                    includeNames: includeNames, includePlayingNotes: includePlayingNotes,
+                    hasPlayingNotes: opponent?.playingNotes != nil,
+                    includeNotes: includeNotes, notesUnreadable: notesUnreadable,
+                    includedNoteCount: selectedNotes.count - omittedNoteIDs.count,
+                    noteCount: selectedNotes.count))
+            }
+            .accessibilityIdentifier("game-plan-contents")
+        } footer: {
+            if candidates.eligible.isEmpty {
+                Text("No singles matches against \(opponentName) yet. Tag them as the opponent in Match Info on a past singles match to use it here.")
+                    .accessibilityIdentifier("game-plan-empty")
+            } else if let exclusions = GamePlanEvidenceView.shortExclusionsText(candidates) {
+                Text(exclusions)
+            }
         }
     }
 
-    private var upcomingSection: some View {
+    private var contextSection: some View {
         Section {
-            Picker("Competition", selection: $upcoming.competition) {
-                Text("Not set").tag(CompetitionType?.none)
-                ForEach(CompetitionType.allCases) { type in
-                    Text(type.displayLabel).tag(Optional(type))
-                }
-            }
-            .accessibilityIdentifier("game-plan-competition")
-            Picker("Format", selection: $upcoming.format) {
-                Text("Not set").tag(MatchFormat?.none)
-                ForEach(GamePlanText.selectableFormats, id: \.self) { format in
-                    Text(GamePlanText.formatLabel(format)).tag(Optional(format))
-                }
-            }
-            Toggle("Set a date", isOn: $hasUpcomingDate)
-            if hasUpcomingDate {
-                DatePicker("Date", selection: $upcomingDate, displayedComponents: .date)
-            }
             VStack(alignment: .leading, spacing: 4) {
-                TextField("Surface, conditions or a concern (optional)", text: $upcoming.preparationText, axis: .vertical)
+                TextField("Surface, conditions, or what you want to try (optional)",
+                          text: $upcoming.preparationText, axis: .vertical)
                     .lineLimit(2...6)
                     .accessibilityIdentifier("game-plan-preparation")
-                Text("\(upcoming.preparationText.count)/\(GamePlanUpcomingMatch.maxPreparationLength)")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-        } header: {
-            Text("Upcoming Match")
-        } footer: {
-            Text("Your own statements, not tracked data. Competition starts unset so the plan doesn’t assume another friendly. Preparation text is included as written.")
-        }
-    }
-
-    @ViewBuilder
-    private var evidenceSection: some View {
-        Section {
-            if candidates.eligible.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("No singles matches against \(opponent?.name ?? "this opponent") yet")
-                        .font(.subheadline.weight(.semibold))
-                    Text("Tag them as the opponent in Match Info on a past singles match to use it here.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 4)
-                .accessibilityIdentifier("game-plan-empty")
-            } else {
-                presetPicker
-                if preset == .count {
-                    Stepper(value: Binding(
-                        get: { customCount },
-                        set: { value in
-                            customCount = GamePlanSelection.clampedCount(value, available: pool.count)
-                            selection.mode = .latest(customCount)
-                        }
-                    ), in: 1...max(1, pool.count)) {
-                        Text("Latest \(customCount) \(customCount == 1 ? "match" : "matches")")
-                    }
-                    .accessibilityIdentifier("game-plan-custom-count")
-                }
-                if case .custom = selection.mode {
-                    HStack {
-                        Text("Custom selection")
-                        Spacer()
-                        Button("Reset to Last 5") {
-                            usesCustomCount = false
-                            selection.mode = .latest(GamePlanSelection.defaultCount)
-                        }
-                            .font(.footnote)
-                    }
-                }
-                NavigationLink {
-                    GamePlanMatchPickerView(
-                        pool: pool,
-                        selectedIDs: Set(selected.map(\.id)),
-                        notesMatchIDs: Set(selectedNotes.keys),
-                        toggle: { id in selection.toggle(id, candidates: candidates) }
-                    )
-                } label: {
-                    LabeledContent("Matches", value: "\(selected.count) of \(pool.count) selected")
-                }
-                .accessibilityIdentifier("game-plan-choose-matches")
-                selectionSummary
-                filtersGroup
-            }
-            Toggle("Include unfinished matches", isOn: $includeInProgress)
-                .accessibilityIdentifier("game-plan-include-in-progress")
-        } header: {
-            Text("Evidence")
-        } footer: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Only the selected matches are used. Unfinished matches are saved checkpoints: partial evidence, never results.")
-                if let exclusions = exclusionsText { Text(exclusions) }
-            }
-        }
-    }
-
-    private enum Preset: Hashable { case last5, last10, count, all, custom }
-
-    private var preset: Preset {
-        switch selection.mode {
-        case .latest where usesCustomCount: return .count
-        case .latest(5):  return .last5
-        case .latest(10): return .last10
-        case .latest:     return .count
-        case .all:        return .all
-        case .custom:     return .custom
-        }
-    }
-
-    private var presetPicker: some View {
-        Picker("Selection", selection: Binding(
-            get: { preset },
-            set: { newValue in
-                usesCustomCount = newValue == .count
-                switch newValue {
-                case .last5:  selection.mode = .latest(5)
-                case .last10: selection.mode = .latest(10)
-                case .count:
-                    customCount = GamePlanSelection.clampedCount(customCount, available: pool.count)
-                    selection.mode = .latest(customCount)
-                case .all:    selection.mode = .all
-                case .custom: break
-                }
-            }
-        )) {
-            Text("Last 5").tag(Preset.last5)
-            Text("Last 10").tag(Preset.last10)
-            Text("Count").tag(Preset.count)
-            Text("All").tag(Preset.all)
-            if preset == .custom { Text("Custom").tag(Preset.custom) }
-        }
-        .pickerStyle(.segmented)
-        .accessibilityIdentifier("game-plan-preset")
-    }
-
-    private var selectionSummary: some View {
-        let points = selected.reduce(0) { $0 + $1.stats.count }
-        let withOutcome = selected.reduce(0) { $0 + $1.stats.filter { $0.outcome != .uncategorized }.count }
-        let starts = selected.map(\.startTime)
-        let range: String = {
-            guard let first = starts.min(), let last = starts.max() else { return "—" }
-            let a = Self.dayFormatter.string(from: first), b = Self.dayFormatter.string(from: last)
-            return a == b ? a : "\(a) – \(b)"
-        }()
-        let competitions = Dictionary(grouping: selected, by: GamePlanCompetition.init(record:))
-            .sorted { GamePlanCompetition.ordered($0.key, $1.key) }
-            .map { "\($0.key.label) \($0.value.count)" }
-            .joined(separator: " · ")
-        let scoreOnly = selected.filter { $0.stats.isEmpty }.count
-        let partial = selected.filter { record in
-            let tracked = record.stats.filter { $0.outcome != .uncategorized }.count
-            return tracked > 0 && tracked < record.stats.count
-        }.count
-        return VStack(alignment: .leading, spacing: 3) {
-            Text("Dates: \(range)")
-            Text("Points: \(points) saved · outcomes on \(GamePlanText.percent(withOutcome, of: points))")
-            if !competitions.isEmpty { Text("Competition: \(competitions)") }
-            Text("Notes: \(selectedNotes.count) on selected matches")
-            if scoreOnly > 0 || partial > 0 {
-                Text("Coverage: \(scoreOnly) score only · \(partial) partially tracked")
-            }
-        }
-        .font(.footnote)
-        .foregroundStyle(.secondary)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("game-plan-selection-summary")
-    }
-
-    private var filtersGroup: some View {
-        DisclosureGroup("Filters\(filter.isActive ? " (on)" : "")") {
-            Toggle("From", isOn: $useFromDate)
-            if useFromDate {
-                DatePicker("From date", selection: $fromDate, displayedComponents: .date)
-            }
-            Toggle("Through", isOn: $useThroughDate)
-            if useThroughDate {
-                DatePicker("Through date", selection: $throughDate, displayedComponents: .date)
-            }
-            ForEach(availableCompetitions) { competition in
-                Toggle(competition.label, isOn: Binding(
-                    get: { competitionFilter?.contains(competition) ?? true },
-                    set: { isOn in
-                        var set = competitionFilter ?? Set(availableCompetitions)
-                        if isOn { set.insert(competition) } else { set.remove(competition) }
-                        competitionFilter = set == Set(availableCompetitions) ? nil : set
-                    }
-                ))
-            }
-        }
-        .accessibilityIdentifier("game-plan-filters")
-    }
-
-    private var exclusionsText: String? {
-        let c = candidates
-        var parts: [String] = []
-        if !c.excludedDoubles.isEmpty {
-            parts.append("\(GamePlanText.plural(c.excludedDoubles.count, "doubles match", "doubles matches")) left out: this version prepares singles, and team points can’t show one opponent’s pattern.")
-        }
-        if !c.excludedInProgress.isEmpty {
-            parts.append("\(GamePlanText.plural(c.excludedInProgress.count, "unfinished match", "unfinished matches")) left out.")
-        }
-        if c.untaggedSinglesCount > 0 {
-            parts.append("\(GamePlanText.plural(c.untaggedSinglesCount, "singles match", "singles matches")) in your archive have no opponent tagged and can’t be used until tagged in Match Info.")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " ")
-    }
-
-    private var reviewableNotes: [GamePlanNotesReviewView.Item] {
-        selected.compactMap { record in
-            guard let text = selectedNotes[record.id] else { return nil }
-            return GamePlanNotesReviewView.Item(
-                matchID: record.id,
-                title: "\(Self.dayFormatter.string(from: record.startTime)) · \(GamePlanCompetition(record: record).label)",
-                text: text
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var privacySection: some View {
-        Section {
-            Toggle("Include player names", isOn: $includeNames)
-                .accessibilityIdentifier("game-plan-include-names")
-            if opponent?.playingNotes != nil {
-                Toggle("Include playing style notes", isOn: $includePlayingNotes)
-                    .accessibilityIdentifier("game-plan-include-playing-notes")
-            }
-            if notesUnreadable {
-                Label("Private notes couldn’t be read, so none can be included. Your notes haven’t been changed.",
-                      systemImage: "exclamationmark.triangle")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-                    .accessibilityIdentifier("game-plan-notes-unreadable")
-            } else if !selectedNotes.isEmpty {
-                Toggle("Include private notes", isOn: Binding(
-                    get: { includeNotes },
-                    set: { wantsOn in
-                        if wantsOn { showNotesReview = true } else { includeNotes = false }
-                    }
-                ))
-                .accessibilityIdentifier("game-plan-include-notes")
-                if includeNotes {
-                    Button(unreviewedNoteCount > 0
-                           ? "Review Notes (\(unreviewedNoteCount) not yet reviewed)"
-                           : "Review Notes") { showNotesReview = true }
+                if !upcoming.preparationText.isEmpty {
+                    Text("\(upcoming.preparationText.count)/\(GamePlanUpcomingMatch.maxPreparationLength)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
             }
         } header: {
-            Text("Pack Contents")
+            Text("Focus")
         } footer: {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(MatchExportDisclosure.namesCaption(isOn: includeNames, forAI: true))
-                if includePlayingNotes, opponent?.playingNotes != nil {
-                    Text("Your Playing Style notes for this opponent are quoted exactly as written. They may mention names or health.")
-                }
-                if includeNotes && !notesUnreadable {
-                    Text("\(selectedNotes.count - omittedNoteIDs.count) of \(selectedNotes.count) notes included, quoted exactly as written. A note added or edited after review stays out until you review it.")
-                    if !includeNames {
-                        Text(MatchExportDisclosure.namesOffNotesWarning)
-                            .foregroundStyle(.orange)
-                    }
-                }
-                Text("Heart rate, steps, calories and other Health data are never included. Notes may still mention health or names.")
-            }
-        }
-    }
-
-    private var detailSection: some View {
-        Section {
-            Picker("Detail", selection: $detailMode) {
-                ForEach(GamePlanDetailMode.allCases) { mode in
-                    Text(mode.label).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("game-plan-detail")
-            Picker("Delivery", selection: $delivery) {
-                Text("One file").tag(GamePlanDelivery.singleFile)
-                ForEach(GamePlanDelivery.partTargets, id: \.self) { target in
-                    Text("Parts of ~\(GamePlanTokenEstimate(tokens: target).label)").tag(GamePlanDelivery.parts(targetTokens: target))
-                }
-            }
-            .accessibilityIdentifier("game-plan-delivery")
-        } header: {
-            Text("Detail")
-        } footer: {
-            Text(detailMode == .full
-                 ? "Full detail includes every saved point of every selected match. Nothing is trimmed to fit."
-                 : "Summary only keeps each match’s figures and included notes but leaves out the point rows, and says so in the pack.")
-        }
-    }
-
-    @ViewBuilder
-    private var estimateSection: some View {
-        Section {
-            if let output {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(output.pack.totalEstimate.inputLabel)
-                        .font(.headline)
-                    Text("\(GamePlanText.plural(output.evidence.matches.count, "match", "matches")) · \(GamePlanText.plural(output.evidence.pointsSaved, "point")) · \(ByteCountFormatter.string(fromByteCount: Int64(output.pack.totalBytes), countStyle: .file))\(output.pack.isSplit ? " · \(output.pack.parts.count) parts" : "")")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    if output.pack.isSplit {
-                        ForEach(output.pack.parts) { part in
-                            Text("Part \(part.number): \(part.estimate.label)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("\(GamePlanText.plural(output.evidence.matches.count, "match", "matches")) selected. \(output.pack.totalEstimate.inputLabel).")
-                .accessibilityValue(packContentsSummary(output.evidence))
-                .accessibilityIdentifier("game-plan-estimate")
-                NavigationLink {
-                    GamePlanPreviewView(output: output)
-                } label: {
-                    Label("Preview Evidence Pack", systemImage: "doc.text.magnifyingglass")
-                }
-                .accessibilityIdentifier("game-plan-preview")
-            } else if let buildFailure {
-                Label(buildFailure, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
-            } else {
-                HStack(spacing: 10) {
-                    ProgressView(value: buildProgress)
-                    Text("Estimating…").font(.footnote).foregroundStyle(.secondary)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Building the evidence pack")
-            }
-        } header: {
-            Text("Size")
-        } footer: {
-            Text("An on-device estimate of the input the AI app will read, usually within about \(GamePlanTokenEstimator.documentedErrorPercent)% for tennis tables and English text; notes in other languages vary more. Each AI service counts differently and may add its own overhead. The answer isn’t included. Large packs work best as a shared file.")
+            Text("Included as written.")
         }
     }
 
     @ViewBuilder
     private var handOffSection: some View {
         Section {
+            estimateRow
             if let output {
                 if output.pack.isSplit {
                     ForEach(output.pack.parts) { part in
@@ -579,9 +279,6 @@ struct GamePlanView: View {
                         Label("Open \(app.name)", systemImage: app.systemImage)
                     }
                 }
-            } else {
-                Text("Available once the pack is ready.")
-                    .foregroundStyle(.secondary)
             }
         } header: {
             Text("Hand Off")
@@ -590,17 +287,63 @@ struct GamePlanView: View {
         }
     }
 
+    @ViewBuilder
+    private var estimateRow: some View {
+        if let output {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(output.pack.totalEstimate.inputLabel)
+                    .font(.subheadline.weight(.semibold))
+                Text("\(GamePlanText.plural(output.evidence.matches.count, "match", "matches")) · \(GamePlanText.plural(output.evidence.pointsSaved, "point"))\(output.pack.isSplit ? " · \(output.pack.parts.count) parts" : "")")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(GamePlanText.plural(output.evidence.matches.count, "match", "matches")) selected. \(output.pack.totalEstimate.inputLabel).")
+            .accessibilityValue(packContentsSummary(output.evidence))
+            .accessibilityIdentifier("game-plan-estimate")
+        } else if let buildFailure {
+            Label(buildFailure, systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.orange)
+        } else {
+            HStack(spacing: 10) {
+                ProgressView(value: buildProgress)
+                Text("Preparing…").font(.footnote).foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Building the evidence pack")
+        }
+    }
+
+    private var moreSection: some View {
+        Section {
+            if let output {
+                NavigationLink {
+                    GamePlanPreviewView(output: output)
+                } label: {
+                    Label("Preview Evidence Pack", systemImage: "doc.text.magnifyingglass")
+                }
+                .accessibilityIdentifier("game-plan-preview")
+            }
+            NavigationLink {
+                GamePlanAdvancedView(detailMode: $detailMode, delivery: $delivery, output: output)
+            } label: {
+                LabeledContent("Advanced", value: GamePlanAdvancedView.summary(detailMode: detailMode, delivery: delivery))
+            }
+            .accessibilityIdentifier("game-plan-advanced")
+        }
+    }
+
     private var handOffFooter: String {
         let split = output?.pack.isSplit == true
         var text = split
-            ? "Send the parts in order. The pack asks the AI to acknowledge each part and wait for the last one."
-            : "Copy Prompt copies the whole pack, request included, for pasting. Share Evidence File attaches it as a .txt file with a short message — better for large packs."
+            ? "Send the parts in order; the pack asks the AI to wait for the last one."
+            : "Copy and paste it, or share it as a file (better for large packs)."
         if !installedApps.isEmpty {
             text += split
-                ? " Opening an app copies part 1; paste it, then come back for the next part."
-                : " Opening an app copies the pack; paste it or attach the file there."
+                ? " Opening an app copies part 1 for you to paste."
+                : " Opening an app copies the pack for you to paste."
         }
-        text += " Opening an app doesn’t mean it received or analysed anything, and copies you share can’t be recalled later."
+        text += " DeuceMate never sends it anywhere itself, and copies you share can’t be recalled."
         return text
     }
 
