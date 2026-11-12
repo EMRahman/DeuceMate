@@ -268,14 +268,18 @@
       save.disabled = !dirty();
     }
     function prompt(title, message, actionLabel, action, keepLabel) {
-      var text = area.value; leaving = true;
+      var text = area.value, chosen = false; leaving = true;
       var content = h("div", "phone-confirmation");
       content.append(
         h("p", "phone-note", message),
-        phone.button(actionLabel, function () { phone.closeSheet(); action(); phone.render(); }, "phone-danger"),
-        phone.button(keepLabel, function () { openNote(phone, rec, text); }, "")
+        phone.button(actionLabel, function () { chosen = true; phone.closeSheet(); action(); phone.render(); }, "phone-danger"),
+        phone.button(keepLabel, function () { chosen = true; openNote(phone, rec, text); }, "")
       );
-      phone.showSheet(title, content, { presentation: "alert" });
+      // Escape closes an alert without a choice: treat that as Keep, so only an
+      // explicit Discard or Delete can lose the draft.
+      phone.showSheet(title, content, { presentation: "alert", cleanup: function () {
+        if (!chosen) setTimeout(function () { openNote(phone, rec, text); }, 0);
+      } });
     }
     function askDiscard() { prompt("Discard changes to this note?", "Your changes haven’t been saved.", "Discard Changes", function () {}, "Keep Editing"); }
     function askDelete() { prompt("Delete this note?", "The note is removed from this iPhone. This can’t be undone.", "Delete Note", function () { setNote(rec.id, ""); }, "Keep Note"); }
