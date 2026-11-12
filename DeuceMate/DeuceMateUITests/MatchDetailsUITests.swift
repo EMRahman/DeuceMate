@@ -998,6 +998,21 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertTrue(contents.contains("## 7. Coaching Request"))
         XCTAssertTrue(contents.contains("competition Friendly;"), "The upcoming competition comes from the previous match")
         capture("35-game-plan-text")
+
+        // A choice made on Advanced reaches the main screen's estimate on return.
+        for _ in 0..<4 where !mainBar.exists { app.navigationBars.firstMatch.buttons.firstMatch.tap() }
+        XCTAssertTrue(mainBar.waitForExistence(timeout: 5))
+        let advanced = app.buttons["game-plan-advanced"]
+        for _ in 0..<6 where !(advanced.exists && advanced.isHittable) { app.swipeUp() }
+        advanced.tap()
+        XCTAssertTrue(app.navigationBars["Advanced"].waitForExistence(timeout: 5))
+        app.buttons["Summary only"].tap()
+        app.navigationBars["Advanced"].buttons.firstMatch.tap()
+        XCTAssertTrue(mainBar.waitForExistence(timeout: 5))
+        let summaryOnly = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value ENDSWITH %@", "summary only"), object: estimate)
+        XCTAssertEqual(XCTWaiter().wait(for: [summaryOnly], timeout: 15), .completed,
+                       "The estimate rebuilds for the detail chosen on Advanced")
     }
 
     // MARK: - Helpers: archive

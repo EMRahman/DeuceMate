@@ -293,9 +293,16 @@ struct GamePlanView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(output.pack.totalEstimate.inputLabel)
                     .font(.subheadline.weight(.semibold))
-                Text("\(GamePlanText.plural(output.evidence.matches.count, "match", "matches")) · \(GamePlanText.plural(output.evidence.pointsSaved, "point"))\(output.pack.isSplit ? " · \(output.pack.parts.count) parts" : "")")
+                Text("\(GamePlanText.plural(output.evidence.matches.count, "match", "matches")) · \(GamePlanText.plural(output.evidence.pointsSaved, "point")) · \(ByteCountFormatter.string(fromByteCount: Int64(output.pack.totalBytes), countStyle: .file))\(output.pack.isSplit ? " · \(output.pack.parts.count) parts" : "")")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                if output.pack.isSplit {
+                    ForEach(output.pack.parts) { part in
+                        Text("Part \(part.number): \(part.estimate.label)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(GamePlanText.plural(output.evidence.matches.count, "match", "matches")) selected. \(output.pack.totalEstimate.inputLabel).")
@@ -325,7 +332,7 @@ struct GamePlanView: View {
                 .accessibilityIdentifier("game-plan-preview")
             }
             NavigationLink {
-                GamePlanAdvancedView(detailMode: $detailMode, delivery: $delivery, output: output)
+                GamePlanAdvancedView(detailMode: $detailMode, delivery: $delivery)
             } label: {
                 LabeledContent("Advanced", value: GamePlanAdvancedView.summary(detailMode: detailMode, delivery: delivery))
             }

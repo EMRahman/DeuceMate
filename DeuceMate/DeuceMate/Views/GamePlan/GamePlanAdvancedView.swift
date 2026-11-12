@@ -1,14 +1,18 @@
-// GamePlanAdvancedView.swift — detail level, delivery and the size
-// breakdown, pushed from Prepare Game Plan's Advanced row. The defaults (Full
-// detail, one file) suit almost every pack; the estimate itself stays on the
-// main screen.
+// GamePlanAdvancedView.swift — detail level and delivery, pushed from
+// Prepare Game Plan's Advanced row. The defaults (Full detail, one file) suit
+// almost every pack.
+//
+// Deliberately shows no built-pack figures: the build belongs to the main
+// screen's view-scoped task, which SwiftUI cancels while a pushed screen
+// covers it, so a size shown here could not follow these pickers. The
+// estimate, file size and per-part sizes live on the main screen, which
+// rebuilds when it reappears.
 import SwiftUI
 import DeuceMateCore
 
 struct GamePlanAdvancedView: View {
     @Binding var detailMode: GamePlanDetailMode
     @Binding var delivery: GamePlanDelivery
-    let output: GamePlanBuildOutput?
 
     var body: some View {
         List {
@@ -36,19 +40,10 @@ struct GamePlanAdvancedView: View {
                     }
                 }
                 .accessibilityIdentifier("game-plan-delivery")
-                if let output {
-                    LabeledContent("Estimated input", value: output.pack.totalEstimate.label)
-                    LabeledContent("File size", value: ByteCountFormatter.string(fromByteCount: Int64(output.pack.totalBytes), countStyle: .file))
-                    if output.pack.isSplit {
-                        ForEach(output.pack.parts) { part in
-                            LabeledContent("Part \(part.number)", value: part.estimate.label)
-                        }
-                    }
-                }
             } header: {
-                Text("Size")
+                Text("Delivery")
             } footer: {
-                Text("An on-device estimate of the input the AI app will read, usually within about \(GamePlanTokenEstimator.documentedErrorPercent)% for tennis tables and English text; notes in other languages vary more. Each AI service counts differently and may add its own overhead. The answer isn’t included. Large packs work best as a shared file; split only if your AI app rejects one.")
+                Text("The size estimate on the previous screen is an on-device estimate of the input the AI app will read, usually within about \(GamePlanTokenEstimator.documentedErrorPercent)% for tennis tables and English text; notes in other languages vary more. Each AI service counts differently and may add its own overhead. The answer isn’t included. Large packs work best as a shared file; split only if your AI app rejects one.")
             }
         }
         .listStyle(.insetGrouped)
