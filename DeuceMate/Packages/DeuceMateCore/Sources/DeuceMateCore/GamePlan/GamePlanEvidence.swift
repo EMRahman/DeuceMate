@@ -248,6 +248,28 @@ public struct GamePlanExclusions: Equatable, Sendable {
     public let unselectedEligibleCount: Int
 }
 
+/// Where an unfinished match stopped, for a pack that prepares to finish it.
+/// Recorder-framed facts from the saved checkpoint only.
+public struct GamePlanFinishing: Equatable, Sendable {
+    /// The match's reference in this pack (it is always selected).
+    public let reference: String
+    public let startTime: Date
+    /// Set scores (Me–Opp) at the checkpoint; a trailing unstarted set is omitted.
+    public let setScoreLabels: [String]
+    /// The game in progress ("30–15"), when the checkpoint is mid-game in a regular set.
+    public let gameScore: String?
+    /// Who serves the next point, when saved.
+    public let nextServer: Player?
+    /// The next point starts on a second serve.
+    public let onSecondServe: Bool
+    /// Me's wins among the last `recentPointsTotal` saved points.
+    public let recentPointsWon: Int
+    public let recentPointsTotal: Int
+
+    /// How many of the latest saved points `recentPoints*` covers.
+    public static let recentWindow = 10
+}
+
 // MARK: - Evidence
 
 public struct GamePlanEvidence: Equatable, Sendable {
@@ -277,6 +299,8 @@ public struct GamePlanEvidence: Equatable, Sendable {
     public let upcomingCompetition: CompetitionType?
     public let upcomingFormat: MatchFormat?
     public let upcomingDate: Date?
+    /// Set when the upcoming match is an unfinished match being finished.
+    public let finishing: GamePlanFinishing?
     public let preparationText: String?
     public let includesNames: Bool
     /// Only when names are included.
@@ -355,9 +379,21 @@ public struct GamePlanEvidence: Equatable, Sendable {
             progress?(index + 1, unique.count)
         }
 
+        // Finishing a match states that match's own competition and format.
+        let finishingIndex = upcoming.finishingMatchID.flatMap { id in
+            unique.firstIndex { $0.id == id && $0.isInProgress }
+        }
         self.builtAt = builtAt
-        self.upcomingCompetition = upcoming.competition
-        self.upcomingFormat = upcoming.format
+        if let finishingIndex {
+            let record = unique[finishingIndex]
+            self.finishing = Self.finishing(record, reference: Self.reference(finishingIndex))
+            self.upcomingCompetition = record.tags?.competitionTypeRaw.flatMap(CompetitionType.init(rawValue:))
+            self.upcomingFormat = record.matchFormat
+        } else {
+            self.finishing = nil
+            self.upcomingCompetition = upcoming.competition
+            self.upcomingFormat = upcoming.format
+        }
         self.upcomingDate = upcoming.date
         self.preparationText = upcoming.sanitizedPreparationText
         self.includesNames = includeNames
@@ -380,7 +416,7 @@ public struct GamePlanEvidence: Equatable, Sendable {
         self.includesNotes = includeNotes
         self.headToHead = HeadToHead.record(vs: opponentID, in: unique, excluding: nil, matchType: .singles)
         self.scopes = Self.scopes(for: projected)
-        self.competitionRows = Self.competitionRows(for: projected, upcoming: upcoming.competition)
+        self.competitionRows = Self.competitionRows(for: projected, upcoming: upcomingCompetition)
     }
 
     // MARK: Derived
@@ -620,6 +656,33 @@ public struct GamePlanEvidence: Equatable, Sendable {
         return sets.enumerated().map { index, set in
             SetScoreLabel.string(for: set, setIndex: index, matchFormat: record.matchFormat)
         }
+    }
+
+    /// "6–4 2–3, 30–15" (Me–Opp): where an unfinished match stopped, for the
+    /// iPhone screen's labels. "No score yet" before the first point.
+    public static func checkpointScoreLabel(_ record: MatchRecord) -> String {
+        let sets = setScoreLabels(record).joined(separator: " ")
+        let game = checkpointGameScore(record)
+        switch (sets.isEmpty, game) {
+        case (true, nil):        return "No score yet"
+        case (true, let g?):     return g
+        case (false, nil):       return sets
+        case (false, let g?):    return "\(sets), \(g)"
+        }
+    }
+
+    static func finishing(_ record: MatchRecord, reference: String) -> GamePlanFinishing {
+        let recent = record.stats.suffix(GamePlanFinishing.recentWindow)
+        return GamePlanFinishing(
+            reference: reference,
+            startTime: record.startTime,
+            setScoreLabels: setScoreLabels(record),
+            gameScore: checkpointGameScore(record),
+            nextServer: record.currentServer,
+            onSecondServe: record.isOnSecondServe,
+            recentPointsWon: recent.filter { $0.winner == .me }.count,
+            recentPointsTotal: recent.count
+        )
     }
 
     static func checkpointGameScore(_ record: MatchRecord) -> String? {

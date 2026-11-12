@@ -137,9 +137,11 @@ enum GamePlanFixtures {
         detail: GamePlanDetailMode = .full,
         includeInProgress: Bool = false
     ) throws -> GamePlanEvidence {
+        // Same rules as the iPhone screen: a match being finished is always evidence.
         let candidates = GamePlanEligibility.candidates(for: opponentID, in: records,
-                                                         includeInProgress: includeInProgress)
-        let selected = selection.resolve(candidates)
+                                                         includeInProgress: includeInProgress,
+                                                         alwaysInclude: upcoming.finishingMatchID)
+        let selected = selection.resolve(candidates, pinning: upcoming.finishingMatchID)
         return try GamePlanEvidence(
             opponentID: opponentID,
             opponent: roster(records),

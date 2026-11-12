@@ -13,7 +13,8 @@ struct GamePlanEvidenceChoices: Equatable {
     var customCount = 3
     /// The Count preset is on, so 5 or 10 chosen with the stepper stays a count.
     var usesCustomCount = false
-    var includeInProgress = false
+    /// On by default: a saved checkpoint is partial evidence, never a result.
+    var includeInProgress = true
     var useFromDate = false
     var fromDate = Date()
     var useThroughDate = false
@@ -33,9 +34,11 @@ struct GamePlanEvidenceView: View {
     let opponentName: String
     /// Selected matches that carry a private note.
     let noteMatchIDs: Set<UUID>
+    /// The unfinished match being finished: always selected.
+    let pinnedMatchID: UUID?
 
     private var pool: [MatchRecord] { choices.selection.filtered(candidates) }
-    private var selected: [MatchRecord] { choices.selection.resolve(candidates) }
+    private var selected: [MatchRecord] { choices.selection.resolve(candidates, pinning: pinnedMatchID) }
 
     /// Competition contexts present among eligible matches, for the filter.
     private var availableCompetitions: [GamePlanCompetition] {
@@ -85,16 +88,19 @@ struct GamePlanEvidenceView: View {
                             pool: pool,
                             selectedIDs: Set(selected.map(\.id)),
                             notesMatchIDs: noteMatchIDs,
+                            pinned: selected.first { $0.id == pinnedMatchID },
                             toggle: { id in choices.selection.toggle(id, candidates: candidates) }
                         )
                     } label: {
-                        LabeledContent("Matches", value: "\(selected.count) of \(pool.count) selected")
+                        LabeledContent("Matches", value: "\(selected.count) of \(max(pool.count, selected.count)) selected")
                     }
                     .accessibilityIdentifier("game-plan-choose-matches")
                     selectionSummary
                 }
             } footer: {
-                Text("Only the selected matches are used.")
+                Text(pinnedMatchID == nil
+                     ? "Only the selected matches are used."
+                     : "Only the selected matches are used. The match you’re finishing is always included.")
             }
 
             if !candidates.eligible.isEmpty {

@@ -933,21 +933,8 @@ final class MatchDetailsUITests: XCTestCase {
         editMatchInfo(competition: "Friendly", opponents: [.existing(opponent)])
         closeDetail()
 
-        let sectionLink = app.buttons["opponents-section-link"]
-        for _ in 0..<10 where !(sectionLink.exists && sectionLink.isHittable) { app.swipeDown() }
-        XCTAssertTrue(sectionLink.waitForExistence(timeout: 5))
-        sectionLink.tap()
-        let row = app.buttons.matching(NSPredicate(
-            format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "opponent-row-", opponent
-        )).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        row.tap()
-        let prepare = app.buttons["opponent-prepare-game-plan"]
-        XCTAssertTrue(prepare.waitForExistence(timeout: 5), "The entry point sits on the opponent's profile")
-        capture("30-opponent-prepare-entry")
-        prepare.tap()
+        openGamePlan(for: opponent, capturing: "30-opponent-prepare-entry")
         let mainBar = app.navigationBars["Prepare Game Plan"]
-        XCTAssertTrue(mainBar.waitForExistence(timeout: 5))
 
         // Ready on arrival: the estimate and the hand-off sit on the first screen.
         let estimate = app.descendants(matching: .any)["game-plan-estimate"]
@@ -1013,6 +1000,73 @@ final class MatchDetailsUITests: XCTestCase {
             predicate: NSPredicate(format: "value ENDSWITH %@", "summary only"), object: estimate)
         XCTAssertEqual(XCTWaiter().wait(for: [summaryOnly], timeout: 15), .completed,
                        "The estimate rebuilds for the detail chosen on Advanced")
+    }
+
+    /// An unfinished last match makes the next match "finish it": the pack
+    /// states where it stopped and asks how to close it out, and unfinished
+    /// matches are evidence by default.
+    @MainActor
+    func testGamePlanFinishesAnUnfinishedMatch() throws {
+        launch()
+        let opponent = "Resumer \(token)"
+        let earlier = createMatch(gamesMe: 3, gamesOpp: 1, complete: true)
+        openMatch(earlier)
+        editMatchInfo(competition: "League", opponents: [.new(opponent)])
+        closeDetail()
+        let unfinished = createMatch(gamesMe: 2, gamesOpp: 3, complete: false)
+        openMatch(unfinished)
+        editMatchInfo(competition: "League", opponents: [.existing(opponent)])
+        closeDetail()
+
+        openGamePlan(for: opponent)
+        let upcoming = app.buttons["game-plan-upcoming"]
+        XCTAssertTrue(upcoming.waitForExistence(timeout: 5))
+        XCTAssertTrue(upcoming.label.contains("Finish"), "The unfinished last match is the one to finish")
+        let estimate = app.descendants(matching: .any)["game-plan-estimate"]
+        XCTAssertTrue(estimate.waitForExistence(timeout: 15))
+        XCTAssertTrue(waitForLabel(estimate, contains: "2 matches selected"), "Unfinished matches are included by default")
+        capture("36-game-plan-finishing")
+
+        upcoming.tap()
+        XCTAssertTrue(app.navigationBars["Upcoming Match"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Competition and format are the unfinished match’s own."].exists)
+        capture("37-game-plan-finishing-upcoming")
+        app.navigationBars["Upcoming Match"].buttons.firstMatch.tap()
+
+        let preview = app.buttons["game-plan-preview"]
+        for _ in 0..<6 where !(preview.exists && preview.isHittable) { app.swipeUp() }
+        XCTAssertTrue(preview.waitForExistence(timeout: 15))
+        preview.tap()
+        XCTAssertTrue(app.navigationBars["Preview"].waitForExistence(timeout: 5))
+        app.buttons["game-plan-view-text"].tap()
+        let text = app.textViews["game-plan-text"]
+        XCTAssertTrue(text.waitForExistence(timeout: 5))
+        let contents = text.value as? String ?? ""
+        XCTAssertTrue(contents.contains("finishing the unfinished match M002"))
+        XCTAssertTrue(contents.contains("- Where it stopped: sets"))
+        XCTAssertTrue(contents.contains("Where the match stands"))
+        XCTAssertTrue(contents.contains("What went well so far"))
+        XCTAssertTrue(contents.contains("Closing it out"))
+        XCTAssertFalse(contents.contains("Warm-up checks"))
+    }
+
+    /// Opponents → the opponent's profile → Prepare Game Plan.
+    @MainActor
+    private func openGamePlan(for opponent: String, capturing shot: String? = nil) {
+        let sectionLink = app.buttons["opponents-section-link"]
+        for _ in 0..<10 where !(sectionLink.exists && sectionLink.isHittable) { app.swipeDown() }
+        XCTAssertTrue(sectionLink.waitForExistence(timeout: 5))
+        sectionLink.tap()
+        let row = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "opponent-row-", opponent
+        )).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        let prepare = app.buttons["opponent-prepare-game-plan"]
+        XCTAssertTrue(prepare.waitForExistence(timeout: 5), "The entry point sits on the opponent's profile")
+        if let shot { capture(shot) }
+        prepare.tap()
+        XCTAssertTrue(app.navigationBars["Prepare Game Plan"].waitForExistence(timeout: 5))
     }
 
     // MARK: - Helpers: archive

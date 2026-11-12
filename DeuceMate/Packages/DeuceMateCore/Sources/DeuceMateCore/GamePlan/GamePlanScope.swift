@@ -87,10 +87,18 @@ public enum GamePlanCompetition: Hashable, Sendable, Identifiable {
 /// iPhone screen pre-fills competition and format from the previous match
 /// against the opponent (`init(prefilledFrom:)`) and shows them on its first
 /// row, so the statement the pack makes is always visible and editable.
+///
+/// When `finishingMatchID` names an unfinished match, the next match IS that
+/// match, resumed from its saved score: it is always selected as evidence
+/// (`GamePlanEligibility.candidates(alwaysInclude:)`,
+/// `GamePlanSelection.resolve(_:pinning:)`), its own competition and format
+/// are stated, and the coaching request asks how to finish it.
 public struct GamePlanUpcomingMatch: Equatable, Sendable {
     public var competition: CompetitionType?
     public var format: MatchFormat?
     public var date: Date?
+    /// The unfinished match being finished, or `nil` for a new match.
+    public var finishingMatchID: UUID?
     /// Free text (surface, conditions, a concern), as typed. Exports only
     /// ever read `sanitizedPreparationText`.
     public var preparationText: String
@@ -98,21 +106,24 @@ public struct GamePlanUpcomingMatch: Equatable, Sendable {
     public static let maxPreparationLength = 1_000
 
     public init(competition: CompetitionType? = nil, format: MatchFormat? = nil,
-                date: Date? = nil, preparationText: String = "") {
+                date: Date? = nil, preparationText: String = "", finishingMatchID: UUID? = nil) {
         self.competition = competition
         self.format = format
         self.date = date
         self.preparationText = preparationText
+        self.finishingMatchID = finishingMatchID
     }
 
     /// The previous match's competition and format, as a starting point for
     /// the next one. An untagged or unrecognised competition stays unset (it
     /// is never guessed as Friendly or League), and a format the upcoming
     /// picker doesn't offer stays unset. Date and preparation text never carry over.
+    /// An unfinished previous match becomes the match to finish.
     public init(prefilledFrom record: MatchRecord) {
         self.init(
             competition: record.tags?.competitionTypeRaw.flatMap(CompetitionType.init(rawValue:)),
-            format: GamePlanText.selectableFormats.contains(record.matchFormat) ? record.matchFormat : nil
+            format: GamePlanText.selectableFormats.contains(record.matchFormat) ? record.matchFormat : nil,
+            finishingMatchID: record.isInProgress ? record.id : nil
         )
     }
 
@@ -160,6 +171,12 @@ public struct GamePlanCandidates: Equatable, Sendable {
     public var latestMatch: MatchRecord? {
         (eligible + excludedInProgress).min(by: GamePlanEligibility.newestFirst)
     }
+
+    /// Unfinished singles matches against this opponent, newest first — the
+    /// matches the player could be about to finish.
+    public var unfinishedMatches: [MatchRecord] {
+        (eligible + excludedInProgress).filter(\.isInProgress).sorted(by: GamePlanEligibility.newestFirst)
+    }
 }
 
 public struct GamePlanCandidateCounts: Equatable, Sendable {
@@ -182,11 +199,14 @@ public enum GamePlanEligibility {
         a.startTime != b.startTime ? a.startTime > b.startTime : a.id.uuidString < b.id.uuidString
     }
 
+    /// - Parameter alwaysInclude: an unfinished match the player is about to
+    ///   finish. It is eligible even when other unfinished matches are not.
     public static func candidates(
         for opponentID: UUID,
         in records: [MatchRecord],
         forgotten: ForgottenPlayerLedger = ForgottenPlayerLedger(),
-        includeInProgress: Bool = false
+        includeInProgress: Bool = false,
+        alwaysInclude: UUID? = nil
     ) -> GamePlanCandidates {
         // A forgotten player has no evidence, even if a stale copy still carries them.
         let isForgotten = forgotten.contains(opponentID)
@@ -206,7 +226,7 @@ public enum GamePlanEligibility {
             case .doubles:
                 doubles.append(record)
             case .singles:
-                if record.isInProgress && !includeInProgress {
+                if record.isInProgress && !includeInProgress && record.id != alwaysInclude {
                     inProgress.append(record)
                 } else {
                     eligible.append(record)
@@ -299,6 +319,17 @@ public struct GamePlanSelection: Equatable, Sendable {
         case .custom(let ids):
             return pool.filter { ids.contains($0.id) }
         }
+    }
+
+    /// `resolve`, plus the `pinned` match when the count, a filter or a custom
+    /// choice left it out: the unfinished match being finished is always
+    /// evidence. Only an eligible match can be pinned.
+    public func resolve(_ candidates: GamePlanCandidates, pinning pinned: UUID?,
+                        calendar: Calendar = .current) -> [MatchRecord] {
+        let base = resolve(candidates, calendar: calendar)
+        guard let pinned, !base.contains(where: { $0.id == pinned }),
+              let record = candidates.eligible.first(where: { $0.id == pinned }) else { return base }
+        return (base + [record]).sorted(by: GamePlanEligibility.newestFirst)
     }
 
     /// Changing a filter recomputes count presets automatically (they resolve

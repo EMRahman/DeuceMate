@@ -11,8 +11,11 @@
 // hand-off. Each row pushes the full controls (`GamePlanUpcomingView`,
 // `GamePlanEvidenceView`, `GamePlanContentsView`, `GamePlanAdvancedView`).
 // The upcoming competition and format are pre-filled from the previous match
-// against the opponent; names, playing style notes and private notes start
-// on, and any note can be left out. The summaries state all of it before
+// against the opponent; when that match is unfinished, the next match is
+// finishing it (always selected as evidence; the pack asks how to close it
+// out from the saved score). Unfinished matches are evidence by default.
+// Names, playing style notes and private notes start on, and any note can be
+// left out. The summaries state all of it before
 // anything is copied or shared.
 //
 // Session-local by design: everything lives in @State and is gone when the
@@ -76,11 +79,23 @@ struct GamePlanView: View {
     private var candidates: GamePlanCandidates {
         GamePlanEligibility.candidates(for: opponentID, in: store.history,
                                        forgotten: store.forgottenPlayers,
-                                       includeInProgress: evidence.includeInProgress)
+                                       includeInProgress: evidence.includeInProgress,
+                                       alwaysInclude: upcoming.finishingMatchID)
     }
 
     private var pool: [MatchRecord] { evidence.selection.filtered(candidates) }
-    private var selected: [MatchRecord] { evidence.selection.resolve(candidates) }
+    /// The selection, plus the match being finished if it was left out.
+    private var selected: [MatchRecord] {
+        evidence.selection.resolve(candidates, pinning: finishingRecord?.id)
+    }
+
+    /// The unfinished match being finished, while it is still unfinished. A
+    /// match completed meanwhile (say, from the Watch) is no longer pinned,
+    /// and the pack falls back to a new match.
+    private var finishingRecord: MatchRecord? {
+        guard let id = upcoming.finishingMatchID else { return nil }
+        return candidates.unfinishedMatches.first { $0.id == id }
+    }
 
     private var notesUnreadable: Bool { notesStore.loadFailure != nil }
 
@@ -166,7 +181,8 @@ struct GamePlanView: View {
     }
 
     /// Competition and format from the previous match against this opponent,
-    /// once per visit, so a later edit is never overwritten.
+    /// once per visit, so a later edit is never overwritten. An unfinished
+    /// previous match becomes the match to finish.
     private func prefillUpcomingOnce() {
         guard !didPrefill else { return }
         didPrefill = true
@@ -174,6 +190,7 @@ struct GamePlanView: View {
         let prefill = GamePlanUpcomingMatch(prefilledFrom: latest)
         upcoming.competition = prefill.competition
         upcoming.format = prefill.format
+        upcoming.finishingMatchID = prefill.finishingMatchID
         prefilledFrom = latest.startTime
     }
 
@@ -183,16 +200,18 @@ struct GamePlanView: View {
         Section {
             NavigationLink {
                 GamePlanUpcomingView(upcoming: $upcoming, hasDate: $hasUpcomingDate,
-                                     date: $upcomingDate, prefilledFrom: prefilledFrom)
+                                     date: $upcomingDate, prefilledFrom: prefilledFrom,
+                                     unfinished: candidates.unfinishedMatches)
             } label: {
                 LabeledContent("Upcoming", value: GamePlanUpcomingView.summary(
-                    upcoming, date: hasUpcomingDate ? upcomingDate : nil))
+                    upcoming, date: hasUpcomingDate ? upcomingDate : nil, finishing: finishingRecord))
             }
             .accessibilityIdentifier("game-plan-upcoming")
 
             NavigationLink {
                 GamePlanEvidenceView(choices: $evidence, candidates: candidates,
-                                     opponentName: opponentName, noteMatchIDs: Set(selectedNotes.keys))
+                                     opponentName: opponentName, noteMatchIDs: Set(selectedNotes.keys),
+                                     pinnedMatchID: finishingRecord?.id)
             } label: {
                 LabeledContent("Matches", value: candidates.eligible.isEmpty
                                ? "None yet"
@@ -227,7 +246,9 @@ struct GamePlanView: View {
     private var contextSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 4) {
-                TextField("Surface, conditions, or what you want to try (optional)",
+                TextField(finishingRecord == nil
+                          ? "Surface, conditions, or what you want to try (optional)"
+                          : "What changed since the stop, or what you want to try (optional)",
                           text: $upcoming.preparationText, axis: .vertical)
                     .lineLimit(2...6)
                     .accessibilityIdentifier("game-plan-preparation")

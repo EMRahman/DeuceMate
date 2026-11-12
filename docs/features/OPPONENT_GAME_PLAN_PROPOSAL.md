@@ -59,6 +59,17 @@ identity and competition filters now exist, as documented in `CLAUDE.md`.
    app would not assume another friendly. The previous match is a better
    guess for a recurring league opponent, and the always-visible summary keeps
    the statement in view.)*
+   *(Added 2026-11-12:)* When that previous match is unfinished, the next
+   match is **finishing it** (the player can switch back to a new match, or
+   pick another unfinished match). The match is always selected as evidence,
+   even past the count or a filter; its own competition and format are
+   stated; the brief records where it stopped (set scores, game in progress,
+   who serves next, Me's share of the last 10 saved points); and the Coaching
+   Request asks where the match stands, what went well and what hurt so far,
+   three priorities to finish it, a restart routine, closing it out, Plan B and
+   unknowns — in place of warm-up checks for a new match. A match completed
+   meanwhile (for example from the Watch) stops being pinned and the pack
+   falls back to a new match.
    Optional preparation context can describe the surface, conditions or a
    particular concern. These are user statements, not tracked measurements.
 3. Review the evidence selection. Default to the latest five completed singles
@@ -118,9 +129,10 @@ Summary only. A larger token estimate must not silently reduce the chosen count.
 - Completed draws and matches explicitly ended at the current score remain
   eligible, with their recorded status explained. Do not infer completion from
   `iWon != nil`; use the existing lifecycle/result rules.
-- In-progress matches are excluded by default. An explicit option can include
-  their saved checkpoints as partial evidence, separately from completed results
-  and head-to-head. Never describe the checkpoint as the live watch's latest score.
+- In-progress matches are included by default on the iPhone *(revised
+  2026-11-12; Core's `candidates` default stays opt-in)*. Their saved
+  checkpoints are partial evidence, kept separate from completed results and
+  head-to-head, and an option excludes them. Never describe the checkpoint as the live watch's latest score.
 - Score-only/manual matches contribute results and opted-in notes, but not
   invented serve, return or pressure statistics. Partial tracking is visible.
 - First release targets singles. List excluded doubles matches and explain why.
