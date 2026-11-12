@@ -190,8 +190,6 @@ private struct OpponentDetailView: View {
                             Label("Prepare Game Plan", systemImage: "list.bullet.clipboard")
                         }
                         .accessibilityIdentifier("opponent-prepare-game-plan")
-                    } footer: {
-                        Text("Build an evidence pack from your singles matches against \(opponent.name) to ask an AI app for a pre-match plan.")
                     }
 
                     if !pendingMatches.isEmpty {

@@ -37,7 +37,7 @@ as **Prepare Game Plan**, not imply that it generates or receives an answer itse
 | `OpponentDirectory`, `PlayerRoster`, `OpponentsView` | Select an opponent by stable identity and open the preparation flow from their profile. |
 | `MatchTags`, `CompetitionType` | Identify opposition, distinguish match types and competition contexts, and include recorded tennis profiles. |
 | `PhoneStatsStore.history` | Read full local records across the phone archive; do not use the watch's rolling history or summary-only mirror as the evidence source. |
-| `MatchNotesStore` | Read private notes by match UUID only after explicit inclusion and review. |
+| `MatchNotesStore` | Read private notes of selected matches by UUID; each can be left out individually. |
 | `HeadToHead`, `MatchComparisonFormat` | Keep result scope and wording consistent with the existing opponent screen. |
 | `MatchStatsSummary`, `TrendMetric`, `PerformanceTrends` | Reuse factual counts, correct denominators and cross-match pooling rules. |
 | `MatchExporter`, `AICoachSheet`, `AICoachLauncher` | Reuse export conventions and explicit copy/share/open actions, adding a distinct pre-match prompt. |
@@ -51,8 +51,25 @@ identity and competition filters now exist, as documented in `CLAUDE.md`.
 ## 3. User journey
 
 1. Open **Matches → Opponents → [player] → Prepare Game Plan**.
-2. Set the upcoming match's competition type and format. Date is optional;
-   competition starts unset, so the app does not assume it is another friendly.
+2. Set the upcoming match's competition type and format. Date is optional.
+   Competition and format are pre-filled from the previous singles match
+   against this opponent (finished or not) and shown on the screen's first
+   row; an untagged or unrecognised competition stays unset rather than being
+   guessed. *(Revised 2026-11-12: originally competition started unset so the
+   app would not assume another friendly. The previous match is a better
+   guess for a recurring league opponent, and the always-visible summary keeps
+   the statement in view.)*
+   *(Added 2026-11-12:)* When that previous match is unfinished, the next
+   match is **finishing it** (the player can switch back to a new match, or
+   pick another unfinished match). The match is always selected as evidence,
+   even past the count or a filter; its own competition and format are
+   stated; the brief records where it stopped (set scores, game in progress,
+   who serves next, Me's share of the last 10 saved points); and the Coaching
+   Request asks where the match stands, what went well and what hurt so far,
+   three priorities to finish it, a restart routine, closing it out, Plan B and
+   unknowns — in place of warm-up checks for a new match. A match completed
+   meanwhile (for example from the Watch) stops being pinned and the pack
+   falls back to a new match.
    Optional preparation context can describe the surface, conditions or a
    particular concern. These are user statements, not tracked measurements.
 3. Review the evidence selection. Default to the latest five completed singles
@@ -61,8 +78,10 @@ identity and competition filters now exist, as documented in `CLAUDE.md`.
    individual selection, date filtering and competition filtering. Show selected
    versus available match counts, point and note counts, date range, tracking
    coverage and exclusions. Do not impose a five- or ten-match cap.
-4. Optionally include private notes and player names; both start off for every
-   session. Review the exact selected notes by match and omit individual notes.
+4. Player names, playing style notes and private notes start included
+   *(revised 2026-11-12: originally off every session; the player prepares
+   this for their own AI app and wrote the notes as scouting)*. The main
+   screen's Includes row states what the pack quotes before any hand-off. Review the exact selected notes by match and omit individual notes.
    Preview any new preparation text too. Explain that notes may contain names
    even when the names toggle is off.
 5. Preview the evidence overview and complete prompt/file contents. Show the
@@ -110,9 +129,10 @@ Summary only. A larger token estimate must not silently reduce the chosen count.
 - Completed draws and matches explicitly ended at the current score remain
   eligible, with their recorded status explained. Do not infer completion from
   `iWon != nil`; use the existing lifecycle/result rules.
-- In-progress matches are excluded by default. An explicit option can include
-  their saved checkpoints as partial evidence, separately from completed results
-  and head-to-head. Never describe the checkpoint as the live watch's latest score.
+- In-progress matches are included by default on the iPhone *(revised
+  2026-11-12; Core's `candidates` default stays opt-in)*. Their saved
+  checkpoints are partial evidence, kept separate from completed results and
+  head-to-head, and an option excludes them. Never describe the checkpoint as the live watch's latest score.
 - Score-only/manual matches contribute results and opted-in notes, but not
   invented serve, return or pressure statistics. Partial tracking is visible.
 - First release targets singles. List excluded doubles matches and explain why.
@@ -437,9 +457,10 @@ All state is session-local, as §7 requires.
   completed, latest five completed (only when more than five), each competition
   context (only when there is more than one), and unfinished checkpoints
   (partial, never results or head-to-head).
-- **Note review** is per note and per text: the pack includes a note only if the
-  player approved that exact text in this session. A newly selected match's
-  note, or one edited after review, stays out until reviewed. An unreadable
+- **Note choice** is per note: every selected match's note is included unless
+  the player left it out with Choose Notes, which shows the exact text quoted.
+  *(Revised 2026-11-12: this replaced per-text approval, under which a newly
+  selected or edited note stayed out until reviewed.)* An unreadable
   notes file shows an error and blocks inclusion; it is never treated as "no
   notes".
 - **Hand-off**: Copy Prompt copies the complete pack (request included). Share
@@ -499,8 +520,9 @@ peak memory remains a release check (§9).
   splitting, estimator and performance tests.
 - iOS: `GamePlanBuildTests` (staging, filenames, cancellation) and the
   `MatchDetailsUITests.testPrepareGamePlanFromOpponentProfile` flow on the
-  iPhone simulator (entry point, Last 5 default, names off, estimate follows the
-  selection, preview text).
+  iPhone simulator (entry point, ready on arrival with Last 5, names on and the
+  upcoming match pre-filled, estimate follows the selection and contents,
+  preview text).
 
 ### Still open
 

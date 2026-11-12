@@ -255,6 +255,88 @@ final class GamePlanScopeTests: XCTestCase {
         XCTAssertEqual(upcoming.sanitizedPreparationText?.count, GamePlanUpcomingMatch.maxPreparationLength)
     }
 
+    func test_latestMatch_isNewestSinglesAgainstOpponent_evenWhenUnfinishedIsNotEvidence() {
+        let older = singles(1, competition: .league)
+        let unfinished = singles(5, competition: .friendly, inProgress: true)
+        let otherOpponent = singles(9, opponents: [F.opponent("Sam", id: F.otherOpponentID)], competition: .tournament)
+        var doubles = singles(10, competition: .practice)
+        doubles.matchType = .doubles
+        let c = candidates([older, unfinished, otherOpponent, doubles])
+        XCTAssertEqual(c.eligible.map(\.id), [older.id], "Unfinished stays out of the evidence")
+        XCTAssertEqual(c.latestMatch?.id, unfinished.id, "…but is still the previous match")
+        XCTAssertEqual(candidates([older, unfinished], includeInProgress: true).latestMatch?.id, unfinished.id)
+        XCTAssertNil(candidates([otherOpponent, doubles]).latestMatch, "Other opponents and doubles never pre-fill")
+        XCTAssertNil(candidates([older], forgotten: ForgottenPlayerLedger(playerIDs: [F.opponentID])).latestMatch,
+                     "A forgotten player pre-fills nothing")
+    }
+
+    func test_prefill_copiesCompetitionAndFormatOnly() {
+        var league = singles(1, competition: .league)
+        league.matchFormat = .bestOf3FullFinalSet
+        let upcoming = GamePlanUpcomingMatch(prefilledFrom: league)
+        XCTAssertEqual(upcoming.competition, .league)
+        XCTAssertEqual(upcoming.format, .bestOf3FullFinalSet)
+        XCTAssertNil(upcoming.date)
+        XCTAssertNil(upcoming.sanitizedPreparationText)
+        XCTAssertNil(upcoming.finishingMatchID, "A completed previous match means a new match next")
+    }
+
+    func test_prefill_fromUnfinishedMatch_finishesIt() {
+        let unfinished = singles(3, competition: .league, inProgress: true)
+        let upcoming = GamePlanUpcomingMatch(prefilledFrom: unfinished)
+        XCTAssertEqual(upcoming.finishingMatchID, unfinished.id)
+        XCTAssertEqual(upcoming.competition, .league)
+    }
+
+    func test_unfinishedMatches_newestFirst_whetherOrNotOptedIn() {
+        let old = singles(1, inProgress: true), done = singles(2), recent = singles(4, inProgress: true)
+        XCTAssertEqual(candidates([old, done, recent]).unfinishedMatches.map(\.id), [recent.id, old.id])
+        XCTAssertEqual(candidates([old, done, recent], includeInProgress: true).unfinishedMatches.map(\.id),
+                       [recent.id, old.id])
+    }
+
+    func test_alwaysInclude_makesOnlyTheFinishingMatchEligible() {
+        let finishing = singles(5, inProgress: true), other = singles(4, inProgress: true), done = singles(1)
+        let c = GamePlanEligibility.candidates(for: F.opponentID, in: [finishing, other, done],
+                                               alwaysInclude: finishing.id)
+        XCTAssertEqual(c.eligible.map(\.id), [finishing.id, done.id])
+        XCTAssertEqual(c.excludedInProgress.map(\.id), [other.id], "Other unfinished matches still need the opt-in")
+        let forgotten = GamePlanEligibility.candidates(
+            for: F.opponentID, in: [finishing], forgotten: ForgottenPlayerLedger(playerIDs: [F.opponentID]),
+            alwaysInclude: finishing.id)
+        XCTAssertTrue(forgotten.eligible.isEmpty, "A forgotten player stays without evidence")
+    }
+
+    func test_resolvePinning_keepsTheFinishingMatchSelected() {
+        let finishing = singles(0, competition: .friendly, inProgress: true)
+        let newer = (1...5).map { singles(Double($0), competition: .league) }
+        let c = candidates([finishing] + newer, includeInProgress: true)
+        let lastFive = GamePlanSelection()
+        XCTAssertFalse(lastFive.resolve(c).contains { $0.id == finishing.id }, "Older than the latest five")
+        let pinned = lastFive.resolve(c, pinning: finishing.id)
+        XCTAssertEqual(pinned.count, 6)
+        XCTAssertEqual(pinned.last?.id, finishing.id, "Still newest first")
+        let leagueOnly = GamePlanSelection(mode: .all, filter: GamePlanFilter(competitions: [.league]))
+        XCTAssertTrue(leagueOnly.resolve(c, pinning: finishing.id).contains { $0.id == finishing.id },
+                      "Filters can't drop it")
+        XCTAssertEqual(GamePlanSelection(mode: .custom([])).resolve(c, pinning: finishing.id).map(\.id), [finishing.id])
+        XCTAssertEqual(lastFive.resolve(c, pinning: UUID()).map(\.id), lastFive.resolve(c).map(\.id),
+                       "Only an eligible match can be pinned")
+        XCTAssertEqual(lastFive.resolve(c, pinning: nil).map(\.id), lastFive.resolve(c).map(\.id))
+    }
+
+    func test_prefill_leavesUntaggedUnknownAndUnofferedValuesUnset() {
+        XCTAssertNil(GamePlanUpcomingMatch(prefilledFrom: singles(1)).competition, "Untagged is not guessed")
+        XCTAssertNil(GamePlanUpcomingMatch(prefilledFrom: singles(1, raw: "ladder")).competition,
+                     "An unknown future type is neither Friendly nor League")
+        XCTAssertEqual(GamePlanUpcomingMatch(prefilledFrom: singles(1)).format, .standard)
+        var quick = singles(1, competition: .friendly)
+        quick.matchFormat = .quick4Games
+        XCTAssertFalse(GamePlanText.selectableFormats.contains(.quick4Games))
+        XCTAssertNil(GamePlanUpcomingMatch(prefilledFrom: quick).format, "Only offered formats are pre-filled")
+        XCTAssertEqual(GamePlanUpcomingMatch(prefilledFrom: quick).competition, .friendly)
+    }
+
     func test_manifestDescription_statesModeAndFilters() {
         let utc = F.utc
         XCTAssertEqual(GamePlanSelection().manifestDescription(timeZone: utc), "Last 5 by start date")

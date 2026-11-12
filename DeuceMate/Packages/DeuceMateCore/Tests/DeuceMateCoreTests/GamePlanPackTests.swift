@@ -290,6 +290,77 @@ final class GamePlanPackTests: XCTestCase {
         XCTAssertEqual(body.components(separatedBy: "## 7. Coaching Request").count, 2, "one request for the whole pack")
     }
 
+    // MARK: Finishing an unfinished match
+
+    func test_finishing_statesWhereItStopped_andAsksHowToFinishIt() throws {
+        var checkpoint = F.simulatedMatch(seed: 77, startDay: 100, competition: .league, stopAfterPoints: 40)
+        checkpoint.isOnSecondServe = true
+        var upcoming = GamePlanUpcomingMatch(finishingMatchID: checkpoint.id)
+        upcoming.competition = .friendly  // a stale statement: the match's own type wins
+        let evidence = try F.evidence(history(2) + [checkpoint], upcoming: upcoming)
+
+        let finishing = try XCTUnwrap(evidence.finishing, "Pinned and projected without the unfinished opt-in")
+        XCTAssertEqual(finishing.reference, "M003")
+        XCTAssertEqual(evidence.upcomingCompetition, .league)
+        XCTAssertEqual(evidence.upcomingFormat, .standard)
+        XCTAssertEqual(finishing.nextServer, checkpoint.currentServer)
+        XCTAssertTrue(finishing.onSecondServe)
+        let recent = checkpoint.stats.suffix(GamePlanFinishing.recentWindow)
+        XCTAssertEqual(finishing.recentPointsTotal, 10)
+        XCTAssertEqual(finishing.recentPointsWon, recent.filter { $0.winner == .me }.count)
+        XCTAssertEqual(evidence.headToHead.played, 2, "Still never a result")
+
+        let body = try text(evidence)
+        XCTAssertTrue(body.contains("finishing the unfinished match M003 (started"))
+        XCTAssertTrue(body.contains("competition League; format Best of 3; resume date not set"))
+        XCTAssertTrue(body.contains("- Where it stopped: sets "))
+        XCTAssertTrue(body.contains("serves next, on a second serve"))
+        XCTAssertTrue(body.contains("Me won \(finishing.recentPointsWon) of the last 10 saved points"))
+        XCTAssertTrue(body.contains("Coach Me to finish M003 against Opp from its saved score"))
+        XCTAssertTrue(body.contains("Use the other selected matches (M001, M002) as background on Opp"))
+        for heading in ["Where the match stands", "What went well so far", "What hurt so far",
+                        "Three priorities to finish it", "Restart routine", "Closing it out",
+                        "Plan B", "Confidence and unknowns", "Evidence check"] {
+            XCTAssertTrue(body.contains(heading), heading)
+        }
+        XCTAssertFalse(body.contains("Warm-up checks"), "Not a new-match plan")
+        XCTAssertTrue(body.contains("Do not invent serve placement"))
+        XCTAssertEqual(body.components(separatedBy: "## 7. Coaching Request").count, 2)
+    }
+
+    func test_checkpointScoreLabel_showsSetsThenGame() {
+        var record = F.simulatedMatch(seed: 77, startDay: 0, stopAfterPoints: 0)
+        XCTAssertEqual(GamePlanEvidence.checkpointScoreLabel(record), "0–0", "A match stopped before its first point")
+        record.setScores = [SetScore(gamesMe: 6, gamesOpponent: 4), SetScore(gamesMe: 2, gamesOpponent: 3)]
+        record.currentPointsMe = 2
+        record.currentPointsOpponent = 1
+        XCTAssertEqual(GamePlanEvidence.checkpointScoreLabel(record), "6–4 2–3, 30–15")
+        record.currentPointsMe = 0
+        record.currentPointsOpponent = 0
+        XCTAssertEqual(GamePlanEvidence.checkpointScoreLabel(record), "6–4 2–3")
+    }
+
+    func test_finishing_aloneSaysThePlanRestsOnOneMatch() throws {
+        let checkpoint = F.simulatedMatch(seed: 78, startDay: 100, stopAfterPoints: 25)
+        let evidence = try F.evidence([checkpoint], upcoming: GamePlanUpcomingMatch(finishingMatchID: checkpoint.id))
+        XCTAssertEqual(evidence.finishing?.reference, "M001")
+        XCTAssertTrue(try text(evidence).contains("the plan rests on this one match so far"))
+    }
+
+    func test_finishing_aCompletedOrMissingMatch_fallsBackToANewMatch() throws {
+        let records = history(2)
+        for id in [records[1].id, UUID()] {
+            var upcoming = GamePlanUpcomingMatch(competition: .league, finishingMatchID: id)
+            upcoming.format = .standard
+            let evidence = try F.evidence(records, upcoming: upcoming)
+            XCTAssertNil(evidence.finishing)
+            XCTAssertEqual(evidence.upcomingCompetition, .league)
+            let body = try text(evidence)
+            XCTAssertTrue(body.contains("Warm-up checks"))
+            XCTAssertFalse(body.contains("finishing the unfinished match"))
+        }
+    }
+
     func test_formatDifference_isCalledOut() throws {
         var upcoming = GamePlanUpcomingMatch()
         upcoming.format = .superTiebreak
