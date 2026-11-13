@@ -13,6 +13,7 @@ nonisolated struct AICoachSourceIdentity: Equatable {
     let record: MatchRecord
     let maxHR: Int
     let playerNTRP: String
+    let recorderName: String
     let note: String?
     let headToHead: HeadToHeadRecord?
 }
@@ -32,8 +33,9 @@ struct AICoachSheet: View {
     let hasOpponentPrompt: Bool
     let filenameMe: String
     let filenameOpponent: String
-    /// Whether anyone is tagged on this match (names toggle is shown only then).
-    let hasTaggedPeople: Bool
+    /// Whether the prompt could name anyone — a tagged player or the recorder's
+    /// own name (the names toggle is shown only then).
+    let hasNamesToInclude: Bool
     /// The stored private note, if any (the notes toggle is shown only then).
     let noteText: String?
     /// Refresh identity: the prompt is rebuilt when this changes (see type doc).
@@ -45,9 +47,11 @@ struct AICoachSheet: View {
     @State private var installed: [AICoachApp] = []
     @State private var toast: String?
     @State private var toastWorkItem: DispatchWorkItem?
-    /// Both default OFF every time the sheet opens: names and notes are
-    /// per-hand-off opt-ins (MATCH_TAGS_PLAN.md §7.3), never remembered.
-    @State private var includeNames = false
+    /// Reset every time the sheet opens, never remembered. Names default ON,
+    /// matching the share menu (the player hands this prompt to their own AI
+    /// app); the private note stays a per-hand-off opt-in behind its review
+    /// step (MATCH_TAGS_PLAN.md §7.3).
+    @State private var includeNames = true
     @State private var includeNotes = false
     @State private var showNotesReview = false
     @State private var activePrompt = ""
@@ -100,7 +104,7 @@ struct AICoachSheet: View {
                     }
                 }
 
-                if hasTaggedPeople || noteText != nil {
+                if hasNamesToInclude || noteText != nil {
                     promptContentsSection
                 }
 
@@ -209,7 +213,7 @@ struct AICoachSheet: View {
     @ViewBuilder
     private var promptContentsSection: some View {
         Section {
-            if hasTaggedPeople {
+            if hasNamesToInclude {
                 Toggle("Include player names", isOn: $includeNames)
                     .accessibilityIdentifier("ai-include-names")
             }
@@ -233,7 +237,7 @@ struct AICoachSheet: View {
             Text("Prompt Contents")
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
-                if hasTaggedPeople {
+                if hasNamesToInclude {
                     Text(MatchExportDisclosure.namesCaption(isOn: includeNames, forAI: true))
                 }
                 if noteText != nil {

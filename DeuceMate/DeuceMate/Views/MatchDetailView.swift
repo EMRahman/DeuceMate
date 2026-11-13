@@ -56,9 +56,12 @@ struct MatchDetailView: View {
     /// Share-menu choices for the TEXT and HTML reports (MATCH_TAGS_PLAN.md
     /// 7.3): names ON by default (OQ-2), the private note OFF by default and
     /// only enabled through its review sheet. The AI Coach sheet keeps its own
-    /// toggles (both off). Both feed `ExportInputs`, so changing either
-    /// rebuilds the snapshot and clears the old files first.
+    /// toggles (names on, note off). Both feed `ExportInputs`, so changing
+    /// either rebuilds the snapshot and clears the old files first.
     @State private var shareIncludeNames = true
+    /// The synced "Your name" setting (`MatchSyncKey.playerName`). With names
+    /// included, exports name the recorder instead of only saying "Me".
+    @AppStorage("playerName") private var recorderName: String = ""
     @State private var shareIncludeNotes = false
     @State private var showShareNotesReview = false
     @ObservedObject private var notesStore: MatchNotesStore = .shared
@@ -75,6 +78,8 @@ struct MatchDetailView: View {
         let maxHR: Int
         let ntrp: String
         let includeNames: Bool
+        /// The raw "Your name" setting, so a rename rebuilds the files.
+        let recorderName: String
         let includeNotes: Bool
         /// The stored note text (so editing a note rebuilds an included copy).
         let noteText: String?
@@ -94,15 +99,22 @@ struct MatchDetailView: View {
         return !tags.opponents.isEmpty || tags.partner != nil
     }
 
+    /// Whether an export could name anyone: a tagged player or the recorder's
+    /// own name. The "Include player names" toggles are shown only then.
+    private var hasNamesToShare: Bool {
+        hasTaggedPeople || MatchExportDetails.sanitizedRecorderName(recorderName) != nil
+    }
+
     /// The match context the TEXT/HTML reports carry right now.
     private var shareDetails: MatchExportDetails {
-        MatchExportDetails(record: record, note: noteText, headToHead: headToHead,
+        MatchExportDetails(record: record, recorderName: recorderName, note: noteText, headToHead: headToHead,
                            includeNames: shareIncludeNames, includeNotes: shareIncludeNotes)
     }
 
     private var currentExportInputs: ExportInputs {
         ExportInputs(record: record, maxHR: resolvedMaxHR, ntrp: playerNTRP,
                      includeNames: shareIncludeNames,
+                     recorderName: recorderName,
                      includeNotes: shareIncludeNotes && noteText != nil,
                      noteText: noteText, headToHead: headToHead)
     }
@@ -841,9 +853,9 @@ struct MatchDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if !exportSummary.isEmpty {
                     Menu {
-                        if hasTaggedPeople || noteText != nil {
+                        if hasNamesToShare || noteText != nil {
                             Section {
-                                if hasTaggedPeople {
+                                if hasNamesToShare {
                                     Toggle("Include player names", isOn: $shareIncludeNames)
                                 }
                                 if noteText != nil {
@@ -964,29 +976,31 @@ struct MatchDetailView: View {
         }
     }
 
-    /// AI Coach hand-off. The sheet owns its own names/notes toggles (both off
-    /// by default) and rebuilds the prompt from this pure closure on change.
+    /// AI Coach hand-off. The sheet owns its own names/notes toggles (names on,
+    /// note off by default) and rebuilds the prompt from this pure closure on
+    /// change.
     private var aiCoachSheet: some View {
         let record = record
         let maxHR = resolvedMaxHR
         let ntrp = playerNTRP
         let note = noteText
         let h2h = headToHead
+        let name = recorderName
         return AICoachSheet(
             buildPrompt: { focal, names, notes in
                 MatchExporter.aiPromptExport(
                     for: record, maxHR: maxHR, focal: focal, playerNTRP: ntrp,
-                    details: MatchExportDetails(record: record, note: note, headToHead: h2h,
+                    details: MatchExportDetails(record: record, recorderName: name, note: note, headToHead: h2h,
                                                 includeNames: names, includeNotes: notes)
                 )
             },
             hasOpponentPrompt: !record.stats.isEmpty,
             filenameMe: exportFilename(for: record, mode: .ai),
             filenameOpponent: exportFilename(for: record, mode: .aiOpp),
-            hasTaggedPeople: hasTaggedPeople,
+            hasNamesToInclude: hasNamesToShare,
             noteText: note,
             sourceIdentity: AICoachSourceIdentity(
-                record: record, maxHR: maxHR, playerNTRP: ntrp, note: note, headToHead: h2h)
+                record: record, maxHR: maxHR, playerNTRP: ntrp, recorderName: name, note: note, headToHead: h2h)
         )
     }
 

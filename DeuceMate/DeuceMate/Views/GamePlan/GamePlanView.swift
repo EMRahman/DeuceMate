@@ -42,6 +42,9 @@ struct GamePlanView: View {
 
     // Inclusion choices — on by default; the player prepares this for their own AI app.
     @State private var includeNames = true
+    /// The synced "Your name" setting (`MatchSyncKey.playerName`), named in
+    /// the pack as the recorder when names are included.
+    @AppStorage("playerName") private var recorderName: String = ""
     @State private var includeNotes = true
     @State private var includePlayingNotes = true
     /// Notes the player chose to leave out, by match.
@@ -138,6 +141,7 @@ struct GamePlanView: View {
             includeNotes: includeNotes && !notesUnreadable,
             omittedNoteMatchIDs: omittedNoteIDs,
             includeNames: includeNames,
+            recorderName: recorderName,
             includePlayingNotes: includePlayingNotes,
             detailMode: detailMode,
             delivery: delivery,

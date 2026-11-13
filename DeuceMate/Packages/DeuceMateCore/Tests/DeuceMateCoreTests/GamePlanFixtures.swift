@@ -133,6 +133,7 @@ enum GamePlanFixtures {
         includeNotes: Bool = false,
         omitted: Set<UUID> = [],
         includeNames: Bool = false,
+        recorderName: String? = nil,
         includePlayingNotes: Bool = false,
         detail: GamePlanDetailMode = .full,
         includeInProgress: Bool = false
@@ -153,6 +154,7 @@ enum GamePlanFixtures {
             includeNotes: includeNotes,
             omittedNoteMatchIDs: omitted,
             includeNames: includeNames,
+            recorderName: recorderName,
             includePlayingNotes: includePlayingNotes,
             detailMode: detail,
             builtAt: TagFixtures.base.addingTimeInterval(400 * day)

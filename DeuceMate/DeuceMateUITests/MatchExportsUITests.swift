@@ -36,8 +36,9 @@ final class MatchExportsUITests: XCTestCase {
 
     // MARK: - AI Coach
 
-    /// Names and the private note are separate, default-OFF opt-ins on the AI
-    /// Coach sheet; the visible prompt changes exactly with them.
+    /// Names (default ON, like the share menu) and the private note (a
+    /// default-OFF opt-in) are separate toggles on the AI Coach sheet; the
+    /// visible prompt changes exactly with them.
     @MainActor
     func testAICoachNamesAndNoteAreOptIns() throws {
         launch()
@@ -49,22 +50,30 @@ final class MatchExportsUITests: XCTestCase {
         aiButton.tap()
         XCTAssertTrue(app.navigationBars["AI Coach"].waitForExistence(timeout: 5))
 
-        // Defaults: both off.
+        // Defaults: names on, note off.
         let names = app.switches["ai-include-names"]
         let notes = app.switches["ai-include-notes"]
         XCTAssertTrue(names.waitForExistence(timeout: 5))
         XCTAssertTrue(notes.exists)
-        XCTAssertEqual(names.value as? String, "0", "Names default OFF for the AI hand-off")
+        XCTAssertEqual(names.value as? String, "1", "Names default ON for the AI hand-off")
         XCTAssertEqual(notes.value as? String, "0", "The private note defaults OFF")
         capture("20-ai-coach-defaults")
 
         var prompt = openPromptPreview()
+        XCTAssertTrue(prompt.contains("\"\(alex)\""), "Names appear (quoted) by default")
+        XCTAssertFalse(prompt.contains("knee sore"), "No note by default")
+        goBack(from: "Prompt")
+
+        // Names OFF.
+        flipSwitch("ai-include-names")
+        XCTAssertEqual(app.switches["ai-include-names"].value as? String, "0")
+        prompt = openPromptPreview()
         XCTAssertTrue(prompt.contains("## Match Context"), "Match Context is always present")
         XCTAssertTrue(prompt.contains("Competition: League"))
         XCTAssertTrue(prompt.contains("Match type: Singles"))
         XCTAssertTrue(prompt.contains("Head-to-head vs this opponent"), "Head-to-head is always present")
         XCTAssertTrue(prompt.contains("Opponent (name withheld)"))
-        XCTAssertFalse(prompt.contains(alex), "No typed name by default")
+        XCTAssertFalse(prompt.contains(alex), "No typed name with names off")
         XCTAssertFalse(prompt.contains("knee sore"), "No note by default")
         scrollPromptToContext()
         capture("21-ai-prompt-names-off")
@@ -91,10 +100,10 @@ final class MatchExportsUITests: XCTestCase {
         capture("23-ai-prompt-note-on")
         goBack(from: "Prompt")
 
-        // Names ON.
+        // Names back ON.
         flipSwitch("ai-include-names")
         prompt = openPromptPreview()
-        XCTAssertTrue(prompt.contains("\"\(alex)\""), "Names appear (quoted) once opted in")
+        XCTAssertTrue(prompt.contains("\"\(alex)\""), "Names appear (quoted) when on")
         XCTAssertTrue(prompt.contains("> \(note)"))
         scrollPromptToContext()
         capture("24-ai-prompt-names-on")

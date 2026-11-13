@@ -305,6 +305,9 @@ public struct GamePlanEvidence: Equatable, Sendable {
     public let includesNames: Bool
     /// Only when names are included.
     public let opponentName: String?
+    /// The recorder's own name (the "Your name" setting). Only when names are
+    /// included and the setting is not blank.
+    public let recorderName: String?
     /// Current roster profile (user-entered, may postdate older matches).
     public let opponentProfile: String?
     /// The player's free-text scouting notes about the opponent's game
@@ -345,6 +348,7 @@ public struct GamePlanEvidence: Equatable, Sendable {
         includeNotes: Bool,
         omittedNoteMatchIDs: Set<UUID>,
         includeNames: Bool,
+        recorderName: String? = nil,
         includePlayingNotes: Bool = false,
         detailMode: GamePlanDetailMode,
         builtAt: Date,
@@ -398,6 +402,7 @@ public struct GamePlanEvidence: Equatable, Sendable {
         self.preparationText = upcoming.sanitizedPreparationText
         self.includesNames = includeNames
         self.opponentName = includeNames ? opponent?.name : nil
+        self.recorderName = includeNames ? MatchExportDetails.sanitizedRecorderName(recorderName) : nil
         self.opponentProfile = opponent?.taggedPlayer.profileSummary
         self.playingNotesAvailable = opponent?.playingNotes != nil
         self.opponentPlayingNotes = includePlayingNotes ? opponent?.playingNotes : nil

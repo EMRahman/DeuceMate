@@ -392,11 +392,18 @@
   // Private-note consent belongs to the one match whose exact text was reviewed.
   function noteConsent(rec) { return exportOptions.noteMatchId === rec.id; }
   function quoted(text) { return String(text).split("\n").map(function (l) { return "> " + l; }).join("\n"); }
+  // The recorder's own name: the synced "Your name" setting, only while names are included.
+  function recorderName() {
+    var shell = window.DeuceMateShell, raw = shell && shell.settings ? shell.settings.name : "";
+    var n = exportOptions.names ? clean(raw).slice(0, 40).trim() : "";
+    return n || null;
+  }
   function contextText(rec, focal) {
-    var t = rec.tags, note = focal !== "opponent" && noteConsent(rec) ? getNote(rec.id).trim() : "";
-    if (!t && !note) return null;
+    var t = rec.tags, note = focal !== "opponent" && noteConsent(rec) ? getNote(rec.id).trim() : "", me = recorderName();
+    if (!t && !note && !me) return null;
     var lines = ["## Match Context"], comp = t && label(COMPETITIONS, t.competition);
     if (comp) lines.push("Competition: " + comp);
+    if (me) lines.push(focal === "opponent" ? 'Your opponent (the recorder): "' + me + '"' : 'You (the recorder, "Me" in the data below): "' + me + '"');
     if (t && focal !== "opponent") {
       (t.opponents || []).forEach(function (p, i) {
         var prof = profileText(p), nm = exportOptions.names ? ' "' + p.name + '"' : "";
@@ -409,9 +416,10 @@
   }
   // Reader-framed side names for the interactive page (MatchExportDetails.sideNames).
   function sideNames(rec, reader) {
-    var t = rec.tags; if (!exportOptions.names || !t || (!(t.opponents || []).length && !t.partner)) return { reader: [], other: [] };
+    var t = rec.tags || {}, me = recorderName();
+    if (!exportOptions.names || (!(t.opponents || []).length && !t.partner && !me)) return { reader: [], other: [] };
     var opp = (t.opponents || []).map(function (p) { return p.name; }), partner = t.partner ? [t.partner.name] : [];
-    return reader === "me" ? { reader: ["Me"].concat(partner), other: opp.length ? opp : ["Opponent"] } : { reader: opp.length ? opp : ["Me"], other: ["Opponent"].concat(partner) };
+    return reader === "me" ? { reader: [me || "Me"].concat(partner), other: opp.length ? opp : ["Opponent"] } : { reader: opp.length ? opp : ["Me"], other: [me || "Opponent"].concat(partner) };
   }
   function webMeta(rec, reader) {
     var names = sideNames(rec, reader), t = rec.tags, note = reader === "me" && noteConsent(rec) ? getNote(rec.id).trim() : "";
@@ -427,7 +435,8 @@
     phone.showSheet("Include private note?", body, { detent: "large" });
   }
   function shareSwitches(phone, rec, rebuild) {
-    var hasNote = !!getNote(rec.id).trim(), hasTags = !!displayLine(rec.tags);
+    var shell = window.DeuceMateShell, hasNote = !!getNote(rec.id).trim();
+    var hasTags = !!displayLine(rec.tags) || !!clean(shell && shell.settings ? shell.settings.name : "");
     if (!hasNote && !hasTags) return null;
     var box = h("div", "pr-share-group");
     box.append(h("div", "pr-share-group-title", "Match details"));

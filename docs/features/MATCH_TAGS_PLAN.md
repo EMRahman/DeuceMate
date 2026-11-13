@@ -445,8 +445,8 @@ cached file containing names or notes after its toggle was turned off.
 
 | Export | Adds | Names |
 |---|---|---|
-| AI Coach prompt (`MatchExporter.aiPromptExport`) | `## Match Context`: competition, singles/doubles, head-to-head ("vs this opponent: 3–2 in 5 matches; last 3: W W L") | **Off by default.** "Include player names" toggle on `AICoachSheet`; off ⇒ "Opponent", "Partner". |
-| Text summary / full export | Overview lines: Competition, Opponent(s), Partner | On by default (OQ-2, decided). |
+| AI Coach prompt (`MatchExporter.aiPromptExport`) | `## Match Context`: competition, singles/doubles, the recorder's own name, head-to-head ("vs this opponent: 3–2 in 5 matches; last 3: W W L") | **On by default** (revised 2026-11-13, see OQ-2). "Include player names" toggle on `AICoachSheet`; off ⇒ "Me", "Opponent", "Partner". |
+| Text summary / full export | Overview lines: Competition, Player (the recorder's own name), Opponent(s), Partner | On by default (OQ-2, decided). |
 | Interactive HTML | `Meta.competitionTypeLabel`, `Meta.readerSideNames`, `Meta.otherSideNames` — **reader-framed in Swift** like every other field, so the JS only paints; schema 12 → 13; same lines in `MatchWebStaticFallback` | On by default (OQ-2, decided). |
 | Private notes | Optional section in text/HTML and AI only after a separate **Include private notes** opt-in, default off, with exact preview and disclosure; manual archives follow §4.1. | Names inside note prose are not removed by the names toggle. Explain this before sharing. |
 | Filenames (`deuce_mate_<date>[_opponent].html`) | unchanged | **Never.** |
@@ -471,7 +471,7 @@ developer, but every place a name can travel needs a deliberate answer.
 | # | Concern | Risk | Decision |
 |---|---|---|---|
 | S1 | **Names of other people stored on device and in the user's iCloud backup** | Low. Personal/household use; the user's own iCloud container. | Allowed. Disclose in the privacy policy (S9). Tags are *not* health data, so they stay in the iCloud copy. |
-| S2 | **Names sent to third-party AI services** via the AI Coach hand-off | Medium. Another person's name plus their performance data goes to a service under its own terms; adds nothing to coaching. | **Withheld by default**; per-export opt-in toggle; the existing disclosure line names "player names" when included. |
+| S2 | **Names sent to third-party AI services** via the AI Coach hand-off | Medium. Another person's name plus their performance data goes to a service under its own terms; adds nothing to coaching. | Originally withheld by default. **Revised 2026-11-13 (owner decision): included by default**, like reports and the Game Plan pack — the player hands the prompt to their own AI app — behind the same visible per-hand-off "Include player names" toggle, reset to ON each time the sheet opens; the caption states that names are sent. |
 | S3 | **Names in shared reports** (text, HTML, manual archive) | Low–medium. Shared on purpose, often *with* that opponent — but a report can be forwarded. | Included by default for reports (OQ-2, decided), behind a visible "Include player names" toggle in the share menu. Manual archives include names and structured health data; private notes require a separate opt-in (§4.1). The disclosure describes the selected contents. |
 | S4 | **Names in filenames** | Medium, easy to miss. Filenames show in Files, AirDrop previews, iCloud Drive listings, email attachments — outside the report's own context. | Never. Filenames stay date-based. |
 | S5 | **HTML / script injection** through a typed name in the exported page | Medium if unescaped — CSP allows inline script. | Route through existing `scriptSafe` / HTML escaping; hostile-name tests (§7.3). |
@@ -830,7 +830,11 @@ comparison and the match-detail head-to-head summary are already v1 scope.
   type is `CompetitionType` (property `MatchTags.competitionType`, raw storage
   `competitionTypeRaw`), and the HTML field is `Meta.competitionTypeLabel`.
 - **OQ-2 — names in shared reports: on by default**, with an "Include player
-  names" toggle in the share menu. The AI prompt stays off by default regardless.
+  names" toggle in the share menu. The AI prompt originally stayed off by
+  default; **revised 2026-11-13**: the AI Coach prompt is on by default too, with
+  its own toggle. "Names" now includes the recorder's own `playerName` setting,
+  which names the "Me" side (Settings → Your name, iOS AutoFill offers the
+  contact-card name).
 - **OQ-3 — iPhone-only editing in v1.** The watch shows tags read-only; watch
   quick-tag stays v2 (§9).
 - **OQ-4 — "Practice" is in v1** as the fourth `CompetitionType` case. It goes

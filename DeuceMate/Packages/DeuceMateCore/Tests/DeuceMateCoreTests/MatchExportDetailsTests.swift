@@ -306,6 +306,107 @@ final class MatchExportDetailsTests: XCTestCase {
         XCTAssertTrue(html.contains("Tournament \u{00B7} Alex &amp; Jo vs Opponent &amp; Sam"))
     }
 
+    // MARK: - The recorder's own name
+
+    private let me = "Ehsan"
+
+    private func named(_ record: MatchRecord, names: Bool = true, recorder: String? = "Ehsan") -> MatchExportDetails {
+        MatchExportDetails(record: record, recorderName: recorder, includeNames: names, includeNotes: false)
+    }
+
+    func test_recorderName_namesOff_isNeverHeldOrShown() throws {
+        let record = singles()
+        let d = named(record, names: false)
+        XCTAssertNil(d.recorderName)
+        XCTAssertFalse(d.overviewRows.contains { $0.value.contains(me) })
+        XCTAssertEqual(d.sideNames(reader: .me).reader, [])
+        for focal in [Player.me, .opponent] {
+            let ai = try XCTUnwrap(d.aiContextSection(focal: focal))
+            XCTAssertFalse(ai.contains(me))
+            let html = MatchHTMLExporter.html(for: record, perspective: focal, details: d)
+            XCTAssertFalse(html.contains(me), "recorder name leaked in \(focal) page")
+        }
+        XCTAssertEqual(d, MatchExportDetails(record: record, includeNames: false, includeNotes: false),
+                       "names off: the setting changes nothing")
+    }
+
+    func test_recorderName_namesOn_overviewRowsBothPerspectives() {
+        let d = named(doubles())
+        XCTAssertEqual(d.overviewRows.map(\.label), ["Competition:", "Player:", "Opponents:", "Partner:"])
+        XCTAssertEqual(d.overviewRows[1].value, me)
+        let opp = d.overviewRows(for: .opponent)
+        XCTAssertEqual(opp.map(\.label), ["Competition:", "Your side:", "Recorded by:", "Recorder's partner:"])
+        XCTAssertEqual(opp[2].value, me)
+    }
+
+    func test_recorderName_replacesThePlaceholderSeat() {
+        let s = named(singles())
+        XCTAssertEqual(s.sideNames(reader: .me).reader, [me])
+        XCTAssertEqual(s.sideNames(reader: .me).other, ["Alex"])
+        XCTAssertEqual(s.sideNames(reader: .opponent).reader, ["Alex"])
+        XCTAssertEqual(s.sideNames(reader: .opponent).other, [me])
+        let d = named(doubles())
+        XCTAssertEqual(d.sideNames(reader: .me).reader, [me, "Sam"])
+        XCTAssertEqual(d.sideNames(reader: .opponent).other, [me, "Sam"])
+    }
+
+    func test_recorderName_aloneStillNamesTheRecorder_untaggedMatch() throws {
+        let record = F.record(type: .singles, tags: nil, stats: F.points(4, won: 2))
+        let d = named(record)
+        XCTAssertFalse(d.isEmpty)
+        XCTAssertEqual(d.sideNames(reader: .me).reader, [me])
+        XCTAssertEqual(d.sideNames(reader: .me).other, ["Opponent"])
+        XCTAssertEqual(d.sideNames(reader: .opponent).reader, ["Me"])
+        XCTAssertEqual(d.sideNames(reader: .opponent).other, [me])
+        XCTAssertEqual(d.overviewRows.map(\.label), ["Player:"])
+        let ai = try XCTUnwrap(d.aiContextSection(focal: .me))
+        XCTAssertTrue(ai.contains("- You (the recorder, \"Me\" in the data below): \"Ehsan\""))
+        let oppAI = try XCTUnwrap(d.aiContextSection(focal: .opponent))
+        XCTAssertTrue(oppAI.contains("- Your opponent (the recorder): \"Ehsan\""))
+        // No tags, no name: nothing, as before.
+        XCTAssertNil(named(record, recorder: nil).aiContextSection(focal: .me))
+    }
+
+    func test_recorderName_blankOrMissing_isExactlyTodaysOutput() {
+        let record = doubles()
+        let baseline = MatchExportDetails(record: record, includeNames: true, includeNotes: false)
+        for blank in [nil, "", "   ", "\n\t"] {
+            let d = named(record, recorder: blank)
+            XCTAssertNil(d.recorderName)
+            XCTAssertEqual(d, baseline)
+            XCTAssertEqual(d.sideNames(reader: .me).reader, ["Me", "Sam"])
+        }
+    }
+
+    func test_recorderName_isSanitizedLikeATaggedName() {
+        XCTAssertEqual(MatchExportDetails.sanitizedRecorderName("  Ehsan\n  Rahman\u{202E} "), "Ehsan Rahman")
+        let long = String(repeating: "x", count: 100)
+        XCTAssertEqual(MatchExportDetails.sanitizedRecorderName(long)?.count, MatchTags.maxNameLength)
+        XCTAssertNil(MatchExportDetails.sanitizedRecorderName(" \u{0007} "))
+    }
+
+    func test_recorderName_inThePage_headerAndStaticFallback() {
+        let record = singles()
+        let d = named(record)
+        let mine = MatchWebViewModel.make(from: record, perspective: .me, details: d).meta
+        XCTAssertEqual(mine.readerSideNames, [me])
+        XCTAssertTrue(MatchHTMLExporter.html(for: record, perspective: .me, details: d)
+            .contains("League \u{00B7} Ehsan vs Alex"))
+        XCTAssertTrue(MatchHTMLExporter.html(for: record, perspective: .opponent, details: d)
+            .contains("League \u{00B7} Alex vs Ehsan"))
+    }
+
+    func test_recorderName_hostile_staysInert() {
+        let record = singles()
+        let d = named(record, recorder: hostileName)
+        let baseline = breakoutCount(MatchHTMLExporter.html(for: record))
+        for perspective in [Player.me, .opponent] {
+            let html = MatchHTMLExporter.html(for: record, perspective: perspective, details: d)
+            XCTAssertEqual(breakoutCount(html), baseline)
+            XCTAssertFalse(html.contains("</script><script>alert"))
+        }
+    }
+
     // MARK: - Hostile text
 
     private let hostileName = "</script><script>alert(1)</script>"
