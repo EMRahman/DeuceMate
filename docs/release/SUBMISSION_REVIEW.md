@@ -5,24 +5,40 @@ Current pre-flight review of DeuceMate against the
 focused on upload blockers, likely rejection reasons, and the manual work needed
 in App Store Connect.
 
-## TestFlight candidate — 1.3.3 (build 17), 9 November 2026
+## Release candidate — 1.4.0 (build 18), 13 November 2026
 
 The iPhone app and embedded Apple Watch app are configured as
-`MARKETING_VERSION = 1.3.3` and `CURRENT_PROJECT_VERSION = 17` in both Debug and
-Release. This replaces the repository's `1.3.2 (16)` testing candidate and includes
-workout saving/recovery fixes (#185, #187), updated Short Sets rules and FAST4
-(#186). This candidate has not yet been archived, uploaded or tested on physical
-devices. Test targets keep their non-shipping version/build values. Build 17 is
-the next number recorded in this repository; confirm it is still unused in
-App Store Connect before upload, as Xcode has raised build numbers during
-previous uploads.
+`MARKETING_VERSION = 1.4.0` and `CURRENT_PROJECT_VERSION = 18` in both Debug and
+Release. The baseline is the released `v1.3.1` tag. The `1.3.2 (16)` and
+`1.3.3 (17)` TestFlight-only candidates are superseded and never ship; App Store
+Connect only requires the version to be higher than the released 1.3.1.
 
-Install it as an upgrade over the currently installed build, confirm both apps
-report `1.3.3 (17)` (or the build number assigned at upload), and check that the
-existing archive is intact. Complete the manual gate below before preparing
-release notes or submitting to App Review. Also exercise Prepare Game Plan from
-an opponent's page (#182), including match selection, note inclusion and sharing,
-and check the updated Short Sets and FAST4 formats (#186).
+This is a minor release, not a patch, because it adds new user-facing features:
+Prepare Game Plan (#182) with playing-style notes (#189), the FAST4 format and the
+Short Sets format that replaces Quick 4 Games in match setup (#186), and play
+sessions with finish-date ordering (#175). It also includes the live scoreboard's
+unreachable-Watch state (#174), the App Store rating request plus Send Feedback /
+Rate DeuceMate rows (#179), and the workout saving/recovery fixes (#185, #187).
+
+This candidate has not yet been archived, uploaded or tested on physical devices.
+Test targets keep their non-shipping version/build values. Build 18 is the next
+number recorded in this repository; confirm it is still unused in App Store
+Connect before upload, as Xcode has raised build numbers during previous uploads.
+
+- [ ] Install it through TestFlight as an upgrade over the currently installed
+  build. Confirm both apps report `1.4.0 (18)` (or the build number assigned at
+  upload), and check that the existing archive is intact.
+- [ ] Complete the [manual testing gate](#next-release--manual-testing-gate) and
+  the [workout save checks](#workout-save-investigation--9-november-2026) below.
+- [ ] Exercise Prepare Game Plan from an opponent's page (#182), including match
+  selection, note inclusion (match notes and playing-style notes) and sharing.
+- [ ] Play a Short Sets and a FAST4 match on the Watch, including a tiebreak and a
+  deciding point at deuce, and check the "Receiver chooses side" banner (#186).
+  Open an existing Quick 4 Games match and check its score still reads correctly.
+- [ ] Finalise the draft
+  [What's New and App Review notes](APP_STORE_METADATA.md#version-140---game-plan-fast4-and-play-sessions)
+  against what passed. Remove any line whose feature is deferred.
+- [ ] Tag the uploaded commit `v1.4.0`.
 
 ## Workout save investigation — 9 November 2026
 
