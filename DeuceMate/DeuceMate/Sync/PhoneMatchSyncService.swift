@@ -392,7 +392,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
 
     /// Push the name spoken for the recorder in announcements (bidirectional).
     func pushAnnouncedName(_ name: String) {
-        transport.sendControl([MatchSyncKey.announcedName: name], queueOnFailure: true)
+        transport.sendControl(MatchSyncPayloadBuilder.announcedName(name), queueOnFailure: true)
     }
 
     /// Send a spectator score command (winMe / winOpp / undo) to the watch.

@@ -171,7 +171,7 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
 
     /// Push the name spoken for the recorder in announcements (bidirectional).
     func pushAnnouncedName(_ name: String) {
-        transport.sendControl([MatchSyncKey.announcedName: name], queueOnFailure: true)
+        transport.sendControl(MatchSyncPayloadBuilder.announcedName(name), queueOnFailure: true)
     }
 
     /// Push the current pending-point categorization state to the phone. Sent
