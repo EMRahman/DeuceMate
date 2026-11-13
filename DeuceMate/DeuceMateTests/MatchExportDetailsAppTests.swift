@@ -297,12 +297,14 @@ struct MatchExportDetailsAppTests {
         let r = record()
         var updated = r
         updated.setScores = [SetScore(gamesMe: 6, gamesOpponent: 4), SetScore(gamesMe: 2, gamesOpponent: 1)]
-        func identity(_ rec: MatchRecord, note: String? = nil) -> AICoachSourceIdentity {
-            AICoachSourceIdentity(record: rec, maxHR: 190, playerNTRP: "3.0", note: note, headToHead: nil)
+        func identity(_ rec: MatchRecord, note: String? = nil, name: String = "") -> AICoachSourceIdentity {
+            AICoachSourceIdentity(record: rec, maxHR: 190, playerNTRP: "3.0", recorderName: name,
+                                  note: note, headToHead: nil)
         }
         #expect(identity(r) == identity(r))
         #expect(identity(r) != identity(updated))
         #expect(identity(r) != identity(r, note: "new"))
+        #expect(identity(r) != identity(r, name: "Sam"), "renaming yourself rebuilds the open prompt")
         func prompt(_ rec: MatchRecord) -> String {
             MatchExporter.aiPromptExport(for: rec, details: MatchExportDetails(record: rec, includeNames: false, includeNotes: false))
         }

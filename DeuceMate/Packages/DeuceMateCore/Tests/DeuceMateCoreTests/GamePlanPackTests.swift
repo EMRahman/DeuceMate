@@ -69,6 +69,23 @@ final class GamePlanPackTests: XCTestCase {
         XCTAssertTrue(try text(F.evidence(records)).contains("name withheld"))
     }
 
+    func test_recorderName_namedOnlyWithNames() throws {
+        let records = history(2)
+        let withheld = try F.evidence(records, recorderName: "Sam Lee")
+        XCTAssertNil(withheld.recorderName)
+        XCTAssertFalse(try text(withheld).contains("Sam Lee"))
+        XCTAssertTrue(try text(withheld).contains("- Recorder: \"Me\"."))
+
+        let named = try F.evidence(records, includeNames: true, recorderName: "  Sam\nLee ")
+        XCTAssertEqual(named.recorderName, "Sam Lee", "sanitized like a tagged name")
+        XCTAssertTrue(try text(named).contains("- Recorder: \"Sam Lee\" (shown as \"Me\" below)."))
+
+        let blank = try F.evidence(records, includeNames: true, recorderName: "   ")
+        XCTAssertNil(blank.recorderName)
+        XCTAssertEqual(try text(blank), try text(F.evidence(records, includeNames: true)),
+                       "a blank name changes nothing")
+    }
+
     func test_notesOnlyWhenIncluded_selected_andNotOmitted() throws {
         let records = history(7)
         let candidates = GamePlanEligibility.candidates(for: F.opponentID, in: records)

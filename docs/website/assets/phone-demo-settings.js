@@ -10,6 +10,7 @@
     swipeVibration: "Taps your wrist when a swipe scores or undoes a point.",
     theme: "Sets the scoreboard color theme on both your iPhone and watch.",
     announce: "Speaks the score aloud through your iPhone speaker.",
+    name: "Names you in shared reports, AI prompts and spoken scores.",
     input: "Lets you swipe to score on the iPhone scoreboard.",
     birth: "Estimates your maximum heart rate from your age.",
     override: "Sets your maximum heart rate manually instead of by age.",
@@ -118,11 +119,12 @@
       if (selected) dots.appendChild(node("b", {}, "✓"));
       tile.append(dots, node("span", {}, choice[1])); skins.appendChild(tile);
     });
-    var shared = [skins];
+    var shared = [label("Your name", textInput(s.name, function (v) { setRow(phone, "name", v); }, "e.g. Federer"))];
+    shared.push(node("p", { class: "phone-muted" }, COPY.name));
+    shared.push(skins);
     shared.push(node("p", { class: "phone-muted" }, COPY.theme));
     shared.push(toggle("Announce scores aloud on iPhone", COPY.announce, s.announce, function (v) { setRow(phone, "announce", v); }));
     if (s.announce) {
-      shared.push(label("Your name", textInput(s.name, function (v) { setRow(phone, "name", v); }, "e.g. Federer")));
       shared.push(phone.button("Test name on iPhone speaker", function () {
         var phrase = "Hello" + ((s.name || "").trim() ? " " + s.name.trim() : "");
         if ("speechSynthesis" in window && "SpeechSynthesisUtterance" in window) window.speechSynthesis.speak(new SpeechSynthesisUtterance(phrase));

@@ -25,6 +25,9 @@ nonisolated struct GamePlanBuildInputs: Equatable, Sendable {
     let includeNotes: Bool
     let omittedNoteMatchIDs: Set<UUID>
     let includeNames: Bool
+    /// The raw "Your name" setting; the projection drops it unless
+    /// `includeNames`. A rename rebuilds the pack.
+    var recorderName: String? = nil
     let includePlayingNotes: Bool
     let detailMode: GamePlanDetailMode
     let delivery: GamePlanDelivery
@@ -62,6 +65,7 @@ nonisolated enum GamePlanBuild {
             includeNotes: inputs.includeNotes,
             omittedNoteMatchIDs: inputs.omittedNoteMatchIDs,
             includeNames: inputs.includeNames,
+            recorderName: inputs.recorderName,
             includePlayingNotes: inputs.includePlayingNotes,
             detailMode: inputs.detailMode,
             builtAt: builtAt,

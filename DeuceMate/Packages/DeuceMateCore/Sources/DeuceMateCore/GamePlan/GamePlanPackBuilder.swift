@@ -337,7 +337,11 @@ public enum GamePlanPackBuilder {
             } else {
                 lines.append("- Upcoming match (as stated by the player): competition \(competition); format \(format); date \(date); singles.")
             }
-            lines.append("- Recorder: \"Me\".")
+            if let name = evidence.recorderName {
+                lines.append("- Recorder: \"\(name)\" (shown as \"Me\" below).")
+            } else {
+                lines.append("- Recorder: \"Me\".")
+            }
             if let name = evidence.opponentName {
                 lines.append("- Opponent: \"\(name)\" (shown as \"Opp\" below).")
             } else {

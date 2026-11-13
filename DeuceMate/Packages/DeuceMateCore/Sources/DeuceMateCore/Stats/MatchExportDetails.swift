@@ -1,11 +1,13 @@
 // MatchExportDetails.swift — the match-detail context (competition, who was
-// played, head-to-head, an opted-in private note) that exports may carry.
+// played, the recorder's own name, head-to-head, an opted-in private note) that
+// exports may carry.
 //
 // This is the single, pure place that decides WHAT may leave the device:
 //
 // - Names are applied at construction. When `includeNames` is false the value
-//   never holds a typed name, so no downstream builder (text, AI prompt, HTML
-//   JSON, static fallback) can leak one by mistake.
+//   never holds a typed name — the recorder's own (the synced `playerName`
+//   setting) included — so no downstream builder (text, AI prompt, HTML JSON,
+//   static fallback) can leak one by mistake.
 // - The note is applied the same way: `note` is non-nil only when the caller
 //   opted in AND the note has text.
 // - A bare `MatchHTMLExporter` / `MatchExporter` call with no details emits
@@ -27,6 +29,10 @@ public struct MatchExportDetails: Equatable, Sendable {
     public let opponentNames: [String]
     /// The partner's name. Always `nil` when names are excluded.
     public let partnerName: String?
+    /// The recorder's own name (the "Your name" setting). Always `nil` when
+    /// names are excluded or the setting is blank. Reports still label the
+    /// recorder's side "Me" in tables; this names who "Me" is.
+    public let recorderName: String?
     /// How many opponents / whether a partner were TAGGED, regardless of
     /// whether their names are shared. Lets an AI prompt say "Opponent (name
     /// withheld)" without ever holding the name.
@@ -53,7 +59,7 @@ public struct MatchExportDetails: Equatable, Sendable {
     /// export builder uses when the caller supplies no details.
     public static let none = MatchExportDetails(
         matchType: .singles, competition: nil, opponentNames: [], partnerName: nil,
-        taggedOpponentCount: 0, hasTaggedPartner: false, headToHead: nil,
+        recorderName: nil, taggedOpponentCount: 0, hasTaggedPartner: false, headToHead: nil,
         headToHeadOpponentSide: nil, note: nil, includesNames: false, includesNotes: false
     )
 
@@ -62,6 +68,7 @@ public struct MatchExportDetails: Equatable, Sendable {
         competition: CompetitionType?,
         opponentNames: [String],
         partnerName: String?,
+        recorderName: String? = nil,
         taggedOpponentCount: Int,
         hasTaggedPartner: Bool,
         opponentProfiles: [String?] = [],
@@ -76,6 +83,7 @@ public struct MatchExportDetails: Equatable, Sendable {
         self.competition = competition
         self.opponentNames = opponentNames
         self.partnerName = partnerName
+        self.recorderName = recorderName
         self.taggedOpponentCount = taggedOpponentCount
         self.hasTaggedPartner = hasTaggedPartner
         self.opponentProfiles = opponentProfiles
@@ -90,6 +98,8 @@ public struct MatchExportDetails: Equatable, Sendable {
     /// Builds the export context for `record`.
     ///
     /// - Parameters:
+    ///   - recorderName: the raw "Your name" setting. Sanitized here and
+    ///     dropped unless `includeNames`.
     ///   - note: the stored private note text for this match, if any. Ignored
     ///     unless `includeNotes`.
     ///   - headToHead: the completed-only head-to-head for this match's own
@@ -97,6 +107,7 @@ public struct MatchExportDetails: Equatable, Sendable {
     ///     screen summarises, so the AI scope equals the on-screen scope.
     public init(
         record: MatchRecord,
+        recorderName: String? = nil,
         note: String? = nil,
         headToHead: HeadToHeadRecord? = nil,
         includeNames: Bool,
@@ -112,6 +123,7 @@ public struct MatchExportDetails: Equatable, Sendable {
         self.partnerProfile = tags?.partner?.profileSummary
         self.opponentNames = includeNames ? opponents.map(\.name) : []
         self.partnerName = includeNames ? tags?.partner?.name : nil
+        self.recorderName = includeNames ? Self.sanitizedRecorderName(recorderName) : nil
         // Same visibility rule as the on-screen Match Info line: nothing until
         // there is at least one completed result, so the AI scope equals the
         // screen's.
@@ -128,7 +140,16 @@ public struct MatchExportDetails: Equatable, Sendable {
 
     public var isEmpty: Bool {
         competitionLabel == nil && taggedOpponentCount == 0 && !hasTaggedPartner
-            && headToHead == nil && note == nil
+            && recorderName == nil && headToHead == nil && note == nil
+    }
+
+    /// The "Your name" setting as exports may carry it: the same sanitizer as
+    /// tagged player names (line breaks, control and bidi characters removed,
+    /// capped at `MatchTags.maxNameLength`). `nil` when blank.
+    public static func sanitizedRecorderName(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let clean = MatchTags.sanitizedName(raw)
+        return clean.isEmpty ? nil : clean
     }
 
     /// Whether anything about who was played is tagged (names or not).
@@ -136,7 +157,7 @@ public struct MatchExportDetails: Equatable, Sendable {
 
     // MARK: - Text report lines
 
-    /// "Competition / Opponent(s) / Partner" overview rows for the plain-text
+    /// "Competition / Player / Opponent(s) / Partner" overview rows for the plain-text
     /// summary and full export, as the recorder reads them. Names only appear
     /// when included; with names off only the competition remains.
     public var overviewRows: [(label: String, value: String)] { overviewRows(for: .me) }
@@ -149,12 +170,14 @@ public struct MatchExportDetails: Equatable, Sendable {
         if let competitionLabel { rows.append(("Competition:", competitionLabel)) }
         switch focal {
         case .me:
+            if let recorderName { rows.append(("Player:", recorderName)) }
             if !opponentNames.isEmpty {
                 rows.append((opponentNames.count == 1 ? "Opponent:" : "Opponents:", opponentNames.joined(separator: " & ")))
             }
             if let partnerName { rows.append(("Partner:", partnerName)) }
         case .opponent:
             if !opponentNames.isEmpty { rows.append(("Your side:", opponentNames.joined(separator: " & "))) }
+            if let recorderName { rows.append(("Recorded by:", recorderName)) }
             if let partnerName { rows.append(("Recorder's partner:", partnerName)) }
         }
         return rows
@@ -190,7 +213,8 @@ public struct MatchExportDetails: Equatable, Sendable {
             lines.append("- Coaching steer: \(steer)")
         }
         // Nothing beyond the always-present match type: stay out of the prompt.
-        let hasSubstance = competitionLabel != nil || hasPeople || headToHead != nil || note != nil
+        let hasSubstance = competitionLabel != nil || hasPeople || recorderName != nil
+            || headToHead != nil || note != nil
         guard hasSubstance else { return nil }
 
         var section = "## Match Context\n" + lines.joined(separator: "\n")
@@ -203,10 +227,13 @@ public struct MatchExportDetails: Equatable, Sendable {
     }
 
     private func aiPeopleLines(focal: Player) -> [String]? {
-        guard hasPeople else { return nil }
+        guard hasPeople || recorderName != nil else { return nil }
         var lines: [String] = []
         switch focal {
         case .me:
+            if let recorderName {
+                lines.append("- You (the recorder, \"Me\" in the data below): " + Self.quotedNames([recorderName]))
+            }
             if taggedOpponentCount > 0 {
                 lines.append("- \(taggedOpponentCount == 1 ? "Opponent" : "Opponents"): "
                     + (includesNames ? Self.quotedNames(opponentNames) : Self.withheld(taggedOpponentCount == 1 ? "Opponent" : "Opponents")))
@@ -226,6 +253,9 @@ public struct MatchExportDetails: Equatable, Sendable {
             }
         case .opponent:
             // The prompt is for the person who was tagged as the opponent.
+            if let recorderName {
+                lines.append("- Your opponent (the recorder): " + Self.quotedNames([recorderName]))
+            }
             if taggedOpponentCount > 0 {
                 lines.append("- Your side: "
                     + (includesNames ? Self.quotedNames(opponentNames) : Self.withheld(taggedOpponentCount == 1 ? "You" : "You and your partner")))
@@ -285,24 +315,27 @@ public struct MatchExportDetails: Equatable, Sendable {
     // MARK: - HTML (reader-framed)
 
     /// The two side-name lists the interactive page paints, FRAMED FOR THE
-    /// READER. `reader` is whose file this is. The recorder's own name is never
-    /// known, so a seat is a placeholder ("Me" / "Opponent"). Empty arrays when
-    /// names are excluded or nobody is tagged.
+    /// READER. `reader` is whose file this is. The recorder's seat shows their
+    /// name when one is set (`recorderName`), else a placeholder ("Me" /
+    /// "Opponent"). Empty arrays when names are excluded or no name is known.
     ///
-    /// - Recorder's file: reader = `["Me"] + partner`, other = opponents.
+    /// - Recorder's file: reader = `[name or "Me"] + partner`, other = opponents.
     /// - Opponent's file: reader = the tagged opponents (their own team; the
-    ///   viewer cannot know which one is the reader), other = `["Opponent"] +
-    ///   the recorder's partner`.
+    ///   viewer cannot know which one is the reader), other = `[name or
+    ///   "Opponent"] + the recorder's partner`.
     public func sideNames(reader: Player) -> (reader: [String], other: [String]) {
-        guard includesNames, !opponentNames.isEmpty || partnerName != nil else { return ([], []) }
+        guard includesNames, !opponentNames.isEmpty || partnerName != nil || recorderName != nil else {
+            return ([], [])
+        }
+        let partner = partnerName.map { [$0] } ?? []
         switch reader {
         case .me:
-            let mine = ["Me"] + (partnerName.map { [$0] } ?? [])
+            let mine = [recorderName ?? "Me"] + partner
             let theirs = opponentNames.isEmpty ? ["Opponent"] : opponentNames
             return (mine, theirs)
         case .opponent:
             let mine = opponentNames.isEmpty ? ["Me"] : opponentNames
-            let theirs = ["Opponent"] + (partnerName.map { [$0] } ?? [])
+            let theirs = [recorderName ?? "Opponent"] + partner
             return (mine, theirs)
         }
     }
@@ -391,7 +424,7 @@ public enum MatchExportDisclosure {
                 : "Names you typed appear in the report. File names never include them."
         }
         return forAI
-            ? "The prompt says \"Opponent\" and \"Partner\" instead of names."
-            : "Reports leave out opponent and partner names. File names never include names."
+            ? "The prompt says \"Me\", \"Opponent\" and \"Partner\" instead of names."
+            : "Reports leave out player names, including yours. File names never include names."
     }
 }

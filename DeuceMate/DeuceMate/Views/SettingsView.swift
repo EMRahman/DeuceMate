@@ -293,6 +293,25 @@ struct SettingsView: View {
 
     private var sharedConfigSection: some View {
         Section {
+            // Your name — synced with the Watch. Named as the recorder in
+            // exports and AI prompts when "Include player names" is on, and
+            // used in spoken announcements. `.name` lets iOS AutoFill offer
+            // the owner's contact-card name with one tap, no permission needed.
+            VStack(alignment: .leading, spacing: 8) {
+                settingLabel("Your name", .yourName)
+                TextField("e.g. Federer", text: Binding(
+                    get: { playerName },
+                    set: { newValue in
+                        playerName = newValue
+                        syncService.pushSharedPlayerName(newValue)
+                    }
+                ))
+                .textContentType(.name)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .accessibilityIdentifier("settings-your-name")
+            }
+
             // Appearance
             ThemeSkinPicker(selection: selectedTheme)
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
@@ -314,15 +333,6 @@ struct SettingsView: View {
                 settingLabel("Announce scores aloud on iPhone", .announceScores)
             }
             if announcementService.isEnabled {
-                TextField("Your name (e.g. Federer)", text: Binding(
-                    get: { playerName },
-                    set: { newValue in
-                        playerName = newValue
-                        syncService.pushSharedPlayerName(newValue)
-                    }
-                ))
-                .textContentType(.name)
-                .autocorrectionDisabled()
                 Button {
                     let trimmed = playerName.trimmingCharacters(in: .whitespacesAndNewlines)
                     let phrase = trimmed.isEmpty ? "Hello" : "Hello \(trimmed)"
@@ -330,7 +340,7 @@ struct SettingsView: View {
                 } label: {
                     Label("Test name on iPhone speaker", systemImage: "speaker.wave.2.fill")
                 }
-                Text("Keep DeuceMate open on screen during the match — scores are spoken through the iPhone speaker or a connected Bluetooth speaker while the app is in the foreground, and pause if you lock the phone or switch apps. Your name personalises announcements and stays in sync with the Watch app.")
+                Text("Keep DeuceMate open on screen during the match — scores are spoken through the iPhone speaker or a connected Bluetooth speaker while the app is in the foreground, and pause if you lock the phone or switch apps. Announcements use your name from the top of this section.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
