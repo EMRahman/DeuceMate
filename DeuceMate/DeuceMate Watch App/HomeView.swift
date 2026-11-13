@@ -533,13 +533,13 @@ struct HomeView: View {
                         matchFormatOption(
                             .shortSets,
                             title: "Short Sets",
-                            details: "First to 4 games (by 2) · 7-pt tiebreak at 4-4 · Deciding point at deuce",
+                            details: "1 set to 4 · Tiebreak at 4-4 · No-Ad",
                             background: ButtonGradients.support
                         )
                         matchFormatOption(
                             .fast4,
                             title: "FAST4",
-                            details: "First to 4 games · 5-pt tiebreak at 3-3 · Deciding point at deuce",
+                            details: "1 set to 4 · Tiebreak to 5 at 3-3 · No-Ad",
                             background: ButtonGradients.support
                         )
                         matchFormatOption(

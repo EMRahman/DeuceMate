@@ -288,7 +288,6 @@
     }
     function paint() {
       output.replaceChildren(); var list = scoped(phone.records(), filters);
-      output.append(phone.note("Completed matches are ordered by finish date." + (filters.includeInProgress ? " In-progress matches use last recorded activity and are provisional." : "")));
       if (list.length < 3) {
         output.append(h("div", { class: "pr-trend-empty" }, h("span", { "aria-hidden": "true" }, "⌁"), h("h3", {}, "Not Enough Matches"), phone.note(!list.length ? "No tracked matches match these filters." : "Only " + list.length + " tracked " + (list.length === 1 ? "match" : "matches") + " found for these filters — Trends needs at least 3."))); return;
       }

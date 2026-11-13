@@ -153,13 +153,6 @@ struct TrendsView: View {
                 .pickerStyle(.segmented)
             }
 
-            Section {
-                Text(includeInProgress
-                     ? "Completed matches are ordered by finish date. In-progress matches use last recorded activity and are provisional."
-                     : "Completed matches are ordered by finish date.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
             // Re-enforces PerformanceTrends.minimumMatches AFTER filtering —
             // the archive screen's TrendsSection only gates on the unfiltered
             // total, so a filter combination that leaves 1-2 matches must be

@@ -395,8 +395,9 @@ one match fewer than the opponent's page.
 
 ### Managing players
 
-Handedness, backhand and game style are optional. They save as you pick them, and
-the name saves when you finish editing. In **Settings → Match Details → Players**
+Handedness, backhand, play style and notes are optional. Tap **Save** to keep
+changes to the name or playing style; going back with unsaved changes asks before
+discarding them. In **Settings → Match Details → Players**
 you can rename a player, merge duplicates, or forget a player. Forgetting removes
 that player from every match and keeps them from returning through sync or a
 backup.

@@ -134,8 +134,9 @@ Do not invent a last-played time for a tracking-disabled legacy record.
 - Preserve the existing include-in-progress setting and its default. When enabled,
   label unfinished samples provisional. On completion, move/update the same sample;
   never append a second observation.
-- Explain briefly: `Completed matches are ordered by finish date.` With unfinished
-  matches enabled, also explain that they use last recorded activity.
+- No on-screen caption explains the ordering (removed in November 2026 as
+  self-evident); completed matches order by finish date, unfinished ones by last
+  recorded activity.
 - Keep ordinal spacing. A week-long interruption does not require a new time axis.
 
 ### Match history and related dates
