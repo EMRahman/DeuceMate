@@ -92,6 +92,15 @@ public enum MatchSyncPayloadBuilder {
         [MatchSyncKey.requestFullHistory: true]
     }
 
+    // MARK: - Shared settings
+
+    /// Either direction: the name spoken for the recorder in announcements
+    /// (bidirectional, last write wins). Empty means "use the first name of
+    /// `playerName`" — see `AnnouncedName`.
+    public static func announcedName(_ name: String) -> [String: Any] {
+        [MatchSyncKey.announcedName: name]
+    }
+
     // MARK: - Match tags
 
     /// One match's tags (bidirectional; phone → watch in v1). The tags are

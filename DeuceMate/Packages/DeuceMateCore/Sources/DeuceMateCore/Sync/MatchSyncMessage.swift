@@ -69,6 +69,11 @@ public enum MatchSyncKey {
     /// Player's preferred display name used in spoken announcements. Bidirectional,
     /// last-write wins. Empty string means "unset" (fall back to "you").
     public static let playerName = "playerName"
+    /// The name spoken for the recorder in iPhone score announcements.
+    /// Bidirectional, last-write wins; the local `UserDefaults` key equals this
+    /// wire key on both devices. Empty means "use the first name of
+    /// `playerName`" (see `AnnouncedName`).
+    public static let announcedName = "announcedName"
 
     // MARK: - Score commands (iPhone → watch, gated by iPhoneInputEnabled)
     /// Scoring action issued by the iPhone spectator. Values are

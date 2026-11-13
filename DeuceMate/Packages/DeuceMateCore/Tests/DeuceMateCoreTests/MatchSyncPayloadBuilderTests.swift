@@ -80,6 +80,18 @@ final class MatchSyncPayloadBuilderTests: XCTestCase {
         XCTAssertEqual(payload[MatchSyncKey.requestFullHistory] as? Bool, true)
     }
 
+    func test_announcedName_roundTripsThroughDecode() {
+        XCTAssertEqual(
+            SyncIncomingPayload.decode(MatchSyncPayloadBuilder.announcedName("John")),
+            [.announcedName("John")]
+        )
+        // Empty is a real value ("follow Your name"), not an absent key.
+        XCTAssertEqual(
+            SyncIncomingPayload.decode(MatchSyncPayloadBuilder.announcedName("")),
+            [.announcedName("")]
+        )
+    }
+
     func test_singleRecordPayload_andHistoryPayload_useExpectedKeys() throws {
         let record = makeRecord(iWon: true, endTime: Date(timeIntervalSince1970: 1_700_003_600))
         XCTAssertNotNil(try MatchSyncPayloadBuilder.singleRecord(record)[MatchSyncKey.singleMatch] as? Data)

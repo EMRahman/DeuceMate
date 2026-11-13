@@ -881,8 +881,15 @@ class ScoreViewModel: ObservableObject {
 
     // MARK: - Phone announcement helpers
 
-    /// The name used in announcements for the user's side.
-    private var myDisplayName: String { playerName.isEmpty ? "you" : playerName }
+    /// The name used in announcements for the user's side: the synced announced
+    /// name, else the first name of "Your name", else "you". Read from
+    /// `UserDefaults` at speak time — the phone's value is stored straight there.
+    private var myDisplayName: String {
+        AnnouncedName.resolve(
+            announcedName: UserDefaults.standard.string(forKey: MatchSyncKey.announcedName) ?? "",
+            playerName: playerName
+        ) ?? "you"
+    }
 
     /// Converts raw point counters to a spoken score string using umpire convention.
     /// Server's score is announced first; equal non-deuce scores use "X all".

@@ -169,6 +169,11 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
         transport.sendControl([MatchSyncKey.playerName: name], queueOnFailure: true)
     }
 
+    /// Push the name spoken for the recorder in announcements (bidirectional).
+    func pushAnnouncedName(_ name: String) {
+        transport.sendControl(MatchSyncPayloadBuilder.announcedName(name), queueOnFailure: true)
+    }
+
     /// Push the current pending-point categorization state to the phone. Sent
     /// whenever the watch enters, advances, or rolls back its categorization
     /// sheet. `pending == nil` is encoded as `clearPendingPoint` so the phone
@@ -283,6 +288,15 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
                 DispatchQueue.main.async { self.onIPhoneInputReceived?(v) }
             case .playerName(let v):
                 DispatchQueue.main.async { self.onPlayerNameReceived?(v) }
+            case .announcedName(let v):
+                // Written straight to UserDefaults: HomeView reads it with
+                // @AppStorage and ScoreViewModel at speak time, so no setter
+                // runs to echo it back.
+                DispatchQueue.main.async {
+                    let defaults = UserDefaults.standard
+                    guard defaults.string(forKey: MatchSyncKey.announcedName) != v else { return }
+                    defaults.set(v, forKey: MatchSyncKey.announcedName)
+                }
             case .scoreCommand(let cmd, let matchID):
                 DispatchQueue.main.async { self.onScoreCommandReceived?(cmd, matchID) }
             case .statAction(let action, let outcome, let endingShot):
