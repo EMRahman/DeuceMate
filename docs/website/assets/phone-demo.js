@@ -673,9 +673,16 @@
       var gesture = start; start = null;
       document.removeEventListener("pointerup", finishSwipe);
       document.removeEventListener("pointercancel", finishSwipe);
-      if (e.type === "pointercancel" || screen !== "live" || gesture.matchID !== displayedLiveId || !settings.iPhoneInput || !connection.reachable) return;
+      if (e.type === "pointercancel" || screen !== "live" || gesture.matchID !== displayedLiveId || !settings.iPhoneInput) return;
       var dx = e.clientX - gesture.x, dy = e.clientY - gesture.y, now = performance.now();
       if (now - lastPhoneSwipe < 250) return;
+      // Mirrors LiveScoreboardView.refuseSwipe: with iPhone Input on and the
+      // Watch unreachable, a scoring swipe is never sent but says why.
+      if (!connection.reachable) {
+        var scoring = (Math.abs(dy) > 20 && Math.abs(dy) > Math.abs(dx)) || (dx < -20 && Math.abs(dx) > Math.abs(dy));
+        if (scoring) { lastPhoneSwipe = now; flashWaitingBadge(); }
+        return;
+      }
       if (Math.abs(dy) > 20 && Math.abs(dy) > Math.abs(dx)) { lastPhoneSwipe = now; send("point", dy < 0 ? "me" : "opponent"); }
       else if (dx < -20 && Math.abs(dx) > Math.abs(dy)) { lastPhoneSwipe = now; if (!api.phoneState().pending) send("undo"); }
     }
@@ -729,6 +736,12 @@
     extras.append(button("View Match Stats", function () { navigate("detail", rec); }));
     out.append(status, extras);
     return out;
+  }
+  function flashWaitingBadge() {
+    var badge = body.querySelector(".phone-live-badge.waiting");
+    if (!badge) return;
+    badge.classList.remove("flash"); void badge.offsetWidth; badge.classList.add("flash");
+    if (navigator.vibrate) { try { navigator.vibrate(30); } catch (error) { /* unsupported */ } }
   }
   function render() {
     var focusedKey = body.contains(document.activeElement) ? document.activeElement.dataset.focusKey : null;

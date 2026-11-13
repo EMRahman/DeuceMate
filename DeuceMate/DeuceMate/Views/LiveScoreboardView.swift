@@ -60,6 +60,8 @@ struct LiveScoreboardView: View {
     /// The `liveCommandFailureCount` currently on screen; nil once its message
     /// has timed out. Doubles as the id that restarts the timeout on a new failure.
     @State private var shownCommandFailure: Int? = nil
+    /// Briefly emphasises the connection message when a swipe can't be sent.
+    @State private var isFlashingConnectionMessage = false
 
     private static let commandFailureDisplayDuration: Duration = .seconds(5)
 
@@ -157,9 +159,11 @@ struct LiveScoreboardView: View {
                         if let connectionMessage {
                             Text(connectionMessage)
                                 .font(.caption)
+                                .fontWeight(isFlashingConnectionMessage ? .semibold : .regular)
                                 .foregroundStyle(Color.orange)
                                 .lineLimit(2)
                                 .minimumScaleFactor(0.7)
+                                .scaleEffect(isFlashingConnectionMessage ? 1.1 : 1, anchor: .leading)
                                 .accessibilityIdentifier("live-connection-message")
                         }
                         Spacer()
@@ -300,8 +304,13 @@ struct LiveScoreboardView: View {
     /// in-scene stats sheet (stats live in the past-matches detail), so a right
     /// swipe shouldn't accidentally trigger anything.
     private func handleSwipe(value: DragGesture.Value) {
-        // Unreachable: no haptic and no send, so nothing implies the point counted.
-        guard status.acceptsInput else { return }
+        // Unreachable: never sent, and never the haptic that confirms a send.
+        // With iPhone Input on, a warning haptic and a flash of the status
+        // line say the swipe was felt but couldn't reach the Watch.
+        guard status.acceptsInput else {
+            if status.refusesSwipeWithFeedback, isScoringSwipe(value) { refuseSwipe() }
+            return
+        }
         // Mirror the watch's swipe guard: while a categorization is pending we
         // can't safely score another point. The watch rejects the command
         // anyway, but blocking locally avoids confusing the user with a
@@ -337,6 +346,28 @@ struct LiveScoreboardView: View {
             (command == MatchSyncKey.scoreCommandUndo) ? .light : .medium
         UIImpactFeedbackGenerator(style: style).impactOccurred()
         syncService.sendScoreCommand(command, matchID: displayedMatchID)
+    }
+
+    /// Up, down or left: the directions that would send a command.
+    private func isScoringSwipe(_ value: DragGesture.Value) -> Bool {
+        let dx = value.translation.width
+        let dy = value.translation.height
+        return abs(dy) >= abs(dx) || dx < 0
+    }
+
+    private func refuseSwipe() {
+        let now = ProcessInfo.processInfo.systemUptime
+        if let last = lastSwipeUptime, now - last < Self.swipeDebounceInterval { return }
+        lastSwipeUptime = now
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        if let detail = status.detail {
+            UIAccessibility.post(notification: .announcement, argument: detail)
+        }
+        withAnimation(.easeOut(duration: 0.12)) { isFlashingConnectionMessage = true }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            withAnimation(.easeIn(duration: 0.25)) { isFlashingConnectionMessage = false }
+        }
     }
 
     /// The player a vertical drag would award a point to if released now:

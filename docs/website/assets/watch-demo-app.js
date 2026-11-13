@@ -139,8 +139,8 @@
   var FORMATS = [
     { id: "standard", title: "Best of 3 Sets (Club / League)", details: "3 sets · Final set: Super Tiebreak to 10", short: "Best of 3 (Club/League)", label: "Best of 3", tone: "primary" },
     { id: "bestOf3FullFinalSet", title: "Best of 3 Sets (ATP)", details: "3 sets · Final set: Full set, tiebreak to 7", short: "Best of 3 (ATP)", label: "Best of 3 (Full Final Set)", tone: "primary" },
-    { id: "shortSets", title: "Short Sets", details: "First to 4 games (by 2) · 7-pt tiebreak at 4-4 · Deciding point at deuce", short: "Short Sets", label: "Short Sets", tone: "support" },
-    { id: "fast4", title: "FAST4", details: "First to 4 games · 5-pt tiebreak at 3-3 · Deciding point at deuce", short: "FAST4", label: "FAST4", tone: "support" },
+    { id: "shortSets", title: "Short Sets", details: "1 set to 4 · Tiebreak at 4-4 · No-Ad", short: "Short Sets", label: "Short Sets", tone: "support" },
+    { id: "fast4", title: "FAST4", details: "1 set to 4 · Tiebreak to 5 at 3-3 · No-Ad", short: "FAST4", label: "FAST4", tone: "support" },
     { id: "superTiebreak", title: "Super Tiebreak", details: "1 set · Single tiebreak to 10 pts", short: "Super Tiebreak", label: "Super Tiebreak", tone: "support" },
     { id: "perpetualSuperTiebreak", title: "Perpetual Tiebreak", details: "Continuous tiebreak until stopping", short: "Perpetual Tiebreak", label: "Perpetual Tiebreak", tone: "support" },
     { id: "perpetualPoints", title: "Perpetual Points", details: "Just count points · server alternates every point · no stats or changeovers", short: "Perpetual Points", label: "Perpetual Points", tone: "support" }

@@ -170,14 +170,17 @@ final class MatchDetailsUITests: XCTestCase {
         for _ in 0..<5 where !playStylePicker.isHittable { app.swipeUp() }
         playStylePicker.tap()
         app.buttons["Serve & Volley"].tap()
+        app.buttons["player-manage-save"].tap()
 
         let playerBack = app.navigationBars.buttons.firstMatch
         playerBack.tap()
-        let handednessRow = app.staticTexts["Handedness, Left-handed"]
-        for _ in 0..<8 where !handednessRow.isHittable { app.swipeDown() }
-        XCTAssertTrue(handednessRow.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Backhand, One-handed"].exists)
-        XCTAssertTrue(app.staticTexts["Play Style, Serve & Volley"].exists)
+        // The opponent card shows the saved style as display-only chips.
+        let chips = app.descendants(matching: .any)["opponent-playing-style-chips"]
+        for _ in 0..<8 where !(chips.exists && chips.isHittable) { app.swipeDown() }
+        XCTAssertTrue(chips.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(chips, contains: "Left-handed"))
+        XCTAssertTrue(chips.label.contains("One-handed"))
+        XCTAssertTrue(chips.label.contains("Serve & Volley"))
         for _ in 0..<8 where !manage.isHittable { app.swipeUp() }
         manage.tap()
         XCTAssertTrue(app.buttons["player-handedness-picker"].waitForExistence(timeout: 5))
@@ -191,6 +194,7 @@ final class MatchDetailsUITests: XCTestCase {
         nameField.tap()
         nameField.clearAndType(renamed)
         nameField.typeText("\n")
+        app.buttons["player-manage-save"].tap()
         XCTAssertTrue(app.navigationBars[renamed].waitForExistence(timeout: 5))
 
         // Return through the navigation stack and confirm the list and archive
@@ -337,12 +341,14 @@ final class MatchDetailsUITests: XCTestCase {
         nameField.tap()
         nameField.clearAndType(renamed)
         nameField.typeText("\n")
+        app.buttons["player-manage-save"].tap()
         XCTAssertTrue(app.navigationBars[renamed].waitForExistence(timeout: 5))
 
         let handednessPicker = app.buttons["player-handedness-picker"]
         for _ in 0..<5 where !handednessPicker.isHittable { app.swipeUp() }
         handednessPicker.tap()
         app.buttons["Left-handed"].tap()
+        app.buttons["player-manage-save"].tap()
 
         goBack(from: renamed)
         XCTAssertTrue(app.navigationBars["Opponent"].waitForExistence(timeout: 5))
@@ -358,10 +364,10 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertTrue(archiveRow(third, contains: "vs \(renamed)"))
     }
 
-    /// A saved player's profile persists as soon as a value is picked: leaving
-    /// with the back button, with no other action, must not lose it.
+    /// A saved player's profile is written only by Save. Back with an unsaved
+    /// pick asks first, and Discard Changes keeps what was stored.
     @MainActor
-    func testSavedPlayerProfileAutosaves() throws {
+    func testSavedPlayerProfileSavesOnlyOnSave() throws {
         launch()
         let alex = "Alex \(token)"
         let match = createMatch(gamesMe: 2, complete: true)
@@ -369,7 +375,31 @@ final class MatchDetailsUITests: XCTestCase {
         editMatchInfo(competition: nil, opponents: [.new(alex)])
 
         openManagedOpponent()
+        let save = app.buttons["player-manage-save"]
+        XCTAssertFalse(save.isEnabled, "Nothing to save until something changes")
         selectHandedness("Left-handed")
+        XCTAssertTrue(save.isEnabled)
+
+        // Back asks; Keep Editing keeps the pick.
+        app.buttons["player-manage-back"].tap()
+        XCTAssertTrue(app.staticTexts["Discard changes to this player?"].waitForExistence(timeout: 5))
+        app.buttons["Keep Editing"].tap()
+        XCTAssertTrue(app.buttons["player-handedness-picker"].label.contains("Left-handed"))
+
+        // Discard Changes leaves without saving.
+        app.buttons["player-manage-back"].tap()
+        app.buttons["Discard Changes"].tap()
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+        let manage = app.buttons["manage-slot-opponent-0"]
+        for _ in 0..<4 where !manage.isHittable { app.swipeUp() }
+        manage.tap()
+        XCTAssertFalse(app.buttons["player-handedness-picker"].label.contains("Left-handed"),
+                       "A discarded pick isn't saved")
+
+        // Save writes it.
+        selectHandedness("Left-handed")
+        save.tap()
+        XCTAssertTrue(waitForDisabled(save), "Saved changes leave nothing to save")
         goBack(from: alex)
         XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
 
@@ -378,12 +408,13 @@ final class MatchDetailsUITests: XCTestCase {
         openMatch(match)
         openManagedOpponent()
         XCTAssertTrue(app.buttons["player-handedness-picker"].label.contains("Left-handed"),
-                      "The profile survives a relaunch without any explicit save")
+                      "The saved profile survives a relaunch")
     }
 
-    /// A typed name is saved by Back, with no need to press return first.
+    /// A typed name is saved only by Save; Back asks first, and Discard
+    /// Changes keeps the stored name.
     @MainActor
-    func testTypedPlayerNameSavesWhenGoingBack() throws {
+    func testTypedPlayerNameSavesOnlyOnSave() throws {
         launch()
         let alex = "Alex \(token)", renamed = "Rival \(token)"
         let match = createMatch(gamesMe: 2, complete: true)
@@ -391,22 +422,37 @@ final class MatchDetailsUITests: XCTestCase {
         editMatchInfo(competition: nil, opponents: [.new(alex)])
 
         openManagedOpponent()
-        let field = app.textFields["rename-player-field"]
+        var field = app.textFields["rename-player-field"]
         field.tap()
         field.clearAndType(renamed)
         let back = app.buttons["player-manage-back"]
         XCTAssertTrue(back.waitForExistence(timeout: 5))
         back.tap()
+        XCTAssertTrue(app.staticTexts["Discard changes to this player?"].waitForExistence(timeout: 5))
+        app.buttons["Discard Changes"].tap()
+        XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
+        let manage = app.buttons["manage-slot-opponent-0"]
+        for _ in 0..<4 where !manage.isHittable { app.swipeUp() }
+        manage.tap()
+        field = app.textFields["rename-player-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, alex, "A discarded name isn't saved")
+
+        field.tap()
+        field.clearAndType(renamed)
+        app.buttons["player-manage-save"].tap()
+        XCTAssertTrue(app.navigationBars[renamed].waitForExistence(timeout: 5))
+        goBack(from: renamed)
         XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
 
         app.terminate()
         launch()
         openMatch(match)
-        XCTAssertTrue(matchInfoRow(contains: "vs \(renamed)"), "The name survives a relaunch")
+        XCTAssertTrue(matchInfoRow(contains: "vs \(renamed)"), "The saved name survives a relaunch")
     }
 
-    /// Playing notes save only through Save Notes. Clearing the field and
-    /// leaving asks first and keeps the saved notes unless deletion is chosen.
+    /// Playing notes save only through Save. Emptying saved notes and saving
+    /// asks first and keeps them unless deletion is chosen.
     @MainActor
     func testPlayingNotesSaveOnlyWhenAskedAndClearingIsConfirmed() throws {
         launch()
@@ -415,21 +461,20 @@ final class MatchDetailsUITests: XCTestCase {
         openMatch(match)
         editMatchInfo(competition: nil, opponents: [.new(alex)])
 
-        // Typed notes wait for Save Notes; Back asks about them.
+        // Typed notes wait for Save; Back asks about them.
         openManagedOpponent()
         var field = playingNotesField()
         field.tap()
         field.typeText(notes)
-        let save = app.buttons["player-notes-save"]
-        XCTAssertTrue(save.waitForExistence(timeout: 5), "Unsaved notes offer Save Notes")
+        let save = app.buttons["player-manage-save"]
+        XCTAssertTrue(save.isEnabled, "Unsaved notes enable Save")
         app.buttons["player-manage-back"].tap()
-        XCTAssertTrue(app.staticTexts["Save changes to notes?"].waitForExistence(timeout: 5))
-        // Tap outside the dialog to keep editing (its Cancel button is hidden).
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)).tap()
+        XCTAssertTrue(app.staticTexts["Discard changes to this player?"].waitForExistence(timeout: 5))
+        app.buttons["Keep Editing"].tap()
         XCTAssertTrue(waitForNonExistence(app.buttons["Discard Changes"], timeout: 5))
         XCTAssertEqual(playingNotesField().value as? String, notes, "Keep Editing keeps the typed notes")
         save.tap()
-        XCTAssertTrue(waitForNonExistence(save, timeout: 5), "Saved notes leave nothing to save")
+        XCTAssertTrue(waitForDisabled(save), "Saved notes leave nothing to save")
         goBack(from: alex)
         XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
 
@@ -440,11 +485,13 @@ final class MatchDetailsUITests: XCTestCase {
         field = playingNotesField()
         XCTAssertEqual(field.value as? String, notes, "Saved notes survive a relaunch")
 
-        // Clearing the field and leaving keeps the saved notes when asked to.
+        // Saving an emptied field asks; Keep Notes changes nothing.
         clearPlayingNotes(field)
-        app.buttons["player-manage-back"].tap()
+        save.tap()
         XCTAssertTrue(app.staticTexts["Delete these notes?"].waitForExistence(timeout: 5))
-        app.buttons["Keep Saved Notes"].tap()
+        app.buttons["Keep Notes"].tap()
+        app.buttons["player-manage-back"].tap()
+        app.buttons["Discard Changes"].tap()
         XCTAssertTrue(app.navigationBars["Match Info"].waitForExistence(timeout: 5))
         let manage = app.buttons["manage-slot-opponent-0"]
         for _ in 0..<4 where !manage.isHittable { app.swipeUp() }
@@ -454,10 +501,9 @@ final class MatchDetailsUITests: XCTestCase {
 
         // Deleting is a deliberate, confirmed action.
         clearPlayingNotes(field)
-        XCTAssertTrue(waitForLabel(save, contains: "Delete Notes"))
         save.tap()
-        dialogButton("Delete Notes", notIdentifier: "player-notes-save").tap()
-        XCTAssertTrue(waitForNonExistence(save, timeout: 5), "Confirmed deletion is saved")
+        app.buttons["Delete Notes"].tap()
+        XCTAssertTrue(waitForDisabled(save), "Confirmed deletion is saved")
         XCTAssertNotEqual(playingNotesField().value as? String, notes)
     }
 
@@ -553,6 +599,7 @@ final class MatchDetailsUITests: XCTestCase {
         field.tap()
         field.clearAndType(renamed)
         field.typeText("\n")
+        app.buttons["player-manage-save"].tap()
         XCTAssertTrue(app.navigationBars[renamed].waitForExistence(timeout: 5))
         capture("11-player-manage")
         goBack(from: renamed)
@@ -1420,6 +1467,12 @@ final class MatchDetailsUITests: XCTestCase {
     private func waitForLabel(_ element: XCUIElement, contains text: String, timeout: TimeInterval = 5) -> Bool {
         let predicate = NSPredicate(format: "label CONTAINS %@", text)
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    @MainActor
+    private func waitForDisabled(_ element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == false"), object: element)
         return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 

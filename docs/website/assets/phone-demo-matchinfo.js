@@ -474,12 +474,23 @@
     body.append(footnote("Players come from your matches. Renaming or merging updates every match; forgetting removes a player from every match."));
     phone.showSheet("Players", body, { detent: "large" });
   }
-  function playerDetail(phone, p, onBack) {
+  // Mirrors PlayerManageView: the name and playing style are written only by
+  // Save, and Back with unsaved changes asks first.
+  function playerDetail(phone, p, onBack, draft) {
     var body = h("div", "mi-page"), original = p.name, who = { id: p.id, name: p.name }, n = playerMatchCount(phone, who).length;
-    var name = h("input", "mi-name-input mi-block"); name.value = p.name; name.maxLength = 40; name.setAttribute("aria-label", "Player name");
-    name.addEventListener("change", function () { var v = clean(name.value); if (!v) { name.value = original; return; } mapPlayers(phone, who, function (q) { q.name = v; return q; }); original = v; if (!who.id) who = { name: v }; });
-    body.append(sectionTitle("Name"), group(null, name), footnote("Saves automatically and updates all " + n + " matches with this player."));
-    body.append(sectionTitle("Playing Style"), group(null, [["hand", HAND, "Handedness"], ["backhand", BACK, "Backhand"], ["style", STYLE, "Play Style"]].map(function (g) { return pickerRow(g[2], g[1], p[g[0]], function (v) { mapPlayers(phone, who, function (q) { q[g[0]] = v || null; return q; }); }); })), footnote("Saves automatically. Optional tennis profile shown on the opponent detail screen and included in AI Coach match context."));
+    var STYLE_KEYS = ["hand", "backhand", "style"], stored = {}, style = {};
+    STYLE_KEYS.forEach(function (k) { stored[k] = p[k] || null; style[k] = draft ? draft[k] : stored[k]; });
+    function nameDraft() { return clean(name.value); }
+    function nameDirty() { var v = nameDraft(); return !!v && v !== original; }
+    function dirty() { return nameDirty() || STYLE_KEYS.some(function (k) { return (style[k] || null) !== stored[k]; }); }
+    function snapshot() { return Object.assign({ name: name.value }, style); }
+    function current() { return Object.assign({}, p, { name: original }); }
+    var leave = onBack || function () { playersSheet(phone); };
+    var unsaved = footnote("");
+    var name = h("input", "mi-name-input mi-block"); name.value = draft ? draft.name : p.name; name.maxLength = 40; name.setAttribute("aria-label", "Player name");
+    name.addEventListener("input", function () { update(); });
+    body.append(sectionTitle("Name"), group(null, name), footnote("Updates all " + n + " matches with this player."));
+    body.append(sectionTitle("Playing Style"), group(null, [["hand", HAND, "Handedness"], ["backhand", BACK, "Backhand"], ["style", STYLE, "Play Style"]].map(function (g) { return pickerRow(g[2], g[1], style[g[0]], function (v) { style[g[0]] = v || null; update(); }); })), unsaved);
     var others = roster(phone).filter(function (q) { return !samePlayer(q, who); });
     var merge = phone.button("", function () {
       var pick = h("div", "mi-page"); pick.append(group("Merge into", others.map(function (q) { var b = phone.button("", function () { phone.confirm("Merge " + original + " into " + q.name + "?", "Every match with " + original + " will use " + q.name + " instead.", "Merge", function () { mapPlayers(phone, who, function (x) { return Object.assign({}, x, { name: q.name, id: q.id || x.id }); }); playersSheet(phone); }); }, "mi-row"); b.append(h("span", "mi-row-title", q.name)); return b; })));
@@ -488,7 +499,34 @@
     body.append(group(null, merge), footnote("If the same person was added twice, merge this entry into the other one. Every match then uses that player."));
     var forget = phone.button("", function () { phone.confirm("Forget " + original + "?", "Removes " + original + " from every match on this iPhone and, when it holds those matches, your Apple Watch. Scores are kept.", "Forget Player", function () { mapPlayers(phone, who, function () { return null; }); playersSheet(phone); }); }, "mi-row"); forget.append(h("span", "mi-row-title mi-destructive", "Forget Player"));
     body.append(group(null, forget), footnote("Removes " + original + " from every match on this iPhone and, when it holds those matches, your Apple Watch. Scores are kept."));
-    phone.showSheet(original, body, { detent: "large", leading: backButton(phone, onBack || function () { playersSheet(phone); }), trailing: h("span", "phone-sheet-spacer") });
+    var save = phone.button("Save", function () {
+      if (!dirty()) return;
+      var saved = Object.assign({}, style), newName = nameDirty() ? nameDraft() : null;
+      mapPlayers(phone, who, function (q) { if (newName) q.name = newName; STYLE_KEYS.forEach(function (k) { q[k] = saved[k] || null; }); return q; });
+      STYLE_KEYS.forEach(function (k) { p[k] = saved[k] || null; });
+      if (newName) { original = newName; if (!who.id) who = { name: newName }; }
+      // Redraw so the title shows the saved name.
+      playerDetail(phone, current(), onBack);
+    }, "mi-save");
+    function update() {
+      unsaved.textContent = dirty() ? "Unsaved changes. Tap Save to keep them." : "";
+      save.disabled = !dirty();
+    }
+    function back() {
+      if (!dirty()) { leave(); return; }
+      var kept = snapshot(), chosen = false, content = h("div", "phone-confirmation");
+      content.append(
+        h("p", "phone-note", "Your changes haven’t been saved."),
+        phone.button("Discard Changes", function () { chosen = true; phone.closeSheet(); leave(); }, "phone-danger"),
+        phone.button("Keep Editing", function () { chosen = true; playerDetail(phone, current(), onBack, kept); }, "")
+      );
+      // Escape closes the alert without a choice: treat that as Keep Editing.
+      phone.showSheet("Discard changes to this player?", content, { presentation: "alert", cleanup: function () {
+        if (!chosen) setTimeout(function () { playerDetail(phone, current(), onBack, kept); }, 0);
+      } });
+    }
+    update();
+    phone.showSheet(original, body, { detent: "large", leading: backButton(phone, back), trailing: save });
   }
 
   // MARK: Opponents directory (OpponentsSection / OpponentsView), opponents only, by singles opponent + doubles pairs

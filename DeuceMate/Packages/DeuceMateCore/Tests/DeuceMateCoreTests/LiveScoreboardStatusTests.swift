@@ -49,6 +49,24 @@ final class LiveScoreboardStatusTests: XCTestCase {
         XCTAssertTrue(restored.acceptsInput)
     }
 
+    func test_refusedSwipeFeedback_onlyWhenInputIsOnAndTheWatchIsUnreachable() {
+        XCTAssertTrue(LiveScoreboardStatus(isWatchReachable: false, isInputEnabled: true).refusesSwipeWithFeedback)
+        XCTAssertFalse(LiveScoreboardStatus(isWatchReachable: false, isInputEnabled: false).refusesSwipeWithFeedback,
+                       "A spectator's drag isn't a scoring attempt")
+        XCTAssertFalse(LiveScoreboardStatus(isWatchReachable: true, isInputEnabled: true).refusesSwipeWithFeedback,
+                       "A reachable Watch accepts the swipe instead")
+        XCTAssertFalse(LiveScoreboardStatus(isWatchReachable: true, isInputEnabled: false).refusesSwipeWithFeedback)
+    }
+
+    func test_refusedSwipeFeedback_neverOverlapsAcceptedInput() {
+        for reachable in [true, false] {
+            for input in [true, false] {
+                let status = LiveScoreboardStatus(isWatchReachable: reachable, isInputEnabled: input)
+                XCTAssertFalse(status.acceptsInput && status.refusesSwipeWithFeedback)
+            }
+        }
+    }
+
     func test_commandFailureMessage_doesNotClaimThePointWasLost() {
         // The Watch may have applied a command whose send reported failure.
         XCTAssertTrue(LiveScoreboardStatus.commandFailureMessage.contains("Check the score"))

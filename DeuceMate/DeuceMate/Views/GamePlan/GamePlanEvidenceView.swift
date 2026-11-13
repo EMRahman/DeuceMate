@@ -108,8 +108,6 @@ struct GamePlanEvidenceView: View {
                     filters
                 } header: {
                     Text("Filters")
-                } footer: {
-                    Text("Filters apply before the count, so Last 5 means the latest five that match.")
                 }
             }
 
@@ -117,10 +115,7 @@ struct GamePlanEvidenceView: View {
                 Toggle("Include unfinished matches", isOn: $choices.includeInProgress)
                     .accessibilityIdentifier("game-plan-include-in-progress")
             } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Unfinished matches are saved checkpoints: partial evidence, never results.")
-                    if let exclusions = Self.exclusionsText(candidates) { Text(exclusions) }
-                }
+                if let exclusions = Self.exclusionsText(candidates) { Text(exclusions) }
             }
         }
         .listStyle(.insetGrouped)

@@ -91,7 +91,7 @@ const path = require("path"), { pathToFileURL } = require("url"), assert = requi
   console.log("caption", await ph.locator(".phone-row-caption").count());
   // players settings
   await page.evaluate(() => window.DeuceMatePhone.navigate("settings"));
-  await ph.getByRole("button", { name: /Players/ }).click(); await ph.getByText("Players come from your matches").waitFor(); await page.screenshot({ path: "/tmp/mi-players-list.png" }); await ph.locator("button.mi-row", { hasText: "Alex" }).first().click(); await ph.getByText("Saves automatically and updates all").waitFor(); await ph.locator("button.mi-row", { hasText: "Forget Player" }).waitFor();
+  await ph.getByRole("button", { name: /Players/ }).click(); await ph.getByText("Players come from your matches").waitFor(); await page.screenshot({ path: "/tmp/mi-players-list.png" }); await ph.locator("button.mi-row", { hasText: "Alex" }).first().click(); await ph.getByText(/^Updates all \d+ matches with this player/).waitFor(); await ph.locator("button.mi-row", { hasText: "Forget Player" }).waitFor();
   await page.screenshot({ path: "/tmp/mi-players.png" });
   // Review findings: consent is per match, picker->profile is not dismissal, identity is the player id.
   await page.evaluate(() => window.DeuceMatePhone.closeSheet());

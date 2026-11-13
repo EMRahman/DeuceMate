@@ -260,8 +260,6 @@ struct GamePlanView: View {
             }
         } header: {
             Text("Focus")
-        } footer: {
-            Text("Included as written.")
         }
     }
 

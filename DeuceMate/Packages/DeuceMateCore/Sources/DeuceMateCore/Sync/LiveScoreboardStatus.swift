@@ -33,6 +33,14 @@ public struct LiveScoreboardStatus: Equatable, Sendable {
         acceptsInput
     }
 
+    /// Whether a swipe that can't be sent should say so: a warning haptic and
+    /// a flash of `detail`. Only when iPhone Input is on, so the swipe was a
+    /// real scoring attempt; a spectator's stray drag stays silent. The swipe
+    /// itself is still never sent.
+    public var refusesSwipeWithFeedback: Bool {
+        isInputEnabled && !isWatchReachable
+    }
+
     /// Why the score may be stale and, when relevant, how to resume scoring.
     public var detail: String? {
         guard !isWatchReachable else { return nil }
