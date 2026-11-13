@@ -37,6 +37,8 @@ public enum SyncIncomingEvent: Equatable {
     case iPhoneInputEnabled(Bool)
     /// Player display name used in spoken announcements, bidirectional.
     case playerName(String)
+    /// Name spoken for the recorder in announcements, bidirectional.
+    case announcedName(String)
     /// Scoring action issued by the iPhone spectator (one of
     /// `MatchSyncKey.scoreCommandWinMe` / `scoreCommandWinOpp` / `scoreCommandUndo`).
     /// `matchID` is the UUID of the match the iPhone displayed when the swipe
@@ -94,6 +96,7 @@ extension SyncIncomingEvent {
         case (.announcementsEnabled(let a), .announcementsEnabled(let b)): return a == b
         case (.iPhoneInputEnabled(let a), .iPhoneInputEnabled(let b)): return a == b
         case (.playerName(let a), .playerName(let b)): return a == b
+        case (.announcedName(let a), .announcedName(let b)): return a == b
         case (.scoreCommand(let ca, let ma), .scoreCommand(let cb, let mb)): return ca == cb && ma == mb
         case (.pendingPoint(let a), .pendingPoint(let b)): return a == b
         case (.pendingPointOutcome(let a), .pendingPointOutcome(let b)): return a == b
@@ -198,6 +201,9 @@ public enum SyncIncomingPayload {
         if let v = payload[MatchSyncKey.iPhoneInputEnabled] as? Bool { events.append(.iPhoneInputEnabled(v)) }
         if let v = payload[MatchSyncKey.playerName] as? String {
             events.append(.playerName(String(v.prefix(maxPlayerNameLength))))
+        }
+        if let v = payload[MatchSyncKey.announcedName] as? String {
+            events.append(.announcedName(String(v.prefix(maxPlayerNameLength))))
         }
         if let v = payload[MatchSyncKey.scoreCommand] as? String {
             let matchID = (payload[MatchSyncKey.scoreCommandMatchID] as? String).flatMap(UUID.init(uuidString:))

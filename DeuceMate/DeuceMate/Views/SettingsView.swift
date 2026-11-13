@@ -105,6 +105,7 @@ struct SettingsView: View {
     @AppStorage("selectedTheme") private var themeRawValue: String = AppTheme.default.rawValue
     @AppStorage("iPhoneInputEnabled") private var iPhoneInputEnabled: Bool = false
     @AppStorage("playerName") private var playerName: String = ""
+    @AppStorage(MatchSyncKey.announcedName) private var announcedName: String = ""
     @AppStorage("userBirthYear") private var userBirthYear: Int = 0
     @AppStorage("userMaxHROverride") private var userMaxHROverride: Int = 0
     @AppStorage("playerNTRP") private var playerNTRP: String = "3.0–3.5"
@@ -294,12 +295,13 @@ struct SettingsView: View {
     private var sharedConfigSection: some View {
         Section {
             // Your name — synced with the Watch. Named as the recorder in
-            // exports and AI prompts when "Include player names" is on, and
-            // used in spoken announcements. `.name` lets iOS AutoFill offer
-            // the owner's contact-card name with one tap, no permission needed.
+            // exports and AI prompts when "Include player names" is on; its
+            // first name is also the default announced name. `.name` lets iOS
+            // AutoFill offer the owner's contact-card name with one tap, no
+            // permission needed.
             VStack(alignment: .leading, spacing: 8) {
                 settingLabel("Your name", .yourName)
-                TextField("e.g. Federer", text: Binding(
+                TextField("e.g. John Smith", text: Binding(
                     get: { playerName },
                     set: { newValue in
                         playerName = newValue
@@ -333,14 +335,30 @@ struct SettingsView: View {
                 settingLabel("Announce scores aloud on iPhone", .announceScores)
             }
             if announcementService.isEnabled {
+                // Name for announcements — synced with the Watch. Empty follows
+                // the first name of "Your name", shown as the placeholder.
+                VStack(alignment: .leading, spacing: 8) {
+                    settingLabel("Name for announcements", .announcedName)
+                    TextField(AnnouncedName.placeholder(playerName: playerName), text: Binding(
+                        get: { announcedName },
+                        set: { newValue in
+                            announcedName = newValue
+                            syncService.pushAnnouncedName(newValue)
+                        }
+                    ))
+                    .textContentType(.givenName)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .accessibilityIdentifier("settings-announced-name")
+                }
                 Button {
-                    let trimmed = playerName.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let phrase = trimmed.isEmpty ? "Hello" : "Hello \(trimmed)"
+                    let spoken = AnnouncedName.resolve(announcedName: announcedName, playerName: playerName)
+                    let phrase = spoken.map { "Hello \($0)" } ?? "Hello"
                     announcementService.previewVoice(phrase)
                 } label: {
                     Label("Test name on iPhone speaker", systemImage: "speaker.wave.2.fill")
                 }
-                Text("Keep DeuceMate open on screen during the match — scores are spoken through the iPhone speaker or a connected Bluetooth speaker while the app is in the foreground, and pause if you lock the phone or switch apps. Announcements use your name from the top of this section.")
+                Text("Keep DeuceMate open on screen during the match — scores are spoken through the iPhone speaker or a connected Bluetooth speaker while the app is in the foreground, and pause if you lock the phone or switch apps.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

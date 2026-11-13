@@ -130,6 +130,7 @@
     swipeVibration: "Taps your wrist when a swipe scores or undoes a point.",
     appearanceTheme: "Sets the scoreboard color theme on both your iPhone and watch.",
     announceScores: "Speaks the score aloud through your iPhone speaker.",
+    announcedName: "The name spoken for you. Leave blank to use your first name.",
     iPhoneInput: "Lets you swipe to score on the iPhone scoreboard.",
     birthYear: "Estimates your maximum heart rate from your age.",
     overrideMaxHR: "Sets your maximum heart rate manually instead of by age.",
@@ -154,11 +155,16 @@
     return FORMATS[0];
   }
 
+  /* ---- Announced name (mirrors Core's AnnouncedName) ----------------------- */
+  function firstName(full) { var w = String(full || "").trim().split(/\s+/)[0]; return w || null; }
+  function announcedNamePlaceholder(full) { return firstName(full) || "e.g. John"; }
+  function spokenName(settings) { var typed = String(settings.announcedName || "").trim(); return typed || firstName(settings.name); }
+
   /* ---- Watch state --------------------------------------------------------- */
   var S = window.DeuceMateShell = {
     settings: {
       track: false,            // statsTrackingEnabled defaults to OFF on the real watch
-      compass: false, swipeVibration: false, announce: false, name: "", iPhoneInput: false,
+      compass: false, swipeVibration: false, announce: false, name: "", announcedName: "", iPhoneInput: false,
       theme: "default", birthYear: 0, override: false, overrideBpm: 180
     },
     setup: { type: "singles", format: "standard" },   // MatchSetupDefaults (remembered)
@@ -179,6 +185,7 @@
   S.h = h; S.append = append; S.md = md; S.icon = icon; S.api = api; S.root = root; S.FORMATS = FORMATS;
   S.formatInfo = formatInfo; S.THEMES = THEMES; S.GUIDE_GRAD = GUIDE_GRAD; S.END_GRAD = END_GRAD; S.SUPPORT_GRAD = SUPPORT_GRAD;
   S.grad = grad;
+  S.spokenName = spokenName; S.announcedNamePlaceholder = announcedNamePlaceholder;
   S.applyTheme = applyTheme;
 
   function uid() { return "r" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36); }
@@ -380,9 +387,15 @@
     scroll.appendChild(toggleRow("Announce scores aloud on iPhone", COPY.announceScores, s.announce, function (v) { s.announce = v; S.announceResult = null; render(); }));
 
     if (s.announce) {
-      var input = h("input", { type: "text", class: "name-input", placeholder: "e.g. Federer", value: s.name, autocomplete: "off", spellcheck: "false", maxlength: "40", "aria-label": "Your name" });
+      var input = h("input", { type: "text", class: "name-input", placeholder: "e.g. John Smith", value: s.name, autocomplete: "off", spellcheck: "false", maxlength: "40", "aria-label": "Your name" });
       input.addEventListener("input", function () { s.name = input.value; });
       scroll.appendChild(h("div", { class: "namebox" }, h("div", { class: "caption", text: "Your name" }), input));
+      // Mirrors Core's AnnouncedName: empty follows the first name of "Your name".
+      var spokenInput = h("input", { type: "text", class: "name-input", placeholder: announcedNamePlaceholder(s.name), value: s.announcedName || "", autocomplete: "off", spellcheck: "false", maxlength: "40", "aria-label": "Name for announcements" });
+      spokenInput.addEventListener("input", function () { s.announcedName = spokenInput.value; });
+      input.addEventListener("input", function () { spokenInput.placeholder = announcedNamePlaceholder(s.name); });
+      scroll.appendChild(h("div", { class: "namebox" }, h("div", { class: "caption", text: "Name for announcements" }), spokenInput,
+        h("div", { class: "cap", text: COPY.announcedName })));
       scroll.appendChild(h("button", { type: "button", class: "bordered", onclick: function () {
         S.announceResult = null; render();
         setTimeout(function () { S.announceResult = { message: "iPhone reached ✓", success: true }; render(); }, 450);

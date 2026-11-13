@@ -817,7 +817,7 @@
     if (!window.speechSynthesis) return;
     var p = E.regularPointStrings(state.currentPointsMe, state.currentPointsOpponent), cur = E.lastSet(state);
     var text = cur.isTieBreak ? cur.tieBreakPointsMe + " " + cur.tieBreakPointsOpponent : p[0] + " " + p[1];
-    speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance((settings.name || "Me") + " " + text));
+    speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance((S.spokenName(settings) || "Me") + " " + text));
   }
   var phone = window.DeuceMatePhone = { h: h, button: button, card: card, note: note, heading: heading,
     icon: icon, segment: segment, endRecord: endRecord, storageLabel: storageLabel, recordActions: recordActions, removeFromWatch: removeFromWatch, syncToWatch: syncToWatch, storedOnWatch: storedOnWatch,

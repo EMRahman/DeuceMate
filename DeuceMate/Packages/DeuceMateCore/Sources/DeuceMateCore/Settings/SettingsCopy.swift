@@ -12,6 +12,7 @@ public enum SettingsCopy: CaseIterable, Sendable {
     case appearanceTheme
     case announceScores
     case yourName
+    case announcedName
     case iPhoneInput
     case birthYear
     case overrideMaxHR
@@ -28,7 +29,8 @@ public enum SettingsCopy: CaseIterable, Sendable {
         case .swipeVibration:        return "Taps your wrist when a swipe scores or undoes a point."
         case .appearanceTheme:       return "Sets the scoreboard color theme on both your iPhone and watch."
         case .announceScores:        return "Speaks the score aloud through your iPhone speaker."
-        case .yourName:              return "Names you in shared reports, AI prompts and spoken scores."
+        case .yourName:              return "Names you in shared reports and AI prompts."
+        case .announcedName:         return "The name spoken for you. Leave blank to use your first name."
         case .iPhoneInput:           return "Lets you swipe to score on the iPhone scoreboard."
         case .birthYear:             return "Estimates your maximum heart rate from your age."
         case .overrideMaxHR:         return "Sets your maximum heart rate manually instead of by age."

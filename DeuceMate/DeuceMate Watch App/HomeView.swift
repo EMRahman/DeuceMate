@@ -302,6 +302,7 @@ private enum SettingsAnchor: Hashable {
 struct HomeView: View {
     @EnvironmentObject var viewModel: ScoreViewModel
     @AppStorage(ScoreInputHaptics.enabledKey) private var swipeHapticsEnabled = ScoreInputHaptics.isEnabledByDefault
+    @AppStorage(MatchSyncKey.announcedName) private var announcedName: String = ""
     @Environment(\.openURL) private var openURL
     @State private var showMatchView = false
     @State private var showInstructions = false
@@ -639,7 +640,7 @@ struct HomeView: View {
                             Text("Your name")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
-                            TextField("e.g. Federer", text: $viewModel.playerName)
+                            TextField("e.g. John Smith", text: $viewModel.playerName)
                                 .textContentType(.name)
                                 .autocorrectionDisabled()
                                 .textFieldStyle(.plain)
@@ -650,10 +651,34 @@ struct HomeView: View {
                                 .background(Color.white.opacity(0.08))
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Name for announcements")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            TextField(AnnouncedName.placeholder(playerName: viewModel.playerName), text: Binding(
+                                get: { announcedName },
+                                set: { newValue in
+                                    announcedName = newValue
+                                    WatchMatchSyncService.shared.pushAnnouncedName(newValue)
+                                }
+                            ))
+                                .textContentType(.givenName)
+                                .autocorrectionDisabled()
+                                .textFieldStyle(.plain)
+                                .font(.footnote)
+                                .frame(maxWidth: .infinity)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                            Text(SettingsCopy.announcedName.text)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                         Button {
                             announcementTestResult = nil
-                            let trimmed = viewModel.playerName.trimmingCharacters(in: .whitespacesAndNewlines)
-                            let phrase = trimmed.isEmpty ? "Hello" : "Hello \(trimmed)"
+                            let spoken = AnnouncedName.resolve(announcedName: announcedName, playerName: viewModel.playerName)
+                            let phrase = spoken.map { "Hello \($0)" } ?? "Hello"
                             WatchMatchSyncService.shared.sendAnnouncement(phrase) { success in
                                 DispatchQueue.main.async {
                                     announcementTestResult = success

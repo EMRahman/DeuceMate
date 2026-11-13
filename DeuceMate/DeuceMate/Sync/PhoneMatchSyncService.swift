@@ -390,6 +390,11 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         transport.sendControl([MatchSyncKey.playerName: name], queueOnFailure: true)
     }
 
+    /// Push the name spoken for the recorder in announcements (bidirectional).
+    func pushAnnouncedName(_ name: String) {
+        transport.sendControl([MatchSyncKey.announcedName: name], queueOnFailure: true)
+    }
+
     /// Send a spectator score command (winMe / winOpp / undo) to the watch.
     /// `matchID` is the UUID of the match the iPhone was displaying when the
     /// swipe happened. The watch rejects commands whose id doesn't match its
@@ -666,6 +671,12 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
             case .playerName(let v):
                 DispatchQueue.main.async {
                     UserDefaults.standard.set(v, forKey: "playerName")
+                }
+            case .announcedName(let v):
+                DispatchQueue.main.async {
+                    let defaults = UserDefaults.standard
+                    guard defaults.string(forKey: MatchSyncKey.announcedName) != v else { return }
+                    defaults.set(v, forKey: MatchSyncKey.announcedName)
                 }
             case .pendingPoint(let info):
                 DispatchQueue.main.async {
