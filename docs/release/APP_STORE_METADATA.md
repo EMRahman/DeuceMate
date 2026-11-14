@@ -197,10 +197,15 @@ Plan for your next match against a familiar opponent, and play FAST4.
 
 NEW: GAME PLAN
 • On an opponent's page on iPhone, tap Prepare Game Plan. It collects what your recorded singles matches against them show, ready to copy or share with the AI app you choose. DeuceMate prepares it; it never sends it.
-• Choose which matches go in, and whether to include names, your private notes and your playing-style notes.
+• It's ready as soon as it opens, set up from your last match against them. If that match is unfinished, the plan is for finishing it.
+• Names and notes are included unless you turn them off, and you can leave out individual notes or matches.
+
+NEW: YOUR NAME IN REPORTS
+• Add your name in Settings and shared reports and AI prompts say who recorded the match.
+• Score announcements can use a shorter name of their own, or your first name.
 
 NEW: PLAYING STYLE NOTES
-• Add your own notes to any player's playing style.
+• Add your own notes to any player. Their playing style now shows as a compact card at the top of their page.
 
 NEW: MATCH FORMATS
 • FAST4: first to 4 games, a tiebreak at 3–3 and a deciding point at deuce.
@@ -209,14 +214,15 @@ NEW: MATCH FORMATS
 
 IMPROVED
 • When you resume a match, its reports show each session you played, and matches are listed by when they finished.
-• The iPhone live scoreboard shows when it can't reach your Apple Watch, and pauses scoring from iPhone until it reconnects so a point is never counted by mistake.
+• The iPhone live scoreboard shows when it can't reach your Apple Watch, and pauses scoring from iPhone until it reconnects so a point is never counted by mistake. A swipe while it's waiting tells you why it didn't count.
+• Player details and notes save only when you tap Save, so a stray edit can't overwrite them.
 • Workouts save to Health more reliably, including after the Watch app closes unexpectedly, and Apple Watch tells you if saving fails.
 • Send feedback or rate DeuceMate from Settings on iPhone.
 
 No account, subscription, ads, or tracking — just your tennis, on your devices.
 ```
 
-**Character count:** 1,422 characters (including line breaks; under 4,000)
+**Character count:** 1,970 characters (including line breaks; under 4,000)
 
 > **Scope.** The shipping targets are configured as version **1.4.0 (18)**. The
 > comparison baseline is the released `v1.3.1` tag; 1.3.2 and 1.3.3 were
@@ -567,9 +573,16 @@ When completing the App Privacy questionnaire in App Store Connect:
   (`docs/website/privacy.html`, "Match Details, Player Names & Private Notes")
   describes the storage, backup, forget-player and recovery limits.
 - **Match details in exports (PR 4, final hand-off).** Competition type and
-  head-to-head always accompany an AI Coach prompt; opponent/partner names are
-  in shared text/interactive-HTML reports by default (visible "Include player
-  names" switch) and **off** in AI prompts by default; the private note enters a
+  head-to-head always accompany an AI Coach prompt; opponent/partner names (and,
+  from 1.4.0, the recorder's own "Your name" when set) are in shared
+  text/interactive-HTML reports and AI Coach prompts by default (visible
+  "Include player names" switch; AI prompts defaulted to off before 1.4.0).
+  **1.4.0 to re-confirm:** Prepare Game Plan starts with names, private match
+  notes and playing-style notes all included (#193), which differs from the
+  report/AI Coach rule below. `docs/website/privacy.html` is out of date on
+  main: it still says AI prompts leave names out by default and that notes are
+  never included unless switched on, and it doesn't mention Game Plan or "Your
+  name". Update it before submission. Otherwise the private note enters a
   report, AI prompt or manual archive only through a separate per-export
   "Include private note(s)" opt-in (off every time) that shows the exact text,
   states it may hold personal or health information, and warns when names are
@@ -630,9 +643,15 @@ permissions, no accounts, no in-app purchases, no ads, no tracking.
 WHAT CHANGED IN 1.4.0
 - iPhone: an opponent's page has Prepare Game Plan. It builds a text summary of
   the singles matches recorded against that player, which the user can copy,
-  share or open in an AI app of their choice. The app sends nothing itself;
-  names and private notes are left out unless the user includes them.
-- iPhone: players can have free-text playing-style notes.
+  share or open in an AI app of their choice. The app sends nothing itself.
+  Names and notes are included by default and can be switched off, or left out
+  note by note, before anything is shared.
+- iPhone: players can have free-text playing-style notes. Player details and
+  match notes now save only when the user taps Save.
+- Both: an optional "Your name" setting names the recorder in shared reports and
+  AI prompts (only when player names are included), and an optional "Name for
+  announcements" is spoken in score announcements. The AI Coach prompt now
+  includes player names by default, like shared reports; it can be switched off.
 - Apple Watch: two match formats, FAST4 and Short Sets (which replaces Quick 4
   Games in match setup). A banner at a deciding point reminds players that the
   receiver chooses the side.

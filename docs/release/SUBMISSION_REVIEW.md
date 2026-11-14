@@ -17,8 +17,15 @@ This is a minor release, not a patch, because it adds new user-facing features:
 Prepare Game Plan (#182) with playing-style notes (#189), the FAST4 format and the
 Short Sets format that replaces Quick 4 Games in match setup (#186), and play
 sessions with finish-date ordering (#175). It also includes the live scoreboard's
-unreachable-Watch state (#174), the App Store rating request plus Send Feedback /
-Rate DeuceMate rows (#179), and the workout saving/recovery fixes (#185, #187).
+unreachable-Watch state (#174, with refused-swipe feedback from #195), the App
+Store rating request plus Send Feedback / Rate DeuceMate rows (#179), and the
+workout saving/recovery fixes (#185, #187). Since the first draft it has gained
+the condensed playing-style card (#190, #191), a Game Plan that opens ready and
+pre-filled with names and notes included by default (#193), save-only-on-Save for
+player details and notes (#194, #195), the recorder's name in reports and AI
+prompts with AI Coach names on by default (#197), and a separate name for
+announcements (#198). #192 raised the watchOS minimum for the Watch **test**
+targets only; the shipping Watch app stays on watchOS 9.0.
 
 This candidate has not yet been archived, uploaded or tested on physical devices.
 Test targets keep their non-shipping version/build values. Build 18 is the next
@@ -30,8 +37,18 @@ Connect before upload, as Xcode has raised build numbers during previous uploads
   upload), and check that the existing archive is intact.
 - [ ] Complete the [manual testing gate](#next-release--manual-testing-gate) and
   the [workout save checks](#workout-save-investigation--9-november-2026) below.
-- [ ] Exercise Prepare Game Plan from an opponent's page (#182), including match
-  selection, note inclusion (match notes and playing-style notes) and sharing.
+- [ ] Exercise Prepare Game Plan from an opponent's page (#182, #193), including
+  the pre-filled upcoming match, an unfinished previous match, match selection,
+  turning names and notes off or leaving individual notes out, and sharing.
+- [ ] Set "Your name" and "Name for announcements" on iPhone and check both sync
+  to the Watch. Check the name appears in a shared report and AI prompt only with
+  Include player names on, and that announcements say the short name (#197, #198).
+- [ ] Edit a player and a match note, then leave without saving. Confirm nothing
+  is overwritten and emptying notes asks before deleting them (#194, #195).
+- [ ] **Blocker:** update `docs/website/privacy.html` for 1.4.0. It still says AI
+  prompts leave names out by default and that notes are never included unless
+  switched on, and doesn't mention Game Plan or "Your name" (#193, #197). Then
+  re-confirm the App Privacy label, as noted in `APP_STORE_METADATA.md`.
 - [ ] Play a Short Sets and a FAST4 match on the Watch, including a tiebreak and a
   deciding point at deuce, and check the "Receiver chooses side" banner (#186).
   Open an existing Quick 4 Games match and check its score still reads correctly.
