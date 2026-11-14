@@ -5,6 +5,10 @@ demo parity is still open.
 **Date:** 4 November 2026  
 **Surface:** iPhone companion, accessed from an opponent's profile.
 
+**Future extension:** [Opponents before the first match](OPPONENTS_BEFORE_FIRST_MATCH_PROPOSAL.md)
+proposes saved opponent profiles and preparation without recorded match evidence.
+It is a design proposal; the implemented flow described here is unchanged.
+
 **Confirmed scope:** default to the last five eligible matches in full detail;
 let the user choose any number up to all available eligible matches; display a
 token estimate that updates with the actual selected export contents.

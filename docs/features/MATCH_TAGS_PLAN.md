@@ -230,6 +230,11 @@ the automatic iCloud snapshot, the HTML model or an AI prompt implicitly.
 
 ## 5. The roster — "selectable in the future"
 
+**Future extension:** [Opponents before the first match](OPPONENTS_BEFORE_FIRST_MATCH_PROPOSAL.md)
+proposes revisiting this archive-derived-only decision so a player can save an
+opponent and scouting notes before any match. The following remains the current
+implemented model; the separate saved-player store is not implemented.
+
 New `Stats/PlayerRoster.swift`, pure and derived:
 
 ```swift
