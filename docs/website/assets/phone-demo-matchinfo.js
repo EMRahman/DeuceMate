@@ -387,8 +387,17 @@
 
   // MARK: export context (MatchExportDetails: names applied at construction, note never included here)
   function profileText(p) { return [label(HAND, p.hand), label(BACK, p.backhand) && label(BACK, p.backhand) + " backhand", label(STYLE, p.style)].filter(Boolean).join(", "); }
-  // Share-menu switches (names default ON, private note default OFF and opt-in through a review).
-  var exportOptions = { names: true, noteMatchId: null };
+  // Share-menu switches (ExportInclusionDefaults): names default ON and the
+  // choice is remembered in this browser; the private note defaults OFF, is
+  // never remembered and is opted in through a review.
+  var NAMES_KEY = "deucemate-export-include-names";
+  var namesChoice = (function () { try { return localStorage.getItem(NAMES_KEY) !== "0"; } catch (_) { return true; } })();
+  var exportOptions = { noteMatchId: null };
+  Object.defineProperty(exportOptions, "names", {
+    enumerable: true,
+    get: function () { return namesChoice; },
+    set: function (v) { namesChoice = !!v; try { localStorage.setItem(NAMES_KEY, namesChoice ? "1" : "0"); } catch (_) {} }
+  });
   // Private-note consent belongs to the one match whose exact text was reviewed.
   function noteConsent(rec) { return exportOptions.noteMatchId === rec.id; }
   function quoted(text) { return String(text).split("\n").map(function (l) { return "> " + l; }).join("\n"); }

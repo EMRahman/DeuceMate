@@ -450,10 +450,10 @@ cached file containing names or notes after its toggle was turned off.
 
 | Export | Adds | Names |
 |---|---|---|
-| AI Coach prompt (`MatchExporter.aiPromptExport`) | `## Match Context`: competition, singles/doubles, the recorder's own name, head-to-head ("vs this opponent: 3–2 in 5 matches; last 3: W W L") | **On by default** (revised 2026-11-13, see OQ-2). "Include player names" toggle on `AICoachSheet`; off ⇒ "Me", "Opponent", "Partner". |
-| Text summary / full export | Overview lines: Competition, Player (the recorder's own name), Opponent(s), Partner | On by default (OQ-2, decided). |
+| AI Coach prompt (`MatchExporter.aiPromptExport`) | `## Match Context`: competition, singles/doubles, the recorder's own name, head-to-head ("vs this opponent: 3–2 in 5 matches; last 3: W W L") | **On by default** (revised 2026-11-13, see OQ-2). "Include player names" toggle on `AICoachSheet`; off ⇒ "Me", "Opponent", "Partner". The choice is remembered on the iPhone and shared with the share menu and Prepare Game Plan (revised 2026-11-15, `ExportInclusionDefaults`). |
+| Text summary / full export | Overview lines: Competition, Player (the recorder's own name), Opponent(s), Partner | On by default (OQ-2, decided); turning it off is remembered (one choice with AI Coach and Game Plan). |
 | Interactive HTML | `Meta.competitionTypeLabel`, `Meta.readerSideNames`, `Meta.otherSideNames` — **reader-framed in Swift** like every other field, so the JS only paints; schema 12 → 13; same lines in `MatchWebStaticFallback` | On by default (OQ-2, decided). |
-| Private notes | Optional section in text/HTML and AI only after a separate **Include private notes** opt-in, default off, with exact preview and disclosure; manual archives follow §4.1. | Names inside note prose are not removed by the names toggle. Explain this before sharing. |
+| Private notes | Optional section in text/HTML, AI and Prepare Game Plan only after a separate **Include private notes** opt-in, off every time and never remembered, with exact preview and disclosure; manual archives follow §4.1. | Names inside note prose are not removed by the names toggle. Explain this before sharing. |
 | Filenames (`deuce_mate_<date>[_opponent].html`) | unchanged | **Never.** |
 | Spoken announcements | unchanged | **Never** (v1). |
 
@@ -476,7 +476,7 @@ developer, but every place a name can travel needs a deliberate answer.
 | # | Concern | Risk | Decision |
 |---|---|---|---|
 | S1 | **Names of other people stored on device and in the user's iCloud backup** | Low. Personal/household use; the user's own iCloud container. | Allowed. Disclose in the privacy policy (S9). Tags are *not* health data, so they stay in the iCloud copy. |
-| S2 | **Names sent to third-party AI services** via the AI Coach hand-off | Medium. Another person's name plus their performance data goes to a service under its own terms; adds nothing to coaching. | Originally withheld by default. **Revised 2026-11-13 (owner decision): included by default**, like reports and the Game Plan pack — the player hands the prompt to their own AI app — behind the same visible per-hand-off "Include player names" toggle, reset to ON each time the sheet opens; the caption states that names are sent. |
+| S2 | **Names sent to third-party AI services** via the AI Coach hand-off | Medium. Another person's name plus their performance data goes to a service under its own terms; adds nothing to coaching. | Originally withheld by default. **Revised 2026-11-13 (owner decision): included by default**, like reports and the Game Plan pack — the player hands the prompt to their own AI app — behind the same visible per-hand-off "Include player names" toggle; the caption states that names are sent. **Revised 2026-11-15:** turning names off is remembered on the iPhone as one choice for the share menu, AI Coach and Game Plan, so a player who withholds names doesn't have to repeat it. |
 | S3 | **Names in shared reports** (text, HTML, manual archive) | Low–medium. Shared on purpose, often *with* that opponent — but a report can be forwarded. | Included by default for reports (OQ-2, decided), behind a visible "Include player names" toggle in the share menu. Manual archives include names and structured health data; private notes require a separate opt-in (§4.1). The disclosure describes the selected contents. |
 | S4 | **Names in filenames** | Medium, easy to miss. Filenames show in Files, AirDrop previews, iCloud Drive listings, email attachments — outside the report's own context. | Never. Filenames stay date-based. |
 | S5 | **HTML / script injection** through a typed name in the exported page | Medium if unescaped — CSP allows inline script. | Route through existing `scriptSafe` / HTML escaping; hostile-name tests (§7.3). |
@@ -586,7 +586,7 @@ flowchart TB
     subgraph local["iPhone — local preparation"]
         U["User chooses Report, AI Coach or Manual Archive"]
         R["Read current archive, health and notes by UUID<br/>Rebuild after edits or toggle changes"]
-        T["Select contents<br/>Reports: names ON by default<br/>AI: names OFF by default<br/>Notes: OFF by default for every export<br/>Manual archive includes names and deletion ledger"]
+        T["Select contents<br/>Reports, AI and Game Plan: names ON by default<br/>(one remembered choice)<br/>Notes: OFF for every export, never remembered<br/>Manual archive includes names and deletion ledger"]
         P["Preview selected contents<br/>Notes opt-in warns about personal or health prose<br/>Names OFF does not anonymize opted-in notes"]
         G{"Selected structured<br/>health measurements?"}
         HC["Explicit health confirmation<br/>Can combine with notes disclosure"]

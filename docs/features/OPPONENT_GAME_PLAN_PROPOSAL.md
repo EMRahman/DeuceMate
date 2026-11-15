@@ -82,10 +82,16 @@ identity and competition filters now exist, as documented in `CLAUDE.md`.
    individual selection, date filtering and competition filtering. Show selected
    versus available match counts, point and note counts, date range, tracking
    coverage and exclusions. Do not impose a five- or ten-match cap.
-4. Player names, playing style notes and private notes start included
-   *(revised 2026-11-12: originally off every session; the player prepares
-   this for their own AI app and wrote the notes as scouting)*. The main
-   screen's Includes row states what the pack quotes before any hand-off. Review the exact selected notes by match and omit individual notes.
+4. Player names and playing style notes start included, and the iPhone
+   remembers either being turned off; names are one choice shared with the
+   share menu and AI Coach. Private notes start off on every visit, and
+   switching them on first shows the exact selected notes by match, where
+   individual notes can be omitted *(revised 2026-11-12 to start everything
+   included; revised again 2026-11-15 to keep private notes a per-visit
+   opt-in, matching reports and AI Coach and the privacy policy, and to
+   remember the names and playing-notes choices — see
+   `ExportInclusionDefaults`)*. The main screen's Includes row states what the
+   pack quotes before any hand-off.
    Preview any new preparation text too. Explain that notes may contain names
    even when the names toggle is off.
 5. Preview the evidence overview and complete prompt/file contents. Show the
@@ -526,7 +532,8 @@ peak memory remains a release check (§9).
   `MatchDetailsUITests.testPrepareGamePlanFromOpponentProfile` flow on the
   iPhone simulator (entry point, ready on arrival with Last 5, names on and the
   upcoming match pre-filled, estimate follows the selection and contents,
-  preview text).
+  preview text), and `MatchExportsUITests.testGamePlanPrivateNotesAreReviewedAndNeverRemembered`
+  (private notes start off, are reviewed before inclusion and reset next visit).
 
 ### Still open
 

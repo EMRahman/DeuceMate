@@ -54,11 +54,13 @@ struct MatchDetailView: View {
     @State private var showMatchInfoEditor = false
     @State private var showNotesEditor = false
     /// Share-menu choices for the TEXT and HTML reports (MATCH_TAGS_PLAN.md
-    /// 7.3): names ON by default (OQ-2), the private note OFF by default and
-    /// only enabled through its review sheet. The AI Coach sheet keeps its own
-    /// toggles (names on, note off). Both feed `ExportInputs`, so changing
-    /// either rebuilds the snapshot and clears the old files first.
-    @State private var shareIncludeNames = true
+    /// 7.3): names ON by default (OQ-2) and remembered on this iPhone, shared
+    /// with AI Coach and Prepare Game Plan (`ExportInclusionDefaults`); the
+    /// private note OFF on every visit and only enabled through its review
+    /// sheet. Both feed `ExportInputs`, so changing either rebuilds the
+    /// snapshot and clears the old files first.
+    @AppStorage(ExportInclusionDefaults.includePlayerNamesKey)
+    private var shareIncludeNames = ExportInclusionDefaults.includePlayerNames
     /// The synced "Your name" setting (`MatchSyncKey.playerName`). With names
     /// included, exports name the recorder instead of only saying "Me".
     @AppStorage("playerName") private var recorderName: String = ""

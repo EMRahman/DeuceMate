@@ -47,12 +47,13 @@ struct AICoachSheet: View {
     @State private var installed: [AICoachApp] = []
     @State private var toast: String?
     @State private var toastWorkItem: DispatchWorkItem?
-    /// Reset every time the sheet opens, never remembered. Names default ON,
-    /// matching the share menu (the player hands this prompt to their own AI
-    /// app); the private note stays a per-hand-off opt-in behind its review
-    /// step (MATCH_TAGS_PLAN.md §7.3).
-    @State private var includeNames = true
-    @State private var includeNotes = false
+    /// Names default ON and the choice is remembered on this iPhone, shared
+    /// with the share menu and Prepare Game Plan (`ExportInclusionDefaults`).
+    /// The private note resets OFF every time the sheet opens: it stays a
+    /// per-hand-off opt-in behind its review step (MATCH_TAGS_PLAN.md §7.3).
+    @AppStorage(ExportInclusionDefaults.includePlayerNamesKey)
+    private var includeNames = ExportInclusionDefaults.includePlayerNames
+    @State private var includeNotes = ExportInclusionDefaults.includePrivateNotes
     @State private var showNotesReview = false
     @State private var activePrompt = ""
 

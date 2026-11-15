@@ -2,10 +2,13 @@
 // pushed from Prepare Game Plan's Includes row: player names, the opponent's
 // Playing Style notes and the selected matches' private notes.
 //
-// All three start ON: the player prepares this pack for their own AI app and
-// wrote the notes as scouting for exactly this. Any note can be left out with
-// Choose Notes, and the Includes summary on the main screen states what is in
-// before anything is copied or shared. Health data is never included.
+// Names and playing style notes start ON and are remembered on this iPhone
+// (`ExportInclusionDefaults`): playing style notes are scouting written for
+// exactly this pack. Private notes start OFF every time; switching them on
+// opens Choose Notes, which shows each note's exact text and lets any be left
+// out, and Cancel leaves them off. The Includes summary on the main screen
+// states what is in before anything is copied or shared. Health data is never
+// included.
 import SwiftUI
 import DeuceMateCore
 
@@ -40,8 +43,15 @@ struct GamePlanContentsView: View {
                         .foregroundStyle(.orange)
                         .accessibilityIdentifier("game-plan-notes-unreadable")
                 } else if !notes.isEmpty {
-                    Toggle("Private notes", isOn: $includeNotes)
-                        .accessibilityIdentifier("game-plan-include-notes")
+                    Toggle("Private notes", isOn: Binding(
+                        get: { includeNotes },
+                        set: { wantsOn in
+                            // Turning ON goes through the review of the exact
+                            // text; OFF is immediate.
+                            if wantsOn { showNotesReview = true } else { includeNotes = false }
+                        }
+                    ))
+                    .accessibilityIdentifier("game-plan-include-notes")
                     if includeNotes {
                         Button {
                             showNotesReview = true
@@ -76,6 +86,7 @@ struct GamePlanContentsView: View {
                 onConfirm: { excluded in
                     // Keep choices for notes not on screen now (another selection).
                     notesLeftOut = notesLeftOut.subtracting(notes.map(\.matchID)).union(excluded)
+                    includeNotes = true
                     showNotesReview = false
                 },
                 onCancel: { showNotesReview = false }

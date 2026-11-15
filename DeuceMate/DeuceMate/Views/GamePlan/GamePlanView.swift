@@ -40,13 +40,18 @@ struct GamePlanView: View {
     // Evidence selection.
     @State private var evidence = GamePlanEvidenceChoices()
 
-    // Inclusion choices — on by default; the player prepares this for their own AI app.
-    @State private var includeNames = true
+    // Inclusion choices (`ExportInclusionDefaults`). Names and playing style
+    // notes start on and are remembered on this iPhone (names shared with the
+    // share menu and AI Coach). Private notes start off every time and are
+    // only switched on through the review of their exact text.
+    @AppStorage(ExportInclusionDefaults.includePlayerNamesKey)
+    private var includeNames = ExportInclusionDefaults.includePlayerNames
     /// The synced "Your name" setting (`MatchSyncKey.playerName`), named in
     /// the pack as the recorder when names are included.
     @AppStorage("playerName") private var recorderName: String = ""
-    @State private var includeNotes = true
-    @State private var includePlayingNotes = true
+    @State private var includeNotes = ExportInclusionDefaults.includePrivateNotes
+    @AppStorage(ExportInclusionDefaults.includePlayingNotesKey)
+    private var includePlayingNotes = ExportInclusionDefaults.includePlayingNotes
     /// Notes the player chose to leave out, by match.
     @State private var notesLeftOut: Set<UUID> = []
 

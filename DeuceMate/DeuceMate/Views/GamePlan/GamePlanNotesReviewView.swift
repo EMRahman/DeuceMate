@@ -1,6 +1,7 @@
 // GamePlanNotesReviewView.swift — read the exact private notes a game plan
-// pack quotes, match by match, and leave any of them out. Notes are included
-// by default; this sheet is where the player excludes one. Mirrors
+// pack quotes, match by match, and leave any of them out. Private notes start
+// off; switching them on opens this sheet, so every note is seen before it is
+// included, and Done switches them on with the choices made here. Mirrors
 // `NotesExportReviewSheet`'s disclosure: notes may contain personal or health
 // information, and may name people even with player names off. Done applies
 // the choices; Cancel changes nothing.
