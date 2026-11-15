@@ -510,6 +510,9 @@
     scroll.appendChild(h("hr", { class: "hr" }));
     var mail = homeButton("Email me here", { cls: "headline", bg: SUPPORT_GRAD, onclick: function () { window.location.href = "mailto:mail@ehsanrahman.com?subject=DeuceMate%20Feedback"; } });
     scroll.appendChild(h("div", { class: "gblock" }, h("div", { text: "Questions or issues?" }), mail));
+    // Mirrors the native "Version x.y.z (build)" caption; the demo has no
+    // bundle version, so it says so (as the phone demo's Settings rows do).
+    scroll.appendChild(h("div", { class: "foot", style: "text-align:center;opacity:.6", text: "Version: Browser demo" }));
     return scroll;
   }
 

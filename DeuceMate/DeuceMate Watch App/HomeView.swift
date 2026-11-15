@@ -321,7 +321,31 @@ struct HomeView: View {
     @State private var showHistory = false
     @State private var announcementTestResult: (message: String, success: Bool)?
     @State private var hasPastMatches = false
-    private let contactMailtoURL = URL(string: "mailto:mail@ehsanrahman.com?subject=DeuceMate%20Feedback")
+    private let contactMailtoURL = HomeView.makeContactMailtoURL()
+
+    // Static: the bundle version can't change mid-process. Same keys and
+    // fallback as the iPhone's Settings > About rows.
+    private static let appVersion: String =
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+
+    private static let appBuild: String =
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+
+    /// "Version 1.4.0 (18)" — shown at the foot of the Guide sheet, under the
+    /// support email, so a bug report can quote the exact build.
+    private static let versionLabel = "Version \(appVersion) (\(appBuild))"
+
+    /// Feedback mailto: with the version in the subject (mirrors the iPhone's
+    /// support links) so emails sent from the Watch arrive pre-triaged.
+    private static func makeContactMailtoURL() -> URL? {
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = "mail@ehsanrahman.com"
+        components.queryItems = [
+            URLQueryItem(name: "subject", value: "DeuceMate Feedback (Watch v\(appVersion), build \(appBuild))")
+        ]
+        return components.url
+    }
 
     var matchInProgress: Bool {
         viewModel.sets.contains(where: { $0.gamesMe > 0 || $0.gamesOpponent > 0 }) ||
@@ -991,6 +1015,13 @@ struct HomeView: View {
                             }
                             .font(.footnote)
                         }
+
+                        Text(Self.versionLabel)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 4)
+                            .accessibilityIdentifier("guide-app-version")
                 }
                 .padding()
             }
