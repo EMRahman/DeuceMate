@@ -1050,13 +1050,14 @@ final class MatchDetailsUITests: XCTestCase {
 
         openGamePlan(for: opponent, capturing: "30-opponent-prepare-entry")
         let mainBar = app.navigationBars["Prepare Game Plan"]
+        ensureGamePlanNamesOn()
 
         // Ready on arrival: the estimate and the hand-off sit on the first screen.
         let estimate = app.descendants(matching: .any)["game-plan-estimate"]
         XCTAssertTrue(estimate.waitForExistence(timeout: 15), "The size estimate appears once the pack is built")
         XCTAssertTrue(waitForLabel(estimate, contains: "2 matches selected"))
         XCTAssertTrue(estimate.label.contains("Estimated input: ~"), "VoiceOver hears the count and the estimate together")
-        XCTAssertTrue((estimate.value as? String ?? "").hasPrefix("Names included"), "Names start on")
+        XCTAssertTrue((estimate.value as? String ?? "").hasPrefix("Names included"), "Names are on")
         XCTAssertTrue(app.buttons["game-plan-share"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["game-plan-upcoming"].label.contains("Friendly"),
                       "The upcoming match is pre-filled from the previous match")
@@ -1078,7 +1079,7 @@ final class MatchDetailsUITests: XCTestCase {
         // Names off rebuilds the pack without them.
         app.buttons["game-plan-contents"].tap()
         XCTAssertTrue(app.navigationBars["Pack Contents"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.switches["game-plan-include-names"].value as? String, "1", "Names start on")
+        XCTAssertEqual(app.switches["game-plan-include-names"].value as? String, "1", "Names are on")
         flipSwitch("game-plan-include-names")
         app.navigationBars["Pack Contents"].buttons.firstMatch.tap()
         XCTAssertTrue(mainBar.waitForExistence(timeout: 5))
@@ -1115,6 +1116,7 @@ final class MatchDetailsUITests: XCTestCase {
             predicate: NSPredicate(format: "value ENDSWITH %@", "summary only"), object: estimate)
         XCTAssertEqual(XCTWaiter().wait(for: [summaryOnly], timeout: 15), .completed,
                        "The estimate rebuilds for the detail chosen on Advanced")
+        ensureGamePlanNamesOn()   // The names choice is remembered; leave it as found.
     }
 
     /// An unfinished last match makes the next match "finish it": the pack
@@ -1181,6 +1183,22 @@ final class MatchDetailsUITests: XCTestCase {
         XCTAssertTrue(prepare.waitForExistence(timeout: 5), "The entry point sits on the opponent's profile")
         if let shot { capture(shot) }
         prepare.tap()
+        XCTAssertTrue(app.navigationBars["Prepare Game Plan"].waitForExistence(timeout: 5))
+    }
+
+    /// "Player names" is remembered on this iPhone and shared with the share
+    /// menu and AI Coach, so a test that needs it on switches it on (from the
+    /// Prepare Game Plan main screen) rather than assuming a fresh install.
+    @MainActor
+    private func ensureGamePlanNamesOn() {
+        let contents = app.buttons["game-plan-contents"]
+        for _ in 0..<6 where !(contents.exists && contents.isHittable) { app.swipeDown() }
+        contents.tap()
+        XCTAssertTrue(app.navigationBars["Pack Contents"].waitForExistence(timeout: 5))
+        let names = app.switches["game-plan-include-names"]
+        XCTAssertTrue(names.waitForExistence(timeout: 5))
+        if names.value as? String == "0" { flipSwitch("game-plan-include-names") }
+        app.navigationBars["Pack Contents"].buttons.firstMatch.tap()
         XCTAssertTrue(app.navigationBars["Prepare Game Plan"].waitForExistence(timeout: 5))
     }
 

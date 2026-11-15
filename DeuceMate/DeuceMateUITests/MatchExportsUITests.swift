@@ -36,9 +36,11 @@ final class MatchExportsUITests: XCTestCase {
 
     // MARK: - AI Coach
 
-    /// Names (default ON, like the share menu) and the private note (a
-    /// default-OFF opt-in) are separate toggles on the AI Coach sheet; the
-    /// visible prompt changes exactly with them.
+    /// Names (ON unless turned off, remembered and shared with the share menu)
+    /// and the private note (OFF every time the sheet opens) are separate
+    /// toggles on the AI Coach sheet; the visible prompt changes exactly with
+    /// them. The names choice is remembered on the simulator, so the test
+    /// switches it on first rather than assuming a fresh install.
     @MainActor
     func testAICoachNamesAndNoteAreOptIns() throws {
         launch()
@@ -50,13 +52,14 @@ final class MatchExportsUITests: XCTestCase {
         aiButton.tap()
         XCTAssertTrue(app.navigationBars["AI Coach"].waitForExistence(timeout: 5))
 
-        // Defaults: names on, note off.
+        // Names on (the remembered choice), note off (never remembered).
         let names = app.switches["ai-include-names"]
         let notes = app.switches["ai-include-notes"]
         XCTAssertTrue(names.waitForExistence(timeout: 5))
         XCTAssertTrue(notes.exists)
-        XCTAssertEqual(names.value as? String, "1", "Names default ON for the AI hand-off")
-        XCTAssertEqual(notes.value as? String, "0", "The private note defaults OFF")
+        ensureSwitchOn("ai-include-names")
+        XCTAssertEqual(names.value as? String, "1")
+        XCTAssertEqual(notes.value as? String, "0", "The private note starts OFF every time")
         capture("20-ai-coach-defaults")
 
         var prompt = openPromptPreview()
@@ -122,8 +125,9 @@ final class MatchExportsUITests: XCTestCase {
 
     // MARK: - Share menu
 
-    /// Names ON by default for reports; the note needs its review; an included
-    /// note joins the same pre-share alert; the text carries what was chosen.
+    /// Names ON for reports (the remembered choice); the note needs its
+    /// review; an included note joins the same pre-share alert; the text
+    /// carries what was chosen.
     @MainActor
     func testShareMenuNamesDefaultOnAndNoteDisclosedBeforeSharing() throws {
         launch()
@@ -133,8 +137,9 @@ final class MatchExportsUITests: XCTestCase {
         let scratch = createMatch()
         let tagged = try seedTaggedPair(opponent: alex, note: note)
 
+        ensureMenuNamesOn()
         openExportMenu()
-        XCTAssertEqual(menuToggleValue("Include player names"), "1", "Names default ON for reports")
+        XCTAssertEqual(menuToggleValue("Include player names"), "1")
         XCTAssertEqual(menuToggleValue("Include private note"), "0", "Note defaults OFF for reports")
         capture("25-share-menu-toggles")
 
@@ -168,8 +173,7 @@ final class MatchExportsUITests: XCTestCase {
         XCTAssertTrue(withNote.contains("> \(note)"), withNote)
         XCTAssertTrue(withNote.contains(alex))
 
-        // Reopening the detail resets both choices to their defaults (names ON,
-        // note OFF): opt-ins are never remembered between visits.
+        // The note opt-in is never remembered once it has been used.
         openExportMenu()
         XCTAssertEqual(menuToggleValue("Include private note"), "0", "The note opt-in does not persist")
         app.buttons["Include private note"].tap()
@@ -191,7 +195,111 @@ final class MatchExportsUITests: XCTestCase {
         XCTAssertFalse(namesOff.contains(alex), "Names OFF: the typed name is absent from the text")
         XCTAssertTrue(namesOff.contains("Competition:"))
         XCTAssertTrue(namesOff.contains("knee sore"), "The opted-in note is still there")
+        ensureMenuNamesOn()   // The choice is remembered; leave it as found.
         closeDetail()
+    }
+
+    /// Turning names off is remembered: reopening the match and opening AI
+    /// Coach both start with names off, while the private note still starts
+    /// off and unremembered. Turning names on in AI Coach carries back to the
+    /// share menu, because it is one choice.
+    @MainActor
+    func testNamesChoiceIsRememberedAcrossExportsButNoteIsNot() throws {
+        launch()
+        let alex = "Alex \(token)"
+        let tagged = try seedTaggedPair(opponent: alex, note: note)
+        ensureMenuNamesOn()
+
+        openExportMenu()
+        app.buttons["Include player names"].tap()
+        openExportMenu()
+        XCTAssertEqual(menuToggleValue("Include player names"), "0")
+        app.buttons["Include private note"].tap()
+        XCTAssertTrue(app.buttons["confirm-include-note"].waitForExistence(timeout: 5))
+        app.buttons["confirm-include-note"].tap()
+        closeDetail()
+
+        openMatch(tagged)
+        openExportMenu()
+        XCTAssertEqual(menuToggleValue("Include player names"), "0", "Names OFF is remembered")
+        XCTAssertEqual(menuToggleValue("Include private note"), "0", "The note opt-in is not remembered")
+        dismissMenu()
+
+        let aiButton = app.buttons["AI Coach"]
+        XCTAssertTrue(aiButton.waitForExistence(timeout: 10))
+        aiButton.tap()
+        XCTAssertTrue(app.navigationBars["AI Coach"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.switches["ai-include-names"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.switches["ai-include-names"].value as? String, "0",
+                       "AI Coach shares the remembered names choice")
+        XCTAssertEqual(app.switches["ai-include-notes"].value as? String, "0")
+        let prompt = openPromptPreview()
+        XCTAssertFalse(prompt.contains(alex), "Names stay out while the choice is OFF")
+        goBack(from: "Prompt")
+        capture("29b-ai-coach-remembered-names-off")
+
+        flipSwitch("ai-include-names")
+        XCTAssertEqual(app.switches["ai-include-names"].value as? String, "1")
+        app.navigationBars["AI Coach"].buttons["Done"].tap()
+        openExportMenu()
+        XCTAssertEqual(menuToggleValue("Include player names"), "1", "Turning names on in AI Coach reaches the share menu")
+        dismissMenu()
+        closeDetail()
+    }
+
+    // MARK: - Prepare Game Plan
+
+    /// Private notes start OFF in every game plan. Switching them on shows the
+    /// exact text first; Cancel leaves them out, Done includes them, and the
+    /// next game plan starts without them again.
+    @MainActor
+    func testGamePlanPrivateNotesAreReviewedAndNeverRemembered() throws {
+        launch()
+        let alex = "Alex \(token)"
+        _ = try seedTaggedPair(opponent: alex, note: note)
+        closeDetail()
+
+        openGamePlan(for: alex)
+        let estimate = app.descendants(matching: .any)["game-plan-estimate"]
+        XCTAssertTrue(estimate.waitForExistence(timeout: 15))
+        app.buttons["game-plan-contents"].tap()
+        XCTAssertTrue(app.navigationBars["Pack Contents"].waitForExistence(timeout: 5))
+        let notes = app.switches["game-plan-include-notes"]
+        XCTAssertTrue(notes.waitForExistence(timeout: 5))
+        XCTAssertEqual(notes.value as? String, "0", "Private notes start OFF in a game plan")
+        XCTAssertFalse(app.buttons["game-plan-choose-notes"].exists)
+        capture("38-game-plan-notes-off")
+
+        // Wanting them on shows the exact text; Cancel leaves them off.
+        notes.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+        XCTAssertTrue(app.navigationBars["Choose Notes"].waitForExistence(timeout: 5),
+                      "Notes are reviewed before they are included")
+        XCTAssertTrue(anyElement(containing: note).exists, "The review shows the exact note")
+        capture("39-game-plan-notes-review")
+        app.navigationBars["Choose Notes"].buttons["Cancel"].tap()
+        XCTAssertEqual(notes.value as? String, "0", "Cancel keeps notes out")
+
+        // Done includes them.
+        notes.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["game-plan-confirm-notes"].waitForExistence(timeout: 5))
+        app.buttons["game-plan-confirm-notes"].tap()
+        XCTAssertEqual(notes.value as? String, "1")
+        XCTAssertTrue(app.buttons["game-plan-choose-notes"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["game-plan-choose-notes"].label.contains("1 of 1"))
+        app.navigationBars["Pack Contents"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Prepare Game Plan"].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForValue(estimate, contains: "1 of 1 notes included"), "The pack rebuilds with the note")
+        XCTAssertTrue(gamePlanText().contains("knee sore"), "An approved note is quoted in the pack")
+
+        // A new game plan starts without them again.
+        let prepare = app.buttons["opponent-prepare-game-plan"]
+        for _ in 0..<4 where !prepare.exists { app.navigationBars.firstMatch.buttons.firstMatch.tap() }
+        XCTAssertTrue(prepare.waitForExistence(timeout: 5))
+        prepare.tap()
+        XCTAssertTrue(app.navigationBars["Prepare Game Plan"].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForValue(estimate, contains: "notes not included"),
+                      "Notes are not remembered between game plans")
+        XCTAssertFalse(gamePlanText().contains("knee sore"))
     }
 
     /// Leaves the staged interactive HTML files built with names OFF and the
@@ -201,6 +309,7 @@ final class MatchExportsUITests: XCTestCase {
         launch()
         let alex = "Alex \(token)"
         _ = try seedTaggedPair(opponent: alex, note: note)
+        ensureMenuNamesOn()
         openExportMenu()
         app.buttons["Include player names"].tap()
         openExportMenu()
@@ -212,6 +321,7 @@ final class MatchExportsUITests: XCTestCase {
         app.buttons["My Perspective"].tap()
         XCTAssertTrue(waitForShareSheet())
         dismissShareSheet()
+        ensureMenuNamesOn()   // The choice is remembered; leave it as found.
         closeDetail()
     }
 
@@ -221,6 +331,7 @@ final class MatchExportsUITests: XCTestCase {
         launch()
         let alex = "Alex \(token)"
         _ = try seedTaggedPair(opponent: alex, note: note)
+        ensureMenuNamesOn()
         openExportMenu()
         app.buttons["Include private note"].tap()
         XCTAssertTrue(app.buttons["confirm-include-note"].waitForExistence(timeout: 5))
@@ -341,7 +452,80 @@ final class MatchExportsUITests: XCTestCase {
         return text.label
     }
 
+    // MARK: - Helpers: Prepare Game Plan
+
+    /// Opponents → the opponent's profile → Prepare Game Plan.
+    @MainActor
+    private func openGamePlan(for opponent: String) {
+        let sectionLink = app.buttons["opponents-section-link"]
+        for _ in 0..<10 where !(sectionLink.exists && sectionLink.isHittable) { app.swipeDown() }
+        XCTAssertTrue(sectionLink.waitForExistence(timeout: 5))
+        sectionLink.tap()
+        let row = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "opponent-row-", opponent
+        )).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        let prepare = app.buttons["opponent-prepare-game-plan"]
+        XCTAssertTrue(prepare.waitForExistence(timeout: 5))
+        prepare.tap()
+        XCTAssertTrue(app.navigationBars["Prepare Game Plan"].waitForExistence(timeout: 5))
+    }
+
+    /// The built pack's text, read from Preview; returns to the main screen.
+    @MainActor
+    private func gamePlanText() -> String {
+        let preview = app.buttons["game-plan-preview"]
+        for _ in 0..<6 where !(preview.exists && preview.isHittable) { app.swipeUp() }
+        XCTAssertTrue(preview.waitForExistence(timeout: 15))
+        preview.tap()
+        XCTAssertTrue(app.navigationBars["Preview"].waitForExistence(timeout: 5))
+        app.buttons["game-plan-view-text"].tap()
+        let text = app.textViews["game-plan-text"]
+        XCTAssertTrue(text.waitForExistence(timeout: 5))
+        let contents = text.value as? String ?? ""
+        let main = app.navigationBars["Prepare Game Plan"]
+        for _ in 0..<4 where !main.exists { app.navigationBars.firstMatch.buttons.firstMatch.tap() }
+        XCTAssertTrue(main.waitForExistence(timeout: 5))
+        return contents
+    }
+
+    @MainActor
+    private func waitForValue(_ element: XCUIElement, contains text: String, timeout: TimeInterval = 15) -> Bool {
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", text), object: element)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
+    }
+
     // MARK: - Helpers: share
+
+    /// "Include player names" is remembered on this iPhone, so a test that
+    /// needs names on switches them on rather than assuming a fresh install,
+    /// and a test that turns them off puts them back. Needs a match detail open.
+    @MainActor
+    private func ensureMenuNamesOn() {
+        openExportMenu()
+        if menuToggleValue("Include player names") == "0" {
+            app.buttons["Include player names"].tap()
+        } else {
+            dismissMenu()
+        }
+    }
+
+    /// Closes an open menu without choosing anything (a tap on the title bar).
+    @MainActor
+    private func dismissMenu() {
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"),
+                                             object: app.buttons["Share Summary"].firstMatch)
+        XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 3), .completed, "The menu closed")
+    }
+
+    @MainActor
+    private func ensureSwitchOn(_ identifier: String) {
+        let toggle = app.switches[identifier]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        if toggle.value as? String == "0" { flipSwitch(identifier) }
+    }
 
     @MainActor
     private func openExportMenu() {
