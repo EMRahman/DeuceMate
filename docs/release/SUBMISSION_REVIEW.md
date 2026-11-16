@@ -76,6 +76,41 @@ HealthKit failure.
   Failed recording/saving must show a Watch warning; scoring remains available.
 - [ ] Record devices/OS/build and whether any failure is absent from Health too.
 
+## Live reconnect finding — 16 November 2026
+
+During #175 testing the owner disabled Bluetooth, incremented the score and
+restored Bluetooth. The iPhone reported the Watch reachable but did not catch up.
+The tested build/devices and recovery after a subsequent point are not recorded.
+At the time, reconnect synced stored history, excluding the live match; this
+explains a recovery gap without establishing a regression introduced by #175.
+
+Track recovery as [technical debt #28](../features/TECHNICAL_DEBT.md#28--recover-current-live-state-and-confirm-courtside-phone-input),
+with archive revision ordering tracked separately in #2. The [Live Watch sync proposal](../features/LIVE_WATCH_SYNC_PROPOSAL.md)
+keeps the Watch authoritative for courtside iPhone scoring. The working branch now
+implements the agreed smaller request/reply flow, one request at a time and timeout
+refresh without replay. Durable receipts, heartbeat/age UI and archive revisions
+remain deferred. Paired-device validation is still required; reachability alone
+must not count as successful recovery.
+
+- [ ] Record build, devices/OS, score before/after and whether another connected
+  point recovers. Disconnect, score on Watch, reconnect, then **do not score
+  again**. Capture whether/when the iPhone catches up.
+- [ ] On the updated build, repeat with undo, pending categorisation and
+  park/finish during the gap. The phone must recover current state automatically;
+  input stays disabled until that state is confirmed. Delay an older history
+  push and verify it cannot roll the recovered score back.
+
+**Branch verification, 16 November 2026:** 1,033 Core tests passed. Both apps'
+production Swift modules and the focused iPhone/Watch live-sync test files
+successfully type-check against their simulator SDKs. This is not a full Xcode
+build or an executed app test run: Xcode package-cache writes and CoreSimulator
+services were blocked by the workspace sandbox. Browser syntax, model/coaching
+and generated-export drift checks passed; Chromium could not launch because the
+sandbox denied its Mach-port registration. Interactive browser and physical-pair
+checks above remain pending. Existing command tests were intentionally updated
+for current-state confirmation and one request in flight; no tests were skipped
+or assertions weakened to hide a failure.
+
 ## Next release — manual testing gate
 
 **Before writing release notes for the release after 1.3.1, confirm that every
@@ -136,11 +171,14 @@ Centre toggles can leave the Watch connected.
   [pending physical-Watch checklist](../features/MATCH_RESUME_MARKERS_PLAN.md#pending-physical-watch-checklist-required-before-release)
   on the same build.
 
-**Not failures:** after a reconnect, the iPhone can stay on the last score it
-received until the next point. A rare drop to an older score that corrects itself
-on the next point is the known late-push limit
-([TECHNICAL_DEBT #2](../features/TECHNICAL_DEBT.md)); note what you did just before
-it. A score that stays wrong after the next point is a failure.
+**Original #175 acceptance limits:** that PR allowed the iPhone to retain the
+last score until another point after reconnect, and a late history push to
+temporarily revert it ([technical debt #2](../features/TECHNICAL_DEBT.md)). These
+describe the pre-fix behavior; the working-branch #28 implementation now fetches
+current live state. Older history can still revert the archive (#2), while the
+compact live board follows its separate Watch state. Record either symptom during testing. A score that stays wrong after the
+next connected point also requires investigation beyond the missing reconnect
+snapshot. The #28 acceptance requires recovery without another point.
 
 ### #174 — live scoreboard when the Watch can't be reached
 

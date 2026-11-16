@@ -1,6 +1,7 @@
 //DeuceMateApp.swift
 import SwiftUI
 import WatchKit
+import DeuceMateCore
 
 @main
 struct DeuceMateApp: App {
@@ -51,6 +52,13 @@ struct DeuceMateApp: App {
                 // Start WatchConnectivity so completed/in-progress matches
                 // are delivered to the paired iPhone companion app.
                 let sync = WatchMatchSyncService.shared
+                sync.onLiveRequest = { [weak model] request in
+                    model?.handleLiveRequest(request) ?? LiveMatchReply(state: nil, message: "Watch is unavailable.")
+                }
+                sync.onCurrentLiveRecord = { [weak model] in
+                    guard let model, model.persistenceError == nil else { return nil }
+                    return model.currentLiveRecord()
+                }
                 sync.onThemeReceived = { [weak model] rawValue in
                     model?.applyIncomingTheme(rawValue)
                 }

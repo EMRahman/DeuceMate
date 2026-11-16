@@ -67,13 +67,17 @@ struct LiveScoreboardView: View {
 
     private var status: LiveScoreboardStatus {
         LiveScoreboardStatus(isWatchReachable: syncService.isWatchReachable,
-                             isInputEnabled: iPhoneInputEnabled)
+                             isInputEnabled: iPhoneInputEnabled && (syncService.liveState?.inputEnabled ?? false),
+                             isStateConfirmed: syncService.isLiveStateConfirmed,
+                             isRequestInFlight: syncService.isLiveRequestInFlight,
+                             blockingReason: syncService.liveState?.blockingReason)
     }
 
     /// A send failure outranks the steady status because it is about what the
     /// user just did.
     private var connectionMessage: String? {
-        shownCommandFailure != nil ? LiveScoreboardStatus.commandFailureMessage : status.detail
+        shownCommandFailure != nil
+            ? (syncService.liveCommandMessage ?? LiveScoreboardStatus.commandFailureMessage) : status.detail
     }
 
     private var meColor:     Color { theme.colors.me }
@@ -95,6 +99,7 @@ struct LiveScoreboardView: View {
     private func chromeBot(for record: MatchRecord) -> CGFloat { showMomentum(for: record) ? 52 : 28 }
 
     private var record: MatchRecord? {
+        if let state = syncService.liveState { return state.record }
         guard let id = syncService.activeMatchID else { return nil }
         return store.history.first { $0.id == id }
     }
@@ -156,6 +161,11 @@ struct LiveScoreboardView: View {
                 VStack {
                     HStack(alignment: .top) {
                         liveBadge
+                        if !syncService.isLiveStateConfirmed && !syncService.isLiveRequestInFlight {
+                            Button("Refresh") { syncService.requestLiveState() }
+                                .font(.caption)
+                                .accessibilityIdentifier("live-refresh")
+                        }
                         if let connectionMessage {
                             Text(connectionMessage)
                                 .font(.caption)
@@ -240,14 +250,18 @@ struct LiveScoreboardView: View {
 
             } else {
                 VStack(spacing: 12) {
-                    Image(systemName: "checkmark.circle.fill")
+                    Image(systemName: syncService.isLiveStateConfirmed ? "checkmark.circle.fill" : "applewatch")
                         .font(.largeTitle)
-                        .foregroundStyle(.green)
-                    Text("Match ended")
+                        .foregroundStyle(syncService.isLiveStateConfirmed ? Color.green : Color.orange)
+                    Text(syncService.isLiveStateConfirmed ? "Match ended" : "Waiting for Watch")
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.white)
                     Button("Close") { closeAndRestorePortrait() }
                         .buttonStyle(.borderedProminent)
+                    if !syncService.isLiveStateConfirmed {
+                        Button("Refresh") { syncService.requestLiveState() }
+                            .disabled(syncService.isLiveRequestInFlight)
+                    }
                 }
             }
         }
@@ -279,6 +293,7 @@ struct LiveScoreboardView: View {
             shownCommandFailure = nil
         }
         .onAppear {
+            syncService.requestLiveState()
             UIApplication.shared.isIdleTimerDisabled = true
             lockLandscape()
         }
@@ -415,7 +430,7 @@ struct LiveScoreboardView: View {
     // MARK: - Chrome
 
     private var liveBadge: some View {
-        let tint: Color = status.isWatchReachable ? .red : .orange
+        let tint: Color = status.isWatchReachable && status.isStateConfirmed ? .red : .orange
         return HStack(spacing: 6) {
             Circle()
                 .fill(tint)

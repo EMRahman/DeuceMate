@@ -453,3 +453,16 @@ changed. The checked items above are backed by the model/browser suites and
 rendered-artifact review described above; hardware services remain simulated.
 
 1.3.1 sync: Trends gained the native competition-type (trophy) and opponent (people, "vs Name") filters beside the format menu (`phone-demo-trends.js`, `TrendFilter.competitionType`/`opponentID`; doubles match either opponent; the opponent menu is hidden with no opponents, and a remembered opponent who no longer exists falls back to All). Swipe vibration now acts, not just toggles: after an applied watch swipe the demo calls `navigator.vibrate` (win 30 ms, lose 20-40-20, undo 12, undo only when something was undone) and nudges the screen, only while the shared setting is on (`ScoreInputHaptics`). The live scoreboard shows the native send-failure message ("Not confirmed by the Watch. Check the score before retrying.", 5 s) when the Watch doesn't confirm a phone command (`api.phoneCommand` now returns false for a rejection; a locally blocked swipe, as in native `handleSwipe`, shows nothing), beside the already-present WAITING FOR WATCH badge and "Last score shown" copy (#174). The Opponent detail ordering and trailing Manage link (#168) were already mirrored. Verified with `scripts/iphone-demo-131-qa.cjs` (new) plus the base, extended, state, Match Info and export suites on Chromium and WebKit, and light/dark screenshots of the Trends filters. The popup suite (`iphone-demo-popup-qa.cjs`) was already failing in `deleteFits` before this pass: at 320x740 the selected archive row ended up below the visible viewport (taller 1.3.0 rows) so the clamped popover sat 86 px from it; the suite now scrolls the row back into view after each resize, as a person would, and passes on Chromium and WebKit. `iphone-demo-visual-qa.cjs` now expects the three Trends menus (format, competition, opponent) instead of one select.
+
+
+### Live Watch request/reply update — 16 November 2026
+
+The phone demo now retains its last received snapshot across a disconnect and
+simulates current-state fetch on reconnect/live-board entry. Score/category
+requests go through the existing Watch engine, with one request in flight and no
+optimistic score mutation or action replay. The native implementation keeps the
+same authority and separates compact live state from full archive records.
+`iphone-demo-state-qa.cjs` adds offline Watch scoring followed by recovery without
+another point, and two gestures before a response. Chromium launch was blocked by
+sandbox Mach-port permissions in this session; interactive/visual parity remains
+unverified. Dependency-free model/coaching and generated-export checks passed.

@@ -28,6 +28,14 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
 
     @Published private(set) var lastSyncDate: Date?
     @Published private(set) var isWatchReachable: Bool = false
+    @Published private(set) var liveState: LiveMatchState?
+    @Published private(set) var isLiveStateConfirmed = false
+    @Published private(set) var isLiveRequestInFlight = false
+    @Published private(set) var liveCommandMessage: String?
+    private var liveRequestID: UUID?
+    private var liveRequestTimeout: DispatchWorkItem?
+    private var liveSessionID: UUID?
+    private var liveSequence: UInt64 = 0
     /// Increments when a live score or category command may not have reached the
     /// watch. A counter, so two identical failures in a row still both notify.
     @Published private(set) var liveCommandFailureCount: Int = 0
@@ -191,6 +199,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     }
 
     func requestFullHistorySync() {
+        requestLiveState()
         transport.sendControl(MatchSyncPayloadBuilder.requestFullHistory(), queueOnFailure: true)
     }
 
@@ -407,54 +416,105 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     /// The watch also ignores unknown commands and any commands when iPhone
     /// Input is disabled.
     func sendScoreCommand(_ command: String, matchID: UUID?) {
-        var payload: [String: Any] = [MatchSyncKey.scoreCommand: command]
-        if let id = matchID {
-            payload[MatchSyncKey.scoreCommandMatchID] = id.uuidString
-        }
-        sendLiveCommand(payload)
+        sendLiveCommand(LiveMatchRequest(action: command, matchID: matchID))
     }
 
-    /// Fast-fail send for live commands, reporting anything undelivered through
-    /// `liveCommandFailureCount`. Never queued or retried: a failed send is
-    /// ambiguous, so sending it again could score a point twice.
-    private func sendLiveCommand(_ payload: [String: Any]) {
-        transport.sendControl(payload, queueOnFailure: false) { [weak self] in
-            DispatchQueue.main.async {
-                self?.liveCommandFailureCount += 1
-            }
-        }
-    }
-
-    /// Send a post-point categorization action to the watch. Mirrors
-    /// `sendScoreCommand` for the categorization sheet — the watch validates
-    /// (must have a pending stat and iPhone Input enabled), applies via its
-    /// existing `selectOutcome` / `commitEndingShot` / `cancelOutcomeSelection`
-    /// paths, and pushes the resulting state back. Sent without queue-on-
-    /// failure: a stale categorization queued for hours would be applied to a
-    /// long-resolved point, so we want fast-fail semantics like score commands.
     func sendSelectOutcome(_ outcome: PointOutcome) {
-        sendLiveCommand([
-            MatchSyncKey.statAction: MatchSyncKey.statActionSelectOutcome,
-            MatchSyncKey.statActionOutcome: outcome.rawValue
-        ])
+        sendStatAction(MatchSyncKey.statActionSelectOutcome, outcome: outcome)
     }
-
     func sendCommitEndingShot(_ shot: EndingShot) {
-        sendLiveCommand([
-            MatchSyncKey.statAction: MatchSyncKey.statActionCommitEndingShot,
-            MatchSyncKey.statActionEndingShot: shot.rawValue
-        ])
+        sendStatAction(MatchSyncKey.statActionCommitEndingShot, shot: shot)
     }
-
     func sendCancelOutcomeSelection() {
-        sendLiveCommand([MatchSyncKey.statAction: MatchSyncKey.statActionCancelOutcomeSelection])
+        sendStatAction(MatchSyncKey.statActionCancelOutcomeSelection)
+    }
+    func sendUndoPoint() { sendStatAction(MatchSyncKey.statActionUndoPoint) }
+
+    private func sendStatAction(_ action: String, outcome: PointOutcome? = nil, shot: EndingShot? = nil) {
+        sendLiveCommand(LiveMatchRequest(action: action, matchID: liveState?.record?.id,
+            outcome: outcome, endingShot: shot, pendingPoint: pendingPoint, pendingOutcome: pendingPointOutcome))
     }
 
-    /// Roll the whole point back from the categorization panel. Routed through
-    /// the stat-action path, not `sendScoreCommand`, because the watch rejects
-    /// score commands while a stat is pending — the state the panel lives in.
-    func sendUndoPoint() {
-        sendLiveCommand([MatchSyncKey.statAction: MatchSyncKey.statActionUndoPoint])
+    private func sendLiveCommand(_ request: LiveMatchRequest) {
+        // One command at a time. No queued intent and no optimistic score changes.
+        guard !isLiveRequestInFlight else { return }
+        guard isLiveStateConfirmed, liveState?.inputEnabled == true,
+              liveState?.record != nil, liveState?.blockingReason == nil, transport.isReachable else {
+            liveCommandMessage = LiveScoreboardStatus.commandFailureMessage
+            liveCommandFailureCount += 1
+            return
+        }
+        beginLiveRequest(request)
+    }
+
+    /// Safe to repeat: reads current Watch state and never replays scoring intent.
+    func requestLiveState() {
+        guard !isLiveRequestInFlight else { return }
+        isLiveStateConfirmed = false
+        guard transport.isActivated, transport.isReachable else { return }
+        beginLiveRequest(LiveMatchRequest())
+    }
+
+    private func beginLiveRequest(_ request: LiveMatchRequest) {
+        let id = UUID()
+        liveRequestID = id
+        isLiveRequestInFlight = true
+        let timeout = DispatchWorkItem { [weak self] in
+            self?.finishLiveRequest(id, request: request, result: .failure(NSError(domain: "LiveMatchTimeout", code: 1)))
+        }
+        liveRequestTimeout = timeout
+        scheduleAfter(10, timeout)
+        transport.requestLiveState(request) { [weak self] result in
+            DispatchQueue.main.async { self?.finishLiveRequest(id, request: request, result: result) }
+        }
+    }
+
+    private func finishLiveRequest(_ id: UUID, request: LiveMatchRequest,
+                                   result: Result<LiveMatchReply, Error>) {
+        guard liveRequestID == id else { return } // expired/disconnected requests cannot unlock input
+        liveRequestTimeout?.cancel()
+        liveRequestTimeout = nil
+        liveRequestID = nil
+        isLiveRequestInFlight = false
+        switch result {
+        case .success(let reply) where reply.state != nil && reply.sessionID != nil:
+            applyLiveReply(reply)
+            isLiveStateConfirmed = true
+            liveCommandMessage = reply.message
+            if reply.message != nil { liveCommandFailureCount += 1 }
+        case .success(let reply):
+            isLiveStateConfirmed = false
+            liveCommandMessage = reply.message ?? LiveScoreboardStatus.commandFailureMessage
+            liveCommandFailureCount += 1
+        case .failure:
+            isLiveStateConfirmed = false
+            liveCommandMessage = LiveScoreboardStatus.commandFailureMessage
+            liveCommandFailureCount += 1
+            if request.action != nil { requestLiveState() }
+        }
+    }
+
+    private func invalidateLiveState() {
+        liveRequestTimeout?.cancel()
+        liveRequestTimeout = nil
+        liveRequestID = nil
+        isLiveRequestInFlight = false
+        isLiveStateConfirmed = false
+    }
+
+    func pauseLiveState() { invalidateLiveState() }
+
+    private func applyLiveReply(_ reply: LiveMatchReply) {
+        guard let state = reply.state, let sessionID = reply.sessionID else { return }
+        if liveSessionID == sessionID && reply.sequence < liveSequence { return }
+        liveSessionID = sessionID
+        liveSequence = reply.sequence
+        liveState = state
+        activeMatchID = state.record?.id
+        pendingPoint = state.pendingPoint
+        pendingPointOutcome = state.pendingOutcome
+        UserDefaults.standard.set(state.inputEnabled, forKey: MatchSyncKey.iPhoneInputEnabled)
+        announcementService?.setMatchLive(state.record != nil)
     }
 
     // MARK: - WCSessionDelegate
@@ -513,9 +573,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                 isReachable: session.isReachable,
                 pendingTransferCount: session.outstandingUserInfoTransfers.count
             )
-        }
-        if session.isReachable {
-            requestFullHistorySync()
+            if session.isReachable { self.requestFullHistorySync() }
         }
     }
 
@@ -570,15 +628,34 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         var didSync = false
         for event in events {
             switch event {
+            case .liveState(let reply):
+                DispatchQueue.main.async {
+                    guard reply.state != nil else {
+                        self.invalidateLiveState()
+                        self.liveCommandMessage = reply.message
+                        self.liveCommandFailureCount += 1
+                        return
+                    }
+                    if let sessionID = reply.sessionID, let current = self.liveSessionID, sessionID != current {
+                        self.invalidateLiveState()
+                        self.requestLiveState()
+                    } else {
+                        self.applyLiveReply(reply)
+                    }
+                    // Pushes update the board, but only our current request's
+                    // application reply can establish readiness or finish a command.
+                }
             case .announcement(let text):
                 DispatchQueue.main.async { self.announcementService?.speak(text) }
             case .clearActiveMatch:
                 DispatchQueue.main.async {
+                    guard self.liveState == nil else { return }
                     self.activeMatchID = nil
                     self.announcementService?.setMatchLive(false)
                 }
             case .activeMatchID(let id):
                 DispatchQueue.main.async {
+                    guard self.liveState == nil else { return }
                     self.activeMatchID = id
                     self.announcementService?.setMatchLive(true)
                 }
@@ -680,6 +757,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                 }
             case .pendingPoint(let info):
                 DispatchQueue.main.async {
+                    guard self.liveState == nil else { return }
                     self.pendingPoint = info
                     // The watch sends `pendingPointOutcome` in the same payload
                     // when it's non-nil. If the message omitted it, treat as
@@ -687,9 +765,10 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                     // "rolled back to phase 1" path.
                 }
             case .pendingPointOutcome(let outcome):
-                DispatchQueue.main.async { self.pendingPointOutcome = outcome }
+                DispatchQueue.main.async { if self.liveState == nil { self.pendingPointOutcome = outcome } }
             case .clearPendingPoint:
                 DispatchQueue.main.async {
+                    guard self.liveState == nil else { return }
                     self.pendingPoint = nil
                     self.pendingPointOutcome = nil
                 }
@@ -830,6 +909,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         self.isPaired = isPaired
         self.isWatchAppInstalled = isWatchAppInstalled
         self.isWatchReachable = isReachable
+        if !isReachable || !isPaired || !isWatchAppInstalled { invalidateLiveState() }
         self.pendingTransferCount = pendingTransferCount
     }
 
