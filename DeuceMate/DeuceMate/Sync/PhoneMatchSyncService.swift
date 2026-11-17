@@ -36,6 +36,10 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     private var liveRequestTimeout: DispatchWorkItem?
     private var liveSessionID: UUID?
     private var liveSequence: UInt64 = 0
+    /// Watch sessions that have already been superseded by a newer Watch session,
+    /// so delayed pushes/application-context updates from a retired session can
+    /// never overwrite the active session's state.
+    private var retiredLiveSessionIDs: Set<UUID> = []
     /// Seconds until the next automatic score refresh, or nil when none is
     /// scheduled. Counts down once a second so the scoreboard can say
     /// "Trying again in 3…". See Core's `LiveRefreshRetry`.
@@ -601,6 +605,10 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
 
     private func applyLiveReply(_ reply: LiveMatchReply) {
         guard let state = reply.state, let sessionID = reply.sessionID else { return }
+        guard !retiredLiveSessionIDs.contains(sessionID) else { return }
+        if let current = liveSessionID, current != sessionID {
+            retiredLiveSessionIDs.insert(current)
+        }
         if liveSessionID == sessionID && reply.sequence < liveSequence { return }
         liveSessionID = sessionID
         liveSequence = reply.sequence
@@ -770,6 +778,9 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                         self.invalidateLiveState()
                         self.liveCommandMessage = reply.message
                         self.liveCommandFailureCount += 1
+                        return
+                    }
+                    if let sessionID = reply.sessionID, self.retiredLiveSessionIDs.contains(sessionID) {
                         return
                     }
                     if let sessionID = reply.sessionID, let current = self.liveSessionID, sessionID != current {

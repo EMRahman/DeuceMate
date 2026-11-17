@@ -550,4 +550,39 @@ struct LiveCommandDeliveryTests {
         #expect(service.liveState?.record?.currentPointsOpponent == 2)
         #expect(!service.isLiveStateConfirmed)
     }
+
+    @Test func delayedPushFromSupersededWatchSessionIsIgnored() async throws {
+        let session = LiveCommandSession()
+        let service = makeService(session)
+        await ready(service, session)
+        let sessionAID = session.sessionID
+
+        var recordB = try #require(session.state.record)
+        recordB.currentPointsMe = 3
+        let sessionBID = UUID()
+        let sessionBReply = LiveMatchReply(
+            state: LiveMatchState(record: recordB, inputEnabled: true),
+            message: nil,
+            sessionID: sessionBID,
+            sequence: 1
+        )
+        session.isReachable = false
+        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: false, pendingTransferCount: 0)
+        service.handle([.liveState(sessionBReply)])
+        await drainMainQueue()
+        #expect(service.liveState?.record?.currentPointsMe == 3)
+
+        var staleRecordA = try #require(session.state.record)
+        staleRecordA.currentPointsMe = 1
+        let delayedAReply = LiveMatchReply(
+            state: LiveMatchState(record: staleRecordA, inputEnabled: true),
+            message: nil,
+            sessionID: sessionAID,
+            sequence: 99
+        )
+        service.handle([.liveState(delayedAReply)])
+        await drainMainQueue()
+        #expect(service.liveState?.record?.currentPointsMe == 3,
+                "a delayed push from retired session A must not replace session B")
+    }
 }
