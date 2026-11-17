@@ -138,33 +138,7 @@ struct PastMatchesView: View {
             OpponentsSection(records: store.history, forgotten: store.forgottenPlayers)
 
             // Live Match section
-            if let liveRecord = store.history.first(where: { $0.id == activeID }) {
-                Section {
-                    Button { selected = liveRecord } label: {
-                        rowView(for: liveRecord, location: rowLocation(for: liveRecord, inHistory: true))
-                    }
-                    .buttonStyle(.plain)
-                    Button {
-                        showScoreboard = true
-                    } label: {
-                        Label("Live Scoreboard", systemImage: "tv.fill")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(theme.colors.server)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 2)
-                    }
-                    .buttonStyle(.plain)
-                } header: {
-                    Text("Live Match")
-                } footer: {
-                    // Show iCloud status here only when there are no past
-                    // records; otherwise it appears in the Past Matches footer.
-                    if pastRecords.isEmpty {
-                        iCloudStatusLabel
-                            .font(.footnote)
-                    }
-                }
-            }
+            liveMatchSection(activeID: activeID, pastRecordsEmpty: pastRecords.isEmpty)
 
             // Past Matches — the phone archive plus matches still on the
             // watch but removed from the phone (rendered from the watch
@@ -842,6 +816,67 @@ struct PastMatchesView: View {
         let count = store.history.count
         let noun = count == 1 ? "match" : "matches"
         return "\(count) \(noun) kept on iPhone — your full history stays here. Apple Watch holds the most recent \(WatchHistory.cap)."
+    }
+
+    @ViewBuilder
+    private func liveMatchSection(activeID: UUID?, pastRecordsEmpty: Bool) -> some View {
+        let storedLive = store.history.first(where: { $0.id == activeID })
+        let compactLive = syncService.liveState?.record
+        if let displayRecord = liveSectionDisplayRecord(stored: storedLive, live: compactLive) {
+            Section {
+                Button {
+                    if let storedLive {
+                        selected = storedLive
+                    } else {
+                        showScoreboard = true
+                    }
+                } label: {
+                    let location = storedLive != nil
+                        ? rowLocation(for: displayRecord, inHistory: true)
+                        : .watchOnly
+                    rowView(for: displayRecord, location: location)
+                }
+                .buttonStyle(.plain)
+                Button {
+                    showScoreboard = true
+                } label: {
+                    Label("Live Scoreboard", systemImage: "tv.fill")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(theme.colors.server)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 2)
+                }
+                .buttonStyle(.plain)
+            } header: {
+                Text("Live Match")
+            } footer: {
+                // Show iCloud status here only when there are no past
+                // records; otherwise it appears in the Past Matches footer.
+                if pastRecordsEmpty {
+                    iCloudStatusLabel
+                        .font(.footnote)
+                }
+            }
+        }
+    }
+
+    /// Overlay the compact live snapshot's score onto the stored archive record
+    /// for display so `PastMatchesView` shows synced scores immediately (e.g.
+    /// from `applicationContext` while the Watch screen is dim) without
+    /// mutating or stripping `store.history`'s stats or tags.
+    private func liveSectionDisplayRecord(stored: MatchRecord?, live: MatchRecord?) -> MatchRecord? {
+        if var stored {
+            if let live, live.id == stored.id {
+                stored.setScores = live.setScores
+                stored.currentPointsMe = live.currentPointsMe
+                stored.currentPointsOpponent = live.currentPointsOpponent
+                stored.currentServer = live.currentServer
+                stored.isOnSecondServe = live.isOnSecondServe
+                stored.recentPoints = live.recentPoints
+            }
+            return stored
+        }
+        return live
     }
 
     private func hasPointStats(_ record: MatchRecord) -> Bool { !record.stats.isEmpty }

@@ -506,4 +506,48 @@ struct LiveCommandDeliveryTests {
         await drainMainQueue()
         #expect(service.liveState == before)
     }
+
+    @Test func pushFromNewWatchSessionAppliesNewScoreWhileReconfirming() async throws {
+        let session = LiveCommandSession()
+        let service = makeService(session)
+        await ready(service, session)
+        session.resetRequests()
+
+        session.isReachable = false
+        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: false, pendingTransferCount: 0)
+        var record = try #require(session.state.record)
+        record.currentPointsMe = 2
+        let restartedReply = LiveMatchReply(
+            state: LiveMatchState(record: record, inputEnabled: true),
+            message: nil,
+            sessionID: UUID(),
+            sequence: 1
+        )
+        // Even while the Watch remains unreachable for RPC confirmation, a push
+        // (e.g. via applicationContext) from a restarted Watch session updates the score.
+        service.handle([.liveState(restartedReply)])
+        await drainMainQueue()
+        #expect(service.liveState?.record?.currentPointsMe == 2)
+        #expect(!service.isLiveStateConfirmed, "new Watch session still waits for confirmation")
+        #expect(session.requests.isEmpty)
+    }
+
+    @Test func coldStartLateReplyShowsScoreWithoutConfirming() async throws {
+        let session = LiveCommandSession()
+        session.automaticallyReply = false
+        let scheduler = ManualScheduler()
+        let service = makeService(session, scheduler: scheduler)
+        service.requestLiveState()
+        scheduler.runLatest(delay: 10)
+        await drainMainQueue()
+        #expect(service.liveState == nil)
+
+        var record = try #require(session.state.record)
+        record.currentPointsOpponent = 2
+        session.state = LiveMatchState(record: record, inputEnabled: true)
+        session.pendingReplies[0](session.reply())
+        await drainMainQueue()
+        #expect(service.liveState?.record?.currentPointsOpponent == 2)
+        #expect(!service.isLiveStateConfirmed)
+    }
 }

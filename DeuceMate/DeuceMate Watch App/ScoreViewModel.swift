@@ -1645,7 +1645,6 @@ class ScoreViewModel: ObservableObject {
             return false
         }
         workoutManager.stopWorkout()
-        syncService?.clearActiveMatch()
         currentServer = nil
         gameCount = 0
         pointCountInTiebreak = 0
@@ -1689,6 +1688,7 @@ class ScoreViewModel: ObservableObject {
         // triple predicate already holds — but routing through the same
         // helper keeps one rule for "seed from the remembered setup."
         applyRememberedSetupIfIdle()
+        syncService?.clearActiveMatch()
         return true
     }
 

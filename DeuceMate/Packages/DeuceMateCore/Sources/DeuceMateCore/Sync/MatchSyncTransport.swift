@@ -38,6 +38,12 @@ public protocol MatchSyncSessing: AnyObject {
     func queueUserInfo(_ userInfo: [String: Any])
     /// Background file transfer for payloads too large for `queueUserInfo`.
     func transferFile(at url: URL, metadata: [String: Any]?)
+    /// Coalesced latest-state dictionary delivery (survives unreachable peers).
+    func updateApplicationContext(_ context: [String: Any]) throws
+}
+
+public extension MatchSyncSessing {
+    func updateApplicationContext(_ context: [String: Any]) throws {}
 }
 
 public final class MatchSyncTransport {
@@ -89,10 +95,33 @@ public final class MatchSyncTransport {
             )
             session.sendMessage(msg, replyHandler: nil) { [weak self] error in
                 self?.logger.error("sendRecord failed: \(error.localizedDescription, privacy: .public)")
-                if let ann = announcement { self?.queueAnnouncement(ann) }
+                if completedClearsActive {
+                    self?.queueCompletedRecord(data: data, payload: msg, announcement: announcement)
+                } else if let ann = announcement {
+                    self?.queueAnnouncement(ann)
+                }
             }
+        } else if completedClearsActive {
+            let msg = MatchSyncPayloadBuilder.checkpointPayload(
+                recordData: data,
+                recordID: record.id,
+                completedClearsActive: true,
+                announcement: announcement
+            )
+            queueCompletedRecord(data: data, payload: msg, announcement: announcement)
         } else if let ann = announcement {
             queueAnnouncement(ann)
+        }
+    }
+
+    private func queueCompletedRecord(data: Data, payload: [String: Any], announcement: String?) {
+        if data.count > matchSyncUserInfoSizeLimit {
+            transferAsFile(data, key: MatchSyncKey.singleMatch)
+            var control: [String: Any] = [MatchSyncKey.clearActiveMatch: true]
+            if let announcement { control[MatchSyncKey.liveAnnouncement] = announcement }
+            session.queueUserInfo(control)
+        } else {
+            session.queueUserInfo(payload)
         }
     }
 
@@ -203,6 +232,21 @@ public final class MatchSyncTransport {
             session.queueUserInfo(payload)
         } else {
             onUndelivered?()
+        }
+    }
+
+    /// Updates the WatchConnectivity application context with the latest
+    /// coalesced state dictionary. Returns true when an activated session
+    /// accepted the context.
+    @discardableResult
+    public func updateApplicationContext(_ context: [String: Any]) -> Bool {
+        guard isActivated else { return false }
+        do {
+            try session.updateApplicationContext(context)
+            return true
+        } catch {
+            logger.error("updateApplicationContext failed: \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 

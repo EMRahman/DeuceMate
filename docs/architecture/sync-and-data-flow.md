@@ -58,12 +58,16 @@ at activation.
 opening the live board and Sync Now request the existing Watch model's current
 state through `liveRequest`/`liveReply`. A compact display-only snapshot carries
 score, pending category/phase, permission and blockers, or explicit idle/error.
-It never enters archive merging. An explicit refresh also sends the full live
-record reliably (file transfer when large), without putting it in Watch history.
-Normal Watch mutations publish compact state too. In-memory session/sequence
-ordering protects the live display from an older response; archive revision debt
-#2 remains separate. Once this protocol is established, legacy active/clear and
-pending messages cannot replace its live identity/context.
+It never enters archive merging. An explicit refresh or Watch history/reconnect
+push also sends the full live record reliably (file transfer when large), without
+putting it in Watch history. Normal Watch mutations publish compact state via
+both `sendMessage` (when reachable) and `updateApplicationContext` (so the latest
+score still delivers over Bluetooth even when the Watch screen is dimmed and
+`isReachable` stays false). Completed matches (`completedClearsActive == true`)
+also queue reliably if `sendMessage` fails or the peer is unreachable. In-memory
+session/sequence ordering protects the live display from an older response;
+archive revision debt #2 remains separate. Once this protocol is established,
+legacy active/clear and pending messages cannot replace its live identity/context.
 
 The phone waits for a current-session application response before enabling input,
 and allows one request in flight. Watch validation, scoring and saving happen

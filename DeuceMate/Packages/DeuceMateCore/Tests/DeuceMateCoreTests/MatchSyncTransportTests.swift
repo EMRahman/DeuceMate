@@ -22,6 +22,8 @@ private final class FakeSyncSession: MatchSyncSessing {
     private(set) var sentMessages: [[String: Any]] = []
     private(set) var queuedUserInfos: [[String: Any]] = []
     private(set) var transferredFiles: [(url: URL, metadata: [String: Any]?)] = []
+    private(set) var applicationContexts: [[String: Any]] = []
+    var failApplicationContext = false
 
     func sendMessage(_ message: [String: Any],
                      replyHandler: (([String: Any]) -> Void)?,
@@ -40,6 +42,13 @@ private final class FakeSyncSession: MatchSyncSessing {
 
     func transferFile(at url: URL, metadata: [String: Any]?) {
         transferredFiles.append((url, metadata))
+    }
+
+    func updateApplicationContext(_ context: [String: Any]) throws {
+        if failApplicationContext {
+            throw NSError(domain: "test.sync", code: 8)
+        }
+        applicationContexts.append(context)
     }
 }
 
@@ -119,6 +128,50 @@ final class MatchSyncTransportTests: XCTestCase {
 
         XCTAssertTrue(fake.sentMessages.isEmpty)
         XCTAssertTrue(fake.queuedUserInfos.isEmpty)
+    }
+
+    func test_sendRecord_completedWhileUnreachable_queuesRecordAndClearActive() {
+        let fake = FakeSyncSession()
+        fake.isReachable = false
+        let transport = MatchSyncTransport(session: fake)
+
+        transport.sendRecord(makeRecord(iWon: true), completedClearsActive: true, announcement: "Game, set, match.")
+
+        XCTAssertTrue(fake.sentMessages.isEmpty)
+        XCTAssertEqual(fake.queuedUserInfos.count, 1)
+        XCTAssertNotNil(fake.queuedUserInfos.first?[MatchSyncKey.singleMatch] as? Data)
+        XCTAssertEqual(fake.queuedUserInfos.first?[MatchSyncKey.clearActiveMatch] as? Bool, true)
+        XCTAssertEqual(fake.queuedUserInfos.first?[MatchSyncKey.liveAnnouncement] as? String, "Game, set, match.")
+    }
+
+    func test_sendRecord_completedSendFailure_fallsBackToQueuedRecord() {
+        let fake = FakeSyncSession()
+        fake.failLiveSend = true
+        let transport = MatchSyncTransport(session: fake)
+
+        transport.sendRecord(makeRecord(iWon: true), completedClearsActive: true, announcement: nil)
+
+        XCTAssertEqual(fake.sentMessages.count, 1)
+        XCTAssertEqual(fake.queuedUserInfos.count, 1)
+        XCTAssertNotNil(fake.queuedUserInfos.first?[MatchSyncKey.singleMatch] as? Data)
+        XCTAssertEqual(fake.queuedUserInfos.first?[MatchSyncKey.clearActiveMatch] as? Bool, true)
+    }
+
+    func test_updateApplicationContext_requiresActivatedSession() {
+        let fake = FakeSyncSession()
+        fake.isActivated = false
+        let transport = MatchSyncTransport(session: fake)
+
+        XCTAssertFalse(transport.updateApplicationContext(["k": "v"]))
+        XCTAssertTrue(fake.applicationContexts.isEmpty)
+
+        fake.isActivated = true
+        XCTAssertTrue(transport.updateApplicationContext(["k": "v"]))
+        XCTAssertEqual(fake.applicationContexts.count, 1)
+
+        fake.failApplicationContext = true
+        XCTAssertFalse(transport.updateApplicationContext(["k": "v2"]))
+        XCTAssertEqual(fake.applicationContexts.count, 1)
     }
 
     func test_sendRecord_notActivated_doesNothing() {
