@@ -85,6 +85,76 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
     public let opponentDoubleFaults: Int
     public var opponentServicePoints: Int { returnPointsOnFirst + returnPointsOnSecond }
 
+    // MARK: - Serve and return by court side
+
+    /// The counters the Serve & Return metrics divide, for one slice of a
+    /// match's points. Built only from a `MatchStatsSummary` so no serve or
+    /// return predicate is restated here.
+    public struct ServeReturnCounts: Equatable, Sendable {
+        public let servicePoints: Int
+        public let firstServesIn: Int
+        public let firstServeWins: Int
+        public let secondServePoints: Int
+        public let secondServesIn: Int
+        public let secondServeWins: Int
+        public let returnPointsOnFirst: Int
+        public let returnWinsOnFirst: Int
+        public let returnPointsOnSecond: Int
+        public let returnWinsOnSecond: Int
+
+        public init(servicePoints: Int, firstServesIn: Int, firstServeWins: Int,
+                    secondServePoints: Int, secondServesIn: Int, secondServeWins: Int,
+                    returnPointsOnFirst: Int, returnWinsOnFirst: Int,
+                    returnPointsOnSecond: Int, returnWinsOnSecond: Int) {
+            self.servicePoints = servicePoints
+            self.firstServesIn = firstServesIn
+            self.firstServeWins = firstServeWins
+            self.secondServePoints = secondServePoints
+            self.secondServesIn = secondServesIn
+            self.secondServeWins = secondServeWins
+            self.returnPointsOnFirst = returnPointsOnFirst
+            self.returnWinsOnFirst = returnWinsOnFirst
+            self.returnPointsOnSecond = returnPointsOnSecond
+            self.returnWinsOnSecond = returnWinsOnSecond
+        }
+
+        init(summary: MatchStatsSummary) {
+            self.init(
+                servicePoints: summary.firstServeTotal, firstServesIn: summary.firstServeIn,
+                firstServeWins: summary.firstServeWins, secondServePoints: summary.secondServeTotal,
+                secondServesIn: summary.secondServeIn, secondServeWins: summary.secondServeWins,
+                returnPointsOnFirst: summary.returnOppsOnFirst, returnWinsOnFirst: summary.returnWinsOnFirst,
+                returnPointsOnSecond: summary.returnOppsOnSecond, returnWinsOnSecond: summary.returnWinsOnSecond
+            )
+        }
+    }
+
+    /// Serve and return counters split by the court side each point was
+    /// served from (`CourtSide.of(_:noAdScoring:)`). A side is ABSENT, not
+    /// zero, when no point in the match can be placed on it — every match
+    /// recorded before `gameScoreAtStart` existed — so its side charts leave a
+    /// gap rather than plotting 0%. Points whose side is unknown (a no-ad
+    /// deciding point) count in the whole-match figures but on neither side.
+    public let serveReturnBySide: [CourtSide: ServeReturnCounts]
+
+    /// The whole-match counters, in the same shape as a side's.
+    public var serveReturn: ServeReturnCounts {
+        ServeReturnCounts(
+            servicePoints: servicePoints, firstServesIn: firstServesIn, firstServeWins: firstServeWins,
+            secondServePoints: secondServePoints, secondServesIn: secondServesIn,
+            secondServeWins: secondServeWins,
+            returnPointsOnFirst: returnPointsOnFirst, returnWinsOnFirst: returnWinsOnFirst,
+            returnPointsOnSecond: returnPointsOnSecond, returnWinsOnSecond: returnWinsOnSecond
+        )
+    }
+
+    /// `nil` side = the whole match. A missing side = no coverage (see
+    /// `serveReturnBySide`).
+    public func serveReturn(on side: CourtSide?) -> ServeReturnCounts? {
+        guard let side else { return serveReturn }
+        return serveReturnBySide[side]
+    }
+
     // MARK: - Outcome mix — recorder-framed, deliberately renamed
 
     public let winnersHit: Int              // summary.myWinners
@@ -204,6 +274,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         rallyDepthOnReturn: [EndingShot: DepthCount] = [:],
         pointsWithEndingShotOnServe: Int = 0, pointsWithEndingShotOnReturn: Int = 0,
         setSlices: [SetSlice] = [],
+        serveReturnBySide: [CourtSide: ServeReturnCounts] = [:],
         competitionTypeRaw: String? = nil,
         opponentIDs: Set<UUID> = [],
         date: Date? = nil
@@ -254,6 +325,7 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
         self.pointsWithEndingShotOnServe = pointsWithEndingShotOnServe
         self.pointsWithEndingShotOnReturn = pointsWithEndingShotOnReturn
         self.setSlices = setSlices
+        self.serveReturnBySide = serveReturnBySide
         self.competitionTypeRaw = competitionTypeRaw
         self.opponentIDs = opponentIDs
     }
@@ -323,10 +395,28 @@ public struct MatchTrendSample: Equatable, Sendable, Identifiable {
             pointsWithEndingShotOnServe: summary.rallyDepthOnServe.reduce(0) { $0 + $1.total },
             pointsWithEndingShotOnReturn: summary.rallyDepthOnReturn.reduce(0) { $0 + $1.total },
             setSlices: Self.setSlices(record: record, summary: summary),
+            serveReturnBySide: Self.serveReturnBySide(record: record),
             competitionTypeRaw: record.tags?.competitionTypeRaw,
             opponentIDs: Set(record.tags?.opponents.map(\.id) ?? []),
             date: MatchChronology.date(record)
         )
+    }
+
+    // MARK: - Court-side split
+
+    /// Serve/return counters per court side. Each side is a
+    /// `MatchStatsSummary(focal: .me)` over just that side's points — the same
+    /// counting the whole-match figures use, never a second set of predicates.
+    /// Serve and return counts are per-point, so summarising a subset gives
+    /// exactly that subset's figures.
+    private static func serveReturnBySide(record: MatchRecord) -> [CourtSide: ServeReturnCounts] {
+        let noAd = record.matchFormat.config.noAdScoring
+        let bySide = Dictionary(grouping: record.stats.compactMap { point in
+            CourtSide.of(point, noAdScoring: noAd).map { (side: $0, point: point) }
+        }, by: \.side)
+        return bySide.mapValues { entries in
+            ServeReturnCounts(summary: MatchStatsSummary(stats: entries.map(\.point), focal: .me))
+        }
     }
 
     // MARK: - Per-set slices

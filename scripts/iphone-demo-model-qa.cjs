@@ -252,6 +252,28 @@ const dfSamples = [8, 8, 2, 2].map((df, i) => ({ record: { id: String(i) }, summ
 assert.equal(trends.series("doubleFaults", dfSamples).delta.direction, "improving", "falling double-fault rates improve");
 assert.equal(trends.series("doubleFaults", dfSamples.slice(0, 3)).delta, null, "both delta blocks need two matches");
 
+// Native CourtSide / MatchTrendSample.serveReturnBySide.
+function sidePoint(server, a, b, extra) {
+  return Object.assign({}, completed.stats[0], { server, winner: "me", outcome: "winner", isSecondServe: false,
+    gameScoreAtStart: { server: a, returner: b, isTiebreak: false } }, extra || {});
+}
+const sideFixture = Object.assign({}, completed, { format: "standard", stats: [
+  ...Array.from({ length: 6 }, () => sidePoint("me", 0, 0)),
+  ...Array.from({ length: 4 }, () => sidePoint("me", 3, 3)),
+  ...Array.from({ length: 6 }, () => sidePoint("me", 1, 0)),
+  ...Array.from({ length: 4 }, () => sidePoint("me", 2, 1, { isSecondServe: true })),
+  sidePoint("me", 4, 3, { gameScoreAtStart: null })
+] });
+const sideSample = trends.sample(sideFixture);
+assert.equal(sideSample.sides.deuce.firstServeTotal, 10, "even points played are deuce side, including 40-40");
+assert.equal(sideSample.sides.ad.firstServeTotal, 10, "odd points played are ad side");
+assert.equal(sideSample.sides.ad.firstServeIn, 6);
+assert.equal(sideSample.summary.firstServeTotal, 21, "points without a saved score still count for the whole match");
+const noAdSample = trends.sample(Object.assign({}, sideFixture, { format: "fast4" }));
+assert.equal(noAdSample.sides.deuce.firstServeTotal, 6, "no-ad deciding points belong to neither side");
+assert.equal(trends.sample(Object.assign({}, completed, { stats: completed.stats.map(p => Object.assign({}, p, { gameScoreAtStart: null })) })).sides.deuce, undefined,
+  "matches without saved scores have no side data");
+
 const partial = JSON.parse(JSON.stringify(completed));
 partial.stats.push(...Array.from({ length: 30 }, () => Object.assign({}, partial.stats[0], { outcome: "uncategorized", endingShot: null, winner: "opponent" })));
 const originalUE = trends.series("unforcedErrors", [trends.sample(completed)]).pooled;

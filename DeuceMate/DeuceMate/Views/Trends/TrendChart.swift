@@ -94,6 +94,10 @@ struct TrendChart: View {
     /// still spans it (Codex review, PR #121).
     let dateByIndex: [Int: Date]
     let provisionalIndices: Set<Int>
+    /// Serve & Return only: the same six metrics restricted to points served
+    /// from each court side (`PerformanceTrends.series(for:in:courtSide:)`).
+    /// Empty for every other group.
+    let courtSideSeries: [CourtSide: [TrendSeries]]
 
     @State private var hiddenMetrics: Set<TrendMetric>
     @State private var rallyDepthMode: RallyDepthMode = .mix
@@ -109,14 +113,22 @@ struct TrendChart: View {
     /// screen opens) — the owner asked this filter to remember the last
     /// choice across launches. Phone-local, no wire key — see CLAUDE.md §0.
     @AppStorage("trendsServeReturnFilter") private var serveReturnFilterRaw: String = ServeReturnFilter.servesIn.rawValue
+    /// Serve & Return's court-side picker: "all" or a `CourtSide` raw value.
+    /// Persisted alongside `trendsServeReturnFilter` for the same reason.
+    /// Phone-local, no wire key — see CLAUDE.md §0.
+    @AppStorage("trendsServeReturnCourtSide") private var courtSideRaw: String = Self.allSidesTag
 
-    init(group: TrendMetricGroup, series: [TrendSeries], displayMode: TrendDisplayMode, sampleCount: Int, dateByIndex: [Int: Date], provisionalIndices: Set<Int> = []) {
+    private static let allSidesTag = "all"
+
+    init(group: TrendMetricGroup, series: [TrendSeries], displayMode: TrendDisplayMode, sampleCount: Int, dateByIndex: [Int: Date], provisionalIndices: Set<Int> = [],
+         courtSideSeries: [CourtSide: [TrendSeries]] = [:]) {
         self.group = group
         self.series = series
         self.displayMode = displayMode
         self.sampleCount = sampleCount
         self.dateByIndex = dateByIndex
         self.provisionalIndices = provisionalIndices
+        self.courtSideSeries = courtSideSeries
         // Opponent-framed metrics start hidden; everything else starts shown.
         _hiddenMetrics = State(initialValue: Set(series.map(\.metric).filter(\.startsHidden)))
     }
@@ -161,6 +173,10 @@ struct TrendChart: View {
     private var serveReturnFilter: ServeReturnFilter {
         ServeReturnFilter(rawValue: serveReturnFilterRaw) ?? .servesIn
     }
+
+    /// `nil` = both sides (the whole match). An unknown stored value falls
+    /// back to both rather than an empty chart.
+    private var courtSide: CourtSide? { CourtSide(rawValue: courtSideRaw) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -500,7 +516,8 @@ struct TrendChart: View {
     /// declared order (1st before 2nd) — the group's `TrendMetric.allCases`
     /// order, unaffected by which two are picked.
     private var serveReturnSelectedSeries: [TrendSeries] {
-        series.filter { serveReturnFilter.metrics.contains($0.metric) }
+        let source = courtSide.map { courtSideSeries[$0] ?? [] } ?? series
+        return source.filter { serveReturnFilter.metrics.contains($0.metric) }
     }
 
     @ViewBuilder
@@ -512,9 +529,30 @@ struct TrendChart: View {
         }
         .pickerStyle(.segmented)
 
+        Picker("Court Side", selection: $courtSideRaw) {
+            Text("Both Sides").tag(Self.allSidesTag)
+            ForEach(CourtSide.allCases) { side in
+                Text(side.displayLabel).tag(side.rawValue)
+            }
+        }
+        .pickerStyle(.segmented)
+
         let selected = serveReturnSelectedSeries
         if selected.isEmpty || selected.allSatisfy({ $0.points.isEmpty }) {
-            emptyState
+            if let courtSide {
+                // The whole-match chart has data (the group wouldn't be on
+                // screen otherwise), so an empty side means these matches
+                // predate per-point score capture — say so rather than the
+                // generic "not enough data".
+                Text("No \(courtSide.displayLabel.lowercased())-side data in these matches. Matches recorded before the score was saved with each point can't be split by side.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .multilineTextAlignment(.center)
+                    .padding(.vertical, 20)
+            } else {
+                emptyState
+            }
         } else {
             // All 6 Serve & Return metrics support Count mode today, so this
             // is a no-op filter in practice — routed through the same

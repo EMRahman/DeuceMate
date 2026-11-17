@@ -704,7 +704,7 @@ No `WebExportColors` coupling: trends are not exported, so the `CLAUDE.md` §2 "
 
 ### 6.4 Filter persistence
 
-Five **phone-local** `@AppStorage` keys, all following the `MatchSetupDefaults` precedent
+Six **phone-local** `@AppStorage` keys, all following the `MatchSetupDefaults` precedent
 for device-local UI state — not synced, no `MatchSyncKey`, no wire key, no watch mirror:
 
 - `trendsWindow`, `trendsMatchType`, `trendsMatchFormat` (`TrendsView`) — the original three.
@@ -714,6 +714,12 @@ for device-local UI state — not synced, no `MatchSyncKey`, no wire key, no wat
 - `trendsServeReturnFilter` (`TrendChart`) — narrows the Serve & Return group's six metrics
   to one pair (Serves In / Serves Win / Returns Win) at a time; persisted, unlike Rally
   Depth's Mix/Win Rate toggle which is plain `@State` and resets each time the screen opens.
+- `trendsServeReturnCourtSide` (`TrendChart`) — the Serve & Return group's second picker,
+  Both Sides / Deuce / Ad (`"all"` or a `CourtSide` raw value). A side restricts the six
+  metrics to points served from that court (`PerformanceTrends.series(for:in:courtSide:)`);
+  the side comes from the parity of `gameScoreAtStart` (`CourtSide.of`), so matches recorded
+  before per-point score capture, and no-ad deciding points (receiver's choice, unrecorded),
+  carry no side and leave a gap rather than a zero. Persisted like its sibling filter.
 
 ⚠️ `CLAUDE.md` §0 runs a settings-key consistency grep that expects every `@AppStorage`
 literal to match a `MatchSyncKey` raw value, with a documented exception list. **Every key

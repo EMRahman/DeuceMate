@@ -8,7 +8,14 @@
   function metric(id, label, group, pair, options) {
     catalog.push(Object.assign({ id: id, label: label, group: group, pair: pair, unit: "percent", direction: "higher", count: true, hidden: false, opponent: false }, options || {}));
   }
-  function fieldPair(a, b) { return function (s) { return [s.summary[a], s.summary[b]]; }; }
+  function fieldPair(a, b) { return function (s) { return s.summary ? [s.summary[a], s.summary[b]] : null; }; }
+  // Native CourtSide.of: even points played in the game/tiebreak = deuce side;
+  // unknown without a saved score, and on a no-ad deciding point (receiver's choice).
+  function courtSide(p, noAd) {
+    var g = p.gameScoreAtStart; if (!g) return null;
+    if (noAd && !g.isTiebreak && g.server >= 3 && g.returner >= 3) return null;
+    return (g.server + g.returner) % 2 === 0 ? "deuce" : "ad";
+  }
   metric("doubleFaults", "Double Faults", "Errors", function (s) { return [s.summary.myDoubleFaults, s.categorizedServed]; }, { direction: "lower" });
   metric("doubleFaultsConceded", "Double Faults Conceded", "Errors", function (s) { return [s.summary.opponentDoubleFaults, s.categorizedReturned]; }, { hidden: true, opponent: true });
   metric("unforcedErrors", "Unforced Errors", "Errors", function (s) { return [s.summary.myUnforcedErrors, s.categorizedLost]; }, { direction: "lower" });
@@ -88,7 +95,13 @@
       categorizedServed: categorized.filter(function (p) { return p.server === "me"; }).length,
       categorizedReturned: categorized.filter(function (p) { return p.server !== "me"; }).length,
       depth: depth(points), servedDepth: depth(points.filter(function (p) { return p.server === "me"; })),
-      returnedDepth: depth(points.filter(function (p) { return p.server !== "me"; })), sets: sets };
+      returnedDepth: depth(points.filter(function (p) { return p.server !== "me"; })), sets: sets,
+      sides: ["deuce", "ad"].reduce(function (out, side) {
+        var noAd = !!window.DeuceMateScoring.cfgFor(record.format).noAdScoring;
+        var p = points.filter(function (x) { return courtSide(x, noAd) === side; });
+        if (p.length) out[side] = window.DeuceMateTracking.matchStatsSummary(p, "me");
+        return out;
+      }, {}) };
   }
   function samples(records) { return records.map(sample).filter(Boolean).sort(function (a, b) { return window.DeuceMateChronology.oldest(a.record, b.record); }); }
   // Native TrendFilter.competitionType / opponentID: tags only; doubles match on either opponent.
@@ -127,10 +140,17 @@
     return { metric: m, points: points, pooled: pooled(m, samples), delta: delta };
   }
   function display(value, unit) { return unit === "percent" ? Math.round(value * 100) + "%" : value.toFixed(1) + (unit === "steps" ? " steps" : ""); }
+  // Native TrendMetric.supportsCourtSide: only Serve & Return reads a side, so a
+  // sided sample swaps in that side's summary (absent = gap, never zero).
+  function sided(list, side) {
+    return side === "all" ? list : list.map(function (s) { return Object.assign({}, s, { summary: s.sides[side] || null }); });
+  }
   var filters = { window: "10", type: "all", format: "all", competition: "all", opponent: "all", includeInProgress: false };
-  var mode = "rate", serveMode = "servesIn", depthMode = "mix", depthSide = "served", visibility = {};
+  var mode = "rate", serveMode = "servesIn", serveSide = "all", depthMode = "mix", depthSide = "served", visibility = {};
   try { Object.assign(filters, JSON.parse(localStorage.getItem("deucemate-demo-trend-filters") || "{}")); } catch (_) {}
   try { serveMode = localStorage.getItem("deucemate-demo-trends-serve-mode") || "servesIn"; } catch (_) {}
+  try { serveSide = localStorage.getItem("deucemate-demo-trends-serve-side") || "all"; } catch (_) {}
+  if (["all", "deuce", "ad"].indexOf(serveSide) < 0) serveSide = "all";
   function saveFilters() { try { localStorage.setItem("deucemate-demo-trend-filters", JSON.stringify(filters)); } catch (_) {} }
   // SwiftUI system colours are keyed by metric, never by its current position.
   function chartColor(metric) {
@@ -296,20 +316,24 @@
       groups.forEach(function (group) {
         var metrics = catalog.filter(function (m) { return m.group === group; });
         if (!metrics.some(function (m) { return series(m.id, list).points.length > 0; })) return;
-        var section = h("section", { class: "pr-trend-section", "data-group": group }), card = h("div", { class: "pr-trend-card" });
+        var section = h("section", { class: "pr-trend-section", "data-group": group }), card = h("div", { class: "pr-trend-card" }), chartList = list;
         section.append(h("h3", { class: "pr-trend-section-title" }, group), card);
         if (group === "Serve & Return") {
           card.append(phone.segment("Serve & Return View", serveMode, [["servesIn", "Serves In"], ["servesWin", "Serves Win"], ["returnsWin", "Returns Win"]], function (v) { serveMode = v; try { localStorage.setItem("deucemate-demo-trends-serve-mode", v); } catch (_) {} paint(); }));
           var ids = serveMode === "servesIn" ? ["firstServeIn", "secondServeIn"] : serveMode === "servesWin" ? ["firstServeWin", "secondServeWin"] : ["returnWinFirst", "returnWinSecond"];
           metrics = metrics.filter(function (m) { return ids.indexOf(m.id) >= 0; });
+          card.append(phone.segment("Court Side", serveSide, [["all", "Both Sides"], ["deuce", "Deuce"], ["ad", "Ad"]], function (v) { serveSide = v; try { localStorage.setItem("deucemate-demo-trends-serve-side", v); } catch (_) {} paint(); }));
+          chartList = sided(list, serveSide);
         } else if (group === "Rally Depth") {
           card.append(phone.segment("Rally Depth View", depthMode, [["mix", "Mix"], ["winRate", "Win Rate"]], function (v) { depthMode = v; paint(); })); metrics = metrics.filter(function (m) { return m.family === depthMode; });
         } else if (group === "Rally Depth — By Service") {
           card.append(phone.segment("Serving Side", depthSide, [["served", "On Serve"], ["returned", "On Returns"]], function (v) { depthSide = v; paint(); })); metrics = metrics.filter(function (m) { return m.family === depthSide; });
         }
-        ["percent", "steps"].forEach(function (unit) { var subset = metrics.filter(function (m) { return m.unit === unit; }); if (subset.length) drawChart(card, group, subset, list, unit); });
+        ["percent", "steps"].forEach(function (unit) { var subset = metrics.filter(function (m) { return m.unit === unit; }); if (subset.length) drawChart(card, group, subset, chartList, unit); });
         metrics.filter(function (m) { return m.unit === "ratio"; }).forEach(function (m) { var s = series(m.id, list); if (s.points.length) { var row = trendRow(phone, s, list.length); row.classList.add("pr-trend-ratio"); row.style.color = chartColor(m); row.querySelector("small").textContent = s.pooled ? s.pooled.value.toFixed(1) + " : 1" : "—"; card.append(row); } });
-        if (!card.querySelector("svg")) card.append(phone.note("Not enough data for this group yet."));
+        if (!card.querySelector("svg")) card.append(phone.note(group === "Serve & Return" && serveSide !== "all"
+          ? "No " + serveSide + "-side data in these matches. Matches recorded before the score was saved with each point can't be split by side."
+          : "Not enough data for this group yet."));
         if (group === "Fatigue") { var covered = list.filter(function (s) { return s.sets.length; }).length; section.append(phone.note(covered + " of " + list.length + " matches in this window have more than one set.")); }
         output.append(section);
       });
