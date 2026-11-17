@@ -158,6 +158,7 @@ final class LiveMatchStateTests: XCTestCase {
     func test_promptRoundTripsInTheLiveReply() throws {
         let record = MatchRecord(startTime: Date(), setScores: [SetScore()], stats: [])
         let prompt = LiveWatchPrompt.changeover(symbol: "🔁 👥", reason: "Odd games – players change ends")
+            .occurring(UUID())
         let reply = LiveMatchReply(state: LiveMatchState(record: record, inputEnabled: true,
             blockingReason: "Continue on the Watch before scoring.", prompt: prompt),
             sessionID: UUID(), sequence: 3)
@@ -189,6 +190,26 @@ final class LiveMatchStateTests: XCTestCase {
         XCTAssertEqual(request.action, MatchSyncKey.scoreCommandWinMe)
         XCTAssertNil(request.prompt)
         XCTAssertNil(request.doublesServer)
+    }
+
+    func test_sameWordsOnADifferentAppearance_isADifferentPrompt() throws {
+        let words = LiveWatchPrompt.changeover(symbol: "🔁 👥", reason: "Odd games – players change ends")
+        let first = words.occurring(UUID()), later = words.occurring(UUID())
+        XCTAssertNotEqual(first, later, "A late answer to the first must not match the later one")
+        XCTAssertEqual(first.title, later.title)
+        XCTAssertEqual(first.detail, later.detail)
+
+        let request = first.request(for: first.answers[0], matchID: UUID())
+        let decoded = try JSONDecoder().decode(LiveMatchRequest.self, from: JSONEncoder().encode(request))
+        XCTAssertEqual(decoded.prompt?.occurrence, first.occurrence, "The answer names the appearance it saw")
+        XCTAssertNotEqual(decoded.prompt, later)
+    }
+
+    func test_promptWithoutOccurrence_stillDecodes() throws {
+        let json = #"{"kindRaw":"changeover","title":"🔁 🎾","detail":"Even games – balls change ends"}"#
+        let prompt = try JSONDecoder().decode(LiveWatchPrompt.self, from: Data(json.utf8))
+        XCTAssertNil(prompt.occurrence)
+        XCTAssertEqual(prompt.kind, .changeover)
     }
 
     func test_newerPromptKind_decodesWithoutAnswers() throws {

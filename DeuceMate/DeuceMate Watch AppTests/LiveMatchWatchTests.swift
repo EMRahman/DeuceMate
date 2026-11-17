@@ -337,7 +337,7 @@ struct LiveMatchWatchTests {
         let files = try Files()
         let (vm, prompt) = try changeoverShowing(files)
         let info = try #require(vm.pendingChangeoverAck)
-        #expect(prompt == .changeover(symbol: info.symbol, reason: info.reason))
+        #expect(prompt == LiveWatchPrompt.changeover(symbol: info.symbol, reason: info.reason).occurring(info.id))
         #expect(prompt.answers.map(\.label) == ["OK"])
         let state = try #require(vm.handleLiveRequest(LiveMatchRequest()).state)
         #expect(state.blockingReason != nil, "Older phones still see the text fallback")
@@ -410,6 +410,42 @@ struct LiveMatchWatchTests {
         #expect(vm.pendingChangeoverAck == nil)
     }
 
+    @Test func lateAnswerCannotCloseALaterChangeoverWithTheSameWords() throws {
+        let files = try Files()
+        let (vm, earlier) = try changeoverShowing(files)
+        // Undo the game-ending point and play it again: the same reminder
+        // reopens, word for word, but it is a new screen.
+        vm.undo()
+        vm.winPoint(player: .me)
+        let current = try #require(vm.handleLiveRequest(LiveMatchRequest()).state?.prompt)
+        #expect(current.title == earlier.title && current.detail == earlier.detail)
+        #expect(current != earlier)
+
+        let late = answer(vm, earlier)
+        #expect(late.message != nil, "An answer to the earlier reminder must not close this one")
+        #expect(vm.pendingChangeoverAck != nil)
+        #expect(late.state?.prompt == current)
+
+        #expect(answer(vm, current).message == nil)
+        #expect(vm.pendingChangeoverAck == nil)
+    }
+
+    @Test func lateDoublesAnswerCannotSettleAReplayedDecision() throws {
+        let files = try Files(), vm = doublesDecisionShowing(files)
+        let earlier = try #require(vm.handleLiveRequest(LiveMatchRequest()).state?.prompt)
+        vm.undo()
+        #expect(vm.handleLiveRequest(LiveMatchRequest()).state?.prompt == nil, "Game one is not over yet")
+        vm.winPoint(player: .me)
+        let current = try #require(vm.handleLiveRequest(LiveMatchRequest()).state?.prompt)
+        #expect(current.kind == .doublesServer)
+        #expect(current != earlier)
+
+        #expect(answer(vm, earlier, 1).message != nil)
+        #expect(vm.needsDoublesTeamServerDecision)
+        #expect(answer(vm, current, 1).message == nil)
+        #expect(vm.doublesServer == .partner)
+    }
+
     @Test func promptAnswersNeedIPhoneInput() throws {
         let files = try Files()
         let (vm, prompt) = try changeoverShowing(files)
@@ -425,7 +461,7 @@ struct LiveMatchWatchTests {
         #expect(vm.needsDoublesTeamServerDecision)
         #expect(vm.pendingChangeoverAck != nil)
         let first = try #require(vm.handleLiveRequest(LiveMatchRequest()).state?.prompt)
-        #expect(first == .doublesServer, "The Watch draws this overlay on top")
+        #expect(first.kind == .doublesServer, "The Watch draws this overlay on top")
 
         let chosen = answer(vm, first, 1) // Partner
         #expect(chosen.message == nil)
@@ -444,15 +480,17 @@ struct LiveMatchWatchTests {
 
     @Test func doublesChoiceOfMeKeepsTheProvisionalRotation() throws {
         let files = try Files(), vm = doublesDecisionShowing(files)
-        #expect(answer(vm, .doublesServer, 0).message == nil)
+        let prompt = try #require(vm.handleLiveRequest(LiveMatchRequest()).state?.prompt)
+        #expect(answer(vm, prompt, 0).message == nil)
         #expect(vm.doublesServer == .me)
         #expect(vm.doublesServiceOrder == [.opponentS1, .me, .opponentS2, .partner])
     }
 
     @Test func doublesAnswerRejectsAnOpponentAsTheNextServer() throws {
         let files = try Files(), vm = doublesDecisionShowing(files)
+        let prompt = try #require(vm.handleLiveRequest(LiveMatchRequest()).state?.prompt)
         let reply = vm.handleLiveRequest(LiveMatchRequest(action: MatchSyncKey.promptActionChooseDoublesServer,
-            matchID: vm.currentMatchID, prompt: .doublesServer, doublesServer: .opponentS2))
+            matchID: vm.currentMatchID, prompt: prompt, doublesServer: .opponentS2))
         #expect(reply.message != nil)
         #expect(vm.needsDoublesTeamServerDecision)
     }

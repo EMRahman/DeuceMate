@@ -179,13 +179,13 @@ sequenceDiagram
     P->>S: Same card, with OK
     W->>R: Same card, with OK
     S->>P: Tap OK
-    P->>W: acknowledgeChangeover + the prompt it showed
+    P->>W: acknowledgeChangeover + the prompt it showed<br/>(with that appearance's occurrence ID)
     alt prompt still open on the Watch
         W->>W: acknowledgeChangeover() — the Watch button's own method
         W->>W: Save; overlay closes
         W->>P: Reply: no prompt, scoring open
         P->>P: Card closes; swipes resume
-    else already answered / changed
+    else already answered / a different appearance
         W->>P: Current state + "The Watch screen changed"
     end
 ```

@@ -16,7 +16,11 @@ class ScoreViewModel: ObservableObject {
     private static let userDefaultsQueue = DispatchQueue(label: "com.deucemate.userdefaults", qos: .utility)
 
     @Published var currentServer: Player? = nil
-    @Published var gameCount: Int = 0
+    @Published var gameCount: Int = 0 {
+        // "Who serves next?" shows once game one is over; an undo hides it and
+        // a replay shows it again, which counts as a new appearance.
+        didSet { if gameCount != oldValue { doublesPromptOccurrence = UUID() } }
+    }
     @Published var pointCountInTiebreak: Int = 0
     @Published var pendingChangeoverAck: ChangeoverInfo? = nil
     private var isSyncingStats = false
@@ -349,7 +353,14 @@ class ScoreViewModel: ObservableObject {
     @Published var matchFormat: MatchFormat = .standard
     var isTiebreakOnlyFormat: Bool { !matchFormat.config.playRegularSets }
     @Published var doublesServer: DoublesServer? = nil
-    @Published var needsDoublesTeamServerDecision: Bool = false
+    @Published var needsDoublesTeamServerDecision: Bool = false {
+        didSet {
+            if needsDoublesTeamServerDecision != oldValue { doublesPromptOccurrence = UUID() }
+        }
+    }
+    /// Identifies the current appearance of "Who serves next?" for the phone.
+    /// Changeovers use their own `ChangeoverInfo.id`, fresh for each reminder.
+    private var doublesPromptOccurrence = UUID()
     var doublesServiceOrder: [DoublesServer] = []
     private var doublesServiceIndex: Int = 0
     private var tiebreakStartDoublesIndex: Int = 0
@@ -1965,7 +1976,8 @@ class ScoreViewModel: ObservableObject {
         }
         // Prompt answers run the same methods as the Watch's own buttons, so
         // the Watch overlay clears too. They are the one input allowed while
-        // the prompt blocks scoring, and only for the prompt the phone saw.
+        // the prompt blocks scoring, and only for the prompt the phone saw:
+        // the same appearance, not merely the same words.
         if action == MatchSyncKey.promptActionAcknowledgeChangeover
             || action == MatchSyncKey.promptActionChooseDoublesServer {
             guard let shown = request.prompt, shown == liveWatchPrompt else {
@@ -2013,9 +2025,11 @@ class ScoreViewModel: ObservableObject {
     /// on its short post-sheet delay, or when nothing can be saved.
     var liveWatchPrompt: LiveWatchPrompt? {
         guard persistenceError == nil, pendingStatPoint == nil else { return nil }
-        if needsDoublesTeamServerDecision && gameCount > 0 { return .doublesServer }
+        if needsDoublesTeamServerDecision && gameCount > 0 {
+            return LiveWatchPrompt.doublesServer.occurring(doublesPromptOccurrence)
+        }
         if let info = pendingChangeoverAck {
-            return .changeover(symbol: info.symbol, reason: info.reason)
+            return LiveWatchPrompt.changeover(symbol: info.symbol, reason: info.reason).occurring(info.id)
         }
         return nil
     }

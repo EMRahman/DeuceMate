@@ -93,6 +93,12 @@ change ends") and doubles' "Who serves next?" — previously left the phone sayi
   different match), then calls the same `acknowledgeChangeover()` /
   `resolveDoublesTeamServer(_:)` as its own buttons. Both overlays are bound to
   that state, so they clear together; the save publishes the result.
+- **Same screen, not just same words.** Every odd-game changeover reads alike,
+  so each prompt carries an `occurrence` ID that is new for every appearance
+  (`ChangeoverInfo.id` for changeovers; a UUID renewed whenever `gameCount` or
+  `needsDoublesTeamServerDecision` changes for "Who serves next?"). A late
+  answer to an earlier reminder, or to one closed by undoing and replaying the
+  game-ending point, is refused instead of closing the new one (#204 review).
 - **Same gates as scoring.** iPhone Input on, Watch reachable, current state
   confirmed, one request at a time. A prompt answer is the one request allowed
   while the prompt blocks scoring. Spectators see the card without buttons.
@@ -130,7 +136,7 @@ iPhone tests exercise one request at a time, no optimistic mutation, timeouts,
 late callbacks, reconnect/idle, Watch rejection and delayed history. Watch tests
 exercise real scoring/saves, phase restoration, unreadable state and failed writes.
 Prompt tests cover phone OK/server choice clearing the Watch state, stale and
-mismatched answers, input-off refusal, the doubles-before-changeover order, and
+mismatched answers (including a late answer to an identical, replayed prompt), input-off refusal, the doubles-before-changeover order, and
 publication of the deferred changeover (`LiveMatchWatchTests`,
 `LiveCommandDeliveryTests`, `LiveScoreboardStatusTests`, `LiveMatchStateTests`;
 browser: `iphone-demo-state-qa.cjs`).

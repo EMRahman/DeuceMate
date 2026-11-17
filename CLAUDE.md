@@ -610,7 +610,10 @@ compiler does not connect** (see §5). To add one, keep them consistent:
   changeover or doubles "Who serves next?", in the Watch's stacking order — the
   doubles decision first). The phone answers with `promptAction*` requests that
   carry the prompt they answer; `ScoreViewModel.handleLiveRequest` refuses any
-  answer whose prompt no longer matches `liveWatchPrompt`, then calls the same
+  answer whose prompt no longer matches `liveWatchPrompt` — including its
+  `occurrence`, which is new for every appearance (`ChangeoverInfo.id`, or
+  `doublesPromptOccurrence`, renewed by `gameCount`/`needsDoublesTeamServerDecision`
+  `didSet`) because every odd-game changeover has the same words — then calls the same
   `acknowledgeChangeover()`/`resolveDoublesTeamServer(_:)` as the Watch buttons so
   both screens clear together. A Watch screen that changes without a save (the
   deferred changeover after a category commit) must call

@@ -51,11 +51,22 @@ public struct LiveWatchPrompt: Codable, Equatable, Sendable {
     public let title: String
     /// The smaller line under it: the changeover reason, when there is one.
     public let detail: String?
+    /// Which appearance of the screen this is. The Watch issues a new one each
+    /// time a prompt opens, so an answer to an earlier screen with the same
+    /// words (every odd-game changeover reads alike) can never close this one.
+    /// Nil only from a build that predates it.
+    public let occurrence: UUID?
 
-    public init(kindRaw: String, title: String, detail: String? = nil) {
+    public init(kindRaw: String, title: String, detail: String? = nil, occurrence: UUID? = nil) {
         self.kindRaw = kindRaw
         self.title = title
         self.detail = detail
+        self.occurrence = occurrence
+    }
+
+    /// This prompt as one particular appearance on the Watch.
+    public func occurring(_ id: UUID) -> LiveWatchPrompt {
+        LiveWatchPrompt(kindRaw: kindRaw, title: title, detail: detail, occurrence: id)
     }
 
     public var kind: Kind? { Kind(rawValue: kindRaw) }

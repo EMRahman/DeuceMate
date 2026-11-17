@@ -161,7 +161,8 @@ sequenceDiagram
 If the player taps OK on the Watch first, the iPhone's later "OK" arrives for a
 reminder that is already closed; the Watch politely ignores it and sends back the
 current state. Every answer names the exact screen it's answering, so a late tap
-can never close a *different* reminder.
+can never close a *different* reminder — not even a later one with the same
+words, such as the next "players change ends".
 
 ### Why the Watch stays in charge
 
