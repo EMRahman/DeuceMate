@@ -102,8 +102,8 @@ DeuceMate tracks the details that are easy to forget:
 • Court changes, prompts, and break points
 • Singles and doubles matches
 
-Choose from seven formats: best of three with a super tiebreak or full final set,
-Short Sets, FAST4, single or perpetual super tiebreaks, or continuous points.
+Choose from eight formats: best of three with a super tiebreak or full final set,
+Short Sets, FAST4, Quick 4 Games, single or perpetual super tiebreaks, or continuous points.
 
 FOLLOW LIVE ON IPHONE
 
@@ -209,7 +209,7 @@ NEW: PLAYING STYLE NOTES
 
 NEW: MATCH FORMATS
 • FAST4: first to 4 games, a tiebreak at 3–3 and a deciding point at deuce.
-• Short Sets replaces Quick 4 Games: first to 4 games, a tiebreak at 4–4 and a deciding point at deuce. Matches you've already played keep their original scoring.
+• Short Sets: first to 4 games, a tiebreak at 4–4 and a deciding point at deuce.
 • At a deciding point, Apple Watch reminds you that the receiver chooses the side.
 
 IMPROVED
@@ -652,8 +652,8 @@ WHAT CHANGED IN 1.4.0
   AI prompts (only when player names are included), and an optional "Name for
   announcements" is spoken in score announcements. The AI Coach prompt now
   includes player names by default, like shared reports; it can be switched off.
-- Apple Watch: two match formats, FAST4 and Short Sets (which replaces Quick 4
-  Games in match setup). A banner at a deciding point reminds players that the
+- Apple Watch: two new match formats, FAST4 and Short Sets. Quick 4 Games stays
+  available in match setup. A banner at a deciding point reminds players that the
   receiver chooses the side.
 - Both: resumed matches record each play session, and matches are listed by
   finish date.

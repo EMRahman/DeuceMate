@@ -14,8 +14,8 @@ Release. The baseline is the released `v1.3.1` tag. The `1.3.2 (16)` and
 Connect only requires the version to be higher than the released 1.3.1.
 
 This is a minor release, not a patch, because it adds new user-facing features:
-Prepare Game Plan (#182) with playing-style notes (#189), the FAST4 format and the
-Short Sets format that replaces Quick 4 Games in match setup (#186), and play
+Prepare Game Plan (#182) with playing-style notes (#189), the FAST4 and Short Sets
+formats (#186; Quick 4 Games stays in match setup), and play
 sessions with finish-date ordering (#175). It also includes the live scoreboard's
 unreachable-Watch state (#174, with refused-swipe feedback from #195), the App
 Store rating request plus Send Feedback / Rate DeuceMate rows (#179), and the
@@ -51,7 +51,8 @@ Connect before upload, as Xcode has raised build numbers during previous uploads
   re-confirm the App Privacy label, as noted in `APP_STORE_METADATA.md`.
 - [ ] Play a Short Sets and a FAST4 match on the Watch, including a tiebreak and a
   deciding point at deuce, and check the "Receiver chooses side" banner (#186).
-  Open an existing Quick 4 Games match and check its score still reads correctly.
+  Start a Quick 4 Games match from setup and play it to 2–2 and the sudden-death
+  point; open an existing Quick 4 Games match and check its score still reads correctly.
 - [ ] Finalise the draft
   [What's New and App Review notes](APP_STORE_METADATA.md#version-140---game-plan-fast4-and-play-sessions)
   against what passed. Remove any line whose feature is deferred.

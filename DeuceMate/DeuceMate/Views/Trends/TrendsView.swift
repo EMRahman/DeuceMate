@@ -56,7 +56,7 @@ struct TrendsView: View {
     /// can never contribute a sample (§3.5) — offering it would be a filter
     /// that always empties the screen.
     private let selectableFormats: [MatchFormat] = [
-        .standard, .bestOf3FullFinalSet, .superTiebreak, .perpetualSuperTiebreak, .shortSets, .fast4
+        .standard, .bestOf3FullFinalSet, .superTiebreak, .perpetualSuperTiebreak, .shortSets, .fast4, .quick4Games
     ]
 
     /// Display order for the grouped sections — a presentation preference

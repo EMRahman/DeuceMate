@@ -29,13 +29,22 @@ final class MatchSetupDefaultsTests: XCTestCase {
         XCTAssertEqual(resolved, .fallback)
     }
 
-    func test_resolve_retiredQuick4GamesFormat_fallsBackToStandard() {
+    func test_resolve_quick4GamesFormat_isRemembered() {
+        // Quick 4 Games is offered in match setup again, so a remembered
+        // choice must be restored rather than falling back.
         let resolved = MatchSetupDefaults.resolve(
             formatRaw: MatchFormat.quick4Games.rawValue,
             typeRaw: MatchType.doubles.rawValue
         )
-        XCTAssertEqual(resolved.format, .standard)
+        XCTAssertEqual(resolved.format, .quick4Games)
         XCTAssertEqual(resolved.type, .doubles)
+    }
+
+    func test_resolve_everyOfferedFormat_roundTrips() {
+        for format in MatchFormat.userSelectable {
+            let resolved = MatchSetupDefaults.resolve(formatRaw: format.rawValue, typeRaw: MatchType.singles.rawValue)
+            XCTAssertEqual(resolved.format, format, "\(format) is offered, so it must be remembered")
+        }
     }
 
     func test_resolve_onlyTheInvalidHalfFallsBack() {

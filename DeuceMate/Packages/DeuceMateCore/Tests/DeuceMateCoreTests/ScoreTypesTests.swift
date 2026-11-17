@@ -38,8 +38,8 @@ final class ScoreTypesTests: XCTestCase {
 
     func test_matchFormat_rawValuesArePersistedIdentifiers() throws {
         // Raw values reach persisted match JSON (`matchHistory.json`, `appState.json`) —
-        // retired cases such as `.quick4Games` must remain decodable with their pinned
-        // raw value forever.
+        // every case, offered or retired, must remain decodable with its pinned raw
+        // value forever.
         let persisted: [(MatchFormat, String)] = [
             (.standard, "standard"),
             (.bestOf3FullFinalSet, "bestOf3FullFinalSet"),
@@ -54,7 +54,7 @@ final class ScoreTypesTests: XCTestCase {
             XCTAssertEqual(format.rawValue, raw)
             XCTAssertEqual(try JSONDecoder().decode(MatchFormat.self, from: Data("\"\(raw)\"".utf8)), format)
         }
-        XCTAssertFalse(MatchFormat.userSelectable.contains(.quick4Games))
+        XCTAssertTrue(MatchFormat.userSelectable.contains(.quick4Games))
         XCTAssertTrue(MatchFormat.userSelectable.contains(.shortSets))
         XCTAssertTrue(MatchFormat.userSelectable.contains(.fast4))
     }

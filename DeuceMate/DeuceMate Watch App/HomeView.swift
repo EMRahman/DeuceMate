@@ -568,6 +568,12 @@ struct HomeView: View {
                             background: ButtonGradients.support
                         )
                         matchFormatOption(
+                            .quick4Games,
+                            title: "Quick 4 Games",
+                            details: "First to 3 games · Sudden death point at 2-2",
+                            background: ButtonGradients.support
+                        )
+                        matchFormatOption(
                             .superTiebreak,
                             title: "Super Tiebreak",
                             details: "1 set · Single tiebreak to 10 pts",

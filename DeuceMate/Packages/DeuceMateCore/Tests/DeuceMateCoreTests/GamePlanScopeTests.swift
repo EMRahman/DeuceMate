@@ -332,8 +332,8 @@ final class GamePlanScopeTests: XCTestCase {
         XCTAssertEqual(GamePlanUpcomingMatch(prefilledFrom: singles(1)).format, .standard)
         var quick = singles(1, competition: .friendly)
         quick.matchFormat = .quick4Games
-        XCTAssertFalse(GamePlanText.selectableFormats.contains(.quick4Games))
-        XCTAssertNil(GamePlanUpcomingMatch(prefilledFrom: quick).format, "Only offered formats are pre-filled")
+        XCTAssertTrue(GamePlanText.selectableFormats.contains(.quick4Games))
+        XCTAssertEqual(GamePlanUpcomingMatch(prefilledFrom: quick).format, .quick4Games)
         XCTAssertEqual(GamePlanUpcomingMatch(prefilledFrom: quick).competition, .friendly)
     }
 

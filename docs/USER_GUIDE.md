@@ -75,6 +75,7 @@ DeuceMate handles the full complexity of tennis scoring automatically so you nev
 | Perpetual Super Tiebreak | Ongoing tiebreak series (draw result when tied) | — |
 | Short Sets | Single set to 4 games (by 2); 7-point tiebreak at 4–4; deciding point at deuce | — |
 | FAST4 | Single set to 4 games; 5-point tiebreak at 3–3; deciding point at deuce | — |
+| Quick 4 Games | Single set, first to 3 games; at 2–2 one sudden-death point decides | — |
 | Perpetual Points | Continuous point accumulation | — |
 
 Supports both **singles** and **doubles** with full service-order management for both teams.
