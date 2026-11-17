@@ -8,8 +8,25 @@ final class PlayingNotesTests: XCTestCase {
         XCTAssertNil(TaggedPlayer.sanitizedPlayingNotes("  \n "))
         XCTAssertEqual(TaggedPlayer.sanitizedPlayingNotes(" strong first serve;\n a lot of  pace "),
                        "strong first serve; a lot of pace")
-        let long = String(repeating: "a", count: 500)
+        let long = String(repeating: "a", count: 4_001)
         XCTAssertEqual(TaggedPlayer.sanitizedPlayingNotes(long)?.count, TaggedPlayer.maxPlayingNotesLength)
+    }
+
+    func test_playingNotes_preservesFourThousandCharactersThroughCodingAndRosterEdits() throws {
+        let notes = String(repeating: "🎾", count: 4_000)
+        XCTAssertEqual(TaggedPlayer.maxPlayingNotesLength, 4_000)
+        XCTAssertEqual(TaggedPlayer.sanitizedPlayingNotes(notes + "extra"), notes)
+        let player = TaggedPlayer(name: "Alex", playingNotes: notes)
+        let data = try JSONEncoder().encode(player)
+        let decoded = try JSONDecoder().decode(TaggedPlayer.self, from: data)
+        XCTAssertEqual(decoded.playingNotes, notes)
+
+        let records = [F.record(tags: F.tags(opponents: [TaggedPlayer(id: player.id, name: "Alex")]))]
+        let updated = PlayerRoster.updatingDetails(
+            player.id, handednessRaw: nil, backhandRaw: nil, playStyleRaw: nil,
+            playingNotes: notes, in: records
+        )
+        XCTAssertEqual(PlayerRoster.entries(from: updated.records).first?.playingNotes, notes)
     }
 
     func test_decodingOldPlayerJSON_hasNoNotes_andRoundTrips() throws {
