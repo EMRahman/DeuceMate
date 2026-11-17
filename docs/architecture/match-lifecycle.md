@@ -144,7 +144,8 @@ waits for a saved Watch response. Reconnect/foreground refreshes the live match
 independently of stored history; a lost response triggers a read without replaying
 the scoring action. Compact snapshots never become archive records. Pending
 categorisation phase (`AppState.pendingOutcome`, optional for older files) survives
-save/relaunch. A changeover acknowledgement saves and publishes the cleared phone
+save/relaunch: shared selection and Back methods save changes from either device.
+A changeover acknowledgement saves and publishes the cleared phone
 input blocker. A pending category remains actionable while a doubles server
 decision waits; only new scoring waits for both to finish. Persistence errors
 still block every phone action. See [sync-and-data-flow.md](sync-and-data-flow.md).

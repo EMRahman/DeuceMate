@@ -52,8 +52,10 @@ phone nevertheless enabled input as soon as reachability returned. The original
 6. A gesture sends a request with the displayed match ID. Categorisation also
    carries the pending context and phase the helper saw. The Watch validates,
    applies through its existing methods, saves and replies with current state or
-   a rejection reason. Phase-only categorisation is saved too; optional
-   AppState `pendingOutcome` defaults to nil in old files.
+   a rejection reason. Phase-only categorisation is saved by the shared selection
+   and Back methods for both Watch and phone input; optional AppState
+   `pendingOutcome` defaults to nil in old files. The phone handler does not
+   repeat the save or mask a failed write.
 7. Only one phone request is in flight. A ten-second timeout or transport error
    never replays the action: it invalidates that request and makes one read-only
    refresh. Late callbacks cannot unlock input. If refresh fails, input stays
@@ -105,6 +107,9 @@ exercise real scoring/saves, phase restoration, unreadable state and failed writ
 Regression tests also cover changeover acknowledgement publication/persistence,
 phone input resuming from that push, and first-game doubles categorization/back/
 commit/undo while the next-server decision waits.
+Phase persistence regressions cover a phone or Watch selection followed by
+Watch-side Back/reselection and relaunch, plus failed phase saves that must not
+be acknowledged as successful phone commands.
 The browser state suite adds offline Watch scoring followed by reconnect without
 another point, and a second gesture while confirmation is pending.
 

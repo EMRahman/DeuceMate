@@ -173,6 +173,84 @@ struct LiveMatchWatchTests {
         #expect(vm.currentMatchStats.last?.outcome == .winner)
     }
 
+    @Test(arguments: [false, true], [false, true])
+    func watchPhaseChangesSurviveRelaunch(startOnPhone: Bool, backOnly: Bool) throws {
+        let files = try Files(), vm = model(files)
+        vm.statsTrackingEnabled = true
+        vm.winPoint(player: .opponent)
+        let pending = try #require(vm.pendingStatPoint)
+        let points = vm.currentMatchStats
+        if startOnPhone {
+            let reply = vm.handleLiveRequest(LiveMatchRequest(action: MatchSyncKey.statActionSelectOutcome,
+                matchID: vm.currentMatchID, outcome: .winner, pendingPoint: pending))
+            #expect(reply.message == nil)
+        } else {
+            vm.selectOutcome(.winner)
+            let selected = try JSONDecoder().decode(ScoreViewModel.AppState.self,
+                from: Data(contentsOf: files.url("state.json")))
+            #expect(selected.pendingOutcome == .winner)
+        }
+
+        // These are the direct Watch sheet calls, with no phone handler or
+        // background save to hide an unsaved phase change.
+        vm.cancelOutcomeSelection()
+        if !backOnly { vm.selectOutcome(.unforcedError) }
+        let expected: PointOutcome? = backOnly ? nil : .unforcedError
+        let saved = try JSONDecoder().decode(ScoreViewModel.AppState.self,
+            from: Data(contentsOf: files.url("state.json")))
+        #expect(saved.pendingOutcome == expected)
+        let restored = ScoreViewModel(statsStore: StatsStore(fileURL: files.url("history.json")),
+            stateFileURL: files.url("state.json"), workoutManager: Workout())
+        restored.loadState()
+        #expect(restored.pendingOutcome == expected)
+        #expect(restored.pendingStatPoint == pending)
+        #expect(restored.currentMatchID == vm.currentMatchID)
+        #expect(restored.currentPointsMe == vm.currentPointsMe)
+        #expect(restored.currentPointsOpponent == vm.currentPointsOpponent)
+        #expect(restored.currentMatchStats == points)
+        if !backOnly {
+            restored.commitEndingShot(.rally)
+            #expect(restored.currentMatchStats.last?.outcome == .unforcedError)
+            #expect(restored.pendingStatPoint == nil)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func phaseSaveFailureRejectsPhoneAcknowledgementWithoutRetry(back: Bool) throws {
+        let files = try Files()
+        final class Writes { var failNext = false; var attempts = 0 }
+        let writes = Writes()
+        let vm = ScoreViewModel(statsStore: StatsStore(fileURL: files.url("history.json")),
+            stateFileURL: files.url("state.json"), writeLiveState: { state, target in
+                writes.attempts += 1
+                if writes.failNext {
+                    writes.failNext = false
+                    throw CocoaError(.fileWriteOutOfSpace)
+                }
+                try BackupExcludedFileWriter.write(state, to: target)
+            }, workoutManager: Workout())
+        vm.loadState()
+        vm.iPhoneInputEnabled = true
+        vm.statsTrackingEnabled = true
+        vm.matchType = .singles
+        vm.matchFormat = .standard
+        vm.currentServer = .me
+        vm.winPoint(player: .me)
+        let pending = try #require(vm.pendingStatPoint)
+        if back { vm.selectOutcome(.winner) }
+        let saved = try Data(contentsOf: files.url("state.json"))
+        let attempts = writes.attempts
+        writes.failNext = true
+        let reply = vm.handleLiveRequest(LiveMatchRequest(
+            action: back ? MatchSyncKey.statActionCancelOutcomeSelection : MatchSyncKey.statActionSelectOutcome,
+            matchID: vm.currentMatchID, outcome: back ? nil : .winner,
+            pendingPoint: pending, pendingOutcome: back ? .winner : nil))
+        #expect(reply.message != nil)
+        #expect(reply.state?.blockingReason != nil)
+        #expect(writes.attempts == attempts + 1, "The phone handler must not retry or mask a failed shared save")
+        #expect(try Data(contentsOf: files.url("state.json")) == saved)
+    }
+
     @Test func unreadableStateDoesNotReportIdleOrAcceptCommands() throws {
         let files = try Files()
         let bytes = Data("unreadable saved match".utf8)

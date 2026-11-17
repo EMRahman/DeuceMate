@@ -1306,6 +1306,9 @@ class ScoreViewModel: ObservableObject {
         }
         if detailedShotTrackingEnabled {
             pendingOutcome = outcome
+            // Both the Watch sheet and phone commands use this method. Keep
+            // the saved phase current regardless of which device changed it.
+            saveState()
         } else {
             commitPointStat(outcome: outcome, endingShot: nil)
         }
@@ -1322,7 +1325,9 @@ class ScoreViewModel: ObservableObject {
     /// re-renders phase 1. The score change is left intact; use `undo()` to
     /// roll the whole point back.
     func cancelOutcomeSelection() {
+        guard pendingOutcome != nil else { return }
         pendingOutcome = nil
+        saveState()
     }
 
     /// Back-compat overload used by existing tests that pre-date detailed
@@ -1963,8 +1968,6 @@ class ScoreViewModel: ObservableObject {
                 return snapshot(message: "The pending point changed. Check the Watch's current point.")
             }
             applyRemoteStatAction(action, outcome: request.outcome, endingShot: request.endingShot)
-            // Phase-only changes also need a durable save before success.
-            if pendingStatPoint != nil && persistenceError == nil { _ = saveState() }
         default:
             return snapshot(message: "This scoring action is unavailable.")
         }
