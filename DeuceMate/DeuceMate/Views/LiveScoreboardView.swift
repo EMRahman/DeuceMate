@@ -71,7 +71,8 @@ struct LiveScoreboardView: View {
                              isStateConfirmed: syncService.isLiveStateConfirmed,
                              isRequestInFlight: syncService.isLiveRequestInFlight,
                              blockingReason: syncService.liveState?.blockingReason,
-                             prompt: syncService.liveState?.prompt)
+                             prompt: syncService.liveState?.prompt,
+                             retryCountdown: syncService.liveRetryCountdown)
     }
 
     /// A send failure outranks the steady status because it is about what the
@@ -163,7 +164,9 @@ struct LiveScoreboardView: View {
                     HStack(alignment: .top) {
                         liveBadge
                         if !syncService.isLiveStateConfirmed && !syncService.isLiveRequestInFlight {
-                            Button("Refresh") { syncService.requestLiveState() }
+                            Button(syncService.liveRetryCountdown == nil ? "Refresh" : "Retry Now") {
+                                syncService.requestLiveState()
+                            }
                                 .font(.caption)
                                 .accessibilityIdentifier("live-refresh")
                         }
@@ -278,10 +281,21 @@ struct LiveScoreboardView: View {
                     Text(syncService.isLiveStateConfirmed ? "Match ended" : "Waiting for Watch")
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.white)
+                    if !syncService.isLiveStateConfirmed, let seconds = syncService.liveRetryCountdown {
+                        Text(LiveScoreboardStatus.retryMessage(seconds: seconds))
+                            .font(.callout)
+                            .foregroundStyle(Color.orange)
+                            .multilineTextAlignment(.center)
+                            .contentTransition(.numericText(countsDown: true))
+                            .animation(.default, value: seconds)
+                            .accessibilityIdentifier("live-retry-countdown")
+                    }
                     Button("Close") { closeAndRestorePortrait() }
                         .buttonStyle(.borderedProminent)
                     if !syncService.isLiveStateConfirmed {
-                        Button("Refresh") { syncService.requestLiveState() }
+                        Button(syncService.liveRetryCountdown == nil ? "Refresh" : "Retry Now") {
+                            syncService.requestLiveState()
+                        }
                             .disabled(syncService.isLiveRequestInFlight)
                     }
                 }

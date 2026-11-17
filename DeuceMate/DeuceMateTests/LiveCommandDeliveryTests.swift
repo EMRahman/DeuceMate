@@ -40,6 +40,18 @@ private final class LiveCommandSession: MatchSyncSessing {
     func resetRequests() { requests = [] }
 }
 
+/// Records scheduled work so tests can run request timeouts (10 s) and
+/// countdown ticks (1 s) on demand.
+private final class ManualScheduler {
+    private var items: [(delay: TimeInterval, work: DispatchWorkItem)] = []
+    func schedule(_ delay: TimeInterval, _ work: DispatchWorkItem) { items.append((delay, work)) }
+    var pendingTicks: Int { items.filter { $0.delay == 1 }.count }
+    func runLatest(delay: TimeInterval) {
+        guard let index = items.lastIndex(where: { $0.delay == delay }) else { return }
+        items.remove(at: index).work.perform()
+    }
+}
+
 @MainActor
 struct LiveCommandDeliveryTests {
     private func makeService(_ session: LiveCommandSession,
@@ -339,5 +351,159 @@ struct LiveCommandDeliveryTests {
         service.sendWatchPromptAnswer(try #require(LiveWatchPrompt.doublesServer.answers.first))
         await drainMainQueue()
         #expect(session.requests.isEmpty)
+    }
+
+    // MARK: - Automatic refresh retry
+
+    private func makeService(_ session: LiveCommandSession, scheduler: ManualScheduler) -> PhoneMatchSyncService {
+        makeService(session, schedule: { scheduler.schedule($0, $1) })
+    }
+
+    /// Runs the countdown one tick at a time, recording what it showed, and
+    /// lets the refresh it ends with finish.
+    @discardableResult
+    private func runCountdown(_ service: PhoneMatchSyncService, _ scheduler: ManualScheduler) async -> [Int] {
+        var shown: [Int] = []
+        while let seconds = service.liveRetryCountdown, shown.count < 60 {
+            shown.append(seconds)
+            scheduler.runLatest(delay: 1)
+        }
+        await drainMainQueue()
+        return shown
+    }
+
+    @Test func failedRefreshCountsDownAndAsksAgain() async {
+        let session = LiveCommandSession()
+        session.failLiveSend = true
+        let scheduler = ManualScheduler()
+        let service = makeService(session, scheduler: scheduler)
+        service.requestLiveState()
+        await drainMainQueue()
+        #expect(service.liveRetryCountdown == 3)
+        #expect(service.liveCommandFailureCount == 0,
+                "the countdown explains a failed refresh; the command-failure message would hide it")
+        #expect(!service.isLiveStateConfirmed)
+
+        session.failLiveSend = false
+        let shown = await runCountdown(service, scheduler)
+        #expect(shown == [3, 2, 1])
+        #expect(session.requests.map(\.action) == [nil, nil])
+        #expect(service.isLiveStateConfirmed)
+        #expect(service.liveRetryCountdown == nil)
+        #expect(scheduler.pendingTicks == 0)
+    }
+
+    @Test func retriesBackOffAndStopAtTheRefreshButton() async {
+        let session = LiveCommandSession()
+        session.failLiveSend = true
+        let scheduler = ManualScheduler()
+        let service = makeService(session, scheduler: scheduler)
+        service.requestLiveState()
+        await drainMainQueue()
+        var starts: [Int] = []
+        while let seconds = service.liveRetryCountdown, starts.count < 10 {
+            starts.append(seconds)
+            await runCountdown(service, scheduler)
+        }
+        #expect(starts == LiveRefreshRetry.delays)
+        #expect(session.requests.count == LiveRefreshRetry.delays.count + 1)
+        #expect(service.liveRetryCountdown == nil)
+        #expect(!service.isLiveStateConfirmed)
+        #expect(LiveScoreboardStatus(isWatchReachable: true, isInputEnabled: true, isStateConfirmed: false,
+                                     retryCountdown: service.liveRetryCountdown).detail
+                == "Current score not confirmed. Refresh to reconnect.")
+    }
+
+    @Test func freshRequestRestartsTheRetryBudget() async {
+        let session = LiveCommandSession()
+        session.failLiveSend = true
+        let scheduler = ManualScheduler()
+        let service = makeService(session, scheduler: scheduler)
+        service.requestLiveState()
+        await drainMainQueue()
+        await runCountdown(service, scheduler)
+        #expect(service.liveRetryCountdown == 5)
+        service.requestLiveState() // Retry Now / reopening the scoreboard
+        await drainMainQueue()
+        #expect(service.liveRetryCountdown == 3)
+    }
+
+    @Test func losingTheWatchCancelsTheCountdown() async {
+        let session = LiveCommandSession()
+        session.failLiveSend = true
+        let scheduler = ManualScheduler()
+        let service = makeService(session, scheduler: scheduler)
+        service.requestLiveState()
+        await drainMainQueue()
+        #expect(service.liveRetryCountdown == 3)
+        session.isReachable = false
+        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: false, pendingTransferCount: 0)
+        #expect(service.liveRetryCountdown == nil)
+        scheduler.runLatest(delay: 1) // a tick already scheduled must do nothing
+        await drainMainQueue()
+        #expect(service.liveRetryCountdown == nil)
+        #expect(session.requests.count == 1)
+    }
+
+    @Test func automaticRetriesNeverReplayAScoreCommand() async {
+        let session = LiveCommandSession()
+        let scheduler = ManualScheduler()
+        let service = makeService(session, scheduler: scheduler)
+        service.requestLiveState()
+        await drainMainQueue()
+        #expect(service.isLiveStateConfirmed)
+        session.resetRequests()
+        session.failLiveSend = true
+        service.sendScoreCommand(MatchSyncKey.scoreCommandWinMe, matchID: service.activeMatchID)
+        await drainMainQueue()
+        #expect(service.liveCommandFailureCount == 1, "a failed command still says so")
+        await runCountdown(service, scheduler)
+        await runCountdown(service, scheduler)
+        #expect(session.requests.filter { $0.action != nil }.count == 1)
+        #expect(session.requests.filter { $0.action == nil }.count == 3)
+        #expect(session.queued.isEmpty)
+    }
+
+    @Test func lateRefreshReplyShowsTheNewerScoreWithoutConfirming() async throws {
+        let session = LiveCommandSession()
+        let scheduler = ManualScheduler()
+        let service = makeService(session, scheduler: scheduler)
+        service.requestLiveState()
+        await drainMainQueue()
+        session.automaticallyReply = false
+        service.requestLiveState()
+        scheduler.runLatest(delay: 10) // the reply misses the timeout
+        await drainMainQueue()
+        #expect(service.liveRetryCountdown == 3)
+
+        var record = try #require(session.state.record)
+        record.currentPointsMe = 3
+        session.state = LiveMatchState(record: record, inputEnabled: true)
+        session.pendingReplies[0](session.reply())
+        await drainMainQueue()
+        #expect(service.liveState?.record?.currentPointsMe == 3, "the late reply is still the Watch's score")
+        #expect(!service.isLiveStateConfirmed, "only the current request can unlock input")
+        #expect(service.liveRetryCountdown == 3, "the retry still confirms readiness")
+    }
+
+    @Test func lateReplyFromAnotherWatchSessionIsIgnored() async throws {
+        let session = LiveCommandSession()
+        let scheduler = ManualScheduler()
+        let service = makeService(session, scheduler: scheduler)
+        service.requestLiveState()
+        await drainMainQueue()
+        let before = service.liveState
+        session.automaticallyReply = false
+        service.requestLiveState()
+        scheduler.runLatest(delay: 10)
+        await drainMainQueue()
+
+        var record = try #require(session.state.record)
+        record.currentPointsMe = 3
+        let other = LiveMatchReply(state: LiveMatchState(record: record, inputEnabled: true),
+                                   message: nil, sessionID: UUID(), sequence: 99)
+        session.pendingReplies[0]((try? MatchSyncPayloadBuilder.liveReply(other)) ?? [:])
+        await drainMainQueue()
+        #expect(service.liveState == before)
     }
 }
