@@ -289,18 +289,9 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
             return depthWinPair(.servePlusOne, in: sample)
         case .depthWinRally:
             return depthWinPair(.rally, in: sample)
-        case .firstServeIn:
-            return (sample.firstServesIn, sample.servicePoints)
-        case .secondServeIn:
-            return (sample.secondServesIn, sample.secondServePoints)
-        case .firstServeWin:
-            return (sample.firstServeWins, sample.firstServesIn)
-        case .secondServeWin:
-            return (sample.secondServeWins, sample.secondServePoints)
-        case .returnWinFirst:
-            return (sample.returnWinsOnFirst, sample.returnPointsOnFirst)
-        case .returnWinSecond:
-            return (sample.returnWinsOnSecond, sample.returnPointsOnSecond)
+        case .firstServeIn, .secondServeIn, .firstServeWin, .secondServeWin,
+             .returnWinFirst, .returnWinSecond:
+            return serveReturnPair(sample.serveReturn)
         case .breakPointsConverted:
             return (sample.breakPointWins, sample.breakPointOpps)
         case .breakPointsSaved:
@@ -336,6 +327,45 @@ public enum TrendMetric: String, CaseIterable, Identifiable, Sendable {
         case .stepsPerPointSet2: return setStepsPair(sample.fullSetSlice(1))
         case .stepsPerPointSet3: return setStepsPair(sample.fullSetSlice(2))
         case .stepsPerPointDecidingTiebreak: return setStepsPair(sample.decidingTiebreakSlice)
+        }
+    }
+
+    // MARK: - Court side
+
+    /// Whether this metric can be read for one court side. Only the Serve &
+    /// Return group: those are per-point serve/return counts, so a side's
+    /// points alone give a complete figure. Every other metric either needs
+    /// the whole match (break points, sets) or isn't a serving question.
+    public var supportsCourtSide: Bool { group == .serveReturn }
+
+    /// `rawPair(in:)` restricted to the points served from `courtSide`
+    /// (`nil` = the whole match, identical to `rawPair(in:)`). `nil` when the
+    /// metric doesn't support a side, or the match has no points that can be
+    /// placed on it — a gap, never a zero.
+    public func rawPair(in sample: MatchTrendSample, courtSide: CourtSide?) -> (numerator: Int, denominator: Int)? {
+        guard let courtSide else { return rawPair(in: sample) }
+        guard supportsCourtSide, let counts = sample.serveReturn(on: courtSide) else { return nil }
+        return serveReturnPair(counts)
+    }
+
+    /// `ratio(in:)` restricted to `courtSide`, with the same empty-denominator
+    /// guard. Pool with `rawPair(in:courtSide:)`, never this.
+    public func ratio(in sample: MatchTrendSample, courtSide: CourtSide?) -> Ratio? {
+        guard let pair = rawPair(in: sample, courtSide: courtSide), pair.denominator > 0 else { return nil }
+        return Ratio(numerator: pair.numerator, denominator: pair.denominator)
+    }
+
+    /// The single definition of the six Serve & Return pairs, shared by the
+    /// whole-match and per-side readings so they can't drift apart.
+    private func serveReturnPair(_ c: MatchTrendSample.ServeReturnCounts) -> (Int, Int)? {
+        switch self {
+        case .firstServeIn:    return (c.firstServesIn, c.servicePoints)
+        case .secondServeIn:   return (c.secondServesIn, c.secondServePoints)
+        case .firstServeWin:   return (c.firstServeWins, c.firstServesIn)
+        case .secondServeWin:  return (c.secondServeWins, c.secondServePoints)
+        case .returnWinFirst:  return (c.returnWinsOnFirst, c.returnPointsOnFirst)
+        case .returnWinSecond: return (c.returnWinsOnSecond, c.returnPointsOnSecond)
+        default:               return nil
         }
     }
 

@@ -130,6 +130,18 @@ struct TrendsView: View {
             + "\(covered == 1 ? "has" : "have") \(subject)."
     }
 
+    /// Serve & Return's per-court-side series, keyed by side, for its
+    /// All / Deuce / Ad picker. Empty for every other group — only
+    /// `TrendMetric.supportsCourtSide` metrics can be split by side.
+    private func courtSideSeries(for group: TrendMetricGroup) -> [CourtSide: [TrendSeries]] {
+        guard group == .serveReturn else { return [:] }
+        var out: [CourtSide: [TrendSeries]] = [:]
+        for side in CourtSide.allCases {
+            out[side] = PerformanceTrends.series(for: group, in: scopedSamples, courtSide: side)
+        }
+        return out
+    }
+
     var body: some View {
         List {
             Section {
@@ -189,7 +201,8 @@ struct TrendsView: View {
                     // empty charts.
                     if groupSeries.contains(where: { !$0.points.isEmpty }) {
                         Section {
-                            TrendChart(group: group, series: groupSeries, displayMode: displayMode, sampleCount: scopedSamples.count, dateByIndex: dateByIndex, provisionalIndices: Set(scopedSamples.indices.filter { scopedSamples[$0].isInProgress }))
+                            TrendChart(group: group, series: groupSeries, displayMode: displayMode, sampleCount: scopedSamples.count, dateByIndex: dateByIndex, provisionalIndices: Set(scopedSamples.indices.filter { scopedSamples[$0].isInProgress }),
+                                       courtSideSeries: courtSideSeries(for: group))
                         } header: {
                             Text(group.displayLabel)
                         } footer: {
