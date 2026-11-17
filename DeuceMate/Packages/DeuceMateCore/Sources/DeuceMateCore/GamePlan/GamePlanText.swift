@@ -20,7 +20,7 @@ public enum GamePlanText {
 
     /// Formats offered for the upcoming match, in picker order.
     public static let selectableFormats: [MatchFormat] = [
-        .standard, .bestOf3FullFinalSet, .superTiebreak, .perpetualSuperTiebreak, .shortSets, .fast4, .perpetualPoints
+        .standard, .bestOf3FullFinalSet, .superTiebreak, .perpetualSuperTiebreak, .shortSets, .fast4, .quick4Games, .perpetualPoints
     ]
 
     /// "2026-10-03" in `timeZone` — unambiguous for any reader or AI.

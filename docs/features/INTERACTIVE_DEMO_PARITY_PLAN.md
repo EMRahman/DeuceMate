@@ -424,7 +424,7 @@ the new capability) to mention outcome tracking and the new gestures. Align
 the setup card's format labels with the watch's own setup sheet (HomeView
 ~L413–476): "Best of 3 Sets (Club / League)" / "3 sets · Final set: Super
 Tiebreak to 10", "Best of 3 Sets (ATP)" / "3 sets · Final set: Full set,
-tiebreak to 7", "Short Sets" / "First to 4 games (by 2) · 7-pt tiebreak at 4-4 · Deciding point at deuce", "FAST4" / "First to 4 games · 5-pt tiebreak at 3-3 · Deciding point at deuce", "Super Tiebreak" / "1 set · Single tiebreak to 10 pts", "Perpetual
+tiebreak to 7", "Short Sets" / "First to 4 games (by 2) · 7-pt tiebreak at 4-4 · Deciding point at deuce", "FAST4" / "First to 4 games · 5-pt tiebreak at 3-3 · Deciding point at deuce", "Quick 4 Games" / "1 set to 3 · Sudden-death point at 2-2", "Super Tiebreak" / "1 set · Single tiebreak to 10 pts", "Perpetual
 Tiebreak" / "Continuous tiebreak until stopping", "Perpetual Points" / "Just
 count points · server alternates every point · no stats or changeovers".
 **Accept when:** owner proof-reads the page.

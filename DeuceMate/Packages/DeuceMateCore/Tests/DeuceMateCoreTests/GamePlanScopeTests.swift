@@ -325,15 +325,15 @@ final class GamePlanScopeTests: XCTestCase {
         XCTAssertEqual(lastFive.resolve(c, pinning: nil).map(\.id), lastFive.resolve(c).map(\.id))
     }
 
-    func test_prefill_leavesUntaggedUnknownAndUnofferedValuesUnset() {
+    func test_prefill_leavesUntaggedAndUnknownCompetitionUnset_andKeepsOfferedFormats() {
         XCTAssertNil(GamePlanUpcomingMatch(prefilledFrom: singles(1)).competition, "Untagged is not guessed")
         XCTAssertNil(GamePlanUpcomingMatch(prefilledFrom: singles(1, raw: "ladder")).competition,
                      "An unknown future type is neither Friendly nor League")
         XCTAssertEqual(GamePlanUpcomingMatch(prefilledFrom: singles(1)).format, .standard)
         var quick = singles(1, competition: .friendly)
         quick.matchFormat = .quick4Games
-        XCTAssertFalse(GamePlanText.selectableFormats.contains(.quick4Games))
-        XCTAssertNil(GamePlanUpcomingMatch(prefilledFrom: quick).format, "Only offered formats are pre-filled")
+        XCTAssertTrue(GamePlanText.selectableFormats.contains(.quick4Games))
+        XCTAssertEqual(GamePlanUpcomingMatch(prefilledFrom: quick).format, .quick4Games)
         XCTAssertEqual(GamePlanUpcomingMatch(prefilledFrom: quick).competition, .friendly)
     }
 
