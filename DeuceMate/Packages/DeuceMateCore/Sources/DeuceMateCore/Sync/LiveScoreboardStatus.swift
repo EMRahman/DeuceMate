@@ -13,16 +13,21 @@ public struct LiveScoreboardStatus: Equatable, Sendable {
     public let blockingReason: String?
     /// The Watch screen pausing play (changeover, "Who serves next?"), if any.
     public let prompt: LiveWatchPrompt?
+    /// Whole seconds until the phone automatically asks the Watch for the score
+    /// again after a refresh failed, or nil when no retry is scheduled.
+    public let retryCountdown: Int?
 
     public init(isWatchReachable: Bool, isInputEnabled: Bool,
                 isStateConfirmed: Bool = true, isRequestInFlight: Bool = false,
-                blockingReason: String? = nil, prompt: LiveWatchPrompt? = nil) {
+                blockingReason: String? = nil, prompt: LiveWatchPrompt? = nil,
+                retryCountdown: Int? = nil) {
         self.isWatchReachable = isWatchReachable
         self.isInputEnabled = isInputEnabled
         self.isStateConfirmed = isStateConfirmed
         self.isRequestInFlight = isRequestInFlight
         self.blockingReason = blockingReason
         self.prompt = prompt
+        self.retryCountdown = retryCountdown
     }
 
     /// A prompt this build can show with its answers. An unknown kind from a
@@ -81,8 +86,9 @@ public struct LiveScoreboardStatus: Equatable, Sendable {
     public var detail: String? {
         if isWatchReachable {
             if !isStateConfirmed {
-                return isRequestInFlight ? "Getting the current score from the Watch."
-                    : "Current score not confirmed. Refresh to reconnect."
+                if isRequestInFlight { return "Getting the current score from the Watch." }
+                if let seconds = retryCountdown { return Self.retryMessage(seconds: seconds) }
+                return "Current score not confirmed. Refresh to reconnect."
             }
             if isRequestInFlight { return "Waiting for the Watch to confirm." }
             // The prompt card explains itself; repeating "Continue on the
@@ -94,9 +100,35 @@ public struct LiveScoreboardStatus: Equatable, Sendable {
             : "Last score shown. Updates resume when the Watch reconnects."
     }
 
+    /// The countdown line while an automatic score refresh is scheduled.
+    public static func retryMessage(seconds: Int) -> String {
+        "No reply from the Watch. Trying again in \(max(seconds, 1))…"
+    }
+
     /// Shown when a send fails. A failed send is ambiguous, because the Watch may
     /// still have applied it, so this asks the user to check rather than retry
     /// blindly. Live commands are never retried automatically.
     public static let commandFailureMessage =
         "Not confirmed by the Watch. Check the score before retrying."
+}
+
+/// When the phone asks the Watch for the live score again after a read-only
+/// refresh fails (no reply, a timeout, or a reply without a state).
+///
+/// Only refreshes retry. Score commands and prompt answers never do: a failed
+/// send is ambiguous, so replaying it could score a point twice. The budget is
+/// bounded so a Watch that stays reachable but never answers (for example an
+/// older build) leaves the Refresh button rather than polling forever. Every
+/// fresh request — the scoreboard opening, Refresh, the app returning to the
+/// foreground, or the Watch becoming reachable — starts a new budget.
+public enum LiveRefreshRetry {
+    /// Seconds to wait before each automatic retry, in order.
+    public static let delays: [Int] = [3, 5, 10, 15, 30]
+
+    /// The wait before the next retry after `failures` consecutive failed
+    /// refreshes (1 = the first failure), or nil once the budget is spent.
+    public static func delay(afterFailures failures: Int) -> Int? {
+        guard failures >= 1, failures <= delays.count else { return nil }
+        return delays[failures - 1]
+    }
 }

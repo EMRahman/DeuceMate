@@ -240,6 +240,10 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     func sessionReachabilityDidChange(_ session: WCSession) {
         guard session.isReachable else { return }
         pushFullHistory()
+        // The history push deliberately leaves out the live match, so points
+        // scored while the phone was out of reach would otherwise not show on
+        // its scoreboard until the next point or a successful phone refresh.
+        publishLiveState()
     }
 
     // MARK: - Receive requests from phone

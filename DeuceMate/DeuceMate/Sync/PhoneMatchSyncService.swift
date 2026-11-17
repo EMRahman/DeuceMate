@@ -36,6 +36,14 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     private var liveRequestTimeout: DispatchWorkItem?
     private var liveSessionID: UUID?
     private var liveSequence: UInt64 = 0
+    /// Seconds until the next automatic score refresh, or nil when none is
+    /// scheduled. Counts down once a second so the scoreboard can say
+    /// "Trying again in 3…". See Core's `LiveRefreshRetry`.
+    @Published private(set) var liveRetryCountdown: Int?
+    /// Consecutive failed read-only refreshes since the last fresh request.
+    private var liveRefreshFailures = 0
+    /// Identifies the scheduled countdown; clearing it cancels pending ticks.
+    private var liveRetryGeneration: UUID?
     /// Increments when a live score or category command may not have reached the
     /// watch. A counter, so two identical failures in a row still both notify.
     @Published private(set) var liveCommandFailureCount: Int = 0
@@ -466,8 +474,15 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     }
 
     /// Safe to repeat: reads current Watch state and never replays scoring intent.
+    /// A fresh request (scoreboard opening, Refresh, foreground, reconnect)
+    /// cancels any countdown and starts a new automatic-retry budget.
     func requestLiveState() {
         guard !isLiveRequestInFlight else { return }
+        cancelLiveRetry()
+        sendLiveRefresh()
+    }
+
+    private func sendLiveRefresh() {
         isLiveStateConfirmed = false
         guard transport.isActivated, transport.isReachable else { return }
         beginLiveRequest(LiveMatchRequest())
@@ -489,13 +504,25 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
 
     private func finishLiveRequest(_ id: UUID, request: LiveMatchRequest,
                                    result: Result<LiveMatchReply, Error>) {
-        guard liveRequestID == id else { return } // expired/disconnected requests cannot unlock input
+        guard liveRequestID == id else {
+            // Expired or disconnected requests cannot unlock input, but the
+            // Watch state they carry is still the Watch's truth: show it rather
+            // than leave an older score on the board. Same Watch session only,
+            // and `applyLiveReply` drops it if a newer state already arrived.
+            if case .success(let reply) = result, reply.state != nil,
+               let sessionID = reply.sessionID, sessionID == liveSessionID {
+                applyLiveReply(reply)
+            }
+            return
+        }
         liveRequestTimeout?.cancel()
         liveRequestTimeout = nil
         liveRequestID = nil
         isLiveRequestInFlight = false
+        let isRefresh = request.action == nil
         switch result {
         case .success(let reply) where reply.state != nil && reply.sessionID != nil:
+            liveRefreshFailures = 0
             applyLiveReply(reply)
             isLiveStateConfirmed = true
             liveCommandMessage = reply.message
@@ -503,13 +530,58 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         case .success(let reply):
             isLiveStateConfirmed = false
             liveCommandMessage = reply.message ?? LiveScoreboardStatus.commandFailureMessage
-            liveCommandFailureCount += 1
+            // A refresh that failed without a Watch reason shows its countdown
+            // instead of the command-failure message, which would hide it.
+            if !isRefresh || reply.message != nil { liveCommandFailureCount += 1 }
+            if isRefresh { scheduleLiveRetry() }
         case .failure:
             isLiveStateConfirmed = false
             liveCommandMessage = LiveScoreboardStatus.commandFailureMessage
-            liveCommandFailureCount += 1
-            if request.action != nil { requestLiveState() }
+            if isRefresh {
+                scheduleLiveRetry()
+            } else {
+                liveCommandFailureCount += 1
+                requestLiveState()
+            }
         }
+    }
+
+    /// Schedules the next automatic refresh after a failed one, counting down
+    /// once a second. Never used for commands, which are never replayed.
+    private func scheduleLiveRetry() {
+        liveRefreshFailures += 1
+        guard transport.isActivated, transport.isReachable,
+              let delay = LiveRefreshRetry.delay(afterFailures: liveRefreshFailures) else {
+            liveRetryGeneration = nil
+            liveRetryCountdown = nil
+            return
+        }
+        let generation = UUID()
+        liveRetryGeneration = generation
+        tickLiveRetry(remaining: delay, generation: generation)
+    }
+
+    private func tickLiveRetry(remaining: Int, generation: UUID) {
+        liveRetryCountdown = remaining
+        let tick = DispatchWorkItem { [weak self] in
+            guard let self, self.liveRetryGeneration == generation else { return }
+            if remaining > 1 {
+                self.tickLiveRetry(remaining: remaining - 1, generation: generation)
+            } else {
+                self.liveRetryGeneration = nil
+                self.liveRetryCountdown = nil
+                // Keeps the failure count, so the next wait is longer.
+                if !self.isLiveRequestInFlight { self.sendLiveRefresh() }
+            }
+        }
+        scheduleAfter(1, tick)
+    }
+
+    /// Stops any countdown and restores the full retry budget.
+    private func cancelLiveRetry() {
+        liveRetryGeneration = nil
+        liveRetryCountdown = nil
+        liveRefreshFailures = 0
     }
 
     private func invalidateLiveState() {
@@ -518,6 +590,9 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         liveRequestID = nil
         isLiveRequestInFlight = false
         isLiveStateConfirmed = false
+        // Unreachable or backgrounded: reconnecting or returning to the
+        // foreground sends a fresh request with a fresh budget.
+        cancelLiveRetry()
     }
 
     func pauseLiveState() { invalidateLiveState() }
