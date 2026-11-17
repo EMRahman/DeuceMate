@@ -273,6 +273,12 @@ struct PlayerManageView: View {
                             notesDraft = String(value.prefix(TaggedPlayer.maxPlayingNotesLength))
                         }
                     }
+                    Text("\(notesDraft.count) / \(TaggedPlayer.maxPlayingNotesLength.formatted())")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .accessibilityIdentifier("player-playing-notes-character-count")
                 }
             } header: {
                 Text("Playing Style")

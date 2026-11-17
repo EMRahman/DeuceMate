@@ -464,8 +464,11 @@ final class MatchDetailsUITests: XCTestCase {
         // Typed notes wait for Save; Back asks about them.
         openManagedOpponent()
         var field = playingNotesField()
+        let characterCount = app.staticTexts["player-playing-notes-character-count"]
+        XCTAssertEqual(characterCount.label, "0 / 4,000")
         field.tap()
         field.typeText(notes)
+        XCTAssertEqual(characterCount.label, "\(notes.count) / 4,000")
         let save = app.buttons["player-manage-save"]
         XCTAssertTrue(save.isEnabled, "Unsaved notes enable Save")
         app.buttons["player-manage-back"].tap()
