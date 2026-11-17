@@ -20,12 +20,18 @@ sessions with finish-date ordering (#175). It also includes the live scoreboard'
 unreachable-Watch state (#174, with refused-swipe feedback from #195), the App
 Store rating request plus Send Feedback / Rate DeuceMate rows (#179), and the
 workout saving/recovery fixes (#185, #187). Since the first draft it has gained
-the condensed playing-style card (#190, #191), a Game Plan that opens ready and
-pre-filled with names and notes included by default (#193), save-only-on-Save for
-player details and notes (#194, #195), the recorder's name in reports and AI
-prompts with AI Coach names on by default (#197), and a separate name for
-announcements (#198). #192 raised the watchOS minimum for the Watch **test**
-targets only; the shipping Watch app stays on watchOS 9.0.
+the condensed playing-style card (#190, #191), a Game Plan that opens ready and pre-filled with names and playing-style notes
+included by default (#193; #200 restores private match notes to off-by-default
+with exact-text review and remembers the names/playing-style-notes choices),
+save-only-on-Save for player details and notes (#194, #195; #207 raises
+playing-style notes to 4,000 characters with a live counter), the recorder's
+name in reports and AI prompts with AI Coach names on by default (#197), a
+separate name for announcements (#198), version/build in the Watch Guide
+(#202), live reconnect recovery with Watch-confirmed iPhone input (#203),
+Watch changeover / "Who serves next?" prompts shown and answerable on iPhone
+(#204), and Trends' Serve & Return split by deuce and ad side (#206). #192
+raised the watchOS minimum for the Watch **test** targets only; the shipping
+Watch app stays on watchOS 9.0.
 
 This candidate has not yet been archived, uploaded or tested on physical devices.
 Test targets keep their non-shipping version/build values. Build 18 is the next
@@ -37,22 +43,30 @@ Connect before upload, as Xcode has raised build numbers during previous uploads
   upload), and check that the existing archive is intact.
 - [ ] Complete the [manual testing gate](#next-release--manual-testing-gate) and
   the [workout save checks](#workout-save-investigation--9-november-2026) below.
-- [ ] Exercise Prepare Game Plan from an opponent's page (#182, #193), including
-  the pre-filled upcoming match, an unfinished previous match, match selection,
-  turning names and notes off or leaving individual notes out, and sharing.
+- [ ] Exercise Prepare Game Plan from an opponent's page (#182, #193, #200),
+  including the pre-filled upcoming match, an unfinished previous match, match
+  selection, turning names/playing-style notes off (and confirming the choice is
+  remembered), switching private match notes on with exact-text review (and
+  confirming they reset to off on the next visit), and sharing.
 - [ ] Set "Your name" and "Name for announcements" on iPhone and check both sync
   to the Watch. Check the name appears in a shared report and AI prompt only with
   Include player names on, and that announcements say the short name (#197, #198).
 - [ ] Edit a player and a match note, then leave without saving. Confirm nothing
   is overwritten and emptying notes asks before deleting them (#194, #195).
 - [ ] **Blocker:** update `docs/website/privacy.html` for 1.4.0. It still says AI
-  prompts leave names out by default and that notes are never included unless
-  switched on, and doesn't mention Game Plan or "Your name" (#193, #197). Then
+  prompts leave names out by default, and doesn't mention Game Plan, remembered
+  name/style-note choices, or "Your name" (#193, #197, #200). Then
   re-confirm the App Privacy label, as noted in `APP_STORE_METADATA.md`.
 - [ ] Play a Short Sets and a FAST4 match on the Watch, including a tiebreak and a
   deciding point at deuce, and check the "Receiver chooses side" banner (#186).
   Start a Quick 4 Games match from setup and play it to 2–2 and the sudden-death
   point; open an existing Quick 4 Games match and check its score still reads correctly.
+- [ ] On paired devices, trigger a Watch changeover and a doubles "Who serves
+  next?" prompt; confirm the prompt card appears on the iPhone live scoreboard
+  (read-only with iPhone Input off) and answering it with iPhone Input on
+  clears both screens (#204).
+- [ ] In Trends > Serve & Return, switch between Both Sides, Deuce and Ad and
+  confirm the filter persists across launches (#206).
 - [ ] Finalise the draft
   [What's New and App Review notes](APP_STORE_METADATA.md#version-140---game-plan-fast4-and-play-sessions)
   against what passed. Remove any line whose feature is deferred.
