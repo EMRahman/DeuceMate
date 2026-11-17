@@ -374,7 +374,7 @@ struct SettingsView: View {
                 settingLabel("iPhone Input", .iPhoneInput)
             }
             if iPhoneInputEnabled {
-                Text("On the iPhone live scoreboard, swipe up to award yourself a point, down for the opponent, and left to undo — like on the Apple Watch. The watch remains the source of truth.")
+                Text("On the iPhone live scoreboard, swipe up to award yourself a point, down for the opponent, and left to undo — like on the Apple Watch. Changeover reminders and doubles' \"Who serves next?\" can be answered here too. The watch remains the source of truth.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

@@ -138,7 +138,7 @@
       shared.push(phone.note("In the native app, keep DeuceMate open during the match. Announcements pause when the phone is locked or another app is open."));
     }
     shared.push(toggle("iPhone Input", COPY.input, s.iPhoneInput, function (v) { setRow(phone, "iPhoneInput", v); }));
-    if (s.iPhoneInput) shared.push(phone.note("On the live scoreboard, swipe up to award yourself a point, down for the opponent, and left to undo. The watch remains the source of truth."));
+    if (s.iPhoneInput) shared.push(phone.note("On the live scoreboard, swipe up to award yourself a point, down for the opponent, and left to undo. Changeover reminders and doubles' \"Who serves next?\" can be answered here too. The watch remains the source of truth."));
     out.appendChild(section("Shared Configurations", shared, "These settings apply to both iPhone and Apple Watch. The last value set on either device wins in the demo."));
 
     var now = new Date().getFullYear(), years = [["0", "Skip"]];

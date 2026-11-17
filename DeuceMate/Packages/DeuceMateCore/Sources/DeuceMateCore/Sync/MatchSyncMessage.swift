@@ -120,6 +120,14 @@ public enum MatchSyncKey {
     /// `applyRemoteScoreCommand` rejects every score command while a stat is
     /// pending — the exact state in which the iPhone panel is visible.
     public static let statActionUndoPoint = "undoPoint"
+
+    // MARK: - Watch prompt answers (iPhone → watch, gated by iPhoneInputEnabled)
+    /// Answers a `LiveWatchPrompt` of kind `.changeover` — the iPhone's "OK" on
+    /// the Watch's changeover screen. Carried as a `LiveMatchRequest.action`.
+    public static let promptActionAcknowledgeChangeover = "acknowledgeChangeover"
+    /// Answers a `LiveWatchPrompt` of kind `.doublesServer` ("Who serves
+    /// next?"). The choice travels in `LiveMatchRequest.doublesServer`.
+    public static let promptActionChooseDoublesServer = "chooseDoublesServer"
 }
 
 /// Protocol implemented by the sync service on each platform.
@@ -142,6 +150,10 @@ public protocol MatchSyncService: AnyObject {
     /// Tells the service which match is live, so a full-history push can leave
     /// out any stored in-progress copy of it. `nil` means no match is live.
     func liveMatchDidChange(_ matchID: UUID?)
+    /// Re-sends the compact live state after a change that saves nothing, such
+    /// as the changeover screen appearing once the category sheet has closed.
+    /// Without it the phone would keep "Waiting" until the next point.
+    func liveStateDidChange()
     /// ISO 8601 date of the last successfully processed sync, if any.
     var lastSyncDate: Date? { get }
 }
@@ -152,6 +164,8 @@ public extension MatchSyncService {
     func sendPendingPointState(_ pending: PendingPointInfo?, outcome: PointOutcome?) {}
     /// Default no-op for services that never push history while a match is live.
     func liveMatchDidChange(_ matchID: UUID?) {}
+    /// Default no-op for services with no live-state channel (the phone, test spies).
+    func liveStateDidChange() {}
 }
 
 // MARK: - Encoding helpers

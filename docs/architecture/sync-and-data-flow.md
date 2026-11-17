@@ -84,6 +84,7 @@ flowchart RL
     P -- "request full history<br/>(on launch or 'Sync Now')" --> W
     P -- "score command: point to me /<br/>point to opponent / undo<br/>(only when 'iPhone Input' is on)" --> W
     P -- "categorisation command: pick outcome /<br/>pick ending shot / cancel / undo point<br/>(only when 'iPhone Input' is on)" --> W
+    P -- "prompt answer: changeover OK /<br/>doubles 'Who serves next?'<br/>(only when 'iPhone Input' is on)" --> W
     P -- "delete this match from the watch<br/>(phone keeps its archive copy)" --> W
     P -- "manually entered or resumed match<br/>(handed to the watch to own)" --> W
     P -- "End at Current Score<br/>(completed archive checkpoint)" --> W
@@ -164,6 +165,34 @@ sequenceDiagram
         W->>P: Current state + rejection reason
     end
 ```
+
+**Answering a Watch prompt from the phone** (changeover, "Who serves next?"):
+
+```mermaid
+sequenceDiagram
+    participant S as Scorer (coach / umpire)
+    participant P as iPhone app
+    participant W as Watch app
+    participant R as Player (wearing Watch)
+    W->>W: Game ends → changeover screen opens
+    W->>P: Compact state + prompt<br/>"🔁 🎾 Even games – balls change ends"
+    P->>S: Same card, with OK
+    W->>R: Same card, with OK
+    S->>P: Tap OK
+    P->>W: acknowledgeChangeover + the prompt it showed<br/>(with that appearance's occurrence ID)
+    alt prompt still open on the Watch
+        W->>W: acknowledgeChangeover() — the Watch button's own method
+        W->>W: Save; overlay closes
+        W->>P: Reply: no prompt, scoring open
+        P->>P: Card closes; swipes resume
+    else already answered / a different appearance
+        W->>P: Current state + "The Watch screen changed"
+    end
+```
+
+Either device may answer first; the other one's card closes when the saved
+state arrives. The Watch also keeps sending the old "Continue on the Watch
+before scoring." text so an older iPhone still explains the pause.
 
 The phone never changes the actual score from a swipe: it waits for Watch state.
 The Watch is always the live authority. Gesture previews/haptics only acknowledge

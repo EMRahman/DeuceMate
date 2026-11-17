@@ -16,7 +16,11 @@ class ScoreViewModel: ObservableObject {
     private static let userDefaultsQueue = DispatchQueue(label: "com.deucemate.userdefaults", qos: .utility)
 
     @Published var currentServer: Player? = nil
-    @Published var gameCount: Int = 0
+    @Published var gameCount: Int = 0 {
+        // "Who serves next?" shows once game one is over; an undo hides it and
+        // a replay shows it again, which counts as a new appearance.
+        didSet { if gameCount != oldValue { doublesPromptOccurrence = UUID() } }
+    }
     @Published var pointCountInTiebreak: Int = 0
     @Published var pendingChangeoverAck: ChangeoverInfo? = nil
     private var isSyncingStats = false
@@ -349,7 +353,14 @@ class ScoreViewModel: ObservableObject {
     @Published var matchFormat: MatchFormat = .standard
     var isTiebreakOnlyFormat: Bool { !matchFormat.config.playRegularSets }
     @Published var doublesServer: DoublesServer? = nil
-    @Published var needsDoublesTeamServerDecision: Bool = false
+    @Published var needsDoublesTeamServerDecision: Bool = false {
+        didSet {
+            if needsDoublesTeamServerDecision != oldValue { doublesPromptOccurrence = UUID() }
+        }
+    }
+    /// Identifies the current appearance of "Who serves next?" for the phone.
+    /// Changeovers use their own `ChangeoverInfo.id`, fresh for each reminder.
+    private var doublesPromptOccurrence = UUID()
     var doublesServiceOrder: [DoublesServer] = []
     private var doublesServiceIndex: Int = 0
     private var tiebreakStartDoublesIndex: Int = 0
@@ -958,6 +969,10 @@ class ScoreViewModel: ObservableObject {
 
     private func displayChangeover(_ info: ChangeoverInfo) {
         pendingChangeoverAck = info
+        // The deferred path (after a category commit) saves nothing here, so
+        // tell the phone the prompt is now answerable instead of leaving it
+        // on "Waiting" until the next point.
+        syncService?.liveStateDidChange()
     }
 
     func acknowledgeChangeover() {
@@ -1945,16 +1960,42 @@ class ScoreViewModel: ObservableObject {
             if blocker == nil && pendingStatPoint == nil
                 && (pendingChangeoverAck != nil || isChangeoverPending
                 || (needsDoublesTeamServerDecision && gameCount > 0)) {
+                // Kept for phones that predate `prompt`; newer phones show the
+                // prompt card instead of this line.
                 blocker = "Continue on the Watch before scoring."
             }
             return LiveMatchReply(state: LiveMatchState(record: currentLiveRecord(),
                 pendingPoint: pendingStatPoint, pendingOutcome: pendingOutcome,
-                inputEnabled: iPhoneInputEnabled, blockingReason: blocker), message: message)
+                inputEnabled: iPhoneInputEnabled, blockingReason: blocker,
+                prompt: liveWatchPrompt), message: message)
         }
         guard let action = request.action else { return snapshot() }
         guard iPhoneInputEnabled else { return snapshot(message: "Enable iPhone Input on the Watch to score here.") }
         guard let id = request.matchID, id == currentMatchID else {
             return snapshot(message: "The Watch is showing a different match. Check the score.")
+        }
+        // Prompt answers run the same methods as the Watch's own buttons, so
+        // the Watch overlay clears too. They are the one input allowed while
+        // the prompt blocks scoring, and only for the prompt the phone saw:
+        // the same appearance, not merely the same words.
+        if action == MatchSyncKey.promptActionAcknowledgeChangeover
+            || action == MatchSyncKey.promptActionChooseDoublesServer {
+            guard let shown = request.prompt, shown == liveWatchPrompt else {
+                return snapshot(message: "The Watch screen changed. Check the score.")
+            }
+            switch shown.kind {
+            case .changeover where action == MatchSyncKey.promptActionAcknowledgeChangeover:
+                acknowledgeChangeover()
+            case .doublesServer where action == MatchSyncKey.promptActionChooseDoublesServer:
+                guard let choice = request.doublesServer, choice == .me || choice == .partner else {
+                    return snapshot(message: "This scoring action is unavailable.")
+                }
+                resolveDoublesTeamServer(choice)
+            default:
+                return snapshot(message: "This scoring action is unavailable.")
+            }
+            if let error = persistenceError { return snapshot(message: error) }
+            return snapshot()
         }
         let before = snapshot()
         guard before.state?.blockingReason == nil else { return snapshot(message: before.state?.blockingReason) }
@@ -1975,6 +2016,22 @@ class ScoreViewModel: ObservableObject {
         let after = snapshot()
         return before.state == after.state
             ? snapshot(message: "The Watch could not apply that action. Check its current screen.") : after
+    }
+
+    /// The Watch screen the iPhone may answer, in the order the Watch stacks
+    /// them: "Who serves next?" draws over a changeover raised at the same
+    /// game, so it is answered first on both devices. Nil while a point awaits
+    /// its category (that panel comes first), while the changeover is still
+    /// on its short post-sheet delay, or when nothing can be saved.
+    var liveWatchPrompt: LiveWatchPrompt? {
+        guard persistenceError == nil, pendingStatPoint == nil else { return nil }
+        if needsDoublesTeamServerDecision && gameCount > 0 {
+            return LiveWatchPrompt.doublesServer.occurring(doublesPromptOccurrence)
+        }
+        if let info = pendingChangeoverAck {
+            return LiveWatchPrompt.changeover(symbol: info.symbol, reason: info.reason).occurring(info.id)
+        }
+        return nil
     }
 
     @Published private(set) var stateRestorationSucceeded = false

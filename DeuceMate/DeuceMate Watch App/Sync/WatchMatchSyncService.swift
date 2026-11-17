@@ -112,6 +112,10 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
         publishLiveState()
     }
 
+    func liveStateDidChange() {
+        publishLiveState()
+    }
+
     func liveMatchDidChange(_ matchID: UUID?) {
         liveMatchIDLock.lock()
         defer { liveMatchIDLock.unlock() }

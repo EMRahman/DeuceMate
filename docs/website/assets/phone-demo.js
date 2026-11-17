@@ -736,7 +736,16 @@
     var recent = rec.resume.momentum.slice(-8), slots = h("div", { class: "phone-momentum" + (recent.length ? "" : " empty") });
     for (var slot = 0; slot < 8; slot++) { var who = recent[slot - (8 - recent.length)]; slots.append(h("i", { class: who === "me" ? "me" : who ? "opp" : "" })); }
     var bottom = h("div", { class: "phone-live-bottom" }, recent.length ? slots : "", h("span", { class: "phone-live-format" }, format(rec)));
-    if (settings.iPhoneInput && watchReady) bottom.append(h("span", { class: "phone-live-hint" }, "↑ Me   ↓ Opp   ← Undo"));
+    // Mirrors LiveWatchPromptPanel + LiveScoreboardStatus.promptCaption: the
+    // Watch screen pausing play, answerable here with iPhone Input on.
+    var prompt = !pending.pending && (pending.doublesDecision
+      ? { title: "Who serves next?", detail: "Your team's first service game", tint: "prompt-doubles",
+          answers: [["Me", "doublesServer", "me"], ["Partner", "doublesServer", "partner"]] }
+      : pending.changeover
+        ? { title: pending.changeover.symbol, detail: pending.changeover.reason, tint: "prompt-changeover",
+            answers: [["OK", "acknowledgeChangeover", null]] }
+        : null);
+    if (settings.iPhoneInput && watchReady && !prompt) bottom.append(h("span", { class: "phone-live-hint" }, "↑ Me   ↓ Opp   ← Undo"));
     out.append(court, bottom);
     if (pending.pending && settings.iPhoneInput) {
       var commandsAvailable = watchReady;
@@ -752,6 +761,20 @@
       });
       var undo = button("Undo point", function () { send("undo"); }); undo.disabled = pending.busy || !commandsAvailable; panel.append(undo); out.append(panel);
     }
+    if (prompt) {
+      var promptCard = card(heading(prompt.title), note(prompt.detail));
+      promptCard.classList.add("phone-live-prompt", prompt.tint);
+      promptCard.setAttribute("role", "group"); promptCard.setAttribute("aria-label", "Apple Watch: " + prompt.title);
+      if (settings.iPhoneInput) {
+        var answers = h("div", { class: "phone-live-prompt-answers" });
+        prompt.answers.forEach(function (a) {
+          var b = button(a[0], function () { send(a[1], a[2]); }); b.disabled = !watchReady;
+          b.dataset.focusKey = "phone-live-prompt-" + a[1] + (a[2] ? "-" + a[2] : ""); answers.append(b);
+        });
+        promptCard.append(answers, note("Answer here or on the Watch. Both screens clear together."));
+      } else promptCard.append(note("Waiting for the Watch. Turn on iPhone Input to answer here."));
+      out.append(promptCard);
+    }
     var extras = h("div", { class: "phone-live-extras" });
     if (settings.iPhoneInput) {
       var controls = h("div", { class: "phone-live-controls" });
@@ -761,7 +784,6 @@
       }); extras.append(controls, note("Double-tap the scoreboard for second serve."));
     } else extras.append(note("Watching live. Enable iPhone Input in Settings to score here."), button("Enable iPhone Input", function () { setSetting("iPhoneInput", true); render(); }));
     var status = h("div", { class: "phone-live-status", role: "status" });
-    if (pending.changeover || pending.doublesDecision) status.append(note("Continue on the Watch to dismiss its open screen before scoring."));
     if (settings.announce) status.append(note("🔊 Score announcements enabled"));
     if (commandFailed) status.append(note(COMMAND_FAILURE));
     else if (watchCanConnect() && !liveReady) status.append(note("Getting the current score from the Watch."));

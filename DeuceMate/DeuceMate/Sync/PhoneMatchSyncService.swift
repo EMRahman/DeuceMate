@@ -435,11 +435,29 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
             outcome: outcome, endingShot: shot, pendingPoint: pendingPoint, pendingOutcome: pendingPointOutcome))
     }
 
-    private func sendLiveCommand(_ request: LiveMatchRequest) {
+    /// Answer the Watch screen that is pausing play (changeover OK, "Who serves
+    /// next?"). The Watch applies it with the same method as its own button,
+    /// so its overlay clears too, then replies with the saved state. Only the
+    /// prompt currently shown can be answered; the Watch re-checks that.
+    func sendWatchPromptAnswer(_ answer: LiveWatchPrompt.Answer) {
+        guard let prompt = liveState?.prompt, prompt.answers.contains(answer) else {
+            liveCommandMessage = LiveScoreboardStatus.commandFailureMessage
+            liveCommandFailureCount += 1
+            return
+        }
+        sendLiveCommand(prompt.request(for: answer, matchID: liveState?.record?.id), answersPrompt: true)
+    }
+
+    private func sendLiveCommand(_ request: LiveMatchRequest, answersPrompt: Bool = false) {
         // One command at a time. No queued intent and no optimistic score changes.
         guard !isLiveRequestInFlight else { return }
+        // A prompt is itself the blocker, so answering it is the one command
+        // allowed while `blockingReason` is set — but only for that prompt.
+        let gateOpen = answersPrompt
+            ? (request.prompt != nil && request.prompt == liveState?.prompt)
+            : liveState?.blockingReason == nil
         guard isLiveStateConfirmed, liveState?.inputEnabled == true,
-              liveState?.record != nil, liveState?.blockingReason == nil, transport.isReachable else {
+              liveState?.record != nil, gateOpen, transport.isReachable else {
             liveCommandMessage = LiveScoreboardStatus.commandFailureMessage
             liveCommandFailureCount += 1
             return

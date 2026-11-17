@@ -36,6 +36,55 @@ async function testRemoteSecondServeWhileWatchShowsStats(browser) {
   } finally { await close(c); }
 }
 
+// Mirrors LiveWatchPromptPanel: a Watch screen that pauses play (changeover,
+// doubles "Who serves next?") is shown and answerable on the iPhone, and an
+// answer from either device clears both screens.
+async function testWatchPromptsAnsweredFromPhone(browser) {
+  const c = await fresh(browser);
+  try {
+    const start = (cfg, input) => c.page.evaluate(([cfg, input]) => {
+      const shell = window.DeuceMateShell, phone = window.DeuceMatePhone;
+      phone.setSetting('track', false); phone.setSetting('iPhoneInput', true);
+      shell.liveId = 'state-qa-prompt-' + cfg.matchType; shell.matchPhase = 'play';
+      shell.api.start(Object.assign({format: 'standard', tracking: false}, cfg));
+      shell.push({id: 'match'}); phone.navigate('live');
+      for (let i = 0; i < 4; i++) shell.api.phoneCommand('point', 'me', shell.liveId);
+      phone.setSetting('iPhoneInput', input); phone.render();
+    }, [cfg, input]);
+    const prompt = c.root.locator('.phone-live-prompt');
+
+    await start({matchType: 'singles', server: 'me'}, true);
+    await prompt.waitFor({state: 'visible', timeout: TIMEOUT});
+    check((await prompt.textContent()).includes('players change ends'), 'the changeover reason must be shown on the iPhone');
+    check(await c.root.locator('.phone-live-hint').count() === 0, 'swipe directions hide while the Watch prompt pauses play');
+    await prompt.getByRole('button', {name: 'OK', exact: true}).click();
+    await c.page.waitForFunction(() => !window.DeuceMateShell.api.phoneState().changeover, null, {timeout: TIMEOUT});
+    await prompt.waitFor({state: 'detached', timeout: TIMEOUT});
+    check(!(await c.page.evaluate(() => window.DeuceMateShell.api.modalOpen())), 'the iPhone OK must close the Watch changeover too');
+    pass('changeover OK on the iPhone clears the Watch screen');
+
+    await start({matchType: 'singles', server: 'me'}, true);
+    await prompt.waitFor({state: 'visible', timeout: TIMEOUT});
+    await c.page.evaluate(() => window.DeuceMateShell.api.phoneCommand('acknowledgeChangeover', null, window.DeuceMateShell.liveId));
+    await prompt.waitFor({state: 'detached', timeout: TIMEOUT});
+    pass('answering on the Watch removes the iPhone prompt');
+
+    await start({matchType: 'doubles', server: 'opponent', doublesServer: 'opponentS1'}, true);
+    await prompt.waitFor({state: 'visible', timeout: TIMEOUT});
+    check((await prompt.textContent()).includes('Who serves next?'), 'the doubles decision must be shown on the iPhone');
+    await prompt.getByRole('button', {name: 'Partner', exact: true}).click();
+    await c.page.waitForFunction(() => window.DeuceMateShell.api.stateRef().doublesServer === 'partner', null, {timeout: TIMEOUT});
+    check(!(await c.page.evaluate(() => window.DeuceMateShell.api.phoneState().doublesDecision)), 'the Watch decision must be resolved');
+    pass('"Who serves next?" answered on the iPhone fixes the Watch rotation');
+
+    await start({matchType: 'singles', server: 'me'}, false);
+    await prompt.waitFor({state: 'visible', timeout: TIMEOUT});
+    check(await prompt.getByRole('button').count() === 0, 'a spectator sees the prompt without answer buttons');
+    check((await prompt.textContent()).includes('Turn on iPhone Input to answer here'), 'a spectator is told how to answer');
+    pass('spectators see the Watch prompt read-only');
+  } finally { await close(c); }
+}
+
 async function testImportedMatchClearsDeletionTombstone(browser) {
   const c = await fresh(browser);
   try {
@@ -805,6 +854,7 @@ async function main() {
     await testWatchToPhoneJourney(browser);
     await testRemoteSecondServeWhileWatchShowsStats(browser);
     await testImportedMatchClearsDeletionTombstone(browser);
+    await testWatchPromptsAnsweredFromPhone(browser);
     pass("all state scenarios passed");
   } finally { await browser.close(); }
 }
