@@ -325,7 +325,7 @@ final class GamePlanScopeTests: XCTestCase {
         XCTAssertEqual(lastFive.resolve(c, pinning: nil).map(\.id), lastFive.resolve(c).map(\.id))
     }
 
-    func test_prefill_leavesUntaggedUnknownAndUnofferedValuesUnset() {
+    func test_prefill_leavesUntaggedAndUnknownCompetitionUnset_andKeepsOfferedFormats() {
         XCTAssertNil(GamePlanUpcomingMatch(prefilledFrom: singles(1)).competition, "Untagged is not guessed")
         XCTAssertNil(GamePlanUpcomingMatch(prefilledFrom: singles(1, raw: "ladder")).competition,
                      "An unknown future type is neither Friendly nor League")

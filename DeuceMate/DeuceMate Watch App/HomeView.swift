@@ -570,7 +570,7 @@ struct HomeView: View {
                         matchFormatOption(
                             .quick4Games,
                             title: "Quick 4 Games",
-                            details: "First to 3 games · Sudden death point at 2-2",
+                            details: "1 set to 3 · Sudden-death point at 2-2",
                             background: ButtonGradients.support
                         )
                         matchFormatOption(
