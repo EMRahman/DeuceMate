@@ -11,6 +11,13 @@
 import Foundation
 
 public enum MatchSyncPayloadBuilder {
+    public static func liveRequest(_ request: LiveMatchRequest) throws -> [String: Any] {
+        [MatchSyncKey.liveRequest: try JSONEncoder().encode(request)]
+    }
+
+    public static func liveReply(_ reply: LiveMatchReply) throws -> [String: Any] {
+        [MatchSyncKey.liveReply: try JSONEncoder().encode(reply)]
+    }
 
     // MARK: - Records
 

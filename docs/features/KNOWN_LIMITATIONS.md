@@ -14,7 +14,7 @@ of the sync/persistence paths.
 
 | # | Area | Limitation | Severity | Status |
 |---|------|------------|----------|--------|
-| 1 | Sync | Live per-point checkpoint has no payload-size guard; long matches freeze the phone's *live* view | Low (live-only; no data loss) | Documented, not scheduled |
+| 1 | Sync | Full-record checkpoints have no size guard; long matches delay archive stats and announcements | Low; compact live board is protected | Partly resolved by #28; full-record fallback remains |
 | 2 | Health/Privacy | Pre-match "Health: On" tracking chip can't detect a share-only grant (workout writes allowed, heart-rate reads denied) | Low (uncommon permission combination; strictly better than showing nothing) | Documented, not scheduled |
 
 ---
@@ -23,7 +23,15 @@ of the sync/persistence paths.
 
 ### 1 — Live checkpoint payload has no size guard (long matches freeze the phone's live view)
 
-**What:** During a match the watch sends a per-point "checkpoint" to the phone so
+**Update, 16 November 2026:** #28 adds a separate bounded live-state path for the
+scoreboard, pending categorisation and command replies. Upgraded pairs keep that
+board current even when a full checkpoint is too large. Explicit live refreshes
+also send the full record through the reliable/file path. The original issue
+below still affects the per-point full-record archive feed, announcements and
+legacy peers; it no longer describes a frozen compact live board. See
+[`LIVE_WATCH_SYNC_PROPOSAL.md`](LIVE_WATCH_SYNC_PROPOSAL.md).
+
+**Original concern:** During a match the watch sends a per-point "checkpoint" to the phone so
 the phone's live scoreboard, spoken announcements, and iPhone-Input mirror stay
 current. On the reachable path this goes over `WCSession.sendMessage`
 (`MatchSyncTransport.sendRecord`, `MatchSyncTransport.swift:70-97`). The checkpoint
@@ -73,8 +81,13 @@ deliberately, for undo checkpoints). So a stats-stripped checkpoint that reached
 merge unflagged would overwrite the phone's stored stats with `[]`. Any fix must
 flag the omission on the wire *and* graft on receive, and therefore ship send + receive
 in one change. This is closely related to `TECHNICAL_DEBT.md` item 2 (add
-`lastModified` to `MatchRecord` — same Case-5 "always accept incoming" area, but for
+monotonic `revision` to `MatchRecord` — same Case-5 "always accept incoming" area, but for
 staleness rather than payload size); revisit them together.
+
+The 16 November 2026 reconnect report and implemented courtside-input scope are tracked
+separately in [technical debt #28](TECHNICAL_DEBT.md#28--recover-current-live-state-and-confirm-courtside-phone-input)
+and [Live Watch sync](LIVE_WATCH_SYNC_PROPOSAL.md). Its bounded live envelope
+handles long matches separately from the remaining full-record feed limitation.
 
 **Status:** Documented, not scheduled. The owner has prioritised persistence/sync
 *reliability* work over this live-view *performance/robustness* gap. Pick up via one

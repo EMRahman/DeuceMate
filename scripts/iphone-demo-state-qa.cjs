@@ -385,7 +385,8 @@ async function testLiveDisconnectedInputAndPendingControls(browser) {
     check((await waitingBoard.locator(".phone-live-status").textContent()).includes("Last score shown. Open DeuceMate on the Watch to score here."), "unreachable scoreboard must explain the score and how to resume");
 
     await controls.getByLabel("Watch reachable").check();
-    check((await waitingBoard.locator(".phone-live-badge").textContent()) === "LIVE", "reconnecting must restore the LIVE badge");
+    await c.page.waitForFunction(() => document.querySelector('.phone-live-badge')?.textContent === 'LIVE', null, {timeout: TIMEOUT});
+    check((await waitingBoard.locator(".phone-live-badge").textContent()) === "LIVE", "a confirmed reconnect must restore the LIVE badge");
     check(await waitingBoard.locator(".phone-live-hint").count() === 1, "reconnecting must restore the swipe directions");
     await c.page.evaluate(() => window.DeuceMatePhone.setSetting("track", true));
     await click(c.root.locator(".phone-live-controls"), "↑ Me");
@@ -735,6 +736,51 @@ async function testNarrowAndLandscapeScoreboard(browser) {
   } finally { await close(c); }
 }
 
+async function testLiveReconnectAfterOfflineWatchScoring(browser) {
+  const c = await fresh(browser);
+  try {
+    await c.page.evaluate(() => {
+      const shell = window.DeuceMateShell, phone = window.DeuceMatePhone;
+      phone.setSetting('track', false); phone.setSetting('iPhoneInput', true);
+      shell.liveId = 'state-qa-reconnect'; shell.matchPhase = 'play';
+      shell.api.start({format: 'perpetualPoints', server: 'me', tracking: false});
+      shell.push({id: 'match'}); phone.navigate('live');
+    });
+    await c.page.waitForFunction(() => document.querySelector('.phone-live-badge')?.textContent === 'LIVE');
+    const before = await c.page.evaluate(() => window.DeuceMatePhone.liveRecord().resume.state.currentPointsMe);
+    await c.page.evaluate(() => {
+      const phone = window.DeuceMatePhone;
+      phone.connection.reachable = false; phone.render();
+      const state = window.DeuceMateShell.api.stateRef();
+      state.currentPointsMe += 3; // Watch-only change while its phone cannot hear it.
+      phone.sync(); phone.render();
+    });
+    check(await c.page.evaluate(() => window.DeuceMatePhone.liveRecord().resume.state.currentPointsMe) === before,
+      'offline phone retains the last received state');
+    await c.page.evaluate(() => {
+      const phone = window.DeuceMatePhone;
+      phone.connection.reachable = true; phone.render();
+    });
+    check((await c.root.locator('.phone-live-badge').textContent()) === 'SYNCING WITH WATCH',
+      'reachability must wait for a current-state response');
+    await c.page.waitForFunction(previous => window.DeuceMatePhone.liveRecord()?.resume.state.currentPointsMe === previous + 3,
+      before, {timeout: TIMEOUT});
+    await c.page.waitForFunction(() => document.querySelector('.phone-live-badge')?.textContent === 'LIVE');
+    // Two gestures before the response still represent only one request.
+    await c.page.evaluate(() => {
+      const court = document.querySelector('.phone-scoreboard');
+      court.dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowUp', bubbles: true}));
+      court.dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowUp', bubbles: true}));
+    });
+    await c.page.waitForFunction(previous => window.DeuceMateShell.api.stateRef().currentPointsMe === previous + 4,
+      before, {timeout: TIMEOUT});
+    await c.page.waitForTimeout(150);
+    check(await c.page.evaluate(() => window.DeuceMateShell.api.stateRef().currentPointsMe) === before + 4,
+      'a second gesture while awaiting confirmation must not score again');
+    pass('offline Watch scoring catches up without another point; phone waits for each response');
+  } finally { await close(c); }
+}
+
 async function main() {
   const browserType = process.env.PLAYWRIGHT_BROWSER === "webkit" ? webkit : chromium;
   const browser = await browserType.launch({ headless: true });
@@ -747,6 +793,7 @@ async function main() {
     await testSettingsSyncAndCloudGuide(browser);
     await testCorruptStorageNotOverwritten(browser);
     await testLiveDisconnectedInputAndPendingControls(browser);
+    await testLiveReconnectAfterOfflineWatchScoring(browser);
     await testBlankManualDate(browser);
     await testManualLeavingTiebreak(browser);
     await testEmptyArchiveAndPermanentDelete(browser);

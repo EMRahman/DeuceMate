@@ -475,6 +475,7 @@ class ScoreViewModel: ObservableObject {
         let matchCompletionTime: Date?
         let isOnSecondServe: Bool
         let pendingStatPoint: PendingPointInfo?
+        let pendingOutcome: PointOutcome?
         let currentMatchID: UUID?
         let matchElapsedSeconds: TimeInterval
         let setElapsedSeconds: [Int: TimeInterval]
@@ -515,6 +516,7 @@ class ScoreViewModel: ObservableObject {
              matchCompletionTime: Date? = nil,
              isOnSecondServe: Bool = false,
              pendingStatPoint: PendingPointInfo? = nil,
+             pendingOutcome: PointOutcome? = nil,
              currentMatchID: UUID? = nil,
              matchElapsedSeconds: TimeInterval = 0,
              setElapsedSeconds: [Int: TimeInterval] = [:],
@@ -555,6 +557,7 @@ class ScoreViewModel: ObservableObject {
             self.matchCompletionTime = matchCompletionTime
             self.isOnSecondServe = isOnSecondServe
             self.pendingStatPoint = pendingStatPoint
+            self.pendingOutcome = pendingOutcome
             self.currentMatchID = currentMatchID
             self.matchElapsedSeconds = matchElapsedSeconds
             self.setElapsedSeconds = setElapsedSeconds
@@ -587,6 +590,7 @@ class ScoreViewModel: ObservableObject {
             matchCompletionTime = try c.decodeIfPresent(Date.self, forKey: .matchCompletionTime)
             isOnSecondServe = try c.decodeIfPresent(Bool.self, forKey: .isOnSecondServe) ?? false
             pendingStatPoint = try c.decodeIfPresent(PendingPointInfo.self, forKey: .pendingStatPoint)
+            pendingOutcome = try c.decodeIfPresent(PointOutcome.self, forKey: .pendingOutcome)
             currentMatchID = try c.decodeIfPresent(UUID.self, forKey: .currentMatchID)
             matchElapsedSeconds = try c.decodeIfPresent(TimeInterval.self, forKey: .matchElapsedSeconds) ?? 0
             setElapsedSeconds = try c.decodeIfPresent([Int: TimeInterval].self, forKey: .setElapsedSeconds) ?? [:]
@@ -957,7 +961,12 @@ class ScoreViewModel: ObservableObject {
     }
 
     func acknowledgeChangeover() {
+        guard pendingChangeoverAck != nil else { return }
         pendingChangeoverAck = nil
+        // Clearing the overlay also releases the phone's input gate. Persist
+        // the acknowledgement and publish via the normal saved-checkpoint path
+        // so neither device waits for another point to learn that play can resume.
+        saveState()
     }
 
     /// True while a changeover popup is visible or about to appear (the brief
@@ -1297,6 +1306,9 @@ class ScoreViewModel: ObservableObject {
         }
         if detailedShotTrackingEnabled {
             pendingOutcome = outcome
+            // Both the Watch sheet and phone commands use this method. Keep
+            // the saved phase current regardless of which device changed it.
+            saveState()
         } else {
             commitPointStat(outcome: outcome, endingShot: nil)
         }
@@ -1313,7 +1325,9 @@ class ScoreViewModel: ObservableObject {
     /// re-renders phase 1. The score change is left intact; use `undo()` to
     /// roll the whole point back.
     func cancelOutcomeSelection() {
+        guard pendingOutcome != nil else { return }
         pendingOutcome = nil
+        saveState()
     }
 
     /// Back-compat overload used by existing tests that pre-date detailed
@@ -1826,6 +1840,7 @@ class ScoreViewModel: ObservableObject {
             matchCompletionTime: matchCompletionTime,
             isOnSecondServe: isOnSecondServe,
             pendingStatPoint: pendingStatPoint,
+            pendingOutcome: pendingOutcome,
             currentMatchID: currentMatchID,
             matchElapsedSeconds: snapshotElapsed,
             setElapsedSeconds: snapshotSetElapsed,
@@ -1863,39 +1878,7 @@ class ScoreViewModel: ObservableObject {
         // reject a later winning-point undo under the existing merge authority.
         // Push in-progress checkpoint to the phone via WatchConnectivity so
         // the phone's archive stays current even if the match is never finished.
-        if let sync = syncService, let start = matchStartTime, let id = currentMatchID {
-            let checkpoint = MatchRecord(
-                id: id,
-                startTime: start,
-                endTime: nil,
-                setScores: sets,
-                stats: currentMatchStats,
-                iWon: nil,
-                currentPointsMe: currentPointsMe,
-                currentPointsOpponent: currentPointsOpponent,
-                currentServer: currentServer,
-                gameCount: gameCount,
-                pointCountInTiebreak: pointCountInTiebreak,
-                tiebreakStartServer: tiebreakStartServer,
-                tiebreakFirstPointReceiver: tiebreakFirstPointReceiver,
-                lastTiebreakPointServer: lastTiebreakPointServer,
-                isOnSecondServe: isOnSecondServe,
-                matchType: matchType,
-                matchFormat: matchFormat,
-                doublesServer: doublesServer,
-                doublesServiceOrder: doublesServiceOrder,
-                doublesServiceIndex: doublesServiceIndex,
-                tiebreakStartDoublesIndex: tiebreakStartDoublesIndex,
-                matchElapsedSeconds: snapshotElapsed,
-                setElapsedSeconds: snapshotSetElapsed,
-                totalSteps: state.activityTotals.steps,
-                totalDistanceMeters: state.activityTotals.distanceMeters,
-                totalCaloriesKcal: state.activityTotals.caloriesKcal,
-                recentPoints: Array((resumedRecentPoints + history.map { $0.player }).suffix(8)),
-                momentumEnabled: momentumEnabled,
-                tags: liveMatchTags,
-                resumeEvents: resumeEvents
-            )
+        if let sync = syncService, let checkpoint = currentLiveRecord(at: now) {
             let ann = phoneAnnouncementsEnabled ? pendingPhoneAnnouncement : nil
             pendingPhoneAnnouncement = nil
             sync.sendMatch(checkpoint, announcement: ann)
@@ -1903,6 +1886,95 @@ class ScoreViewModel: ObservableObject {
             pendingPhoneAnnouncement = nil
         }
         return true
+    }
+
+    /// Pure snapshot construction: no save, workout, announcement or scoring side effects.
+    func currentLiveRecord(at now: Date = Date()) -> MatchRecord? {
+        guard !stateWritesBlocked, let start = matchStartTime, let id = currentMatchID else { return nil }
+        let clockEnd = matchCompletionTime ?? now
+        let elapsed = matchElapsedSeconds + (sessionStartTime.map { max(0, clockEnd.timeIntervalSince($0)) } ?? 0)
+        var setElapsed = setElapsedSeconds
+        if let start = currentSetSessionStart {
+            setElapsed[max(sets.count - 1, 0), default: 0] += max(0, clockEnd.timeIntervalSince(start))
+        }
+        let activity = activitySnapshot()
+        return MatchRecord(
+            id: id,
+            startTime: start,
+            endTime: nil,
+            setScores: sets,
+            stats: currentMatchStats,
+            iWon: nil,
+            currentPointsMe: currentPointsMe,
+            currentPointsOpponent: currentPointsOpponent,
+            currentServer: currentServer,
+            gameCount: gameCount,
+            pointCountInTiebreak: pointCountInTiebreak,
+            tiebreakStartServer: tiebreakStartServer,
+            tiebreakFirstPointReceiver: tiebreakFirstPointReceiver,
+            lastTiebreakPointServer: lastTiebreakPointServer,
+            isOnSecondServe: isOnSecondServe,
+            matchType: matchType,
+            matchFormat: matchFormat,
+            doublesServer: doublesServer,
+            doublesServiceOrder: doublesServiceOrder,
+            doublesServiceIndex: doublesServiceIndex,
+            tiebreakStartDoublesIndex: tiebreakStartDoublesIndex,
+            matchElapsedSeconds: elapsed,
+            setElapsedSeconds: setElapsed,
+            totalSteps: activity.steps,
+            totalDistanceMeters: activity.distanceMeters,
+            totalCaloriesKcal: activity.caloriesKcal,
+            recentPoints: Array((resumedRecentPoints + history.map { $0.player }).suffix(8)),
+            momentumEnabled: momentumEnabled,
+            tags: liveMatchTags,
+            resumeEvents: resumeEvents
+        )
+    }
+
+    /// The sole application handler for acknowledged phone input. Runs on main.
+    func handleLiveRequest(_ request: LiveMatchRequest) -> LiveMatchReply {
+        guard stateRestorationSucceeded, !stateWritesBlocked else {
+            return LiveMatchReply(state: nil, message: "Watch match could not be read. Open DeuceMate on the Watch.")
+        }
+        func snapshot(message: String? = nil) -> LiveMatchReply {
+            var blocker = persistenceError
+            // A pending category can be completed or undone before the next
+            // server is chosen. New score commands still have their own guards
+            // in applyRemoteScoreCommand; persistence errors block every action.
+            if blocker == nil && pendingStatPoint == nil
+                && (pendingChangeoverAck != nil || isChangeoverPending
+                || (needsDoublesTeamServerDecision && gameCount > 0)) {
+                blocker = "Continue on the Watch before scoring."
+            }
+            return LiveMatchReply(state: LiveMatchState(record: currentLiveRecord(),
+                pendingPoint: pendingStatPoint, pendingOutcome: pendingOutcome,
+                inputEnabled: iPhoneInputEnabled, blockingReason: blocker), message: message)
+        }
+        guard let action = request.action else { return snapshot() }
+        guard iPhoneInputEnabled else { return snapshot(message: "Enable iPhone Input on the Watch to score here.") }
+        guard let id = request.matchID, id == currentMatchID else {
+            return snapshot(message: "The Watch is showing a different match. Check the score.")
+        }
+        let before = snapshot()
+        guard before.state?.blockingReason == nil else { return snapshot(message: before.state?.blockingReason) }
+        switch action {
+        case MatchSyncKey.scoreCommandWinMe, MatchSyncKey.scoreCommandWinOpp, MatchSyncKey.scoreCommandUndo:
+            applyRemoteScoreCommand(action, matchID: id)
+        case MatchSyncKey.statActionSelectOutcome, MatchSyncKey.statActionCommitEndingShot,
+             MatchSyncKey.statActionCancelOutcomeSelection, MatchSyncKey.statActionUndoPoint:
+            guard let pending = request.pendingPoint, pending == pendingStatPoint,
+                  request.pendingOutcome == pendingOutcome else {
+                return snapshot(message: "The pending point changed. Check the Watch's current point.")
+            }
+            applyRemoteStatAction(action, outcome: request.outcome, endingShot: request.endingShot)
+        default:
+            return snapshot(message: "This scoring action is unavailable.")
+        }
+        if let error = persistenceError { return snapshot(message: error) }
+        let after = snapshot()
+        return before.state == after.state
+            ? snapshot(message: "The Watch could not apply that action. Check its current screen.") : after
     }
 
     @Published private(set) var stateRestorationSucceeded = false
@@ -1941,6 +2013,7 @@ class ScoreViewModel: ObservableObject {
             matchCompletionTime = state.matchCompletionTime
             isOnSecondServe = state.isOnSecondServe
             pendingStatPoint = state.pendingStatPoint
+            pendingOutcome = state.pendingOutcome
             currentMatchID = state.currentMatchID
             liveMatchTags = state.currentMatchTags
             resumeEvents = state.resumeEvents

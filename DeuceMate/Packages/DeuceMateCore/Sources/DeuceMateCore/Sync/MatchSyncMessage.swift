@@ -3,6 +3,9 @@ import Foundation
 
 /// Keys used in WCSession userInfo and sendMessage dictionaries.
 public enum MatchSyncKey {
+    /// Versioned request/reply exchange; commands on this path are never queued.
+    public static let liveRequest = "liveRequest"
+    public static let liveReply = "liveReply"
     /// Single `MatchRecord` encoded as JSON `Data`.
     public static let singleMatch = "match"
     /// Array of `MatchRecord` encoded as JSON `Data` (full-history sync).

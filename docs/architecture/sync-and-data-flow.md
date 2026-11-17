@@ -33,6 +33,7 @@ flowchart LR
     W -- "watch manifest — the list of match IDs<br/>the watch currently holds (drives the<br/>'on watch / on phone' badges)" --> P
     W -- "live match cleared<br/>(completed or parked)" --> P
     W -- "announcement text for the<br/>phone to speak aloud" --> P
+    W -- "compact current live state + application replies<br/>(display only, never an archive record)" --> P
     W -- "pending-point mirror — 'a point is<br/>waiting to be categorised' (so the<br/>phone can show the same sheet)" --> P
 ```
 
@@ -53,12 +54,33 @@ matches and a fresh Watch has none, it directs the user to open a match and choo
 are refreshed through `sessionWatchStateDidChange`, rather than remaining frozen
 at activation.
 
+**Live recovery (16 November 2026):** activation, reconnect, phone foreground,
+opening the live board and Sync Now request the existing Watch model's current
+state through `liveRequest`/`liveReply`. A compact display-only snapshot carries
+score, pending category/phase, permission and blockers, or explicit idle/error.
+It never enters archive merging. An explicit refresh also sends the full live
+record reliably (file transfer when large), without putting it in Watch history.
+Normal Watch mutations publish compact state too. In-memory session/sequence
+ordering protects the live display from an older response; archive revision debt
+#2 remains separate. Once this protocol is established, legacy active/clear and
+pending messages cannot replace its live identity/context.
+
+The phone waits for a current-session application response before enabling input,
+and allows one request in flight. Watch validation, scoring and saving happen
+before the response. Timeout/error makes one read-only refresh and never replays
+scoring intent. Categorisation requests include match ID and pending context/phase.
+Unreadable state is an error, never idle. New phone scoring requires an updated
+Watch; an older Watch's empty transport reply cannot establish readiness.
+[Live Watch sync](../features/LIVE_WATCH_SYNC_PROPOSAL.md) records the accepted
+scope, deferred durable receipts/heartbeat/revisions and physical-device gate.
+
 ## 2. Requests, commands & explicit archive actions — phone → watch
 
 ```mermaid
 flowchart RL
     P["iPhone<br/>spectator / archive"]
     W["Apple Watch<br/>validates everything"]
+    P -- "request current live state<br/>(also on reconnect/foreground/live-board entry)" --> W
     P -- "request full history<br/>(on launch or 'Sync Now')" --> W
     P -- "score command: point to me /<br/>point to opponent / undo<br/>(only when 'iPhone Input' is on)" --> W
     P -- "categorisation command: pick outcome /<br/>pick ending shot / cancel / undo point<br/>(only when 'iPhone Input' is on)" --> W
@@ -131,19 +153,22 @@ sequenceDiagram
     participant W as Watch app
     S->>P: Swipe on live scoreboard<br/>(requires "iPhone Input" on)
     P->>W: Score command + ID of the match<br/>the phone is displaying
-    W->>W: Validate: input allowed?<br/>same match as my live match?
+    P->>P: Wait for response; block another action
+    W->>W: Validate: input allowed?<br/>same match and pending context?
     alt valid
         W->>W: Apply the point exactly as if<br/>swiped on the watch
-        W->>P: Fresh checkpoint (the new truth)
-        P->>P: Scoreboard updates
+        W->>W: Save Watch state
+        W->>P: Application reply with current compact state
+        P->>P: Scoreboard updates; release command wait
     else stale or not allowed
-        W->>W: Ignore command
+        W->>P: Current state + rejection reason
     end
 ```
 
-Note the shape of the second flow: the phone never updates its own scoreboard
-from the swipe — it waits for the watch's checkpoint to come back. The watch's
-record is always the truth.
+The phone never changes the actual score from a swipe: it waits for Watch state.
+The Watch is always the live authority. Gesture previews/haptics only acknowledge
+recognition. A lost response triggers a state refresh without replaying the action;
+the helper checks the returned score before continuing.
 
 **An archived in-progress match is ended from the phone** (the explicit exception):
 

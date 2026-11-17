@@ -2,29 +2,37 @@
 //
 // A pure rule so the badge, the swipe gate, the category panel and the browser
 // demo cannot disagree about whether the Watch can currently hear the phone.
-// Reachability is the only signal available without a command acknowledgement,
-// and it does not prove the displayed score is current, so the unavailable copy
-// only ever describes the score as the last one received.
+// Reachability, current-state confirmation and command waits gate input together.
 import Foundation
 
 public struct LiveScoreboardStatus: Equatable, Sendable {
     public let isWatchReachable: Bool
     public let isInputEnabled: Bool
+    public let isStateConfirmed: Bool
+    public let isRequestInFlight: Bool
+    public let blockingReason: String?
 
-    public init(isWatchReachable: Bool, isInputEnabled: Bool) {
+    public init(isWatchReachable: Bool, isInputEnabled: Bool,
+                isStateConfirmed: Bool = true, isRequestInFlight: Bool = false,
+                blockingReason: String? = nil) {
         self.isWatchReachable = isWatchReachable
         self.isInputEnabled = isInputEnabled
+        self.isStateConfirmed = isStateConfirmed
+        self.isRequestInFlight = isRequestInFlight
+        self.blockingReason = blockingReason
     }
 
     /// "Waiting", not "disconnected": an in-range Watch is also unreachable while
     /// DeuceMate isn't active on it, for example wrist-down without a workout.
     public var badgeLabel: String {
-        isWatchReachable ? "LIVE" : "WAITING FOR WATCH"
+        guard isWatchReachable else { return "WAITING FOR WATCH" }
+        if !isStateConfirmed { return isRequestInFlight ? "SYNCING WITH WATCH" : "WAITING FOR WATCH" }
+        return isRequestInFlight ? "SENDING TO WATCH" : "LIVE"
     }
 
     /// Whether swipes, their previews and haptics, and category actions may run.
     public var acceptsInput: Bool {
-        isInputEnabled && isWatchReachable
+        isInputEnabled && isWatchReachable && isStateConfirmed && !isRequestInFlight && blockingReason == nil
     }
 
     /// Whether to show the swipe directions. They must not be offered when a
@@ -43,7 +51,14 @@ public struct LiveScoreboardStatus: Equatable, Sendable {
 
     /// Why the score may be stale and, when relevant, how to resume scoring.
     public var detail: String? {
-        guard !isWatchReachable else { return nil }
+        if isWatchReachable {
+            if !isStateConfirmed {
+                return isRequestInFlight ? "Getting the current score from the Watch."
+                    : "Current score not confirmed. Refresh to reconnect."
+            }
+            if isRequestInFlight { return "Waiting for the Watch to confirm." }
+            return blockingReason
+        }
         return isInputEnabled
             ? "Last score shown. Open DeuceMate on the Watch to score here."
             : "Last score shown. Updates resume when the Watch reconnects."

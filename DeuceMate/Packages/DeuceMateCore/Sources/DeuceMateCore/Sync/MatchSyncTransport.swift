@@ -148,6 +148,30 @@ public final class MatchSyncTransport {
 
     // MARK: - Control messages
 
+    /// Application reply, with no queue or retry. The caller owns its timeout.
+    public func requestLiveState(_ request: LiveMatchRequest,
+                                 completion: @escaping (Result<LiveMatchReply, Error>) -> Void) {
+        guard isActivated, isReachable else {
+            completion(.failure(NSError(domain: "LiveMatch", code: 1,
+                                        userInfo: [NSLocalizedDescriptionKey: "Watch is unavailable."])))
+            return
+        }
+        do {
+            let payload = try MatchSyncPayloadBuilder.liveRequest(request)
+            session.sendMessage(payload, replyHandler: { payload in
+                do {
+                    guard let data = payload[MatchSyncKey.liveReply] as? Data,
+                          data.count <= matchSyncUserInfoSizeLimit else {
+                        throw NSError(domain: "LiveMatch", code: 2)
+                    }
+                    let reply = try JSONDecoder().decode(LiveMatchReply.self, from: data)
+                    guard reply.version == 1 else { throw NSError(domain: "LiveMatch", code: 3) }
+                    completion(.success(reply))
+                } catch { completion(.failure(error)) }
+            }, errorHandler: { completion(.failure($0)) })
+        } catch { completion(.failure(error)) }
+    }
+
     /// Sends a control payload (e.g. `clearActiveMatch`, `requestFullHistory`).
     /// `queueOnFailure` controls whether unreachable / errored sends fall back
     /// to `transferUserInfo`.

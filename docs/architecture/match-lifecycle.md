@@ -138,6 +138,18 @@ the live scoreboard and — if enabled and on screen — speaks the score.
 `WatchMatchSyncService` → `PhoneMatchSyncService`, `LiveScoreboardView`,
 `LiveAnnouncementService`.*
 
+Phone live scoring is an online remote path through this same Watch model.
+The phone first requests current live state, permits one request at a time, and
+waits for a saved Watch response. Reconnect/foreground refreshes the live match
+independently of stored history; a lost response triggers a read without replaying
+the scoring action. Compact snapshots never become archive records. Pending
+categorisation phase (`AppState.pendingOutcome`, optional for older files) survives
+save/relaunch: shared selection and Back methods save changes from either device.
+A changeover acknowledgement saves and publishes the cleared phone
+input blocker. A pending category remains actionable while a doubles server
+decision waits; only new scoring waits for both to finish. Persistence errors
+still block every phone action. See [sync-and-data-flow.md](sync-and-data-flow.md).
+
 **3 · Point categorisation (optional, watch or phone).** With outcome tracking on,
 a sheet asks how the point ended (winner, forced error, unforced error, double
 fault) and on which shot. The same pending point is mirrored to the phone so a

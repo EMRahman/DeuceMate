@@ -44,6 +44,11 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     /// Called on the main thread for every phone tag update, so the live match
     /// (which is not in the history store) can keep the tags on its own records.
     var onMatchTagsReceived: ((_ matchID: UUID, _ tags: MatchTags) -> Void)?
+    /// Invoked on main, after restoration; never constructs another scoring model.
+    var onLiveRequest: ((LiveMatchRequest) -> LiveMatchReply)?
+    var onCurrentLiveRecord: (() -> MatchRecord?)?
+    private let liveSessionID = UUID()
+    private var liveSequence: UInt64 = 0
 
     private let transport = MatchSyncTransport(
         logger: Logger(subsystem: "com.deucemate.sync", category: "Watch")
@@ -69,6 +74,7 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
             completedClearsActive: !record.isInProgress,
             announcement: announcement
         )
+        publishLiveState()
         // Only when a match completes does the watch's stored *set* meaningfully
         // change for the phone's badge — in-progress checkpoints fire per point
         // and would spam the manifest. Activation/reachability full-history syncs
@@ -103,6 +109,7 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
         // No queue-on-failure: the phone re-derives state on the next sync,
         // so dropping this when unreachable is intentional.
         transport.sendControl([MatchSyncKey.clearActiveMatch: true], queueOnFailure: false)
+        publishLiveState()
     }
 
     func liveMatchDidChange(_ matchID: UUID?) {
@@ -130,6 +137,7 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     /// the phone would merge it and prune its watch mirror. `loadHistoryOrNil()`
     /// returns `nil` (not `[]`) on an unreadable/corrupt archive — bail then.
     private func pushFullHistory() {
+        publishLiveState()
         guard let history = StatsStore.shared.loadHistoryOrNil() else {
             logger.error("full-history push skipped: watch history unreadable")
             return
@@ -162,6 +170,7 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     /// Push the "iPhone Input" toggle to the phone (bidirectional, last-write wins).
     func pushIPhoneInputEnabled(_ enabled: Bool) {
         transport.sendControl([MatchSyncKey.iPhoneInputEnabled: enabled], queueOnFailure: true)
+        publishLiveState()
     }
 
     /// Push the player display name used in spoken announcements (bidirectional).
@@ -182,6 +191,7 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     /// message is harmless and we want fast-fail semantics — same posture as
     /// the score commands.
     func sendPendingPointState(_ pending: PendingPointInfo?, outcome: PointOutcome?) {
+        publishLiveState()
         var payload: [String: Any] = [:]
         if let pending {
             do {
@@ -243,8 +253,42 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
         didReceiveMessage message: [String: Any],
         replyHandler: @escaping ([String: Any]) -> Void
     ) {
+        if let data = message[MatchSyncKey.liveRequest] as? Data {
+            DispatchQueue.main.async {
+                let reply: LiveMatchReply
+                var archiveRecord: MatchRecord?
+                if data.count <= matchSyncUserInfoSizeLimit,
+                   let request = try? JSONDecoder().decode(LiveMatchRequest.self, from: data) {
+                    reply = self.onLiveRequest?(request)
+                        ?? LiveMatchReply(state: nil, message: "Watch is starting. Try opening the scoreboard again.")
+                    // An explicit refresh also catches up the full archive. The
+                    // compact reply itself must never erase its point history.
+                    if request.action == nil, reply.state != nil { archiveRecord = self.onCurrentLiveRecord?() }
+                } else {
+                    reply = LiveMatchReply(state: nil, message: "Invalid scoring request.")
+                }
+                replyHandler((try? MatchSyncPayloadBuilder.liveReply(self.stamped(reply))) ?? [:])
+                if let record = archiveRecord { self.transport.sendRecordReliable(record) }
+            }
+            return
+        }
         handle(message)
         replyHandler([:])
+    }
+
+    private func stamped(_ reply: LiveMatchReply) -> LiveMatchReply {
+        liveSequence += 1
+        return LiveMatchReply(state: reply.state, message: reply.message,
+                              sessionID: liveSessionID, sequence: liveSequence)
+    }
+
+    /// Always schedule after the current scoring mutation has finished.
+    private func publishLiveState() {
+        DispatchQueue.main.async {
+            guard let reply = self.onLiveRequest?(LiveMatchRequest()),
+                  let payload = try? MatchSyncPayloadBuilder.liveReply(self.stamped(reply)) else { return }
+            self.transport.sendControl(payload, queueOnFailure: false)
+        }
     }
 
     // MARK: - Private
@@ -285,7 +329,10 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
             case .announcementsEnabled(let v):
                 DispatchQueue.main.async { self.onAnnouncementsReceived?(v) }
             case .iPhoneInputEnabled(let v):
-                DispatchQueue.main.async { self.onIPhoneInputReceived?(v) }
+                DispatchQueue.main.async {
+                    self.onIPhoneInputReceived?(v)
+                    self.publishLiveState()
+                }
             case .playerName(let v):
                 DispatchQueue.main.async { self.onPlayerNameReceived?(v) }
             case .announcedName(let v):

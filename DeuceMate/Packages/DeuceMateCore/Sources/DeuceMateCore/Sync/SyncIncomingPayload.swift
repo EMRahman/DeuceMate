@@ -10,6 +10,7 @@ import Foundation
 
 /// One typed event produced by decoding a raw WCSession payload.
 public enum SyncIncomingEvent: Equatable {
+    case liveState(LiveMatchReply)
     case history([MatchRecord])
     case singleMatch(MatchRecord)
     case activeMatchID(UUID)
@@ -77,6 +78,7 @@ public enum SyncIncomingEvent: Equatable {
 extension SyncIncomingEvent {
     public static func == (lhs: SyncIncomingEvent, rhs: SyncIncomingEvent) -> Bool {
         switch (lhs, rhs) {
+        case (.liveState(let a), .liveState(let b)): return a == b
         case (.history(let a), .history(let b)): return a == b
         case (.singleMatch(let a), .singleMatch(let b)): return a == b
         case (.activeMatchID(let a), .activeMatchID(let b)): return a == b
@@ -143,6 +145,15 @@ public enum SyncIncomingPayload {
     /// the matching record arrives, etc.).
     public static func decode(_ payload: [String: Any]) -> [SyncIncomingEvent] {
         var events: [SyncIncomingEvent] = []
+
+        if let data = payload[MatchSyncKey.liveReply] as? Data {
+            do {
+                guard data.count <= matchSyncUserInfoSizeLimit else { throw NSError(domain: "LiveMatch", code: 2) }
+                let reply = try JSONDecoder().decode(LiveMatchReply.self, from: data)
+                guard reply.version == 1 else { throw NSError(domain: "LiveMatch", code: 3) }
+                events.append(.liveState(reply))
+            } catch { events.append(.decodeError(key: MatchSyncKey.liveReply, error: error)) }
+        }
 
         if payload[MatchSyncKey.requestFullHistory] != nil {
             events.append(.requestFullHistory)
