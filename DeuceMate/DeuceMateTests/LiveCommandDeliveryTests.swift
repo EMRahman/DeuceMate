@@ -260,4 +260,84 @@ struct LiveCommandDeliveryTests {
         #expect(service.liveState?.record == current)
         #expect(service.activeMatchID == current.id)
     }
+
+    // MARK: - Watch prompts
+
+    @Test func promptAnswerIsTheOneCommandAllowedWhileTheWatchIsBlocked() async throws {
+        let session = LiveCommandSession()
+        let record = try #require(session.state.record)
+        let prompt = LiveWatchPrompt.changeover(symbol: "🔁 🎾", reason: "Even games – balls change ends")
+        session.state = LiveMatchState(record: record, inputEnabled: true,
+            blockingReason: "Continue on the Watch before scoring.", prompt: prompt)
+        let service = makeService(session)
+        await ready(service, session)
+        session.resetRequests()
+
+        service.sendScoreCommand(MatchSyncKey.scoreCommandWinMe, matchID: record.id)
+        #expect(session.requests.isEmpty, "Points still wait for the prompt")
+        let failuresBefore = service.liveCommandFailureCount
+
+        session.state = LiveMatchState(record: record, inputEnabled: true)
+        service.sendWatchPromptAnswer(try #require(prompt.answers.first))
+        await drainMainQueue()
+        let sent = try #require(session.requests.last)
+        #expect(session.requests.count == 1)
+        #expect(sent.action == MatchSyncKey.promptActionAcknowledgeChangeover)
+        #expect(sent.prompt == prompt, "The Watch checks the prompt it is answering")
+        #expect(sent.matchID == record.id)
+        #expect(service.liveState?.prompt == nil, "Only the Watch reply clears the prompt")
+        #expect(service.liveCommandFailureCount == failuresBefore, "The answer itself is not a failure")
+    }
+
+    @Test func doublesAnswerCarriesTheChosenPlayer() async throws {
+        let session = LiveCommandSession()
+        let record = try #require(session.state.record)
+        session.state = LiveMatchState(record: record, inputEnabled: true,
+            blockingReason: "Continue on the Watch before scoring.", prompt: .doublesServer)
+        let service = makeService(session)
+        await ready(service, session)
+        session.resetRequests()
+
+        service.sendWatchPromptAnswer(try #require(LiveWatchPrompt.doublesServer.answers.last))
+        await drainMainQueue()
+        #expect(session.requests.map(\.doublesServer) == [.partner])
+        #expect(session.requests.map(\.action) == [MatchSyncKey.promptActionChooseDoublesServer])
+    }
+
+    @Test func answerForAPromptThatIsNotShownIsNeverSent() async throws {
+        let session = LiveCommandSession()
+        let record = try #require(session.state.record)
+        session.state = LiveMatchState(record: record, inputEnabled: true)
+        let service = makeService(session)
+        await ready(service, session)
+        session.resetRequests()
+
+        let stale = LiveWatchPrompt.changeover(symbol: "🔁 🎾", reason: "Already answered on the Watch")
+        service.sendWatchPromptAnswer(try #require(stale.answers.first))
+        await drainMainQueue()
+        #expect(session.requests.isEmpty)
+        #expect(service.liveCommandFailureCount == 1)
+    }
+
+    @Test func promptAnswerNeedsIPhoneInputAndAReachableWatch() async throws {
+        let session = LiveCommandSession()
+        let record = try #require(session.state.record)
+        session.state = LiveMatchState(record: record, inputEnabled: false,
+            blockingReason: "Continue on the Watch before scoring.", prompt: .doublesServer)
+        let service = makeService(session)
+        await ready(service, session)
+        session.resetRequests()
+        service.sendWatchPromptAnswer(try #require(LiveWatchPrompt.doublesServer.answers.first))
+        await drainMainQueue()
+        #expect(session.requests.isEmpty)
+
+        session.state = LiveMatchState(record: record, inputEnabled: true,
+            blockingReason: "Continue on the Watch before scoring.", prompt: .doublesServer)
+        await ready(service, session)
+        session.resetRequests()
+        session.isReachable = false
+        service.sendWatchPromptAnswer(try #require(LiveWatchPrompt.doublesServer.answers.first))
+        await drainMainQueue()
+        #expect(session.requests.isEmpty)
+    }
 }

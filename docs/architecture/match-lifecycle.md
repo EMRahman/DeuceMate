@@ -146,7 +146,9 @@ the scoring action. Compact snapshots never become archive records. Pending
 categorisation phase (`AppState.pendingOutcome`, optional for older files) survives
 save/relaunch: shared selection and Back methods save changes from either device.
 A changeover acknowledgement saves and publishes the cleared phone
-input blocker. A pending category remains actionable while a doubles server
+input blocker. The changeover and doubles "Who serves next?" screens are sent to
+the phone as a prompt it can answer; the Watch applies the answer with its own
+button's method, so both screens clear together. A pending category remains actionable while a doubles server
 decision waits; only new scoring waits for both to finish. Persistence errors
 still block every phone action. See [sync-and-data-flow.md](sync-and-data-flow.md).
 
@@ -161,7 +163,9 @@ rate and step count — the raw material for all statistics and coaching.
 **Throughout: workout & changeovers.** The workout session collects heart rate,
 calories, steps and distance; at changeovers the watch prompts the players and can
 use the compass to confirm they're heading to the correct end.
-*Files: `WorkoutManager`, `ScoreViewModel`, `ContentView`.*
+With iPhone Input on, whoever holds the phone can tap OK (or choose the next
+doubles server) on the phone instead of the player doing it on the wrist.
+*Files: `WorkoutManager`, `ScoreViewModel`, `ContentView`, `LiveWatchPromptPanel`.*
 
 **4 · Stop or finish (watch).** A final point completes the configured format.
 The live **End Match** action instead closes the workout and parks the current

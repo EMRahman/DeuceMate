@@ -18,7 +18,9 @@ struct LiveMatchWatchTests {
     private final class SyncSpy: MatchSyncService {
         var lastSyncDate: Date? { nil }
         var onSendMatch: ((MatchRecord) -> Void)?
+        var liveStateChanges = 0
         func start() {}
+        func liveStateDidChange() { liveStateChanges += 1 }
         func sendMatch(_ record: MatchRecord, announcement: String?) { onSendMatch?(record) }
         func sendFullHistory(_ records: [MatchRecord]) {}
         func clearActiveMatch() {}
@@ -306,5 +308,179 @@ struct LiveMatchWatchTests {
         let legacy = try JSONDecoder().decode(ScoreViewModel.AppState.self,
             from: JSONSerialization.data(withJSONObject: json))
         #expect(legacy.pendingOutcome == nil)
+    }
+
+    // MARK: - Watch prompts answered from the iPhone
+
+    /// Singles, first game just won (odd games): the changeover screen is up.
+    private func changeoverShowing(_ files: Files) throws -> (ScoreViewModel, LiveWatchPrompt) {
+        let vm = model(files)
+        for _ in 0..<3 { vm.winPoint(player: .me) }
+        let prompt = try #require(vm.handleLiveRequest(LiveMatchRequest()).state?.prompt)
+        return (vm, prompt)
+    }
+
+    /// Doubles, opponents served first and the game just ended: "Who serves
+    /// next?" and the odd-games changeover are both open on the Watch.
+    private func doublesDecisionShowing(_ files: Files) -> ScoreViewModel {
+        let vm = model(files, scoreFirstPoint: false)
+        vm.startDoublesMatch(firstServer: .opponentS1)
+        for _ in 0..<4 { vm.winPoint(player: .me) }
+        return vm
+    }
+
+    private func answer(_ vm: ScoreViewModel, _ prompt: LiveWatchPrompt, _ index: Int = 0) -> LiveMatchReply {
+        vm.handleLiveRequest(prompt.request(for: prompt.answers[index], matchID: vm.currentMatchID))
+    }
+
+    @Test func changeoverIsSentToThePhoneAsAnAnswerablePrompt() throws {
+        let files = try Files()
+        let (vm, prompt) = try changeoverShowing(files)
+        let info = try #require(vm.pendingChangeoverAck)
+        #expect(prompt == .changeover(symbol: info.symbol, reason: info.reason))
+        #expect(prompt.answers.map(\.label) == ["OK"])
+        let state = try #require(vm.handleLiveRequest(LiveMatchRequest()).state)
+        #expect(state.blockingReason != nil, "Older phones still see the text fallback")
+        #expect(!LiveScoreboardStatus(isWatchReachable: true, isInputEnabled: state.inputEnabled,
+            blockingReason: state.blockingReason, prompt: state.prompt).acceptsInput)
+        #expect(LiveScoreboardStatus(isWatchReachable: true, isInputEnabled: state.inputEnabled,
+            blockingReason: state.blockingReason, prompt: state.prompt).acceptsPromptAnswer)
+    }
+
+    @Test func phoneOKClearsTheWatchChangeoverSavesAndPublishes() throws {
+        let files = try Files()
+        let (vm, prompt) = try changeoverShowing(files)
+        let points = vm.currentMatchStats
+        let spy = SyncSpy()
+        var published: [LiveMatchState] = []
+        spy.onSendMatch = { [weak vm] _ in
+            if let state = vm?.handleLiveRequest(LiveMatchRequest()).state { published.append(state) }
+        }
+        vm.syncService = spy
+
+        let reply = answer(vm, prompt)
+
+        #expect(reply.message == nil)
+        #expect(vm.pendingChangeoverAck == nil, "The Watch overlay is bound to this, so it closes too")
+        #expect(reply.state?.prompt == nil)
+        #expect(reply.state?.blockingReason == nil)
+        #expect(published.last?.prompt == nil, "The Watch pushes the cleared state to every listener")
+        #expect(vm.currentMatchStats == points, "Answering never scores")
+        let saved = try JSONDecoder().decode(ScoreViewModel.AppState.self, from: Data(contentsOf: files.url("state.json")))
+        #expect(saved.pendingAnnouncementMessage == nil)
+        let next = vm.handleLiveRequest(LiveMatchRequest(action: MatchSyncKey.scoreCommandWinMe, matchID: vm.currentMatchID))
+        #expect(next.message == nil, "Scoring resumes from the phone straight away")
+    }
+
+    @Test func watchOKClearsThePhonePrompt() throws {
+        let files = try Files()
+        let (vm, _) = try changeoverShowing(files)
+        vm.acknowledgeChangeover()
+        let state = try #require(vm.handleLiveRequest(LiveMatchRequest()).state)
+        #expect(state.prompt == nil)
+        #expect(state.blockingReason == nil)
+    }
+
+    @Test func staleOrMismatchedPromptAnswersAreRefused() throws {
+        let files = try Files()
+        let (vm, prompt) = try changeoverShowing(files)
+        let other = LiveWatchPrompt.changeover(symbol: "🔁 👥", reason: "A different changeover")
+        let stale = vm.handleLiveRequest(other.request(for: other.answers[0], matchID: vm.currentMatchID))
+        #expect(stale.message != nil)
+        #expect(vm.pendingChangeoverAck != nil)
+
+        let wrongMatch = vm.handleLiveRequest(prompt.request(for: prompt.answers[0], matchID: UUID()))
+        #expect(wrongMatch.message != nil)
+        #expect(vm.pendingChangeoverAck != nil)
+
+        let noPrompt = vm.handleLiveRequest(LiveMatchRequest(
+            action: MatchSyncKey.promptActionAcknowledgeChangeover, matchID: vm.currentMatchID))
+        #expect(noPrompt.message != nil)
+        #expect(vm.pendingChangeoverAck != nil)
+
+        let wrongAction = vm.handleLiveRequest(LiveMatchRequest(action: MatchSyncKey.promptActionChooseDoublesServer,
+            matchID: vm.currentMatchID, prompt: prompt, doublesServer: .me))
+        #expect(wrongAction.message != nil)
+        #expect(vm.pendingChangeoverAck != nil)
+
+        // Already answered on the Watch: a late phone tap does nothing.
+        vm.acknowledgeChangeover()
+        let late = answer(vm, prompt)
+        #expect(late.message != nil)
+        #expect(vm.pendingChangeoverAck == nil)
+    }
+
+    @Test func promptAnswersNeedIPhoneInput() throws {
+        let files = try Files()
+        let (vm, prompt) = try changeoverShowing(files)
+        vm.iPhoneInputEnabled = false
+        let reply = answer(vm, prompt)
+        #expect(reply.message != nil)
+        #expect(vm.pendingChangeoverAck != nil)
+        #expect(reply.state?.prompt == prompt, "Spectators still see what the Watch is asking")
+    }
+
+    @Test func doublesServerDecisionComesFirstThenTheChangeover() throws {
+        let files = try Files(), vm = doublesDecisionShowing(files)
+        #expect(vm.needsDoublesTeamServerDecision)
+        #expect(vm.pendingChangeoverAck != nil)
+        let first = try #require(vm.handleLiveRequest(LiveMatchRequest()).state?.prompt)
+        #expect(first == .doublesServer, "The Watch draws this overlay on top")
+
+        let chosen = answer(vm, first, 1) // Partner
+        #expect(chosen.message == nil)
+        #expect(!vm.needsDoublesTeamServerDecision)
+        #expect(vm.doublesServer == .partner)
+        #expect(vm.doublesServiceOrder == [.opponentS1, .partner, .opponentS2, .me])
+        #expect(vm.currentServer == .me)
+        let saved = try JSONDecoder().decode(ScoreViewModel.AppState.self, from: Data(contentsOf: files.url("state.json")))
+        #expect(saved.needsDoublesTeamServerDecision == false)
+
+        let second = try #require(chosen.state?.prompt)
+        #expect(second.kind == .changeover, "The changeover underneath is next, on both devices")
+        #expect(answer(vm, second).message == nil)
+        #expect(vm.pendingChangeoverAck == nil)
+    }
+
+    @Test func doublesChoiceOfMeKeepsTheProvisionalRotation() throws {
+        let files = try Files(), vm = doublesDecisionShowing(files)
+        #expect(answer(vm, .doublesServer, 0).message == nil)
+        #expect(vm.doublesServer == .me)
+        #expect(vm.doublesServiceOrder == [.opponentS1, .me, .opponentS2, .partner])
+    }
+
+    @Test func doublesAnswerRejectsAnOpponentAsTheNextServer() throws {
+        let files = try Files(), vm = doublesDecisionShowing(files)
+        let reply = vm.handleLiveRequest(LiveMatchRequest(action: MatchSyncKey.promptActionChooseDoublesServer,
+            matchID: vm.currentMatchID, prompt: .doublesServer, doublesServer: .opponentS2))
+        #expect(reply.message != nil)
+        #expect(vm.needsDoublesTeamServerDecision)
+    }
+
+    @Test func noPromptWhileAPointAwaitsItsCategory() throws {
+        let files = try Files(), vm = doublesGameAwaitingCategory(files)
+        #expect(vm.needsDoublesTeamServerDecision)
+        #expect(vm.handleLiveRequest(LiveMatchRequest()).state?.prompt == nil,
+                "The category panel comes first, as on the Watch")
+    }
+
+    @Test func deferredChangeoverIsPublishedWhenItAppears() async throws {
+        let files = try Files(), vm = model(files, scoreFirstPoint: false)
+        vm.statsTrackingEnabled = true
+        let spy = SyncSpy()
+        vm.syncService = spy
+        for _ in 0..<4 {
+            vm.winPoint(player: .me)
+            vm.commitPointStat(outcome: .winner, endingShot: nil)
+        }
+        // The Watch waits for its category sheet to close before showing the
+        // changeover; until then there is nothing for the phone to answer.
+        #expect(vm.isChangeoverPending)
+        #expect(vm.handleLiveRequest(LiveMatchRequest()).state?.prompt == nil)
+        let before = spy.liveStateChanges
+        try await Task.sleep(for: .milliseconds(700))
+        #expect(vm.pendingChangeoverAck != nil)
+        #expect(spy.liveStateChanges > before, "The phone must hear the prompt without waiting for a point")
+        #expect(vm.handleLiveRequest(LiveMatchRequest()).state?.prompt?.kind == .changeover)
     }
 }

@@ -114,4 +114,88 @@ final class LiveMatchStateTests: XCTestCase {
         XCTAssertFalse(blocked.acceptsInput)
         XCTAssertEqual(blocked.detail, "Continue on Watch")
     }
+
+    // MARK: - Watch prompts
+
+    func test_promptAnswers_matchTheWatchButtonsInOrder() {
+        let changeover = LiveWatchPrompt.changeover(symbol: "🔁 🎾", reason: "Even games – balls change ends")
+        XCTAssertEqual(changeover.kind, .changeover)
+        XCTAssertEqual(changeover.title, "🔁 🎾")
+        XCTAssertEqual(changeover.detail, "Even games – balls change ends")
+        XCTAssertEqual(changeover.answers.map(\.label), ["OK"])
+        XCTAssertEqual(changeover.answers.map(\.action), [MatchSyncKey.promptActionAcknowledgeChangeover])
+
+        let doubles = LiveWatchPrompt.doublesServer
+        XCTAssertEqual(doubles.kind, .doublesServer)
+        XCTAssertEqual(doubles.title, "Who serves next?")
+        XCTAssertEqual(doubles.answers.map(\.label), ["Me", "Partner"])
+        XCTAssertEqual(doubles.answers.map(\.doublesServer), [.me, .partner])
+        XCTAssertTrue(doubles.answers.allSatisfy { $0.action == MatchSyncKey.promptActionChooseDoublesServer })
+    }
+
+    func test_promptAnswerRequest_carriesThePromptItAnswers() throws {
+        let id = UUID()
+        let prompt = LiveWatchPrompt.doublesServer
+        let partner = try XCTUnwrap(prompt.answers.last)
+        let request = prompt.request(for: partner, matchID: id)
+        XCTAssertEqual(request.action, MatchSyncKey.promptActionChooseDoublesServer)
+        XCTAssertEqual(request.matchID, id)
+        XCTAssertEqual(request.prompt, prompt)
+        XCTAssertEqual(request.doublesServer, .partner)
+        let payload = try MatchSyncPayloadBuilder.liveRequest(request)
+        let data = try XCTUnwrap(payload[MatchSyncKey.liveRequest] as? Data)
+        XCTAssertEqual(try JSONDecoder().decode(LiveMatchRequest.self, from: data), request)
+    }
+
+    func test_promptWireKeys_arePinned() {
+        // A Watch and iPhone on different builds must agree on these strings.
+        XCTAssertEqual(MatchSyncKey.promptActionAcknowledgeChangeover, "acknowledgeChangeover")
+        XCTAssertEqual(MatchSyncKey.promptActionChooseDoublesServer, "chooseDoublesServer")
+        XCTAssertEqual(LiveWatchPrompt.Kind.changeover.rawValue, "changeover")
+        XCTAssertEqual(LiveWatchPrompt.Kind.doublesServer.rawValue, "doublesServer")
+    }
+
+    func test_promptRoundTripsInTheLiveReply() throws {
+        let record = MatchRecord(startTime: Date(), setScores: [SetScore()], stats: [])
+        let prompt = LiveWatchPrompt.changeover(symbol: "🔁 👥", reason: "Odd games – players change ends")
+        let reply = LiveMatchReply(state: LiveMatchState(record: record, inputEnabled: true,
+            blockingReason: "Continue on the Watch before scoring.", prompt: prompt),
+            sessionID: UUID(), sequence: 3)
+        let payload = try MatchSyncPayloadBuilder.liveReply(reply)
+        XCTAssertEqual(SyncIncomingPayload.decode(payload), [.liveState(reply)])
+        XCTAssertEqual(reply.state?.prompt, prompt)
+    }
+
+    func test_idleStateNeverCarriesAPrompt() {
+        let state = LiveMatchState(record: nil, inputEnabled: true, prompt: .doublesServer)
+        XCTAssertNil(state.prompt)
+    }
+
+    func test_olderWatchStateWithoutPrompt_stillDecodes() throws {
+        let record = MatchRecord(startTime: Date(), setScores: [SetScore()], stats: [])
+        let state = LiveMatchState(record: record, inputEnabled: true,
+                                   blockingReason: "Continue on the Watch before scoring.")
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(state)) as? [String: Any])
+        json.removeValue(forKey: "prompt")
+        let decoded = try JSONDecoder().decode(LiveMatchState.self,
+                                               from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertNil(decoded.prompt)
+        XCTAssertEqual(decoded.blockingReason, "Continue on the Watch before scoring.")
+    }
+
+    func test_olderPhoneRequestWithoutPromptFields_stillDecodes() throws {
+        let json = #"{"action":"winMe","matchID":"\#(UUID().uuidString)"}"#
+        let request = try JSONDecoder().decode(LiveMatchRequest.self, from: Data(json.utf8))
+        XCTAssertEqual(request.action, MatchSyncKey.scoreCommandWinMe)
+        XCTAssertNil(request.prompt)
+        XCTAssertNil(request.doublesServer)
+    }
+
+    func test_newerPromptKind_decodesWithoutAnswers() throws {
+        let json = #"{"kindRaw":"medicalTimeout","title":"Timeout"}"#
+        let prompt = try JSONDecoder().decode(LiveWatchPrompt.self, from: Data(json.utf8))
+        XCTAssertNil(prompt.kind)
+        XCTAssertNil(prompt.detail)
+        XCTAssertTrue(prompt.answers.isEmpty, "Never guess an answer to an unknown screen")
+    }
 }

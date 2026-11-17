@@ -11,15 +11,41 @@ public struct LiveScoreboardStatus: Equatable, Sendable {
     public let isStateConfirmed: Bool
     public let isRequestInFlight: Bool
     public let blockingReason: String?
+    /// The Watch screen pausing play (changeover, "Who serves next?"), if any.
+    public let prompt: LiveWatchPrompt?
 
     public init(isWatchReachable: Bool, isInputEnabled: Bool,
                 isStateConfirmed: Bool = true, isRequestInFlight: Bool = false,
-                blockingReason: String? = nil) {
+                blockingReason: String? = nil, prompt: LiveWatchPrompt? = nil) {
         self.isWatchReachable = isWatchReachable
         self.isInputEnabled = isInputEnabled
         self.isStateConfirmed = isStateConfirmed
         self.isRequestInFlight = isRequestInFlight
         self.blockingReason = blockingReason
+        self.prompt = prompt
+    }
+
+    /// A prompt this build can show with its answers. An unknown kind from a
+    /// newer Watch is not answerable and falls back to `blockingReason`.
+    private var knownPrompt: LiveWatchPrompt? {
+        prompt.flatMap { $0.answers.isEmpty ? nil : $0 }
+    }
+
+    /// Whether the scoreboard shows the Watch's prompt as a card.
+    public var showsPrompt: Bool { knownPrompt != nil }
+
+    /// Whether the prompt card's buttons may send. Same connection rules as
+    /// scoring, but a prompt is itself the blocker, so `blockingReason` does
+    /// not apply. The Watch still checks the prompt is the one being answered.
+    public var acceptsPromptAnswer: Bool {
+        knownPrompt != nil && isInputEnabled && isWatchReachable && isStateConfirmed && !isRequestInFlight
+    }
+
+    /// The line under the prompt card's buttons.
+    public var promptCaption: String? {
+        guard showsPrompt else { return nil }
+        if !isInputEnabled { return "Waiting for the Watch. Turn on iPhone Input to answer here." }
+        return "Answer here or on the Watch. Both screens clear together."
     }
 
     /// "Waiting", not "disconnected": an in-range Watch is also unreachable while
@@ -32,7 +58,8 @@ public struct LiveScoreboardStatus: Equatable, Sendable {
 
     /// Whether swipes, their previews and haptics, and category actions may run.
     public var acceptsInput: Bool {
-        isInputEnabled && isWatchReachable && isStateConfirmed && !isRequestInFlight && blockingReason == nil
+        isInputEnabled && isWatchReachable && isStateConfirmed && !isRequestInFlight
+            && blockingReason == nil && prompt == nil
     }
 
     /// Whether to show the swipe directions. They must not be offered when a
@@ -44,9 +71,10 @@ public struct LiveScoreboardStatus: Equatable, Sendable {
     /// Whether a swipe that can't be sent should say so: a warning haptic and
     /// a flash of `detail`. Only when iPhone Input is on, so the swipe was a
     /// real scoring attempt; a spectator's stray drag stays silent. The swipe
-    /// itself is still never sent.
+    /// itself is still never sent. Also while a Watch prompt is open: the
+    /// scorer must answer it first, and the card on screen says so.
     public var refusesSwipeWithFeedback: Bool {
-        isInputEnabled && !isWatchReachable
+        isInputEnabled && (!isWatchReachable || showsPrompt)
     }
 
     /// Why the score may be stale and, when relevant, how to resume scoring.
@@ -57,7 +85,9 @@ public struct LiveScoreboardStatus: Equatable, Sendable {
                     : "Current score not confirmed. Refresh to reconnect."
             }
             if isRequestInFlight { return "Waiting for the Watch to confirm." }
-            return blockingReason
+            // The prompt card explains itself; repeating "Continue on the
+            // Watch" beside a button that does exactly that would mislead.
+            return showsPrompt ? nil : blockingReason
         }
         return isInputEnabled
             ? "Last score shown. Open DeuceMate on the Watch to score here."

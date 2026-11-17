@@ -70,7 +70,8 @@ struct LiveScoreboardView: View {
                              isInputEnabled: iPhoneInputEnabled && (syncService.liveState?.inputEnabled ?? false),
                              isStateConfirmed: syncService.isLiveStateConfirmed,
                              isRequestInFlight: syncService.isLiveRequestInFlight,
-                             blockingReason: syncService.liveState?.blockingReason)
+                             blockingReason: syncService.liveState?.blockingReason,
+                             prompt: syncService.liveState?.prompt)
     }
 
     /// A send failure outranks the steady status because it is about what the
@@ -248,6 +249,27 @@ struct LiveScoreboardView: View {
                 .animation(.easeOut(duration: 0.22), value: syncService.pendingPoint)
                 .animation(.easeInOut(duration: 0.18), value: syncService.pendingPointOutcome)
 
+                // The Watch screen pausing play (changeover, "Who serves
+                // next?"). Shown to spectators too, so everyone courtside sees
+                // why scoring has paused; only iPhone Input gets buttons. The
+                // Watch never sends a prompt while a category is pending.
+                Group {
+                    if let prompt = syncService.liveState?.prompt, status.showsPrompt,
+                       syncService.pendingPoint == nil {
+                        VStack {
+                            Spacer()
+                            LiveWatchPromptPanel(prompt: prompt, status: status) { answer in
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                syncService.sendWatchPromptAnswer(answer)
+                            }
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 36)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
+                }
+                .animation(.easeOut(duration: 0.22), value: syncService.liveState?.prompt)
+
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: syncService.isLiveStateConfirmed ? "checkmark.circle.fill" : "applewatch")
@@ -281,6 +303,11 @@ struct LiveScoreboardView: View {
             shownCommandFailure = count
             UIAccessibility.post(notification: .announcement,
                                  argument: LiveScoreboardStatus.commandFailureMessage)
+        }
+        .onChange(of: syncService.liveState?.prompt) { _, prompt in
+            guard let prompt, status.showsPrompt else { return }
+            UIAccessibility.post(notification: .announcement,
+                                 argument: [prompt.title, prompt.detail].compactMap { $0 }.joined(separator: ". "))
         }
         .onChange(of: syncService.isWatchReachable) { _, _ in
             UIAccessibility.post(notification: .announcement,

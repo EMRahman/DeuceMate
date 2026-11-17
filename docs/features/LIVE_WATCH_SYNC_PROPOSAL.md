@@ -75,6 +75,31 @@ the existing Watch and phone swipe guards reject new scoring until the pending
 point is resolved and the Watch-only decision is complete. Persistence failures
 continue to block every remote action, including categorization.
 
+### Watch prompts on the iPhone (17 November 2026)
+
+The Watch screens that pause play — the changeover reminder ("Even games – balls
+change ends") and doubles' "Who serves next?" — previously left the phone saying
+"Continue on the Watch before scoring." They now travel as a structured
+`LiveMatchState.prompt` (`LiveWatchPrompt`), and the phone shows the same card:
+
+- **Same order as the Watch.** The doubles decision is drawn over a changeover
+  raised at the same game, so it is offered first on both devices. No prompt is
+  sent while a point awaits its category, or during the 0.4 s before a deferred
+  changeover appears; when it appears the Watch publishes via
+  `liveStateDidChange()` rather than waiting for the next point.
+- **Answered through the Watch.** The phone sends `acknowledgeChangeover` or
+  `chooseDoublesServer` with the prompt it displayed. The Watch rejects the answer
+  unless that same prompt is still open (late tap, other device answered first,
+  different match), then calls the same `acknowledgeChangeover()` /
+  `resolveDoublesTeamServer(_:)` as its own buttons. Both overlays are bound to
+  that state, so they clear together; the save publishes the result.
+- **Same gates as scoring.** iPhone Input on, Watch reachable, current state
+  confirmed, one request at a time. A prompt answer is the one request allowed
+  while the prompt blocks scoring. Spectators see the card without buttons.
+- **Mixed versions.** `blockingReason` is still sent, so an older phone shows
+  the text. An older Watch sends no prompt, so a newer phone shows the text. A
+  prompt kind the phone does not know is shown as text, never answered.
+
 ## Deliberately deferred
 
 - **Durable command receipts/deduplication:** a lost response is reconciled by
@@ -104,6 +129,11 @@ unsupported versions, readiness gates and transport failure without replay.
 iPhone tests exercise one request at a time, no optimistic mutation, timeouts,
 late callbacks, reconnect/idle, Watch rejection and delayed history. Watch tests
 exercise real scoring/saves, phase restoration, unreadable state and failed writes.
+Prompt tests cover phone OK/server choice clearing the Watch state, stale and
+mismatched answers, input-off refusal, the doubles-before-changeover order, and
+publication of the deferred changeover (`LiveMatchWatchTests`,
+`LiveCommandDeliveryTests`, `LiveScoreboardStatusTests`, `LiveMatchStateTests`;
+browser: `iphone-demo-state-qa.cjs`).
 Regression tests also cover changeover acknowledgement publication/persistence,
 phone input resuming from that push, and first-game doubles categorization/back/
 commit/undo while the next-server decision waits.

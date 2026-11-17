@@ -147,10 +147,13 @@ metadata; older app versions may omit it when rewriting a match.
 - Plays while DeuceMate is open on screen — keep the app in the foreground courtside; routes through the iPhone speaker or a connected Bluetooth speaker
 - Ducks other audio while speaking each score, then restores it between points
 
-**iPhone Input (spectator scoring)**
+**iPhone Input (courtside scoring)**
+- Lets a coach, umpire or friend keep score on the player's paired iPhone while the player wears the Watch — see the illustrated [courtside scoring guide](COURTSIDE_SCORING.md)
 - Optional swipe-to-score directly on the iPhone live scoreboard — up for you, down for opponent, left to undo — mirroring the watch gestures
 - The same post-point categorisation panel surfaces on the iPhone when outcome tracking is on
-- The watch remains the source of truth; iPhone inputs are forwarded to it
+- The Watch's pause screens appear on the iPhone too: changeover reminders ("Even games – balls change ends") with **OK**, and doubles' **Who serves next? — Me / Partner**. Answering on either device closes the screen on both
+- With iPhone Input off, the iPhone still shows those screens, read-only
+- The watch remains the source of truth; iPhone inputs are forwarded to it, applied exactly as if done on the wrist, and only shown on the iPhone once the Watch confirms them
 - If the iPhone can't reach the watch, the scoreboard says **Waiting for Watch** and shows the last score it received. Swipes and category buttons pause until the watch reconnects, so open DeuceMate on the watch to carry on
 
 **Manual match entry**

@@ -73,7 +73,7 @@ This project also showcases my ability to ship production-quality native iOS/wat
 - **Straight into the match** — the watch remembers your last format and singles/doubles choice, so Start Match goes directly to who serves first, and a pre-match strip states up front whether point tracking, Health, and Pulse Coach will record this match.
 - **A changeover reminder that stays put** — after a set, the "change ends" notice persists on the scoreboard until the first point of the next set, so you can check it whenever you look down instead of undoing a point to see it again.
 - **Bulletproof state** — full undo stack across game and set boundaries; in-progress matches survive backgrounding, notifications, and overnight pauses.
-- **iPhone companion** — stadium-style live scoreboard, umpire-style spoken announcements, optional swipe-to-score iPhone Input, manual match entry, and an unlimited on-device archive.
+- **iPhone companion** — stadium-style live scoreboard, umpire-style spoken announcements, optional swipe-to-score iPhone Input so a coach can keep score courtside ([guide](docs/COURTSIDE_SCORING.md)), manual match entry, and an unlimited on-device archive.
 - **Point outcome tracking** — tag every point with a cause and ending shot to unlock serve, return, break-point, pressure, rally-depth, and score-state analytics, filterable per set or whole match.
 - **Coaching insights** — Coaching Insights (up to three ranked observations per match) and PulseCoach (heart-rate-correlated insights), plus an interactive points-momentum graph with HR and steps overlays.
 - **Performance trends** — charts across your matches show what is improving and what is slipping, filterable by window, match type, format, competition type, and opponent.
