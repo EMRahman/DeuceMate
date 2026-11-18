@@ -138,7 +138,7 @@ public struct LiveMatchState: Codable, Equatable {
                         currentServer: r.currentServer, isOnSecondServe: r.isOnSecondServe,
                         matchType: r.matchType, matchFormat: r.matchFormat,
                         recentPoints: Array(r.recentPoints.suffix(8)),
-                        momentumEnabled: r.momentumEnabled)
+                        momentumEnabled: r.momentumEnabled, checkpointRevision: r.checkpointRevision)
         }
         self.pendingPoint = record == nil ? nil : pendingPoint
         self.pendingOutcome = record == nil ? nil : pendingOutcome

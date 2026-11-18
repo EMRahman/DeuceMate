@@ -48,6 +48,8 @@ public extension MatchSyncSessing {
 
 public final class MatchSyncTransport {
     private let session: MatchSyncSessing
+    /// Called on the enqueueing thread, including an asynchronous live-send failure.
+    public var onBackgroundTransferQueued: (() -> Void)?
     private let logger: Logger
 
     /// Designated initialiser. Takes any `MatchSyncSessing` so tests can inject a
@@ -119,9 +121,9 @@ public final class MatchSyncTransport {
             transferAsFile(data, key: MatchSyncKey.singleMatch)
             var control: [String: Any] = [MatchSyncKey.clearActiveMatch: true]
             if let announcement { control[MatchSyncKey.liveAnnouncement] = announcement }
-            session.queueUserInfo(control)
+            queueUserInfo(control)
         } else {
-            session.queueUserInfo(payload)
+            queueUserInfo(payload)
         }
     }
 
@@ -153,7 +155,7 @@ public final class MatchSyncTransport {
         if data.count > matchSyncUserInfoSizeLimit {
             transferAsFile(data, key: MatchSyncKey.singleMatch)
         } else {
-            session.queueUserInfo(payload)
+            queueUserInfo(payload)
         }
     }
 
@@ -171,7 +173,7 @@ public final class MatchSyncTransport {
         if data.count > matchSyncUserInfoSizeLimit {
             transferAsFile(data, key: MatchSyncKey.matchHistory)
         } else {
-            session.queueUserInfo(MatchSyncPayloadBuilder.historyPayload(data: data))
+            queueUserInfo(MatchSyncPayloadBuilder.historyPayload(data: data))
         }
     }
 
@@ -223,13 +225,13 @@ public final class MatchSyncTransport {
             session.sendMessage(payload, replyHandler: nil) { [weak self] error in
                 self?.logger.error("sendControl failed: \(error.localizedDescription, privacy: .public)")
                 if queueOnFailure {
-                    self?.session.queueUserInfo(payload)
+                    self?.queueUserInfo(payload)
                 } else {
                     onUndelivered?()
                 }
             }
         } else if queueOnFailure {
-            session.queueUserInfo(payload)
+            queueUserInfo(payload)
         } else {
             onUndelivered?()
         }
@@ -288,8 +290,13 @@ public final class MatchSyncTransport {
 
     // MARK: - Private
 
+    private func queueUserInfo(_ payload: [String: Any]) {
+        session.queueUserInfo(payload)
+        onBackgroundTransferQueued?()
+    }
+
     private func queueAnnouncement(_ text: String) {
-        session.queueUserInfo([MatchSyncKey.liveAnnouncement: text])
+        queueUserInfo([MatchSyncKey.liveAnnouncement: text])
     }
 
     /// Data-at-rest class for the staged copy of a file transfer. The staged file
@@ -312,6 +319,7 @@ public final class MatchSyncTransport {
         do {
             try data.write(to: tmpURL, options: Self.stagedFileWriteOptions)
             session.transferFile(at: tmpURL, metadata: ["key": key])
+            onBackgroundTransferQueued?()
             // WCSession copies the file internally; clean up our temp copy.
             DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
                 try? FileManager.default.removeItem(at: tmpURL)

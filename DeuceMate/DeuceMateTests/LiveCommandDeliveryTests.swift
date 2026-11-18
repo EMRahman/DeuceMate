@@ -182,11 +182,11 @@ struct LiveCommandDeliveryTests {
             pendingPoint: PendingPointInfo(server: .me, winner: .me, setIndex: 0, isSecondServe: false),
             pendingOutcome: .winner, inputEnabled: true)
         await ready(service, session)
-        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: false, pendingTransferCount: 0)
+        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: false, transfers: (userInfo: 0, files: 0))
         #expect(!service.isLiveStateConfirmed)
         session.state = LiveMatchState(record: nil, inputEnabled: true)
         session.automaticallyReply = false
-        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: true, pendingTransferCount: 0)
+        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: true, transfers: (userInfo: 0, files: 0))
         #expect(!service.isLiveStateConfirmed, "reachability alone cannot unlock input")
         service.requestLiveState()
         session.pendingReplies[0](session.reply())
@@ -201,7 +201,7 @@ struct LiveCommandDeliveryTests {
         let session = LiveCommandSession()
         let service = makeService(session)
         await ready(service, session)
-        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: false, pendingTransferCount: 0)
+        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: false, transfers: (userInfo: 0, files: 0))
         var record = try #require(session.state.record)
         record.currentPointsMe = 3
         session.state = LiveMatchState(record: record, inputEnabled: true)
@@ -437,7 +437,7 @@ struct LiveCommandDeliveryTests {
         await drainMainQueue()
         #expect(service.liveRetryCountdown == 3)
         session.isReachable = false
-        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: false, pendingTransferCount: 0)
+        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: false, transfers: (userInfo: 0, files: 0))
         #expect(service.liveRetryCountdown == nil)
         scheduler.runLatest(delay: 1) // a tick already scheduled must do nothing
         await drainMainQueue()
@@ -514,7 +514,7 @@ struct LiveCommandDeliveryTests {
         session.resetRequests()
 
         session.isReachable = false
-        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: false, pendingTransferCount: 0)
+        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: false, transfers: (userInfo: 0, files: 0))
         var record = try #require(session.state.record)
         record.currentPointsMe = 2
         let restartedReply = LiveMatchReply(
@@ -567,7 +567,7 @@ struct LiveCommandDeliveryTests {
             sequence: 1
         )
         session.isReachable = false
-        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: false, pendingTransferCount: 0)
+        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true, isReachable: false, transfers: (userInfo: 0, files: 0))
         service.handle([.liveState(sessionBReply)])
         await drainMainQueue()
         #expect(service.liveState?.record?.currentPointsMe == 3)
@@ -585,4 +585,92 @@ struct LiveCommandDeliveryTests {
         #expect(service.liveState?.record?.currentPointsMe == 3,
                 "a delayed push from retired session A must not replace session B")
     }
+
+    @Test func currentRequestRecoversAfterAnUnseenOldContext() async throws {
+        let session = LiveCommandSession()
+        let service = makeService(session)
+        var current = try #require(session.state.record)
+        current.currentPointsMe = 3
+        session.state = LiveMatchState(record: current, inputEnabled: true)
+        await ready(service, session)
+
+        // The app first heard from the running Watch via RPC. Simulate a
+        // previously unseen context belonging to its previous process.
+        var old = current
+        old.currentPointsMe = 1
+        service.handle([.liveState(LiveMatchReply(
+            state: LiveMatchState(record: old, inputEnabled: true), sessionID: UUID(), sequence: 1))])
+        await drainMainQueue()
+        #expect(session.requests.count == 1, "a mismatched session triggered one confirming refresh")
+        #expect(service.isLiveStateConfirmed)
+        #expect(service.liveState?.record?.currentPointsMe == 3)
+    }
+
+    @Test func olderCheckpointFromAnUnseenSessionCannotRegressOfflineScore() async throws {
+        let session = LiveCommandSession()
+        var record = try #require(session.state.record)
+        record.currentPointsMe = 3
+        record.checkpointRevision = 5
+        session.state = LiveMatchState(record: record, inputEnabled: true)
+        let service = makeService(session)
+        await ready(service, session)
+        session.isReachable = false
+        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true,
+            isReachable: false, transfers: (0, 0))
+        record.currentPointsMe = 1
+        record.checkpointRevision = 2
+        service.handle([.liveState(LiveMatchReply(state: LiveMatchState(record: record, inputEnabled: true),
+            sessionID: UUID(), sequence: 99))])
+        await drainMainQueue()
+        #expect(service.liveState?.record?.currentPointsMe == 3)
+        #expect(!service.isLiveStateConfirmed)
+    }
+
+    @Test func queuedArchiveCheckpointCannotRollBackANewerPoint() throws {
+        var before = MatchRecord(startTime: Date(), setScores: [SetScore()], stats: [])
+        before.currentPointsMe = 1
+        before.checkpointRevision = 1
+        let session = LiveCommandSession()
+        session.isReachable = false
+        MatchSyncTransport(session: session).sendRecordReliable(before)
+        var after = before
+        after.currentPointsMe = 2
+        after.checkpointRevision = 2
+        let queued = try #require(session.queued.first)
+        guard case .singleMatch(let old) = SyncIncomingPayload.decode(queued).first else {
+            Issue.record("Expected a queued Watch record")
+            return
+        }
+        let merged = MatchMergePolicy.merge(incoming: [old], into: [after])
+        #expect(merged.first?.currentPointsMe == 2)
+    }
+
+    @Test func cachedPermissionPreservesThePhonesOfflineSetting() async throws {
+        let defaults = UserDefaults.standard
+        let key = MatchSyncKey.iPhoneInputEnabled
+        let previous = defaults.object(forKey: key)
+        defer { defaults.set(previous, forKey: key) }
+        defaults.set(false, forKey: key)
+
+        let session = LiveCommandSession()
+        session.isReachable = false
+        let service = makeService(session)
+        let data = try #require(session.reply()[MatchSyncKey.liveReply] as? Data)
+        service.handle(SyncIncomingPayload.decode([MatchSyncKey.liveReply: data]))
+        await drainMainQueue()
+        #expect(service.liveState?.inputEnabled == true)
+        #expect(!service.isLiveStateConfirmed)
+        #expect(!defaults.bool(forKey: key))
+    }
+
+    @Test func firstLiveScoreOpensMatchesBeforeTheArchiveArrives() async {
+        let session = LiveCommandSession()
+        let service = makeService(session)
+        #expect(PastMatchesView.showsEmptyArchive(hasHistory: false, hasLiveMatch: false, hasWatchRows: false))
+        service.handle(SyncIncomingPayload.decode(session.reply()))
+        await drainMainQueue()
+        #expect(!PastMatchesView.showsEmptyArchive(hasHistory: false,
+            hasLiveMatch: service.liveState?.record != nil, hasWatchRows: false))
+    }
+
 }

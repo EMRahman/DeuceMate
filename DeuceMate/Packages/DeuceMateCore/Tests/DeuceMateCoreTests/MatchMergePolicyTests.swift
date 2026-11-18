@@ -131,6 +131,27 @@ final class MatchMergePolicyTests: XCTestCase {
 
     // MARK: - merge tests
 
+    func test_equalRevisionPreservesScoreAndRefreshesActivity() {
+        var saved = MatchRecord(startTime: Date(), setScores: [], stats: [], currentPointsMe: 2,
+            matchElapsedSeconds: 10, setElapsedSeconds: [0: 10], totalSteps: 18, checkpointRevision: 3)
+        var incoming = saved
+        incoming.currentPointsMe = 1
+        incoming.matchElapsedSeconds = 15
+        incoming.setElapsedSeconds = [0: 15]
+        incoming.totalSteps = 14
+        incoming.totalCaloriesKcal = 3
+        let merged = MatchMergePolicy.resolve(incoming: incoming, existing: saved)
+        XCTAssertEqual(merged.currentPointsMe, 2)
+        XCTAssertEqual(merged.matchElapsedSeconds, 15)
+        XCTAssertEqual(merged.setElapsedSeconds, [0: 15])
+        XCTAssertEqual(merged.totalSteps, 18)
+        XCTAssertEqual(merged.totalCaloriesKcal, 3)
+
+        saved.checkpointRevision = 0
+        XCTAssertEqual(MatchMergePolicy.resolve(incoming: saved, existing: incoming).currentPointsMe, 1)
+        XCTAssertEqual(MatchMergePolicy.resolve(incoming: incoming, existing: saved).checkpointRevision, 3)
+    }
+
     func test_merge_tombstone_preventsReimport() {
         let id = UUID()
         let current: [MatchRecord] = []

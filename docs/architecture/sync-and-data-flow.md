@@ -65,8 +65,11 @@ both `sendMessage` (when reachable) and `updateApplicationContext` (so the lates
 score still delivers over Bluetooth even when the Watch screen is dimmed and
 `isReachable` stays false). Completed matches (`completedClearsActive == true`)
 also queue reliably if `sendMessage` fails or the peer is unreachable. In-memory
-session/sequence ordering protects the live display from an older response;
-archive revision debt #2 remains separate. Once this protocol is established,
+session/sequence ordering protects the live display. A response to the phone's
+current request establishes the running Watch session even if a delayed context
+previously displaced it. Cached permission updates the displayed state. Only
+explicit setting changes or initial seeding from a confirmed Watch set the
+phone preference. Connection Details counts queued dictionaries and files. Once this protocol is established,
 legacy active/clear and pending messages cannot replace its live identity/context.
 
 The phone waits for a current-session application response before enabling input,
@@ -76,7 +79,7 @@ scoring intent. Categorisation requests include match ID and pending context/pha
 Unreadable state is an error, never idle. New phone scoring requires an updated
 Watch; an older Watch's empty transport reply cannot establish readiness.
 [Live Watch sync](../features/LIVE_WATCH_SYNC_PROPOSAL.md) records the accepted
-scope, deferred durable receipts/heartbeat/revisions and physical-device gate.
+scope, deferred command receipts and heartbeat, and physical-device checks.
 
 ## 2. Requests, commands & explicit archive actions — phone → watch
 
@@ -232,9 +235,9 @@ When a match record arrives on the phone, `MatchMergePolicy` decides what to kee
 3. **Incoming is in-progress, stored copy is finished** → keep the finished one
    (a late-arriving live checkpoint can never "un-finish" a match).
 4. **Both finished** → keep the one that ended later.
-5. **Both in-progress** → always accept the incoming one — the watch is the live
-   source of truth (this also makes undo work: the reverted state replaces the
-   old one even though it has fewer points).
+5. **Both in-progress** → use the greater Watch `checkpointRevision`. An undo gets a
+   new revision. At equal positive revisions retain the accepted score and merge activity
+   samples. When both records predate revisions (zero), accept the incoming body.
 
 **Match tags and post-completion match-type conversions merge separately.** Those five rules pick the record *body*. The
 optional `tags` (opponent / partner / competition type, `MatchTags`) and optional `matchTypeRevision` (completed-match `Doubles ↔ Singles` conversions, `MatchTypeRevision`) then merge by
@@ -391,7 +394,5 @@ iCloud backup and manual transfer; activity measurements retain their existing
 sidecar/consent boundaries. Live state owns a resumed match, so the Watch removes
 the stored copy once the resume is durable and returns it at the next park/finalize.
 Full-history pushes leave out any in-progress copy of the live match that a failed
-write left behind, because the phone accepts any in-progress record. Pushes are
-queued and checkpoints are sent directly, so one queued before a resume can still
-arrive after newer checkpoints; `docs/features/TECHNICAL_DEBT.md` #2 tracks the
-revision that would let the phone reject it.
+write left behind. This also protects older phones. Updated phones can reject a
+parked checkpoint delivered after the higher revision from a resume or subsequent point.

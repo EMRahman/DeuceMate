@@ -522,6 +522,56 @@ struct LiveMatchWatchTests {
         #expect(vm.handleLiveRequest(LiveMatchRequest()).state?.prompt?.kind == .changeover)
     }
 
+    @Test func checkpointOrderingSurvivesUndoParkResumeAndWatchRelaunch() throws {
+        let files = try Files()
+        let vm = model(files)
+        let first = try #require(vm.currentLiveRecord())
+        #expect(first.checkpointRevision > 0)
+        #expect(vm.saveState())
+        #expect(vm.currentLiveRecord()?.checkpointRevision == first.checkpointRevision)
+
+        vm.winPoint(player: .me)
+        let second = try #require(vm.currentLiveRecord())
+        #expect(second.checkpointRevision > first.checkpointRevision)
+        #expect(vm.undo())
+        let undone = try #require(vm.currentLiveRecord())
+        #expect(undone.currentPointsMe == first.currentPointsMe)
+        #expect(undone.checkpointRevision > second.checkpointRevision)
+        #expect(MatchMergePolicy.resolve(incoming: second, existing: undone).currentPointsMe == first.currentPointsMe)
+
+        vm.resetMatch()
+        let history = StatsStore(fileURL: files.url("history.json"))
+        let parked = try #require(history.loadHistory().first)
+        #expect(parked.checkpointRevision > undone.checkpointRevision)
+        #expect(vm.resumeMatch(parked))
+        let resumed = try #require(vm.currentLiveRecord())
+        #expect(resumed.checkpointRevision > parked.checkpointRevision)
+        vm.loadState()
+        #expect(vm.currentLiveRecord()?.checkpointRevision == resumed.checkpointRevision)
+        vm.completeCurrentMatchIfMatching(first.id)
+        let completed = try #require(history.loadHistory().first)
+        #expect(!completed.isInProgress)
+        #expect(completed.checkpointRevision > resumed.checkpointRevision)
+    }
+
+    @Test func recoveringLiveFileAfterInterruptedParkSupersedesArchivedRevision() throws {
+        let files = try Files()
+        let vm = model(files)
+        let liveData = try Data(contentsOf: files.url("state.json"))
+        vm.resetMatch()
+        let history = StatsStore(fileURL: files.url("history.json"))
+        let parked = try #require(history.loadHistory().first)
+        // Recreate the two files left by a crash before the idle-state write.
+        try liveData.write(to: files.url("state.json"))
+        vm.loadState()
+        let recovered = try #require(vm.currentLiveRecord())
+        #expect(recovered.id == parked.id)
+        #expect(recovered.checkpointRevision > parked.checkpointRevision)
+        #expect(history.loadHistory().isEmpty)
+        vm.loadState()
+        #expect(vm.currentLiveRecord()?.checkpointRevision == recovered.checkpointRevision)
+    }
+
     @Test func watchSyncUpdatesApplicationContextOfflineAndSkipsDuplicates() async throws {
         final class RecordingSession: MatchSyncSessing {
             var isActivated = true

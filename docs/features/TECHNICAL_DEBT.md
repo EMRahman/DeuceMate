@@ -57,7 +57,7 @@ when the item should constrain future changes.
 | [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | **High** | **Now**, in the persistence-safety programme | Medium — PR #108 exists to re-read |
 | [27](#27--prevent-unrecorded-fitness-workouts-with-manager-tests-and-crash-recovery) | Health / Reliability | Prevent unrecorded Fitness workouts with manager tests and crash recovery | High impact when a workout is lost; remaining likelihood unverified | **Now**; physical-Watch save/sync checks before release | Medium, staged |
 | [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | **High when schemas diverge** | **Before any persisted-model, enum, or wire-shape change** | Medium |
-| [2](#2--add-a-monotonic-record-revision-before-queued-checkpoints) | Sync | Add a monotonic record revision for merge policy | Medium for live phone scoring; delayed history can revert its score | Separate follow-up; mandatory before queueing live checkpoints | Small–medium |
+| [2](#2--add-a-monotonic-record-revision-before-queued-checkpoints) | Sync | Order Watch archive checkpoints | Implemented for updated pairs | Legacy-to-legacy merges retain arrival order | — |
 | [28](#28--recover-current-live-state-and-confirm-courtside-phone-input) | Sync / UX | Recover current live state and confirm courtside phone input | Reconnect fix implemented; device timing unverified | Implemented in working branch; physical-device validation pending | Medium, staged |
 | [3](#3--replace-stringly-typed-settings-keys-with-typed-keys) | Settings | Replace stringly-typed settings keys with typed keys | Medium today; **high change risk** | Next engineering-risk cleanup after persistence containment | Large, splittable per setting category |
 | [20](#20--make-health-derived-field-classification-mechanically-exhaustive) | Health/Privacy | Make Health-derived field classification mechanically exhaustive | No current bug; **high privacy risk on expansion** | Before adding any Health-derived field or export surface | Medium design; small first guards |
@@ -134,7 +134,7 @@ The optional pending outcome phase survives Watch save/relaunch.
 The owner approved this smaller scope for an occasionally used courtside remote.
 The Watch stays authoritative; independent phone scoring remains future work.
 Durable command receipts, heartbeat/age UI and expected scoring revisions are
-**deferred**, and archive revision work remains separate (#2). The live board uses
+**deferred**. Archive checkpoint ordering is implemented (#2). The live board uses
 its own Watch state so an older archive arrival cannot replace its displayed score.
 No exactly-once or continuous-liveness guarantee is claimed.
 
@@ -520,85 +520,18 @@ do not clear it merely because the view disappeared.
 
 ### 2 — Add a monotonic record revision before queued checkpoints
 
-**What:** `MatchMergePolicy` Case 5 (both in-progress) currently does
-"always accept incoming." There is no revision check. A stale queued record
-arriving after a newer live checkpoint silently rolls the phone back; the
-current transport already exposes this through full-history pushes below.
+**Implemented in PR #210.** The Watch persists a per-match `checkpointRevision` in
+AppState and every full checkpoint. Scoring, undo, park, resume and completion
+advance it. A read-only refresh and a timer or Health sample reuse it. For two
+unfinished records the higher revision wins. Equal positive revisions retain
+the accepted score and can update elapsed time and Health data. Tags and resume
+metadata keep their existing merge rules.
 
-The transport drops in-progress *checkpoints* when unreachable (only
-announcements are queued), but that does not remove the stale-arrival path, as
-this item previously claimed. `sendHistory` always queues, and a history push can
-carry parked in-progress records. PR #175 found two consequences:
-
-- **Stale copy of the live match (fixed in #175).** That PR first kept the stored
-  checkpoint during a resume. Every full-history push then sent the pre-resume
-  score, and the phone accepted it. Resume now removes the stored copy once the live
-  state is durable, and `WatchHistory.recordsForPush` drops any copy that a failed
-  write leaves behind.
-- **Push queued before a resume (still open, also on `main`).** Launching the Watch
-  app queues a full-history push containing the parked match. If the player resumes
-  and wins a point before it is delivered, the direct checkpoint can overtake it.
-  The old push then reverts the phone until the next checkpoint. If it arrives after
-  the final park, the archive stays wrong until the next full-history push. Completed
-  records are safe. Real-device delivery delay has not been measured; a history
-  large enough to go as a file is the likeliest slow case.
-
-A previous attempt to use `stats.count` as a "newer" proxy broke undos
-(an undo checkpoint has fewer stats, so the phone wrongly discarded it). The
-comment in `MatchMergePolicy.swift` records this history.
-
-**Proposed fix:** Add a monotonic `revision: UInt64` to `MatchRecord`, incremented
-by the source watch on every scoring-body mutation, including undo, park and
-completion. Sending, polling and timer-only refresh must not allocate a new
-scoring revision. Update Case 5 to
-accept an incoming in-progress record only when its revision is greater than or
-equal to the existing revision. Decode old records with
-`decodeIfPresent(UInt64.self, forKey: .revision) ?? 0` under the §4
-compatibility recipe: two legacy revision-0 checkpoints retain today's “latest
-arrival wins” behaviour, while a legacy checkpoint cannot roll back an already
-revisioned one.
-
-For positive equal revisions, treat the scoring state as idempotent and handle
-conflicting scoring fields explicitly; do not let arrival order choose between
-different scores. Timer/Health refreshes and independent metadata are not new
-scoring actions and need their existing separate merge rules.
-
-Use the revision — not a wall-clock `lastModified` date — as the ordering
-primitive. Device time can move backwards and two rapid mutations need not have
-distinct timestamps. A `lastModified` date may still be useful for display or
-diagnostics, but it should not decide which queued checkpoint wins.
-
-The revision must survive everything that moves a match between files: persist it
-in `AppState`, write it to every checkpoint and finalize record, seed it from the
-stored record on resume, and carry it through any path that replaces a record by id
-(the §5 `CLAUDE.md` trap for rebuilt records). The phone's explicit completion and
-Case 2–4 completion rules are unchanged.
-
-**What it replaces, and what it doesn't.** Once this lands, retire
-`WatchHistory.recordsForPush` and `liveMatchDidChange`, since the phone can then
-reject a stale record however it arrives. Keep the rule that a live match is not in
-history: Past Matches, swipe-delete and Remove from Watch rely on it, and ordering
-does not address them.
-
-Once revision ordering exists, the transport can safely queue a bounded
-“latest live checkpoint” when unreachable, improving phone archive freshness
-during BLE gaps. Currently the phone can lag for the whole gap.
-
-**Risk and trigger (reviewed 16 November 2026):** **Medium for live phone
-scoring.** A rollback can mislead the courtside scorer even if another point
-later repairs it. The owner's separate reconnect report (#28) makes live recovery
-current work. The accepted #28 fix keeps a separate Watch-owned live snapshot;
-an older history arrival cannot replace that board, but can still revert the
-archive. Persisted revisions remain a separate follow-up and are mandatory before
-queueing live checkpoints.
-Effort is Small–medium because the counter crosses persistence and resume paths.
-Timestamps help display freshness but cannot substitute for this counter; see
-[`LIVE_WATCH_SYNC_PROPOSAL.md`](LIVE_WATCH_SYNC_PROPOSAL.md).
-
-**Key files:** `MatchRecord.swift`, `MatchMergePolicy.swift`,
-`MatchSyncTransport.swift`, `WatchHistoryCap.swift`, `ScoreViewModel.swift`,
-`WatchMatchSyncService.swift`, `MatchRecordCodingTests.swift`,
-`MatchMergePolicyTests.swift`.
+Older files decode at revision zero. Two legacy copies retain arrival ordering,
+and older phone builds still ignore the new field. Full-history pushes therefore
+continue to omit a stored in-progress copy of the live match. Routine per-point
+checkpoints stay best-effort. Reconnects and explicit refreshes can transfer the
+full live record reliably, including large records sent as files.
 
 ---
 

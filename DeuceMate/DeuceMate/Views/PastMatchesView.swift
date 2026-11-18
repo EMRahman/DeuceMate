@@ -441,11 +441,14 @@ struct PastMatchesView: View {
 
     // MARK: - Row actions
 
-    /// True when there are no rows to show: the archive is empty and there are no
-    /// watch-only matches to surface (no watch paired, or an empty mirror).
     private var hasNoRows: Bool {
-        if !store.history.isEmpty { return false }
-        return !syncService.isPaired || syncService.watchMirror.isEmpty
+        Self.showsEmptyArchive(hasHistory: !store.history.isEmpty,
+                               hasLiveMatch: syncService.liveState?.record != nil,
+                               hasWatchRows: syncService.isPaired && !syncService.watchMirror.isEmpty)
+    }
+
+    static func showsEmptyArchive(hasHistory: Bool, hasLiveMatch: Bool, hasWatchRows: Bool) -> Bool {
+        !hasHistory && !hasLiveMatch && !hasWatchRows
     }
 
     /// A tappable past-match row with storage-aware swipe and context actions.
@@ -866,7 +869,7 @@ struct PastMatchesView: View {
     /// mutating or stripping `store.history`'s stats or tags.
     private func liveSectionDisplayRecord(stored: MatchRecord?, live: MatchRecord?) -> MatchRecord? {
         if var stored {
-            if let live, live.id == stored.id {
+            if let live, live.id == stored.id, stored.isInProgress, live.checkpointRevision >= stored.checkpointRevision {
                 stored.setScores = live.setScores
                 stored.currentPointsMe = live.currentPointsMe
                 stored.currentPointsOpponent = live.currentPointsOpponent

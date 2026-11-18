@@ -215,11 +215,14 @@ final class MatchSyncTransportTests: XCTestCase {
         let fake = FakeSyncSession()
         fake.failLiveSend = true
         let transport = MatchSyncTransport(session: fake)
+        var queued = 0
+        transport.onBackgroundTransferQueued = { queued += 1 }
 
         transport.sendRecordReliable(makeRecord())
 
         XCTAssertEqual(fake.sentMessages.count, 1)
         XCTAssertEqual(fake.queuedUserInfos.count, 1)
+        XCTAssertEqual(queued, 1)
     }
 
     // MARK: - sendHistory (size-gated)
@@ -249,6 +252,8 @@ final class MatchSyncTransportTests: XCTestCase {
     func test_sendHistory_oversized_spillsToFileTransfer() throws {
         let fake = FakeSyncSession()
         let transport = MatchSyncTransport(session: fake)
+        var queued = 0
+        transport.onBackgroundTransferQueued = { queued += 1 }
         let history = try makeOversizedHistory()
 
         transport.sendHistory(history)
@@ -256,6 +261,7 @@ final class MatchSyncTransportTests: XCTestCase {
         XCTAssertTrue(fake.queuedUserInfos.isEmpty)
         XCTAssertEqual(fake.transferredFiles.count, 1)
         XCTAssertEqual(fake.transferredFiles.first?.metadata?["key"] as? String, MatchSyncKey.matchHistory)
+        XCTAssertEqual(queued, 1)
     }
 
     // MARK: - sendControl

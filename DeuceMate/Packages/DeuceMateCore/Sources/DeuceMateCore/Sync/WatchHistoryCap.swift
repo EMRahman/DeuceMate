@@ -14,13 +14,9 @@ public enum WatchHistory {
 
     /// The records a full-history push may carry while `liveMatchID` is live.
     ///
-    /// The phone accepts any in-progress record it receives (see
-    /// `MatchMergePolicy`), so a stored in-progress copy of the live match would
-    /// overwrite the newer checkpoints it already holds. Resume removes that copy,
-    /// but one can remain after a failed write. Completed copies always pass: the
-    /// merge policy never lets them be replaced by an in-progress record.
-    ///
-    /// Retire this once checkpoints carry a revision (TECHNICAL_DEBT #2).
+    /// A failed write can leave an unfinished copy in history after resume.
+    /// Omit it from history pushes, including to older phones that still apply
+    /// unfinished records in arrival order. Completed copies always pass.
     public static func recordsForPush(_ records: [MatchRecord], liveMatchID: UUID?) -> [MatchRecord] {
         guard let liveMatchID else { return records }
         return records.filter { $0.id != liveMatchID || !$0.isInProgress }
