@@ -601,8 +601,11 @@ compiler does not connect** (see §5). To add one, keep them consistent:
   pending. Live recovery now uses `liveRequest`/`liveReply` from the existing
   main-thread model, separately from history. Compact `LiveMatchState.record` is
   display-only: NEVER merge it into the archive. Commands wait for a saved Watch
-  response; timeout refreshes state without replaying scoring intent. Its transient
-  session/sequence orders live messages. A current request can re-establish the
+  response; timeout refreshes state without replaying scoring intent. While the
+  foreground phone is unconfirmed, a changed compact match record can trigger
+  a read-only refresh even after automatic retries expire. Compare the accepted
+  record because the same score can arrive with a new transport sequence.
+  The Watch session and sequence order live messages. A current request can re-establish the
   running Watch session after a delayed context. Cached permissions only describe
   the live board. Explicit settings events update the saved iPhone Input choice.
   For changes to the archived scoring body, call `saveState(scoringChanged: true)`.

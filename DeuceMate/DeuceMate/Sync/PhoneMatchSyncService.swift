@@ -34,6 +34,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     @Published private(set) var liveCommandMessage: String?
     private var liveRequestID: UUID?
     private var liveRequestTimeout: DispatchWorkItem?
+    private var liveRequestsPaused = false
     private var liveSessionID: UUID?
     private var liveSequence: UInt64 = 0
     /// Reject unsolicited updates from superseded sessions. A reply to our
@@ -486,14 +487,18 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     /// A fresh request (scoreboard opening, Refresh, foreground, reconnect)
     /// cancels any countdown and starts a new automatic-retry budget.
     func requestLiveState() {
-        guard !isLiveRequestInFlight else { return }
+        guard !liveRequestsPaused, !isLiveRequestInFlight else { return }
         cancelLiveRetry()
         sendLiveRefresh()
     }
 
     private func sendLiveRefresh() {
         isLiveStateConfirmed = false
-        guard transport.isActivated, transport.isReachable else { return }
+        guard transport.isActivated else { return }
+        // A Watch point can arrive before the reachability delegate catches up.
+        // Use the same current value for the request and the scoreboard.
+        isWatchReachable = transport.isReachable
+        guard isWatchReachable else { return }
         beginLiveRequest(LiveMatchRequest())
     }
 
@@ -611,7 +616,15 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         cancelLiveRetry()
     }
 
-    func pauseLiveState() { invalidateLiveState() }
+    func pauseLiveState() {
+        liveRequestsPaused = true
+        invalidateLiveState()
+    }
+
+    func resumeLiveState() {
+        liveRequestsPaused = false
+        requestLiveState()
+    }
 
     private func applyLiveReply(_ reply: LiveMatchReply) {
         guard let state = reply.state, let sessionID = reply.sessionID else { return }
@@ -804,7 +817,17 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                         self.applyLiveReply(reply)
                         self.requestLiveState()
                     } else {
+                        let previousRecord = self.liveState?.record
                         self.applyLiveReply(reply)
+                        // Compare the accepted compact record. A duplicate message,
+                        // re-stamped context or rejected stale push is the same score.
+                        if let record = self.liveState?.record, record != previousRecord,
+                           !self.isLiveStateConfirmed, !self.liveRequestsPaused,
+                           !self.isLiveRequestInFlight, self.liveRetryCountdown == nil {
+                            // Preserve the retry budget. Even after it is spent, a
+                            // new Watch point gives us one more read-only attempt.
+                            self.sendLiveRefresh()
+                        }
                     }
                     // Pushes update the board, but only our current request's
                     // application reply can establish readiness or finish a command.

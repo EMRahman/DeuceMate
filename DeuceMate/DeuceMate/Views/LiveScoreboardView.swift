@@ -78,8 +78,15 @@ struct LiveScoreboardView: View {
     /// A send failure outranks the steady status because it is about what the
     /// user just did.
     private var connectionMessage: String? {
-        shownCommandFailure != nil
-            ? (syncService.liveCommandMessage ?? LiveScoreboardStatus.commandFailureMessage) : status.detail
+        if shownCommandFailure != nil {
+            return syncService.liveCommandMessage ?? LiveScoreboardStatus.commandFailureMessage
+        }
+        return categoryConnectionHint == nil ? status.detail : nil
+    }
+
+    private var categoryConnectionHint: String? {
+        guard iPhoneInputEnabled, syncService.pendingPoint != nil, !status.isWatchReachable else { return nil }
+        return "Open DeuceMate on the Watch to enable iPhone scoring."
     }
 
     private var meColor:     Color { theme.colors.me }
@@ -223,6 +230,7 @@ struct LiveScoreboardView: View {
                                 pending: pending,
                                 outcome: syncService.pendingPointOutcome,
                                 detailedShotTrackingEnabled: statsTrackingEnabled,
+                                connectionHint: categoryConnectionHint,
                                 onSelectOutcome: { outcome in
                                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                     syncService.sendSelectOutcome(outcome)

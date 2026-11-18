@@ -40,7 +40,7 @@ struct DeuceMateApp: App {
                     // Resume any initial restore, or push the local archive
                     // backup, whenever the app returns to the foreground.
                     if phase == .active {
-                        syncService.requestLiveState()
+                        syncService.resumeLiveState()
                         store.syncICloudBackup()
                     } else if phase == .background {
                         syncService.pauseLiveState()

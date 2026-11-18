@@ -414,6 +414,109 @@ struct LiveCommandDeliveryTests {
                 == "Current score not confirmed. Refresh to reconnect.")
     }
 
+    @Test func newWatchPointRestoresCategoryInputAfterReconnectRetriesExpire() async throws {
+        let session = LiveCommandSession()
+        let scheduler = ManualScheduler()
+        let service = makeService(session, scheduler: scheduler)
+        await ready(service, session)
+        var record = try #require(session.state.record)
+        let pending = PendingPointInfo(server: .me, winner: .me, setIndex: 0, isSecondServe: false)
+
+        session.failLiveSend = true
+        service.requestLiveState()
+        await drainMainQueue()
+        record.currentPointsMe = 1
+        session.state = LiveMatchState(record: record, pendingPoint: pending, inputEnabled: true)
+        service.handle(SyncIncomingPayload.decode(session.reply()))
+        await drainMainQueue()
+        #expect(service.liveRetryCountdown == 3)
+        #expect(session.requests.count == 1, "A point during backoff uses the scheduled retry")
+        for _ in LiveRefreshRetry.delays { await runCountdown(service, scheduler) }
+        #expect(service.liveRetryCountdown == nil)
+        session.resetRequests()
+
+        service.handle(SyncIncomingPayload.decode(session.reply()))
+        await drainMainQueue()
+        #expect(session.requests.isEmpty, "A new wire sequence for the same score cannot restart retries")
+
+        session.failLiveSend = false
+        session.automaticallyReply = false
+        record.currentPointsMe = 2
+        record.checkpointRevision += 1
+        session.state = LiveMatchState(record: record, pendingPoint: pending, inputEnabled: true)
+        let point = SyncIncomingPayload.decode(session.reply())
+        service.handle(point)
+        service.handle(point) // Message and application context can carry the same point.
+        await drainMainQueue()
+        #expect(service.pendingPoint == pending)
+        #expect(service.liveState?.record?.currentPointsMe == 2)
+        #expect(!service.isLiveStateConfirmed)
+        service.sendSelectOutcome(.winner)
+        #expect(session.requests.map(\.action) == [nil])
+        let confirm = try #require(session.pendingReplies.first)
+        confirm(session.reply())
+        await drainMainQueue()
+        #expect(service.isLiveStateConfirmed)
+        #expect(service.isWatchReachable)
+        #expect(!service.isLiveRequestInFlight)
+        #expect(service.pendingPoint == pending)
+        service.sendSelectOutcome(.winner)
+        #expect(session.requests.map(\.action) == [nil, MatchSyncKey.statActionSelectOutcome])
+        #expect(session.requests.last?.pendingPoint == pending)
+    }
+
+    @Test func offlineAndBackgroundWatchPointsOnlyUpdateTheDisplay() async throws {
+        let session = LiveCommandSession()
+        let service = makeService(session)
+        await ready(service, session)
+        var record = try #require(session.state.record)
+        session.isReachable = false
+        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true,
+            isReachable: false, transfers: (0, 0))
+        record.currentPointsMe = 1
+        session.state = LiveMatchState(record: record, inputEnabled: true)
+        service.handle(SyncIncomingPayload.decode(session.reply()))
+        await drainMainQueue()
+        #expect(session.requests.isEmpty)
+        #expect(!service.isLiveStateConfirmed)
+        #expect(service.liveState?.record?.currentPointsMe == 1)
+
+        service.pauseLiveState()
+        session.isReachable = true
+        record.currentPointsMe = 2
+        session.state = LiveMatchState(record: record, inputEnabled: true)
+        service.handle(SyncIncomingPayload.decode(session.reply()))
+        await drainMainQueue()
+        #expect(session.requests.isEmpty)
+        #expect(!service.isLiveStateConfirmed)
+        #expect(service.liveState?.record?.currentPointsMe == 2)
+        service.resumeLiveState()
+        await drainMainQueue()
+        #expect(session.requests.map(\.action) == [nil])
+        #expect(service.isLiveStateConfirmed)
+    }
+
+    @Test func pointCanRecoverInputBeforeTheReachabilityCallback() async throws {
+        let session = LiveCommandSession()
+        let service = makeService(session)
+        await ready(service, session)
+        session.isReachable = false
+        service.updatePublishedWatchState(isPaired: true, isWatchAppInstalled: true,
+            isReachable: false, transfers: (0, 0))
+
+        session.isReachable = true // Bluetooth returns before a new delegate notification.
+        var record = try #require(session.state.record)
+        record.currentPointsOpponent = 1
+        session.state = LiveMatchState(record: record, inputEnabled: true)
+        service.handle(SyncIncomingPayload.decode(session.reply()))
+        await drainMainQueue()
+        #expect(session.requests.map(\.action) == [nil])
+        #expect(service.isWatchReachable)
+        #expect(service.isLiveStateConfirmed)
+        service.sendScoreCommand(MatchSyncKey.scoreCommandWinMe, matchID: record.id)
+        #expect(session.requests.map(\.action) == [nil, MatchSyncKey.scoreCommandWinMe])
+    }
+
     @Test func freshRequestRestartsTheRetryBudget() async {
         let session = LiveCommandSession()
         session.failLiveSend = true
