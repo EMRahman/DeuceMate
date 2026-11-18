@@ -73,7 +73,12 @@ phone preference. Connection Details counts queued dictionaries and files. Once 
 legacy active/clear and pending messages cannot replace its live identity/context.
 
 The phone waits for a current-session application response before enabling input,
-and allows one request in flight. Watch validation, scoring and saving happen
+and allows one request in flight. While awaiting confirmation in the foreground,
+a changed compact match record triggers a read-only refresh if the Watch is
+reachable and no request or retry is pending. This works even after automatic
+retries run out. Duplicate pushes leave the retry budget alone. The phone keeps
+showing the pending point until the Watch reports its next state.
+Watch validation, scoring and saving happen
 before the response. Timeout/error makes one read-only refresh and never replays
 scoring intent. Categorisation requests include match ID and pending context/phase.
 Unreadable state is an error, never idle. New phone scoring requires an updated

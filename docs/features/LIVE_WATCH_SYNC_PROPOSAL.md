@@ -58,9 +58,11 @@ phone nevertheless enabled input as soon as reachability returned. The original
    repeat the save or mask a failed write.
 7. Only one phone request is in flight. A ten-second timeout or transport error
    never replays the action: it invalidates that request and makes one read-only
-   refresh. Late callbacks cannot unlock input. If refresh fails, input stays
-   disabled and Refresh/reopening the board can try again. Backgrounding or
-   losing reachability invalidates readiness.
+   refresh. Failed refreshes retry on a bounded backoff while reachable. After
+   retries run out, a changed compact match record prompts one more read-only
+   attempt while the phone is in the foreground and the Watch is reachable.
+   Duplicate deliveries leave the budget alone. Backgrounding or losing
+   reachability invalidates readiness. Only a current reply unlocks input.
 
 No optimistic score change occurs on the iPhone. Gesture previews/haptics still
 mean the gesture was recognised, not that the Watch saved it. Save failures return
@@ -153,6 +155,11 @@ latency and results:
 
 - Disconnect, score several points on Watch, reconnect and **score nothing else**.
   The phone must catch up and permit input only after current-state confirmation.
+- With iPhone Input and point tracking enabled, disconnect Bluetooth and Wi-Fi.
+  Restore Bluetooth with Wi-Fi still off. If the phone remains unconfirmed after
+  its retries, score on the Watch. Check that the phone shows the pending point
+  and that its category buttons become usable when the Watch answers. Categorise
+  it on the phone and check the result on the Watch.
 - Repeat with undo, tracking off, perpetual points, pending categorisation and
   park/finish/switching matches during the gap. Verify stale panels clear.
 - Score from iPhone: each gesture produces one Watch result. Disconnect during a
