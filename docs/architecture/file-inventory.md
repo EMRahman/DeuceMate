@@ -349,6 +349,8 @@ as PNGs when `TEST_RUNNER_DEUCEMATE_UI_SHOTS_DIR` is set; every created match is
 `DeuceMateTests/LiveCommandDeliveryTests.swift` (current-state confirmation, one live request
 in flight, no optimistic score mutation, timeout refresh without replay, stale replies,
 reconnect/idle recovery, rejection reasons and isolation from delayed archive arrivals),
+`DeuceMateTests/LiveScoreboardPresentationTests.swift` (first layout of the iPhone
+scoreboard cover from portrait and return to portrait on dismissal),
 `DeuceMate Watch AppTests/LiveMatchWatchTests.swift` (read-only live snapshots,
 real scoring and durable application, match/category guards, saved pending phase,
 unreadable-state containment and write-failure responses),
