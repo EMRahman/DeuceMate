@@ -521,4 +521,106 @@ struct LiveMatchWatchTests {
         #expect(spy.liveStateChanges > before, "The phone must hear the prompt without waiting for a point")
         #expect(vm.handleLiveRequest(LiveMatchRequest()).state?.prompt?.kind == .changeover)
     }
+
+    @Test func checkpointOrderingSurvivesUndoParkResumeAndWatchRelaunch() throws {
+        let files = try Files()
+        let vm = model(files)
+        let first = try #require(vm.currentLiveRecord())
+        #expect(first.checkpointRevision > 0)
+        #expect(vm.saveState())
+        #expect(vm.currentLiveRecord()?.checkpointRevision == first.checkpointRevision)
+
+        vm.winPoint(player: .me)
+        let second = try #require(vm.currentLiveRecord())
+        #expect(second.checkpointRevision > first.checkpointRevision)
+        #expect(vm.undo())
+        let undone = try #require(vm.currentLiveRecord())
+        #expect(undone.currentPointsMe == first.currentPointsMe)
+        #expect(undone.checkpointRevision > second.checkpointRevision)
+        #expect(MatchMergePolicy.resolve(incoming: second, existing: undone).currentPointsMe == first.currentPointsMe)
+
+        vm.resetMatch()
+        let history = StatsStore(fileURL: files.url("history.json"))
+        let parked = try #require(history.loadHistory().first)
+        #expect(parked.checkpointRevision > undone.checkpointRevision)
+        #expect(vm.resumeMatch(parked))
+        let resumed = try #require(vm.currentLiveRecord())
+        #expect(resumed.checkpointRevision > parked.checkpointRevision)
+        vm.loadState()
+        #expect(vm.currentLiveRecord()?.checkpointRevision == resumed.checkpointRevision)
+        vm.completeCurrentMatchIfMatching(first.id)
+        let completed = try #require(history.loadHistory().first)
+        #expect(!completed.isInProgress)
+        #expect(completed.checkpointRevision > resumed.checkpointRevision)
+    }
+
+    @Test func recoveringLiveFileAfterInterruptedParkSupersedesArchivedRevision() throws {
+        let files = try Files()
+        let vm = model(files)
+        let liveData = try Data(contentsOf: files.url("state.json"))
+        vm.resetMatch()
+        let history = StatsStore(fileURL: files.url("history.json"))
+        let parked = try #require(history.loadHistory().first)
+        // Recreate the two files left by a crash before the idle-state write.
+        try liveData.write(to: files.url("state.json"))
+        vm.loadState()
+        let recovered = try #require(vm.currentLiveRecord())
+        #expect(recovered.id == parked.id)
+        #expect(recovered.checkpointRevision > parked.checkpointRevision)
+        #expect(history.loadHistory().isEmpty)
+        vm.loadState()
+        #expect(vm.currentLiveRecord()?.checkpointRevision == recovered.checkpointRevision)
+    }
+
+    @Test func watchSyncUpdatesApplicationContextOfflineAndSkipsDuplicates() async throws {
+        final class RecordingSession: MatchSyncSessing {
+            var isActivated = true
+            var isReachable = false
+            private(set) var sentMessages: [[String: Any]] = []
+            private(set) var queuedUserInfos: [[String: Any]] = []
+            private(set) var applicationContexts: [[String: Any]] = []
+            func sendMessage(_ message: [String: Any], replyHandler: (([String: Any]) -> Void)?, errorHandler: ((Error) -> Void)?) {
+                sentMessages.append(message)
+                replyHandler?([:])
+            }
+            func queueUserInfo(_ userInfo: [String: Any]) { queuedUserInfos.append(userInfo) }
+            func transferFile(at url: URL, metadata: [String: Any]?) {}
+            func updateApplicationContext(_ context: [String: Any]) throws { applicationContexts.append(context) }
+        }
+
+        let files = try Files(), vm = model(files, scoreFirstPoint: true)
+        let session = RecordingSession()
+        let sync = WatchMatchSyncService(transport: MatchSyncTransport(session: session))
+        sync.onLiveRequest = { [weak vm] req in
+            vm?.handleLiveRequest(req) ?? LiveMatchReply(state: nil)
+        }
+        sync.onCurrentLiveRecord = { [weak vm] in vm?.currentLiveRecord() }
+
+        sync.liveStateDidChange()
+        await Task.yield()
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(session.applicationContexts.count == 1)
+        let decoded = SyncIncomingPayload.decode(try #require(session.applicationContexts.last))
+        guard case .liveState(let reply) = decoded.first else {
+            Issue.record("Expected liveState in applicationContext")
+            return
+        }
+        #expect(reply.state?.record?.currentPointsMe == 1)
+
+        // Unchanged live state should not re-write applicationContext.
+        sync.liveStateDidChange()
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(session.applicationContexts.count == 1)
+
+        // Scoring another point updates applicationContext even while unreachable.
+        vm.winPoint(player: .me)
+        sync.liveStateDidChange()
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(session.applicationContexts.count == 2)
+
+        // Full-history request also pushes the live record reliably while unreachable.
+        sync.handle([MatchSyncKey.requestFullHistory: true])
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(session.queuedUserInfos.contains { $0[MatchSyncKey.singleMatch] != nil })
+    }
 }

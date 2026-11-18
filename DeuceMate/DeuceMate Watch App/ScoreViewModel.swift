@@ -333,6 +333,7 @@ class ScoreViewModel: ObservableObject {
             if currentMatchID != oldValue { syncService?.liveMatchDidChange(currentMatchID) }
         }
     }
+    private var checkpointRevision: UInt64 = 0
     /// Phone-authored tags of the live match, carried only so every record the
     /// watch writes or sends for it keeps them. A resumed match is removed from
     /// the history store, so without this the next checkpoint/finalize would be
@@ -488,6 +489,7 @@ class ScoreViewModel: ObservableObject {
         let pendingStatPoint: PendingPointInfo?
         let pendingOutcome: PointOutcome?
         let currentMatchID: UUID?
+        let checkpointRevision: UInt64
         let matchElapsedSeconds: TimeInterval
         let setElapsedSeconds: [Int: TimeInterval]
         let pendingAnnouncementMessage: String?
@@ -529,6 +531,7 @@ class ScoreViewModel: ObservableObject {
              pendingStatPoint: PendingPointInfo? = nil,
              pendingOutcome: PointOutcome? = nil,
              currentMatchID: UUID? = nil,
+             checkpointRevision: UInt64 = 0,
              matchElapsedSeconds: TimeInterval = 0,
              setElapsedSeconds: [Int: TimeInterval] = [:],
              pendingAnnouncementMessage: String? = nil,
@@ -570,6 +573,7 @@ class ScoreViewModel: ObservableObject {
             self.pendingStatPoint = pendingStatPoint
             self.pendingOutcome = pendingOutcome
             self.currentMatchID = currentMatchID
+            self.checkpointRevision = checkpointRevision
             self.matchElapsedSeconds = matchElapsedSeconds
             self.setElapsedSeconds = setElapsedSeconds
             self.pendingAnnouncementMessage = pendingAnnouncementMessage
@@ -602,6 +606,7 @@ class ScoreViewModel: ObservableObject {
             isOnSecondServe = try c.decodeIfPresent(Bool.self, forKey: .isOnSecondServe) ?? false
             pendingStatPoint = try c.decodeIfPresent(PendingPointInfo.self, forKey: .pendingStatPoint)
             pendingOutcome = try c.decodeIfPresent(PointOutcome.self, forKey: .pendingOutcome)
+            checkpointRevision = try c.decodeIfPresent(UInt64.self, forKey: .checkpointRevision) ?? 0
             currentMatchID = try c.decodeIfPresent(UUID.self, forKey: .currentMatchID)
             matchElapsedSeconds = try c.decodeIfPresent(TimeInterval.self, forKey: .matchElapsedSeconds) ?? 0
             setElapsedSeconds = try c.decodeIfPresent([Int: TimeInterval].self, forKey: .setElapsedSeconds) ?? [:]
@@ -828,7 +833,7 @@ class ScoreViewModel: ObservableObject {
     func syncMatchStart() {
         guard !stateWritesBlocked else { return }
         bootstrapLiveMatchIdentityIfNeeded()
-        saveState()
+        saveState(scoringChanged: true)
     }
 
     /// Seeds state for a 10-point super-tiebreak-only match. Caller must have
@@ -848,7 +853,7 @@ class ScoreViewModel: ObservableObject {
         if matchType == .doubles {
             tiebreakStartDoublesIndex = doublesServiceIndex
         }
-        saveState()
+        saveState(scoringChanged: true)
     }
 
     /// Sets up a doubles match with the given first server and derives the full
@@ -891,7 +896,7 @@ class ScoreViewModel: ObservableObject {
         doublesServiceIndex = 1
         doublesServer = doublesServiceOrder[doublesServiceIndex]
         currentServer = doublesServer?.team ?? currentServer
-        saveState()
+        saveState(scoringChanged: true)
     }
 
     // MARK: - Phone announcement helpers
@@ -1096,7 +1101,7 @@ class ScoreViewModel: ObservableObject {
             }
         }
         isOnSecondServe = false
-        saveState()
+        saveState(scoringChanged: true)
         syncHeadingMonitoring()
     }
 
@@ -1156,7 +1161,7 @@ class ScoreViewModel: ObservableObject {
             }
         }
         isOnSecondServe = false
-        saveState()
+        saveState(scoringChanged: true)
         syncHeadingMonitoring()
     }
 
@@ -1386,7 +1391,7 @@ class ScoreViewModel: ObservableObject {
             pendingAnnouncementWorkItem = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
         }
-        saveState()
+        saveState(scoringChanged: true)
     }
 
     /// Toggles the second-serve flag for the next-to-be-scored point. Driven
@@ -1403,7 +1408,7 @@ class ScoreViewModel: ObservableObject {
         if isOnSecondServe {
             pendingPhoneAnnouncement = "Second serve."
         }
-        saveState()
+        saveState(scoringChanged: true)
     }
 
     /// Silently creates and appends an uncategorized PointStat when point
@@ -1523,7 +1528,8 @@ class ScoreViewModel: ObservableObject {
             totalCaloriesKcal: hkSnapshot.caloriesKcal,
             tags: liveMatchTags,
             resumeEvents: resumeEvents,
-            parkedAt: shouldComplete ? nil : now
+            parkedAt: shouldComplete ? nil : now,
+            checkpointRevision: MatchRecord.nextCheckpointRevision(after: checkpointRevision)
         )
         // Belt-and-braces: if this append will evict the oldest watch record,
         // push the full history first so the phone archives the about-to-be-
@@ -1538,6 +1544,7 @@ class ScoreViewModel: ObservableObject {
             persistenceError = "Match could not be saved. Try again before leaving."
             return false
         }
+        checkpointRevision = record.checkpointRevision
         syncService?.sendMatch(record, announcement: nil)
         return true
     }
@@ -1645,7 +1652,6 @@ class ScoreViewModel: ObservableObject {
             return false
         }
         workoutManager.stopWorkout()
-        syncService?.clearActiveMatch()
         currentServer = nil
         gameCount = 0
         pointCountInTiebreak = 0
@@ -1666,6 +1672,7 @@ class ScoreViewModel: ObservableObject {
         pendingAnnouncementWorkItem = nil
         isOnSecondServe = false
         currentMatchID = nil
+        checkpointRevision = 0
         liveMatchTags = nil
         resumeEvents = []
         priorActivity = MatchActivityTotals()
@@ -1689,6 +1696,7 @@ class ScoreViewModel: ObservableObject {
         // triple predicate already holds — but routing through the same
         // helper keeps one rule for "seed from the remembered setup."
         applyRememberedSetupIfIdle()
+        syncService?.clearActiveMatch()
         return true
     }
 
@@ -1779,6 +1787,7 @@ class ScoreViewModel: ObservableObject {
             tiebreakFirstPointReceiver: record.tiebreakFirstPointReceiver, lastTiebreakPointServer: record.lastTiebreakPointServer,
             currentMatchStats: record.stats, matchStartTime: record.startTime,
             isOnSecondServe: record.isOnSecondServe, currentMatchID: record.id,
+            checkpointRevision: MatchRecord.nextCheckpointRevision(after: record.checkpointRevision),
             matchElapsedSeconds: record.matchElapsedSeconds, setElapsedSeconds: record.setElapsedSeconds,
             matchType: record.matchType, doublesServer: record.doublesServer,
             doublesServiceOrder: record.doublesServiceOrder, doublesServiceIndex: record.doublesServiceIndex,
@@ -1828,8 +1837,11 @@ class ScoreViewModel: ObservableObject {
     }
 
     @discardableResult
-    func saveState() -> Bool {
+    func saveState(scoringChanged: Bool = false) -> Bool {
         guard !stateWritesBlocked else { return false }
+        if currentMatchID != nil && (scoringChanged || checkpointRevision == 0) {
+            checkpointRevision = MatchRecord.nextCheckpointRevision(after: checkpointRevision)
+        }
         let now = Date()
         let clockEnd = matchCompletionTime ?? now
         let snapshotElapsed = matchElapsedSeconds + (sessionStartTime.map { max(0, clockEnd.timeIntervalSince($0)) } ?? 0)
@@ -1857,6 +1869,7 @@ class ScoreViewModel: ObservableObject {
             pendingStatPoint: pendingStatPoint,
             pendingOutcome: pendingOutcome,
             currentMatchID: currentMatchID,
+            checkpointRevision: checkpointRevision,
             matchElapsedSeconds: snapshotElapsed,
             setElapsedSeconds: snapshotSetElapsed,
             pendingAnnouncementMessage: (pendingAnnouncementInfo ?? pendingChangeoverAck)?.symbol,
@@ -1943,7 +1956,8 @@ class ScoreViewModel: ObservableObject {
             recentPoints: Array((resumedRecentPoints + history.map { $0.player }).suffix(8)),
             momentumEnabled: momentumEnabled,
             tags: liveMatchTags,
-            resumeEvents: resumeEvents
+            resumeEvents: resumeEvents,
+            checkpointRevision: checkpointRevision
         )
     }
 
@@ -2072,6 +2086,7 @@ class ScoreViewModel: ObservableObject {
             pendingStatPoint = state.pendingStatPoint
             pendingOutcome = state.pendingOutcome
             currentMatchID = state.currentMatchID
+            checkpointRevision = currentMatchID == nil ? 0 : max(1, state.checkpointRevision)
             liveMatchTags = state.currentMatchTags
             resumeEvents = state.resumeEvents
             priorActivity = state.activityTotals
@@ -2135,6 +2150,7 @@ class ScoreViewModel: ObservableObject {
             pendingStatPoint = nil
             pendingOutcome = nil
             currentMatchID = nil
+            checkpointRevision = 0
             liveMatchTags = nil
             matchType = .singles
             matchFormat = .standard
@@ -2156,7 +2172,14 @@ class ScoreViewModel: ObservableObject {
     /// replaced by an in-progress record.
     private func dropStoredCopyOfLiveMatch() {
         guard let id = currentMatchID,
-              statsStore.loadHistoryOrNil()?.first(where: { $0.id == id })?.isInProgress == true else { return }
+              let stored = statsStore.loadHistoryOrNil()?.first(where: { $0.id == id }), stored.isInProgress else { return }
+        // A crash between archiving a park and clearing the live file leaves both.
+        // Persist a revision above the published park before removing its copy.
+        if stored.checkpointRevision >= checkpointRevision {
+            checkpointRevision = stored.checkpointRevision
+            liveMatchTags = MatchTags.merged(liveMatchTags, stored.tags)
+            guard saveState(scoringChanged: true) else { return }
+        }
         let merged = MatchTags.merged(liveMatchTags, statsStore.removeMatchReturningTags(id: id))
         guard merged != liveMatchTags else { return }
         liveMatchTags = merged
@@ -2245,7 +2268,7 @@ class ScoreViewModel: ObservableObject {
         doublesServiceIndex = last.doublesServiceIndex
 
         pendingChangeoverAck = nil
-        saveState()
+        saveState(scoringChanged: true)
         syncHeadingMonitoring()
         return true
     }

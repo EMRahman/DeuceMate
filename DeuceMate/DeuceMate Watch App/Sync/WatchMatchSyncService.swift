@@ -49,11 +49,21 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     var onCurrentLiveRecord: (() -> MatchRecord?)?
     private let liveSessionID = UUID()
     private var liveSequence: UInt64 = 0
+    /// Last live snapshot written to `WCSession.applicationContext`, so repeated
+    /// syncs with an unchanged live state do not churn the context channel.
+    private var lastPublishedContextState: LiveMatchState?
 
-    private let transport = MatchSyncTransport(
-        logger: Logger(subsystem: "com.deucemate.sync", category: "Watch")
-    )
+    private let transport: MatchSyncTransport
     private let logger = Logger(subsystem: "com.deucemate.sync", category: "Watch")
+
+    init(
+        transport: MatchSyncTransport = MatchSyncTransport(
+            logger: Logger(subsystem: "com.deucemate.sync", category: "Watch")
+        )
+    ) {
+        self.transport = transport
+        super.init()
+    }
 
     /// Copy of `ScoreViewModel.currentMatchID`. Pushes also run on the
     /// WatchConnectivity queue, which can't read the main-thread view model.
@@ -141,7 +151,10 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     /// the phone would merge it and prune its watch mirror. `loadHistoryOrNil()`
     /// returns `nil` (not `[]`) on an unreadable/corrupt archive — bail then.
     private func pushFullHistory() {
-        publishLiveState()
+        // The history push deliberately leaves out the live match, so also
+        // publish the compact live state and send the full live record
+        // reliably when one is active.
+        publishLiveState(includeFullRecord: true)
         guard let history = StatsStore.shared.loadHistoryOrNil() else {
             logger.error("full-history push skipped: watch history unreadable")
             return
@@ -240,10 +253,6 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     func sessionReachabilityDidChange(_ session: WCSession) {
         guard session.isReachable else { return }
         pushFullHistory()
-        // The history push deliberately leaves out the live match, so points
-        // scored while the phone was out of reach would otherwise not show on
-        // its scoreboard until the next point or a successful phone refresh.
-        publishLiveState()
     }
 
     // MARK: - Receive requests from phone
@@ -275,7 +284,10 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
                 } else {
                     reply = LiveMatchReply(state: nil, message: "Invalid scoring request.")
                 }
-                replyHandler((try? MatchSyncPayloadBuilder.liveReply(self.stamped(reply))) ?? [:])
+                let stampedReply = self.stamped(reply)
+                let payload = (try? MatchSyncPayloadBuilder.liveReply(stampedReply)) ?? [:]
+                self.updateContextIfChanged(state: stampedReply.state, payload: payload)
+                replyHandler(payload)
                 if let record = archiveRecord { self.transport.sendRecordReliable(record) }
             }
             return
@@ -290,18 +302,34 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
                               sessionID: liveSessionID, sequence: liveSequence)
     }
 
+    private func updateContextIfChanged(state: LiveMatchState?, payload: [String: Any]) {
+        guard let state, !payload.isEmpty, lastPublishedContextState != state else { return }
+        if transport.updateApplicationContext(payload) {
+            lastPublishedContextState = state
+        }
+    }
+
     /// Always schedule after the current scoring mutation has finished.
-    private func publishLiveState() {
+    /// Updates `applicationContext` as well as sending a live message so points
+    /// scored while Bluetooth is off still sync on reconnect even when the
+    /// Watch screen dims and `isReachable` stays false.
+    private func publishLiveState(includeFullRecord: Bool = false) {
         DispatchQueue.main.async {
             guard let reply = self.onLiveRequest?(LiveMatchRequest()),
                   let payload = try? MatchSyncPayloadBuilder.liveReply(self.stamped(reply)) else { return }
+            self.updateContextIfChanged(state: reply.state, payload: payload)
             self.transport.sendControl(payload, queueOnFailure: false)
+            if includeFullRecord, let record = self.onCurrentLiveRecord?() {
+                self.transport.sendRecordReliable(record)
+            }
         }
     }
 
     // MARK: - Private
 
-    private func handle(_ payload: [String: Any]) {
+    /// Internal so Watch target tests can drive incoming control events
+    /// without constructing a real `WCSession`.
+    func handle(_ payload: [String: Any]) {
         for event in SyncIncomingPayload.decode(payload) {
             switch event {
             case .requestFullHistory, .ping:

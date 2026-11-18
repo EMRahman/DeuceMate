@@ -37,7 +37,7 @@ phone nevertheless enabled input as soon as reachability returned. The original
    identity and pending category together.
 3. A versioned `liveRequest`/`liveReply` exchange carries a compact scoreboard
    record, pending point/phase, input permission and Watch blockers. Its record
-   contains no stats, Health or match metadata and **never enters archive merging**.
+   carries the score and checkpoint revision and excludes stats, Health and tags and **never enters archive merging**.
    An explicit read also sends the full live record using the reliable/file path,
    so large matches can catch up their archive separately.
 4. Normal Watch mutations publish the same compact state. An in-memory Watch
@@ -120,10 +120,9 @@ change ends") and doubles' "Who serves next?" — previously left the phone sayi
   freshness UI. Reachability loss and lifecycle/read/command responses drive
   recovery. A silently lost update with reachability unchanged can remain stale
   until the next update or explicit/lifecycle refresh.
-- **Archive revision counters (#2):** separate existing debt. A queued older
-  unfinished record can still revert the phone archive; the dedicated compact
-  live board does not read its scoring body from that archive. Tags, type clocks,
-  completion precedence, tombstones and Health merge boundaries are unchanged.
+- **Legacy archive records:** updated Watch checkpoints carry a persisted revision.
+  Two legacy unfinished records retain arrival ordering. The dedicated compact
+  live board and archive still receive separate payloads.
 - **Mixed versions:** an older Watch's blank reply does not establish readiness.
   New phone remote scoring requires both apps to support this protocol; legacy
   Watch-to-phone archive messages still decode.

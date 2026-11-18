@@ -36,6 +36,10 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     private var liveRequestTimeout: DispatchWorkItem?
     private var liveSessionID: UUID?
     private var liveSequence: UInt64 = 0
+    /// Reject unsolicited updates from superseded sessions. A reply to our
+    /// current request can identify the running Watch even after a stale
+    /// background context made it look superseded.
+    private var retiredLiveSessionIDs: Set<UUID> = []
     /// Seconds until the next automatic score refresh, or nil when none is
     /// scheduled. Counts down once a second so the scoreboard can say
     /// "Trying again in 3…". See Core's `LiveRefreshRetry`.
@@ -139,6 +143,11 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         self.scheduleAfter = scheduleAfter
         self.transport = transport
         super.init()
+        transport.onBackgroundTransferQueued = { [weak self] in
+            DispatchQueue.main.async {
+                self?.updatePendingTransfers(WCSession.default.outstandingTransferCounts)
+            }
+        }
     }
 
     // MARK: - Start
@@ -507,10 +516,12 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         guard liveRequestID == id else {
             // Expired or disconnected requests cannot unlock input, but the
             // Watch state they carry is still the Watch's truth: show it rather
-            // than leave an older score on the board. Same Watch session only,
-            // and `applyLiveReply` drops it if a newer state already arrived.
+            // than leave an older score on the board. Same Watch session only
+            // (or before a session is established), and `applyLiveReply` drops
+            // it if a newer state already arrived.
             if case .success(let reply) = result, reply.state != nil,
-               let sessionID = reply.sessionID, sessionID == liveSessionID {
+               let sessionID = reply.sessionID,
+               liveSessionID == nil || sessionID == liveSessionID {
                 applyLiveReply(reply)
             }
             return
@@ -523,8 +534,13 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         switch result {
         case .success(let reply) where reply.state != nil && reply.sessionID != nil:
             liveRefreshFailures = 0
+            if let sessionID = reply.sessionID { retiredLiveSessionIDs.remove(sessionID) }
             applyLiveReply(reply)
-            isLiveStateConfirmed = true
+            // A newer push in this same session can already be on screen.
+            isLiveStateConfirmed = liveSessionID == reply.sessionID
+            if UserDefaults.standard.object(forKey: MatchSyncKey.iPhoneInputEnabled) == nil {
+                UserDefaults.standard.set(liveState?.inputEnabled, forKey: MatchSyncKey.iPhoneInputEnabled)
+            }
             liveCommandMessage = reply.message
             if reply.message != nil { liveCommandFailureCount += 1 }
         case .success(let reply):
@@ -536,10 +552,10 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
             if isRefresh { scheduleLiveRetry() }
         case .failure:
             isLiveStateConfirmed = false
-            liveCommandMessage = LiveScoreboardStatus.commandFailureMessage
             if isRefresh {
                 scheduleLiveRetry()
             } else {
+                liveCommandMessage = LiveScoreboardStatus.commandFailureMessage
                 liveCommandFailureCount += 1
                 requestLiveState()
             }
@@ -599,6 +615,10 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
 
     private func applyLiveReply(_ reply: LiveMatchReply) {
         guard let state = reply.state, let sessionID = reply.sessionID else { return }
+        guard !retiredLiveSessionIDs.contains(sessionID) else { return }
+        if let current = liveSessionID, current != sessionID {
+            retiredLiveSessionIDs.insert(current)
+        }
         if liveSessionID == sessionID && reply.sequence < liveSequence { return }
         liveSessionID = sessionID
         liveSequence = reply.sequence
@@ -606,7 +626,6 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         activeMatchID = state.record?.id
         pendingPoint = state.pendingPoint
         pendingPointOutcome = state.pendingOutcome
-        UserDefaults.standard.set(state.inputEnabled, forKey: MatchSyncKey.iPhoneInputEnabled)
         announcementService?.setMatchLive(state.record != nil)
     }
 
@@ -617,15 +636,28 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
+        let isPaired = session.isPaired
+        let isWatchAppInstalled = session.isWatchAppInstalled
+        let isReachable = session.isReachable
+        let transfers = session.outstandingTransferCounts
+        let stateLabel = Self.activationStateLabel(session.activationState)
+        let receivedContext = session.receivedApplicationContext
         DispatchQueue.main.async {
             self.updatePublishedWatchState(
-                isPaired: session.isPaired,
-                isWatchAppInstalled: session.isWatchAppInstalled,
-                isReachable: session.isReachable,
-                pendingTransferCount: session.outstandingUserInfoTransfers.count
+                isPaired: isPaired,
+                isWatchAppInstalled: isWatchAppInstalled,
+                isReachable: isReachable,
+                transfers: transfers
             )
-            self.finishActivation(state: Self.activationStateLabel(session.activationState))
+            self.finishActivation(state: stateLabel)
             if activationState == .activated {
+                if self.liveSessionID == nil, !receivedContext.isEmpty {
+                    for event in SyncIncomingPayload.decode(receivedContext) {
+                        if case .liveState(let reply) = event, reply.state != nil {
+                            self.applyLiveReply(reply)
+                        }
+                    }
+                }
                 self.flushRecordsAwaitingActivation()
                 self.requestFullHistorySync()
             }
@@ -648,25 +680,53 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     /// snapshot so Connection Details does not keep showing the activation-time
     /// value until the phone app is relaunched.
     func sessionWatchStateDidChange(_ session: WCSession) {
+        let isPaired = session.isPaired
+        let isWatchAppInstalled = session.isWatchAppInstalled
+        let isReachable = session.isReachable
+        let transfers = session.outstandingTransferCounts
         DispatchQueue.main.async {
+            let wasReachable = self.isWatchReachable
             self.updatePublishedWatchState(
-                isPaired: session.isPaired,
-                isWatchAppInstalled: session.isWatchAppInstalled,
-                isReachable: session.isReachable,
-                pendingTransferCount: session.outstandingUserInfoTransfers.count
+                isPaired: isPaired,
+                isWatchAppInstalled: isWatchAppInstalled,
+                isReachable: isReachable,
+                transfers: transfers
             )
+            if !wasReachable && isReachable { self.requestFullHistorySync() }
         }
     }
 
     func sessionReachabilityDidChange(_ session: WCSession) {
+        let isPaired = session.isPaired
+        let isWatchAppInstalled = session.isWatchAppInstalled
+        let isReachable = session.isReachable
+        let transfers = session.outstandingTransferCounts
         DispatchQueue.main.async {
             self.updatePublishedWatchState(
-                isPaired: session.isPaired,
-                isWatchAppInstalled: session.isWatchAppInstalled,
-                isReachable: session.isReachable,
-                pendingTransferCount: session.outstandingUserInfoTransfers.count
+                isPaired: isPaired,
+                isWatchAppInstalled: isWatchAppInstalled,
+                isReachable: isReachable,
+                transfers: transfers
             )
-            if session.isReachable { self.requestFullHistorySync() }
+            if isReachable { self.requestFullHistorySync() }
+        }
+    }
+
+    func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        handle(SyncIncomingPayload.decode(applicationContext))
+    }
+
+    func session(_ session: WCSession, didFinish userInfoTransfer: WCSessionUserInfoTransfer, error: Error?) {
+        let transfers = session.outstandingTransferCounts
+        DispatchQueue.main.async {
+            self.updatePendingTransfers(transfers)
+        }
+    }
+
+    func session(_ session: WCSession, didFinish fileTransfer: WCSessionFileTransfer, error: Error?) {
+        let transfers = session.outstandingTransferCounts
+        DispatchQueue.main.async {
+            self.updatePendingTransfers(transfers)
         }
     }
 
@@ -729,8 +789,19 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                         self.liveCommandFailureCount += 1
                         return
                     }
+                    if let sessionID = reply.sessionID, self.retiredLiveSessionIDs.contains(sessionID) {
+                        return
+                    }
                     if let sessionID = reply.sessionID, let current = self.liveSessionID, sessionID != current {
+                        // A restarted Watch can publish while offline. For the same
+                        // match the durable checkpoint revision can also prove that
+                        // an unseen session is older than the score already visible.
+                        if let shown = self.liveState?.record, let incoming = reply.state?.record,
+                           shown.id == incoming.id, incoming.checkpointRevision < shown.checkpointRevision {
+                            return
+                        }
                         self.invalidateLiveState()
+                        self.applyLiveReply(reply)
                         self.requestLiveState()
                     } else {
                         self.applyLiveReply(reply)
@@ -987,7 +1058,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     private func markSynced() {
         DispatchQueue.main.async {
             self.lastSyncDate = Date()
-            self.pendingTransferCount = WCSession.default.outstandingUserInfoTransfers.count
+            self.updatePendingTransfers(WCSession.default.outstandingTransferCounts)
         }
     }
 
@@ -997,13 +1068,17 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         isPaired: Bool,
         isWatchAppInstalled: Bool,
         isReachable: Bool,
-        pendingTransferCount: Int
+        transfers: (userInfo: Int, files: Int)
     ) {
         self.isPaired = isPaired
         self.isWatchAppInstalled = isWatchAppInstalled
         self.isWatchReachable = isReachable
         if !isReachable || !isPaired || !isWatchAppInstalled { invalidateLiveState() }
-        self.pendingTransferCount = pendingTransferCount
+        self.updatePendingTransfers(transfers)
+    }
+
+    private func updatePendingTransfers(_ transfers: (userInfo: Int, files: Int)) {
+        pendingTransferCount = transfers.userInfo + transfers.files
     }
 
     private static func activationStateLabel(_ state: WCSessionActivationState) -> String {
@@ -1013,5 +1088,11 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
         case .activated:    return "Activated"
         @unknown default:   return "Unknown"
         }
+    }
+}
+
+private extension WCSession {
+    var outstandingTransferCounts: (userInfo: Int, files: Int) {
+        (outstandingUserInfoTransfers.count, outstandingFileTransfers.count)
     }
 }

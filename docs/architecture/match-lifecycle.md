@@ -294,7 +294,9 @@ A resume candidate must be durably saved to live state before navigation/workout
 replacement. Only then is the archived checkpoint removed, so a failed write or
 immediate crash cannot destroy the only saved copy; a copy left behind is removed
 on the next launch. While live, the match is in live state and not in history.
-Park/finalize
+Resume advances the stored checkpoint revision. Park and finalization advance it
+again. If a crash leaves a published park alongside an older live file, recovery
+saves a higher live revision before removing the parked copy. Park/finalize
 must durably append before clearing/replacing the live match; failures remain visible.
 Unreadable/newer live states suspend writes and scoring, preserving original bytes.
 

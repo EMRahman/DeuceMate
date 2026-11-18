@@ -62,6 +62,12 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
     public var resumeEvents: [MatchResumeEvent]
     /// Observed explicit park action; absent while live or completed.
     public var parkedAt: Date?
+    /// Watch-owned order of scoring checkpoints for this match. Zero denotes a legacy record.
+    public var checkpointRevision: UInt64
+
+    public static func nextCheckpointRevision(after revision: UInt64) -> UInt64 {
+        revision == .max ? .max : revision + 1
+    }
 
     public init(
         id: UUID = UUID(),
@@ -95,7 +101,8 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
         tags: MatchTags? = nil,
         matchTypeRevision: MatchTypeRevision? = nil,
         resumeEvents: [MatchResumeEvent] = [],
-        parkedAt: Date? = nil
+        parkedAt: Date? = nil,
+        checkpointRevision: UInt64 = 0
     ) {
         self.id = id
         self.startTime = startTime
@@ -128,6 +135,7 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
         self.tags = tags
         self.matchTypeRevision = matchTypeRevision
         self.resumeEvents = MatchResumeEvent.merged([], resumeEvents)
+        self.checkpointRevision = checkpointRevision
         self.parkedAt = endTime == nil && iWon == nil ? parkedAt : nil
     }
 
@@ -168,6 +176,7 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
         tags                     = try? c.decodeIfPresent(MatchTags.self, forKey: .tags)
         matchTypeRevision        = try? c.decodeIfPresent(MatchTypeRevision.self, forKey: .matchTypeRevision)
         resumeEvents = MatchResumeEvent.merged([], try c.decodeIfPresent([MatchResumeEvent].self, forKey: .resumeEvents) ?? [])
+        checkpointRevision = try c.decodeIfPresent(UInt64.self, forKey: .checkpointRevision) ?? 0
         parkedAt = try c.decodeIfPresent(Date.self, forKey: .parkedAt)
         if !isInProgress { parkedAt = nil }
     }
@@ -221,6 +230,7 @@ public struct MatchRecord: Codable, Identifiable, Equatable, Sendable {
             matchFormat: matchFormat
         )
         var completed = self
+        completed.checkpointRevision = Self.nextCheckpointRevision(after: checkpointRevision)
         completed.endTime = date
         completed.iWon = ScoringEngine.leaderWhenStopped(state).map { $0 == .me }
         completed.parkedAt = nil
