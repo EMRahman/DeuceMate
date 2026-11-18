@@ -67,7 +67,7 @@ struct PastMatchesView: View {
     @State private var selected: MatchRecord?
     @State private var reviewPrompt = ReviewPromptCoordinator()
     @State private var showSettings = false
-    @State private var showScoreboard = false
+    @State private var scoreboard = LiveScoreboardPresentation()
     @State private var showManualEntry = false
     @State private var showICloudGuide = false
     @State private var showRestorePrompt = false
@@ -246,8 +246,8 @@ struct PastMatchesView: View {
                         .environmentObject(store)
                 }
             }
-            .fullScreenCover(isPresented: $showScoreboard) {
-                LiveScoreboardView()
+            .fullScreenCover(isPresented: $scoreboard.isPresented) {
+                LiveScoreboardView { scoreboard.isPresented = false }
                     .environmentObject(store)
                     .environmentObject(syncService)
             }
@@ -663,7 +663,7 @@ struct PastMatchesView: View {
             // Current Score) reach `store.history`.
             try? await Task.sleep(for: .seconds(1))
             guard selected == nil, pendingDelete == nil, scenePhase == .active,
-                  !showSettings, !showScoreboard, !showManualEntry,
+                  !showSettings, !scoreboard.isPresented, !showManualEntry,
                   !showICloudGuide, !showRestorePrompt,
                   reviewPrompt.shouldRequestReviewOnClose(history: store.history, now: closedAt)
             else { return }
@@ -831,7 +831,7 @@ struct PastMatchesView: View {
                     if let storedLive {
                         selected = storedLive
                     } else {
-                        showScoreboard = true
+                        scoreboard.isPresented = true
                     }
                 } label: {
                     let location = storedLive != nil
@@ -841,7 +841,7 @@ struct PastMatchesView: View {
                 }
                 .buttonStyle(.plain)
                 Button {
-                    showScoreboard = true
+                    scoreboard.isPresented = true
                 } label: {
                     Label("Live Scoreboard", systemImage: "tv.fill")
                         .font(.body.weight(.semibold))

@@ -313,8 +313,10 @@ distinction, and uses the native Cancel / Share buttons.
 Manual Entry mirrors the native grouped form: plus/minus steppers, date/time
 pills, footer text outside cards, and a single Cancel in the leading toolbar.
 Manual entry is the Matches toolbar pencil only; native Settings has no such row.
-Rotation mirrors the native app, which is portrait-locked except the live
-scoreboard: the external Rotate iPhone control is disabled on every other screen,
+The native app is portrait-locked except for the live scoreboard. Both entry
+points and the Close button use `LiveScoreboardPresentation.isPresented` so
+UIKit reads the destination orientation before the full-screen transition begins.
+In the demo the external Rotate iPhone control is disabled on every other screen,
 `setOrientation` refuses landscape off `live`, and leaving it returns to portrait.
 On touch devices the real device orientation drives it (landscape enters on the
 live screen, portrait leaves) and the portrait Rotate button is hidden; the frame

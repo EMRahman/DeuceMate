@@ -40,10 +40,18 @@ private struct PhoneMomentumBadgeView: View {
     }
 }
 
+struct LiveScoreboardPresentation {
+    // UIKit reads this mask as the full-screen transition begins. Changing it
+    // in onAppear lets the scoreboard lay out its first frame in portrait.
+    var isPresented = false {
+        didSet { AppDelegate.orientationLock = isPresented ? .landscape : .portrait }
+    }
+}
+
 struct LiveScoreboardView: View {
+    let onClose: () -> Void
     @EnvironmentObject private var store: PhoneStatsStore
     @EnvironmentObject private var syncService: PhoneMatchSyncService
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.appTheme) private var theme
     @AppStorage("iPhoneInputEnabled") private var iPhoneInputEnabled: Bool = false
     /// Mirrors the watch's `statsTrackingEnabled` (synced via WatchConnectivity).
@@ -298,7 +306,7 @@ struct LiveScoreboardView: View {
                             .animation(.default, value: seconds)
                             .accessibilityIdentifier("live-retry-countdown")
                     }
-                    Button("Close") { closeAndRestorePortrait() }
+                    Button("Close", action: onClose)
                         .buttonStyle(.borderedProminent)
                     if !syncService.isLiveStateConfirmed {
                         Button(syncService.liveRetryCountdown == nil ? "Refresh" : "Retry Now") {
@@ -344,11 +352,9 @@ struct LiveScoreboardView: View {
         .onAppear {
             syncService.requestLiveState()
             UIApplication.shared.isIdleTimerDisabled = true
-            lockLandscape()
         }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
-            restorePortrait()
         }
     }
 
@@ -453,29 +459,6 @@ struct LiveScoreboardView: View {
         return dy < 0
     }
 
-    // MARK: - Orientation
-
-    private func closeAndRestorePortrait() {
-        restorePortrait()
-        dismiss()
-    }
-
-    private func foregroundScene() -> UIWindowScene? {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive }
-    }
-
-    private func lockLandscape() {
-        AppDelegate.orientationLock = .landscape
-        foregroundScene()?.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape))
-    }
-
-    private func restorePortrait() {
-        AppDelegate.orientationLock = .portrait
-        foregroundScene()?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
-    }
-
     // MARK: - Chrome
 
     private var liveBadge: some View {
@@ -496,7 +479,7 @@ struct LiveScoreboardView: View {
     }
 
     private var closeButton: some View {
-        Button { closeAndRestorePortrait() } label: {
+        Button(action: onClose) {
             Image(systemName: "xmark.circle.fill")
                 .font(.title2)
                 .foregroundStyle(Color.white.opacity(0.5))

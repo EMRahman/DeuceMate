@@ -9,7 +9,7 @@ import Testing
 import DeuceMateCore
 @testable import DeuceMate
 
-private final class FakePhoneSyncSession: MatchSyncSessing {
+final class FakePhoneSyncSession: MatchSyncSessing {
     var isActivated = false
     var isReachable = true
     private(set) var sentMessages: [[String: Any]] = []
