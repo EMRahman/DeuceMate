@@ -96,7 +96,10 @@ a match with several insights for the second, and pass the same
 `TEST_RUNNER_DEUCEMATE_CAPTURE_SCREENSHOTS` and
 `TEST_RUNNER_DEUCEMATE_SCREENSHOT_OUTPUT_DIR` values. `test_captureTrendsOverview`
 takes the same setup on a freshly seeded simulator, so the persisted filters are
-at their defaults. Override
+at their defaults. `test_captureGamePlanScreens` captures the opponent page and
+Prepare Game Plan (`09-opponent-head-to-head`, `10-game-plan`) on a sanitized
+archive; set `TEST_RUNNER_DEUCEMATE_OPPONENT_NAME` to its most-played singles
+opponent. Override
 `status_bar` to 09:41 first (`xcrun simctl status_bar <udid> override --time 9:41`).
 `test_captureAICoachSheet` needs dark appearance and a physical device if the
 AI app rows must show, because the simulator has none installed. Rebuild the ads
