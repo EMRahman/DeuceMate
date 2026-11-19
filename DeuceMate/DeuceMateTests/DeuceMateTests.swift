@@ -9,7 +9,7 @@ import Testing
 import DeuceMateCore
 @testable import DeuceMate
 
-private final class FakePhoneSyncSession: MatchSyncSessing {
+final class FakePhoneSyncSession: MatchSyncSessing {
     var isActivated = false
     var isReachable = true
     private(set) var sentMessages: [[String: Any]] = []
@@ -181,7 +181,7 @@ struct DeuceMateTests {
             isPaired: true,
             isWatchAppInstalled: false,
             isReachable: false,
-            pendingTransferCount: 0
+            transfers: (userInfo: 0, files: 0)
         )
         #expect(service.isWatchAppInstalled == false)
 
@@ -189,13 +189,13 @@ struct DeuceMateTests {
             isPaired: true,
             isWatchAppInstalled: true,
             isReachable: true,
-            pendingTransferCount: 2
+            transfers: (userInfo: 1, files: 2)
         )
 
         #expect(service.isPaired)
         #expect(service.isWatchAppInstalled)
         #expect(service.isWatchReachable)
-        #expect(service.pendingTransferCount == 2)
+        #expect(service.pendingTransferCount == 3)
     }
 
     @Test func syncCompletionShowsCountsAndFreshWatchRestoreGuidance() {

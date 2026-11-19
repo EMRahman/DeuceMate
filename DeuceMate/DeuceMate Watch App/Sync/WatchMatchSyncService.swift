@@ -44,11 +44,26 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     /// Called on the main thread for every phone tag update, so the live match
     /// (which is not in the history store) can keep the tags on its own records.
     var onMatchTagsReceived: ((_ matchID: UUID, _ tags: MatchTags) -> Void)?
+    /// Invoked on main, after restoration; never constructs another scoring model.
+    var onLiveRequest: ((LiveMatchRequest) -> LiveMatchReply)?
+    var onCurrentLiveRecord: (() -> MatchRecord?)?
+    private let liveSessionID = UUID()
+    private var liveSequence: UInt64 = 0
+    /// Last live snapshot written to `WCSession.applicationContext`, so repeated
+    /// syncs with an unchanged live state do not churn the context channel.
+    private var lastPublishedContextState: LiveMatchState?
 
-    private let transport = MatchSyncTransport(
-        logger: Logger(subsystem: "com.deucemate.sync", category: "Watch")
-    )
+    private let transport: MatchSyncTransport
     private let logger = Logger(subsystem: "com.deucemate.sync", category: "Watch")
+
+    init(
+        transport: MatchSyncTransport = MatchSyncTransport(
+            logger: Logger(subsystem: "com.deucemate.sync", category: "Watch")
+        )
+    ) {
+        self.transport = transport
+        super.init()
+    }
 
     /// Copy of `ScoreViewModel.currentMatchID`. Pushes also run on the
     /// WatchConnectivity queue, which can't read the main-thread view model.
@@ -69,6 +84,7 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
             completedClearsActive: !record.isInProgress,
             announcement: announcement
         )
+        publishLiveState()
         // Only when a match completes does the watch's stored *set* meaningfully
         // change for the phone's badge — in-progress checkpoints fire per point
         // and would spam the manifest. Activation/reachability full-history syncs
@@ -103,6 +119,11 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
         // No queue-on-failure: the phone re-derives state on the next sync,
         // so dropping this when unreachable is intentional.
         transport.sendControl([MatchSyncKey.clearActiveMatch: true], queueOnFailure: false)
+        publishLiveState()
+    }
+
+    func liveStateDidChange() {
+        publishLiveState()
     }
 
     func liveMatchDidChange(_ matchID: UUID?) {
@@ -130,6 +151,10 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     /// the phone would merge it and prune its watch mirror. `loadHistoryOrNil()`
     /// returns `nil` (not `[]`) on an unreadable/corrupt archive — bail then.
     private func pushFullHistory() {
+        // The history push deliberately leaves out the live match, so also
+        // publish the compact live state and send the full live record
+        // reliably when one is active.
+        publishLiveState(includeFullRecord: true)
         guard let history = StatsStore.shared.loadHistoryOrNil() else {
             logger.error("full-history push skipped: watch history unreadable")
             return
@@ -162,6 +187,7 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     /// Push the "iPhone Input" toggle to the phone (bidirectional, last-write wins).
     func pushIPhoneInputEnabled(_ enabled: Bool) {
         transport.sendControl([MatchSyncKey.iPhoneInputEnabled: enabled], queueOnFailure: true)
+        publishLiveState()
     }
 
     /// Push the player display name used in spoken announcements (bidirectional).
@@ -182,6 +208,7 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
     /// message is harmless and we want fast-fail semantics — same posture as
     /// the score commands.
     func sendPendingPointState(_ pending: PendingPointInfo?, outcome: PointOutcome?) {
+        publishLiveState()
         var payload: [String: Any] = [:]
         if let pending {
             do {
@@ -243,13 +270,66 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
         didReceiveMessage message: [String: Any],
         replyHandler: @escaping ([String: Any]) -> Void
     ) {
+        if let data = message[MatchSyncKey.liveRequest] as? Data {
+            DispatchQueue.main.async {
+                let reply: LiveMatchReply
+                var archiveRecord: MatchRecord?
+                if data.count <= matchSyncUserInfoSizeLimit,
+                   let request = try? JSONDecoder().decode(LiveMatchRequest.self, from: data) {
+                    reply = self.onLiveRequest?(request)
+                        ?? LiveMatchReply(state: nil, message: "Watch is starting. Try opening the scoreboard again.")
+                    // An explicit refresh also catches up the full archive. The
+                    // compact reply itself must never erase its point history.
+                    if request.action == nil, reply.state != nil { archiveRecord = self.onCurrentLiveRecord?() }
+                } else {
+                    reply = LiveMatchReply(state: nil, message: "Invalid scoring request.")
+                }
+                let stampedReply = self.stamped(reply)
+                let payload = (try? MatchSyncPayloadBuilder.liveReply(stampedReply)) ?? [:]
+                self.updateContextIfChanged(state: stampedReply.state, payload: payload)
+                replyHandler(payload)
+                if let record = archiveRecord { self.transport.sendRecordReliable(record) }
+            }
+            return
+        }
         handle(message)
         replyHandler([:])
     }
 
+    private func stamped(_ reply: LiveMatchReply) -> LiveMatchReply {
+        liveSequence += 1
+        return LiveMatchReply(state: reply.state, message: reply.message,
+                              sessionID: liveSessionID, sequence: liveSequence)
+    }
+
+    private func updateContextIfChanged(state: LiveMatchState?, payload: [String: Any]) {
+        guard let state, !payload.isEmpty, lastPublishedContextState != state else { return }
+        if transport.updateApplicationContext(payload) {
+            lastPublishedContextState = state
+        }
+    }
+
+    /// Always schedule after the current scoring mutation has finished.
+    /// Updates `applicationContext` as well as sending a live message so points
+    /// scored while Bluetooth is off still sync on reconnect even when the
+    /// Watch screen dims and `isReachable` stays false.
+    private func publishLiveState(includeFullRecord: Bool = false) {
+        DispatchQueue.main.async {
+            guard let reply = self.onLiveRequest?(LiveMatchRequest()),
+                  let payload = try? MatchSyncPayloadBuilder.liveReply(self.stamped(reply)) else { return }
+            self.updateContextIfChanged(state: reply.state, payload: payload)
+            self.transport.sendControl(payload, queueOnFailure: false)
+            if includeFullRecord, let record = self.onCurrentLiveRecord?() {
+                self.transport.sendRecordReliable(record)
+            }
+        }
+    }
+
     // MARK: - Private
 
-    private func handle(_ payload: [String: Any]) {
+    /// Internal so Watch target tests can drive incoming control events
+    /// without constructing a real `WCSession`.
+    func handle(_ payload: [String: Any]) {
         for event in SyncIncomingPayload.decode(payload) {
             switch event {
             case .requestFullHistory, .ping:
@@ -285,7 +365,10 @@ final class WatchMatchSyncService: NSObject, MatchSyncService, WCSessionDelegate
             case .announcementsEnabled(let v):
                 DispatchQueue.main.async { self.onAnnouncementsReceived?(v) }
             case .iPhoneInputEnabled(let v):
-                DispatchQueue.main.async { self.onIPhoneInputReceived?(v) }
+                DispatchQueue.main.async {
+                    self.onIPhoneInputReceived?(v)
+                    self.publishLiveState()
+                }
             case .playerName(let v):
                 DispatchQueue.main.async { self.onPlayerNameReceived?(v) }
             case .announcedName(let v):

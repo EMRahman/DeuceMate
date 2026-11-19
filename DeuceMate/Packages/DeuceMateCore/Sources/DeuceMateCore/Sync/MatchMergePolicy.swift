@@ -14,9 +14,8 @@ public enum MatchMergePolicy {
     /// 3. If incoming is in-progress and existing is completed → keep existing
     ///    (a late-arriving checkpoint must never downgrade a completed match).
     /// 4. If both completed → keep the one with the later `endTime`.
-    /// 5. If both in-progress → always accept the incoming record (the watch
-    ///    is source of truth; always accepting preserves undo checkpoints that
-    ///    have fewer points than the prior state).
+    /// 5. If both are in progress, the higher Watch checkpoint revision wins, including undo.
+    ///    Two legacy records retain arrival ordering.
     ///
     /// **Tags** then merge by their own clock on every path
     /// (`MatchTags.merged`), whichever body won. Without this, case 4's `>=`
@@ -64,12 +63,20 @@ public enum MatchMergePolicy {
             return incomingEnd >= existingEnd ? incoming : existing
         }
 
-        // Case 5: both in-progress — the watch is source of truth for an active
-        // match and sends checkpoints via sendMessage (in-order). Always accept
-        // the incoming record. Using stats.count as a proxy for "newer" broke
-        // undos: an undo checkpoint has fewer stats than the prior one, causing
-        // the phone to wrongly discard the reverted state.
-        return incoming
+        if incoming.checkpointRevision != existing.checkpointRevision {
+            return incoming.checkpointRevision > existing.checkpointRevision ? incoming : existing
+        }
+        guard existing.checkpointRevision > 0 else { return incoming }
+
+        // A refresh can sample more elapsed time or activity at the same score.
+        // Keep the already accepted score, including on a conflicting duplicate.
+        var refreshed = existing.fillingMissingHealthData(from: incoming)
+        refreshed.matchElapsedSeconds = max(existing.matchElapsedSeconds, incoming.matchElapsedSeconds)
+        refreshed.setElapsedSeconds.merge(incoming.setElapsedSeconds, uniquingKeysWith: max)
+        if let steps = incoming.totalSteps { refreshed.totalSteps = max(existing.totalSteps ?? steps, steps) }
+        if let distance = incoming.totalDistanceMeters { refreshed.totalDistanceMeters = max(existing.totalDistanceMeters ?? distance, distance) }
+        if let calories = incoming.totalCaloriesKcal { refreshed.totalCaloriesKcal = max(existing.totalCaloriesKcal ?? calories, calories) }
+        return refreshed
     }
 
     /// Merge `incoming` records into `current` history, applying `resolve` for

@@ -11,6 +11,29 @@
   var cloudBackup = null, cloudState = "unavailable";
   var lastSignature = "", announceSignature = "", syncing = false, renderQueued = false;
   var displayedLiveId = null, lastPhoneSwipe = -Infinity;
+  var receivedLive = null, receivedPhoneState = {}, liveReady = false, liveRequestPending = false;
+  var liveRequestGeneration = 0, liveConnectionAvailable = false;
+  function watchCanConnect() {
+    return connection.paired && connection.reachable && connection.activation === "ready" && !connection.syncFailure;
+  }
+  function receiveLiveState() {
+    receivedLive = watchLiveRecord();
+    receivedPhoneState = copy(api.phoneState());
+  }
+  function refreshLiveState() {
+    if (liveRequestPending) return;
+    liveReady = false;
+    if (!watchCanConnect()) return;
+    var generation = ++liveRequestGeneration;
+    liveRequestPending = true;
+    setTimeout(function () {
+      if (generation !== liveRequestGeneration) return;
+      liveRequestPending = false;
+      if (watchCanConnect()) { receiveLiveState(); liveReady = true; sync(); }
+      queueRender();
+    }, 60);
+    queueRender();
+  }
   var settings = S.settings;
   settings.health = S.health;
   settings.playerNTRP = "3.0–3.5";
@@ -201,16 +224,17 @@
     }
     return r;
   }
-  function liveRecord() {
+  function watchLiveRecord() {
     if (!api.active() || !S.liveId) return null;
     var r = api.snapshot(false); r.id = S.liveId; return withDemoHealth(r);
   }
+  function liveRecord() { return receivedLive ? copy(receivedLive) : null; }
   function persist() {
     if (storageReadFailed || resetting) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify({ archive: archive, watch: S.history, settings: settings,
         connection: connection, watchOnlyIDs: Array.from(watchOnlyIDs), tombstones: Array.from(tombstones),
-        live: liveRecord(), cloudBackup: cloudBackup, cloudState: cloudState }));
+        live: watchLiveRecord(), cloudBackup: cloudBackup, cloudState: cloudState }));
     } catch (_) { persistenceError = true; }
   }
   function sync() {
@@ -221,7 +245,8 @@
       if (watchOnlyIDs.has(r.id)) return;
       upsert(withDemoHealth(r));
     });
-    var live = liveRecord(); if (live) upsert(live);
+    var live = watchLiveRecord(); if (live) upsert(live);
+    if (!liveRequestPending) receiveLiveState();
     syncing = false; connection.lastSync = Date.now(); persist();
   }
   function syncNow() {
@@ -231,7 +256,7 @@
     if (connection.activation !== "ready" || !connection.paired || !connection.reachable || connection.syncFailure) {
       notify("Sync unavailable. The iPhone archive is retained."); return;
     }
-    watchOnlyIDs.clear(); sync(); render(); notify("Synced with the simulated Watch.");
+    watchOnlyIDs.clear(); refreshLiveState(); sync(); render(); notify("Synced with the simulated Watch.");
   }
   function notify(text) {
     clearTimeout(noticeTimer); notice.textContent = text; notice.hidden = false;
@@ -403,7 +428,7 @@
   function navigate(next, rec) {
     if (next !== screen) {clearTimeout(noticeTimer);notice.hidden = true;}
     if (next !== screen && (next === "manual" || screen === "manual")) window.DeuceMatePhoneSettings.resetManual();
-    screen = next; selected = rec ? rec.id : selected; render(); body.scrollTop = 0;
+    screen = next; selected = rec ? rec.id : selected; if (next === "live") refreshLiveState(); render(); body.scrollTop = 0;
   }
   function setSetting(key, value) {
     settings[key] = value;
@@ -628,24 +653,33 @@
     commandFailureTimer = setTimeout(function () { commandFailed = false; queueRender(); }, 5000);
   }
   function send(command, value) {
-    if (!settings.iPhoneInput || !connection.paired || !connection.reachable) return;
-    // Native handleSwipe blocks a scoring swipe locally while a categorization/changeover is open: no send, so no failure.
-    // Undo is not gated here: the category panel's own "Undo point" button must still reach the Watch.
-    if (command === "point" && !api.phoneState().canScore) return;
-    if (connection.activation !== "ready" || api.phoneCommand(command, value, displayedLiveId) === false) reportCommandFailure();
-    queueRender();
+    if (!settings.iPhoneInput || !watchCanConnect() || !liveReady || liveRequestPending) return;
+    if (command === "point" && !receivedPhoneState.canScore) return;
+    var matchID = displayedLiveId, generation = ++liveRequestGeneration;
+    liveRequestPending = true; queueRender();
+    // Simulated request/reply latency. Only the existing Watch engine scores.
+    setTimeout(function () {
+      if (generation !== liveRequestGeneration) return;
+      liveRequestPending = false;
+      if (!watchCanConnect() || api.phoneCommand(command, value, matchID) === false) {
+        reportCommandFailure(); refreshLiveState();
+      } else {
+        receiveLiveState(); liveReady = true; sync();
+      }
+      queueRender();
+    }, 60);
   }
   function liveBoard() {
     var rec = liveRecord(), out = h("div", { class: "phone-live" });
     displayedLiveId = rec ? rec.id : null;
     if (!rec || !connection.paired) return card(heading("Waiting for Apple Watch"), note("Start a match on the watch simulator to see the live scoreboard here."));
-    var state = api.stateRef(), pending = api.phoneState(), cur = E.lastSet(state);
+    var state = rec.resume.state, pending = receivedPhoneState, cur = E.lastSet(state);
     // Mirrors LiveScoreboardView: LIVE badge + close in the chrome, ME/OPP rows, then momentum + format label.
-    var theme = S.THEMES[settings.theme] || S.THEMES.default, complete = api.complete();
+    var theme = S.THEMES[settings.theme] || S.THEMES.default, complete = E.isMatchComplete(state);
     var closeLive = button("", function () { setOrientation(false); navigate("matches"); }, "phone-live-close");
     closeLive.append(icon("closeCircle")); closeLive.setAttribute("aria-label", "Back to Matches");
-    var watchReady = connection.paired && connection.reachable && connection.activation === "ready";
-    var badge = h("span", { class: "phone-live-badge" + (!complete && !watchReady ? " waiting" : "") }, h("i", {}), h("b", {}, complete ? "MATCH COMPLETE" : watchReady ? "LIVE" : "WAITING FOR WATCH"));
+    var watchReady = watchCanConnect() && liveReady && !liveRequestPending;
+    var badge = h("span", { class: "phone-live-badge" + (!complete && !watchReady ? " waiting" : "") }, h("i", {}), h("b", {}, complete ? "MATCH COMPLETE" : !watchCanConnect() ? "WAITING FOR WATCH" : !liveReady ? "SYNCING WITH WATCH" : liveRequestPending ? "SENDING TO WATCH" : "LIVE"));
     out.append(h("div", { class: "phone-live-top" }, badge, closeLive));
     var court = h("div", { class: "phone-scoreboard", tabindex: "0", "aria-label": "Live scoreboard. Swipe up for Me, down for Opponent, left to undo." });
     court.dataset.focusKey = "phone-live-scoreboard";
@@ -702,10 +736,19 @@
     var recent = rec.resume.momentum.slice(-8), slots = h("div", { class: "phone-momentum" + (recent.length ? "" : " empty") });
     for (var slot = 0; slot < 8; slot++) { var who = recent[slot - (8 - recent.length)]; slots.append(h("i", { class: who === "me" ? "me" : who ? "opp" : "" })); }
     var bottom = h("div", { class: "phone-live-bottom" }, recent.length ? slots : "", h("span", { class: "phone-live-format" }, format(rec)));
-    if (settings.iPhoneInput && watchReady) bottom.append(h("span", { class: "phone-live-hint" }, "↑ Me   ↓ Opp   ← Undo"));
+    // Mirrors LiveWatchPromptPanel + LiveScoreboardStatus.promptCaption: the
+    // Watch screen pausing play, answerable here with iPhone Input on.
+    var prompt = !pending.pending && (pending.doublesDecision
+      ? { title: "Who serves next?", detail: "Your team's first service game", tint: "prompt-doubles",
+          answers: [["Me", "doublesServer", "me"], ["Partner", "doublesServer", "partner"]] }
+      : pending.changeover
+        ? { title: pending.changeover.symbol, detail: pending.changeover.reason, tint: "prompt-changeover",
+            answers: [["OK", "acknowledgeChangeover", null]] }
+        : null);
+    if (settings.iPhoneInput && watchReady && !prompt) bottom.append(h("span", { class: "phone-live-hint" }, "↑ Me   ↓ Opp   ← Undo"));
     out.append(court, bottom);
     if (pending.pending && settings.iPhoneInput) {
-      var commandsAvailable = connection.paired && connection.reachable && connection.activation === "ready";
+      var commandsAvailable = watchReady;
       var p = pending.pending, panel = card(heading((p.winner === "me" ? "Won" : "Lost") + " — " + (p.server === "me" ? "Your" : "Their") + " serve" + (p.isSecondServe ? " · 2nd" : "")));
       if (pending.outcome) {
         var back = button("‹ Back", function () { send("back"); }); back.disabled = pending.busy || !commandsAvailable;
@@ -718,18 +761,33 @@
       });
       var undo = button("Undo point", function () { send("undo"); }); undo.disabled = pending.busy || !commandsAvailable; panel.append(undo); out.append(panel);
     }
+    if (prompt) {
+      var promptCard = card(heading(prompt.title), note(prompt.detail));
+      promptCard.classList.add("phone-live-prompt", prompt.tint);
+      promptCard.setAttribute("role", "group"); promptCard.setAttribute("aria-label", "Apple Watch: " + prompt.title);
+      if (settings.iPhoneInput) {
+        var answers = h("div", { class: "phone-live-prompt-answers" });
+        prompt.answers.forEach(function (a) {
+          var b = button(a[0], function () { send(a[1], a[2]); }); b.disabled = !watchReady;
+          b.dataset.focusKey = "phone-live-prompt-" + a[1] + (a[2] ? "-" + a[2] : ""); answers.append(b);
+        });
+        promptCard.append(answers, note("Answer here or on the Watch. Both screens clear together."));
+      } else promptCard.append(note("Waiting for the Watch. Turn on iPhone Input to answer here."));
+      out.append(promptCard);
+    }
     var extras = h("div", { class: "phone-live-extras" });
     if (settings.iPhoneInput) {
       var controls = h("div", { class: "phone-live-controls" });
       [["↑ Me", "point", "me", pending.canScore], ["↓ Opp", "point", "opponent", pending.canScore], ["← Undo", "undo", null, pending.canUndo], ["2nd serve", "secondServe", null, pending.canSecondServe]].forEach(function (a) {
-        var b = button(a[0], function () { send(a[1], a[2]); }); b.disabled = !a[3] || !connection.paired || !connection.reachable || connection.activation !== "ready"; controls.append(b);
+        var b = button(a[0], function () { send(a[1], a[2]); }); b.disabled = !a[3] || !watchReady; controls.append(b);
         b.dataset.focusKey = "phone-live-command-" + a[1] + (a[2] ? "-" + a[2] : "");
       }); extras.append(controls, note("Double-tap the scoreboard for second serve."));
     } else extras.append(note("Watching live. Enable iPhone Input in Settings to score here."), button("Enable iPhone Input", function () { setSetting("iPhoneInput", true); render(); }));
     var status = h("div", { class: "phone-live-status", role: "status" });
-    if (pending.changeover || pending.doublesDecision) status.append(note("Continue on the Watch to dismiss its open screen before scoring."));
     if (settings.announce) status.append(note("🔊 Score announcements enabled"));
     if (commandFailed) status.append(note(COMMAND_FAILURE));
+    else if (watchCanConnect() && !liveReady) status.append(note("Getting the current score from the Watch."));
+    else if (liveRequestPending) status.append(note("Waiting for the Watch to confirm."));
     else if (connection.activation === "connecting") status.append(note("Connecting to Apple Watch… Commands are unavailable until connected."));
     else if (connection.activation === "unavailable" || !connection.paired) status.append(note("Apple Watch unavailable. Commands are unavailable; the saved iPhone match is retained."));
     else if (!connection.reachable) status.append(note(settings.iPhoneInput ? "Last score shown. Open DeuceMate on the Watch to score here." : "Last score shown. Updates resume when the Watch reconnects."));
@@ -744,6 +802,12 @@
     if (navigator.vibrate) { try { navigator.vibrate(30); } catch (error) { /* unsupported */ } }
   }
   function render() {
+    var available = watchCanConnect();
+    if (available !== liveConnectionAvailable) {
+      liveConnectionAvailable = available;
+      if (available) refreshLiveState();
+      else { liveRequestGeneration++; liveReady = false; liveRequestPending = false; }
+    }
     var focusedKey = body.contains(document.activeElement) ? document.activeElement.dataset.focusKey : null;
     var theme = S.THEMES[settings.theme] || S.THEMES.default;
     frame.style.setProperty("--phone-me", "rgb(" + theme.me + ")"); frame.style.setProperty("--phone-opp", "rgb(" + theme.opp + ")");
@@ -799,7 +863,8 @@
   function viewSignature() {
     return JSON.stringify([S.liveId, api.stateRef(), api.phoneState(), S.history, settings,
       connection.paired, connection.reachable, connection.activation, connection.syncing,
-      connection.syncFailure, connection.archiveReadFailure, Array.from(watchOnlyIDs), commandFailed]);
+      connection.syncFailure, connection.archiveReadFailure, Array.from(watchOnlyIDs), commandFailed,
+      liveReady, liveRequestPending, receivedLive, receivedPhoneState]);
   }
   function queueRender() {
     if (renderQueued) return;
@@ -825,7 +890,7 @@
     records: function () { return copy(archive); }, openSelectedActions: function () { var r = archive.find(function (x) { return x.id === selected; }); if (r) recordActions(r); }, liveRecord: liveRecord, settings: settings,
     navigate: navigate, render: render, showSheet: showSheet, closeSheet: closeSheet, confirm: confirm, notify: notify,
     updateRecord: updateRecord, applyWatchMatchType: applyWatchMatchType, setSetting: setSetting, addRecord: addRecord, replaceRecords: replaceRecords, sync: sync, syncNow: syncNow, download: download,
-    connection: connection };
+    connection: connection, refreshLiveState: refreshLiveState };
 
   // Guide boot runs before this deferred script, so starter history exists.
   try {

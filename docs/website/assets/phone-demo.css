@@ -430,6 +430,13 @@ html.phone-landscape-lock { overflow:hidden; }
 .phone-live-extras:not(:focus-within) { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); }
 .phone-live-extras:focus-within { padding:10px; }
 .phone-frame[data-screen=live] .phone-live > .phone-card { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); z-index:4; width:min(92%,420px); max-height:calc(100% - 60px); overflow:auto; margin:0; }
+/* Watch prompt card (LiveWatchPromptPanel): changeover OK or doubles "Who serves next?". */
+.phone-live-prompt { text-align:center; }
+.phone-live-prompt .phone-live-prompt-answers { display:flex; gap:10px; margin:8px 0 4px; }
+.phone-live-prompt .phone-live-prompt-answers .phone-button { flex:1; margin:0; color:#fff; font-weight:600; }
+.phone-live-prompt.prompt-changeover .phone-live-prompt-answers .phone-button { background:#25593d; }
+.phone-live-prompt.prompt-doubles .phone-live-prompt-answers .phone-button { background:#0a5bd8; }
+.phone-live-prompt .phone-live-prompt-answers .phone-button:disabled { opacity:.45; }
 .phone-live-name .phone-server i { flex:none; }
 .phone-frame:not(.phone-landscape)[data-screen=live] .phone-live-bottom { bottom:34px; }
 .phone-frame:not(.phone-landscape)[data-screen=live] .phone-scoreboard { padding-bottom:calc(var(--live-bottom,28px) + 24px); }

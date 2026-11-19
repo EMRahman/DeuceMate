@@ -14,18 +14,24 @@ Release. The baseline is the released `v1.3.1` tag. The `1.3.2 (16)` and
 Connect only requires the version to be higher than the released 1.3.1.
 
 This is a minor release, not a patch, because it adds new user-facing features:
-Prepare Game Plan (#182) with playing-style notes (#189), the FAST4 format and the
-Short Sets format that replaces Quick 4 Games in match setup (#186), and play
+Prepare Game Plan (#182) with playing-style notes (#189), the FAST4 and Short Sets
+formats (#186; Quick 4 Games stays in match setup), and play
 sessions with finish-date ordering (#175). It also includes the live scoreboard's
 unreachable-Watch state (#174, with refused-swipe feedback from #195), the App
 Store rating request plus Send Feedback / Rate DeuceMate rows (#179), and the
 workout saving/recovery fixes (#185, #187). Since the first draft it has gained
-the condensed playing-style card (#190, #191), a Game Plan that opens ready and
-pre-filled with names and notes included by default (#193), save-only-on-Save for
-player details and notes (#194, #195), the recorder's name in reports and AI
-prompts with AI Coach names on by default (#197), and a separate name for
-announcements (#198). #192 raised the watchOS minimum for the Watch **test**
-targets only; the shipping Watch app stays on watchOS 9.0.
+the condensed playing-style card (#190, #191), a Game Plan that opens ready and pre-filled with names and playing-style notes
+included by default (#193; #200 restores private match notes to off-by-default
+with exact-text review and remembers the names/playing-style-notes choices),
+save-only-on-Save for player details and notes (#194, #195; #207 raises
+playing-style notes to 4,000 characters with a live counter), the recorder's
+name in reports and AI prompts with AI Coach names on by default (#197), a
+separate name for announcements (#198), version/build in the Watch Guide
+(#202), live reconnect recovery with Watch-confirmed iPhone input (#203),
+Watch changeover / "Who serves next?" prompts shown and answerable on iPhone
+(#204), and Trends' Serve & Return split by deuce and ad side (#206). #192
+raised the watchOS minimum for the Watch **test** targets only; the shipping
+Watch app stays on watchOS 9.0.
 
 This candidate has not yet been archived, uploaded or tested on physical devices.
 Test targets keep their non-shipping version/build values. Build 18 is the next
@@ -37,21 +43,30 @@ Connect before upload, as Xcode has raised build numbers during previous uploads
   upload), and check that the existing archive is intact.
 - [ ] Complete the [manual testing gate](#next-release--manual-testing-gate) and
   the [workout save checks](#workout-save-investigation--9-november-2026) below.
-- [ ] Exercise Prepare Game Plan from an opponent's page (#182, #193), including
-  the pre-filled upcoming match, an unfinished previous match, match selection,
-  turning names and notes off or leaving individual notes out, and sharing.
+- [ ] Exercise Prepare Game Plan from an opponent's page (#182, #193, #200),
+  including the pre-filled upcoming match, an unfinished previous match, match
+  selection, turning names/playing-style notes off (and confirming the choice is
+  remembered), switching private match notes on with exact-text review (and
+  confirming they reset to off on the next visit), and sharing.
 - [ ] Set "Your name" and "Name for announcements" on iPhone and check both sync
   to the Watch. Check the name appears in a shared report and AI prompt only with
   Include player names on, and that announcements say the short name (#197, #198).
 - [ ] Edit a player and a match note, then leave without saving. Confirm nothing
   is overwritten and emptying notes asks before deleting them (#194, #195).
 - [ ] **Blocker:** update `docs/website/privacy.html` for 1.4.0. It still says AI
-  prompts leave names out by default and that notes are never included unless
-  switched on, and doesn't mention Game Plan or "Your name" (#193, #197). Then
+  prompts leave names out by default, and doesn't mention Game Plan, remembered
+  name/style-note choices, or "Your name" (#193, #197, #200). Then
   re-confirm the App Privacy label, as noted in `APP_STORE_METADATA.md`.
 - [ ] Play a Short Sets and a FAST4 match on the Watch, including a tiebreak and a
   deciding point at deuce, and check the "Receiver chooses side" banner (#186).
-  Open an existing Quick 4 Games match and check its score still reads correctly.
+  Start a Quick 4 Games match from setup and play it to 2–2 and the sudden-death
+  point; open an existing Quick 4 Games match and check its score still reads correctly.
+- [ ] On paired devices, trigger a Watch changeover and a doubles "Who serves
+  next?" prompt; confirm the prompt card appears on the iPhone live scoreboard
+  (read-only with iPhone Input off) and answering it with iPhone Input on
+  clears both screens (#204).
+- [ ] In Trends > Serve & Return, switch between Both Sides, Deuce and Ad and
+  confirm the filter persists across launches (#206).
 - [ ] Finalise the draft
   [What's New and App Review notes](APP_STORE_METADATA.md#version-140---game-plan-fast4-and-play-sessions)
   against what passed. Remove any line whose feature is deferred.
@@ -75,6 +90,41 @@ HealthKit failure.
 - [ ] Repeat with Workouts permission denied, then re-enabled for a fresh session.
   Failed recording/saving must show a Watch warning; scoring remains available.
 - [ ] Record devices/OS/build and whether any failure is absent from Health too.
+
+## Live reconnect finding — 16 November 2026
+
+During #175 testing the owner disabled Bluetooth, incremented the score and
+restored Bluetooth. The iPhone reported the Watch reachable but did not catch up.
+The tested build/devices and recovery after a subsequent point are not recorded.
+At the time, reconnect synced stored history, excluding the live match; this
+explains a recovery gap without establishing a regression introduced by #175.
+
+Track recovery as [technical debt #28](../features/TECHNICAL_DEBT.md#28--recover-current-live-state-and-confirm-courtside-phone-input),
+with archive revision ordering tracked separately in #2. The [Live Watch sync proposal](../features/LIVE_WATCH_SYNC_PROPOSAL.md)
+keeps the Watch authoritative for courtside iPhone scoring. The working branch now
+implements the agreed smaller request/reply flow, one request at a time and timeout
+refresh without replay. Durable receipts, heartbeat/age UI and archive revisions
+remain deferred. Paired-device validation is still required; reachability alone
+must not count as successful recovery.
+
+- [ ] Record build, devices/OS, score before/after and whether another connected
+  point recovers. Disconnect, score on Watch, reconnect, then **do not score
+  again**. Capture whether/when the iPhone catches up.
+- [ ] On the updated build, repeat with undo, pending categorisation and
+  park/finish during the gap. The phone must recover current state automatically;
+  input stays disabled until that state is confirmed. Delay an older history
+  push and verify it cannot roll the recovered score back.
+
+**Branch verification, 16 November 2026:** 1,033 Core tests passed. Both apps'
+production Swift modules and the focused iPhone/Watch live-sync test files
+successfully type-check against their simulator SDKs. This is not a full Xcode
+build or an executed app test run: Xcode package-cache writes and CoreSimulator
+services were blocked by the workspace sandbox. Browser syntax, model/coaching
+and generated-export drift checks passed; Chromium could not launch because the
+sandbox denied its Mach-port registration. Interactive browser and physical-pair
+checks above remain pending. Existing command tests were intentionally updated
+for current-state confirmation and one request in flight; no tests were skipped
+or assertions weakened to hide a failure.
 
 ## Next release — manual testing gate
 
@@ -136,11 +186,14 @@ Centre toggles can leave the Watch connected.
   [pending physical-Watch checklist](../features/MATCH_RESUME_MARKERS_PLAN.md#pending-physical-watch-checklist-required-before-release)
   on the same build.
 
-**Not failures:** after a reconnect, the iPhone can stay on the last score it
-received until the next point. A rare drop to an older score that corrects itself
-on the next point is the known late-push limit
-([TECHNICAL_DEBT #2](../features/TECHNICAL_DEBT.md)); note what you did just before
-it. A score that stays wrong after the next point is a failure.
+**Original #175 acceptance limits:** that PR allowed the iPhone to retain the
+last score until another point after reconnect, and a late history push to
+temporarily revert it ([technical debt #2](../features/TECHNICAL_DEBT.md)). These
+describe the pre-fix behavior; the working-branch #28 implementation now fetches
+current live state. Older history can still revert the archive (#2), while the
+compact live board follows its separate Watch state. Record either symptom during testing. A score that stays wrong after the
+next connected point also requires investigation beyond the missing reconnect
+snapshot. The #28 acceptance requires recovery without another point.
 
 ### #174 — live scoreboard when the Watch can't be reached
 

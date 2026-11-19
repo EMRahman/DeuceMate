@@ -178,22 +178,29 @@ public enum PerformanceTrends {
     /// samples but no coverage still returns a series with empty `points`
     /// and a `nil` `pooled`, so the caller can distinguish "no matches in
     /// this window" from "matches exist but none carry this metric's data."
-    public static func series(for metric: TrendMetric, in samples: [MatchTrendSample]) -> TrendSeries? {
+    ///
+    /// `courtSide` restricts the series to points served from that side
+    /// (`nil` = the whole match). Only `TrendMetric.supportsCourtSide`
+    /// metrics can be split; any other metric yields an empty series for a
+    /// non-nil side rather than silently showing whole-match data.
+    public static func series(for metric: TrendMetric, in samples: [MatchTrendSample],
+                              courtSide: CourtSide? = nil) -> TrendSeries? {
         guard !samples.isEmpty else { return nil }
 
         let points: [TrendPoint] = samples.enumerated().compactMap { index, sample in
-            guard let ratio = metric.ratio(in: sample) else { return nil }
+            guard let ratio = metric.ratio(in: sample, courtSide: courtSide) else { return nil }
             return TrendPoint(id: sample.matchID, index: index, date: sample.date, ratio: ratio)
         }
 
-        let pooled = pooledRatio(for: metric, in: samples)
-        let delta = delta(for: metric, in: samples)
+        let pooled = pooledRatio(for: metric, in: samples, courtSide: courtSide)
+        let delta = delta(for: metric, in: samples, courtSide: courtSide)
 
         return TrendSeries(metric: metric, points: points, pooled: pooled, delta: delta)
     }
 
-    public static func series(for group: TrendMetricGroup, in samples: [MatchTrendSample]) -> [TrendSeries] {
-        TrendMetric.metrics(in: group).compactMap { series(for: $0, in: samples) }
+    public static func series(for group: TrendMetricGroup, in samples: [MatchTrendSample],
+                              courtSide: CourtSide? = nil) -> [TrendSeries] {
+        TrendMetric.metrics(in: group).compactMap { series(for: $0, in: samples, courtSide: courtSide) }
     }
 
     /// The four rows on the archive screen (§1.1).
@@ -206,10 +213,11 @@ public enum PerformanceTrends {
     /// Σnumerator / Σdenominator over every sample, via `rawPair` — never via
     /// `ratio`, which would discard the numerator of any zero-denominator
     /// sample (§3.3, §4.2's `10W/0UE` example).
-    private static func pooledRatio(for metric: TrendMetric, in samples: [MatchTrendSample]) -> TrendMetric.Ratio? {
+    private static func pooledRatio(for metric: TrendMetric, in samples: [MatchTrendSample],
+                                    courtSide: CourtSide?) -> TrendMetric.Ratio? {
         var num = 0, den = 0
         for sample in samples {
-            guard let pair = metric.rawPair(in: sample) else { continue }
+            guard let pair = metric.rawPair(in: sample, courtSide: courtSide) else { continue }
             num += pair.numerator
             den += pair.denominator
         }
@@ -222,13 +230,14 @@ public enum PerformanceTrends {
     /// recent half. `nil` when either half has fewer than
     /// `minimumBlockMatches` samples, or when either half's pooled ratio has
     /// a zero denominator.
-    private static func delta(for metric: TrendMetric, in samples: [MatchTrendSample]) -> TrendDelta? {
+    private static func delta(for metric: TrendMetric, in samples: [MatchTrendSample],
+                              courtSide: CourtSide?) -> TrendDelta? {
         let mid = samples.count / 2
         let priorSlice = Array(samples[..<mid])
         let recentSlice = Array(samples[mid...])
         guard priorSlice.count >= minimumBlockMatches, recentSlice.count >= minimumBlockMatches else { return nil }
-        guard let prior = pooledRatio(for: metric, in: priorSlice),
-              let recent = pooledRatio(for: metric, in: recentSlice) else { return nil }
+        guard let prior = pooledRatio(for: metric, in: priorSlice, courtSide: courtSide),
+              let recent = pooledRatio(for: metric, in: recentSlice, courtSide: courtSide) else { return nil }
 
         let rawChange = recent.value - prior.value
         let scaledChange = metric.unit == .percent ? rawChange * 100 : rawChange

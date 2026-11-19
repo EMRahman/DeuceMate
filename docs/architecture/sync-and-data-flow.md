@@ -33,6 +33,7 @@ flowchart LR
     W -- "watch manifest — the list of match IDs<br/>the watch currently holds (drives the<br/>'on watch / on phone' badges)" --> P
     W -- "live match cleared<br/>(completed or parked)" --> P
     W -- "announcement text for the<br/>phone to speak aloud" --> P
+    W -- "compact current live state + application replies<br/>(display only, never an archive record)" --> P
     W -- "pending-point mirror — 'a point is<br/>waiting to be categorised' (so the<br/>phone can show the same sheet)" --> P
 ```
 
@@ -53,15 +54,49 @@ matches and a fresh Watch has none, it directs the user to open a match and choo
 are refreshed through `sessionWatchStateDidChange`, rather than remaining frozen
 at activation.
 
+**Live recovery (16 November 2026):** activation, reconnect, phone foreground,
+opening the live board and Sync Now request the existing Watch model's current
+state through `liveRequest`/`liveReply`. A compact display-only snapshot carries
+score, pending category/phase, permission and blockers, or explicit idle/error.
+It never enters archive merging. An explicit refresh or Watch history/reconnect
+push also sends the full live record reliably (file transfer when large), without
+putting it in Watch history. Normal Watch mutations publish compact state via
+both `sendMessage` (when reachable) and `updateApplicationContext` (so the latest
+score still delivers over Bluetooth even when the Watch screen is dimmed and
+`isReachable` stays false). Completed matches (`completedClearsActive == true`)
+also queue reliably if `sendMessage` fails or the peer is unreachable. In-memory
+session/sequence ordering protects the live display. A response to the phone's
+current request establishes the running Watch session even if a delayed context
+previously displaced it. Cached permission updates the displayed state. Only
+explicit setting changes or initial seeding from a confirmed Watch set the
+phone preference. Connection Details counts queued dictionaries and files. Once this protocol is established,
+legacy active/clear and pending messages cannot replace its live identity/context.
+
+The phone waits for a current-session application response before enabling input,
+and allows one request in flight. While awaiting confirmation in the foreground,
+a changed compact match record triggers a read-only refresh if the Watch is
+reachable and no request or retry is pending. This works even after automatic
+retries run out. Duplicate pushes leave the retry budget alone. The phone keeps
+showing the pending point until the Watch reports its next state.
+Watch validation, scoring and saving happen
+before the response. Timeout/error makes one read-only refresh and never replays
+scoring intent. Categorisation requests include match ID and pending context/phase.
+Unreadable state is an error, never idle. New phone scoring requires an updated
+Watch; an older Watch's empty transport reply cannot establish readiness.
+[Live Watch sync](../features/LIVE_WATCH_SYNC_PROPOSAL.md) records the accepted
+scope, deferred command receipts and heartbeat, and physical-device checks.
+
 ## 2. Requests, commands & explicit archive actions — phone → watch
 
 ```mermaid
 flowchart RL
     P["iPhone<br/>spectator / archive"]
     W["Apple Watch<br/>validates everything"]
+    P -- "request current live state<br/>(also on reconnect/foreground/live-board entry)" --> W
     P -- "request full history<br/>(on launch or 'Sync Now')" --> W
     P -- "score command: point to me /<br/>point to opponent / undo<br/>(only when 'iPhone Input' is on)" --> W
     P -- "categorisation command: pick outcome /<br/>pick ending shot / cancel / undo point<br/>(only when 'iPhone Input' is on)" --> W
+    P -- "prompt answer: changeover OK /<br/>doubles 'Who serves next?'<br/>(only when 'iPhone Input' is on)" --> W
     P -- "delete this match from the watch<br/>(phone keeps its archive copy)" --> W
     P -- "manually entered or resumed match<br/>(handed to the watch to own)" --> W
     P -- "End at Current Score<br/>(completed archive checkpoint)" --> W
@@ -131,19 +166,50 @@ sequenceDiagram
     participant W as Watch app
     S->>P: Swipe on live scoreboard<br/>(requires "iPhone Input" on)
     P->>W: Score command + ID of the match<br/>the phone is displaying
-    W->>W: Validate: input allowed?<br/>same match as my live match?
+    P->>P: Wait for response; block another action
+    W->>W: Validate: input allowed?<br/>same match and pending context?
     alt valid
         W->>W: Apply the point exactly as if<br/>swiped on the watch
-        W->>P: Fresh checkpoint (the new truth)
-        P->>P: Scoreboard updates
+        W->>W: Save Watch state
+        W->>P: Application reply with current compact state
+        P->>P: Scoreboard updates; release command wait
     else stale or not allowed
-        W->>W: Ignore command
+        W->>P: Current state + rejection reason
     end
 ```
 
-Note the shape of the second flow: the phone never updates its own scoreboard
-from the swipe — it waits for the watch's checkpoint to come back. The watch's
-record is always the truth.
+**Answering a Watch prompt from the phone** (changeover, "Who serves next?"):
+
+```mermaid
+sequenceDiagram
+    participant S as Scorer (coach / umpire)
+    participant P as iPhone app
+    participant W as Watch app
+    participant R as Player (wearing Watch)
+    W->>W: Game ends → changeover screen opens
+    W->>P: Compact state + prompt<br/>"🔁 🎾 Even games – balls change ends"
+    P->>S: Same card, with OK
+    W->>R: Same card, with OK
+    S->>P: Tap OK
+    P->>W: acknowledgeChangeover + the prompt it showed<br/>(with that appearance's occurrence ID)
+    alt prompt still open on the Watch
+        W->>W: acknowledgeChangeover() — the Watch button's own method
+        W->>W: Save; overlay closes
+        W->>P: Reply: no prompt, scoring open
+        P->>P: Card closes; swipes resume
+    else already answered / a different appearance
+        W->>P: Current state + "The Watch screen changed"
+    end
+```
+
+Either device may answer first; the other one's card closes when the saved
+state arrives. The Watch also keeps sending the old "Continue on the Watch
+before scoring." text so an older iPhone still explains the pause.
+
+The phone never changes the actual score from a swipe: it waits for Watch state.
+The Watch is always the live authority. Gesture previews/haptics only acknowledge
+recognition. A lost response triggers a state refresh without replaying the action;
+the helper checks the returned score before continuing.
 
 **An archived in-progress match is ended from the phone** (the explicit exception):
 
@@ -174,9 +240,9 @@ When a match record arrives on the phone, `MatchMergePolicy` decides what to kee
 3. **Incoming is in-progress, stored copy is finished** → keep the finished one
    (a late-arriving live checkpoint can never "un-finish" a match).
 4. **Both finished** → keep the one that ended later.
-5. **Both in-progress** → always accept the incoming one — the watch is the live
-   source of truth (this also makes undo work: the reverted state replaces the
-   old one even though it has fewer points).
+5. **Both in-progress** → use the greater Watch `checkpointRevision`. An undo gets a
+   new revision. At equal positive revisions retain the accepted score and merge activity
+   samples. When both records predate revisions (zero), accept the incoming body.
 
 **Match tags and post-completion match-type conversions merge separately.** Those five rules pick the record *body*. The
 optional `tags` (opponent / partner / competition type, `MatchTags`) and optional `matchTypeRevision` (completed-match `Doubles ↔ Singles` conversions, `MatchTypeRevision`) then merge by
@@ -333,7 +399,5 @@ iCloud backup and manual transfer; activity measurements retain their existing
 sidecar/consent boundaries. Live state owns a resumed match, so the Watch removes
 the stored copy once the resume is durable and returns it at the next park/finalize.
 Full-history pushes leave out any in-progress copy of the live match that a failed
-write left behind, because the phone accepts any in-progress record. Pushes are
-queued and checkpoints are sent directly, so one queued before a resume can still
-arrive after newer checkpoints; `docs/features/TECHNICAL_DEBT.md` #2 tracks the
-revision that would let the phone reject it.
+write left behind. This also protects older phones. Updated phones can reject a
+parked checkpoint delivered after the higher revision from a resume or subsequent point.

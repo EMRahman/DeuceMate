@@ -102,8 +102,8 @@ DeuceMate tracks the details that are easy to forget:
 • Court changes, prompts, and break points
 • Singles and doubles matches
 
-Choose from seven formats: best of three with a super tiebreak or full final set,
-Short Sets, FAST4, single or perpetual super tiebreaks, or continuous points.
+Choose from eight formats: best of three with a super tiebreak or full final set,
+Short Sets, FAST4, Quick 4 Games, single or perpetual super tiebreaks, or continuous points.
 
 FOLLOW LIVE ON IPHONE
 
@@ -198,7 +198,7 @@ Plan for your next match against a familiar opponent, and play FAST4.
 NEW: GAME PLAN
 • On an opponent's page on iPhone, tap Prepare Game Plan. It collects what your recorded singles matches against them show, ready to copy or share with the AI app you choose. DeuceMate prepares it; it never sends it.
 • It's ready as soon as it opens, set up from your last match against them. If that match is unfinished, the plan is for finishing it.
-• Names and notes are included unless you turn them off, and you can leave out individual notes or matches.
+• Names and playing-style notes are included unless you turn them off, and you can choose to add private match notes or leave out individual matches.
 
 NEW: YOUR NAME IN REPORTS
 • Add your name in Settings and shared reports and AI prompts say who recorded the match.
@@ -209,12 +209,13 @@ NEW: PLAYING STYLE NOTES
 
 NEW: MATCH FORMATS
 • FAST4: first to 4 games, a tiebreak at 3–3 and a deciding point at deuce.
-• Short Sets replaces Quick 4 Games: first to 4 games, a tiebreak at 4–4 and a deciding point at deuce. Matches you've already played keep their original scoring.
+• Short Sets: first to 4 games, a tiebreak at 4–4 and a deciding point at deuce.
 • At a deciding point, Apple Watch reminds you that the receiver chooses the side.
 
 IMPROVED
 • When you resume a match, its reports show each session you played, and matches are listed by when they finished.
-• The iPhone live scoreboard shows when it can't reach your Apple Watch, and pauses scoring from iPhone until it reconnects so a point is never counted by mistake. A swipe while it's waiting tells you why it didn't count.
+• The iPhone live scoreboard shows when it can't reach your Apple Watch, pauses scoring from iPhone until it reconnects, and catches up automatically when your Watch is back in range. Watch changeover and "Who serves next?" prompts also appear on iPhone and can be answered there when iPhone Input is on.
+• Split Trends' Serve & Return charts by deuce and ad side.
 • Player details and notes save only when you tap Save, so a stray edit can't overwrite them.
 • Workouts save to Health more reliably, including after the Watch app closes unexpectedly, and Apple Watch tells you if saving fails.
 • Send feedback or rate DeuceMate from Settings on iPhone.
@@ -222,7 +223,7 @@ IMPROVED
 No account, subscription, ads, or tracking — just your tennis, on your devices.
 ```
 
-**Character count:** 1,970 characters (including line breaks; under 4,000)
+**Character count:** 2,038 characters (including line breaks; under 4,000)
 
 > **Scope.** The shipping targets are configured as version **1.4.0 (18)**. The
 > comparison baseline is the released `v1.3.1` tag; 1.3.2 and 1.3.3 were
@@ -577,12 +578,13 @@ When completing the App Privacy questionnaire in App Store Connect:
   from 1.4.0, the recorder's own "Your name" when set) are in shared
   text/interactive-HTML reports and AI Coach prompts by default (visible
   "Include player names" switch; AI prompts defaulted to off before 1.4.0).
-  **1.4.0 to re-confirm:** Prepare Game Plan starts with names, private match
-  notes and playing-style notes all included (#193), which differs from the
-  report/AI Coach rule below. `docs/website/privacy.html` is out of date on
-  main: it still says AI prompts leave names out by default and that notes are
-  never included unless switched on, and it doesn't mention Game Plan or "Your
-  name". Update it before submission. Otherwise the private note enters a
+  **1.4.0 to re-confirm:** Prepare Game Plan starts with player names and
+  playing-style notes included (and remembers those choices), while private
+  match notes stay off on every visit and require switching on and reviewing
+  the exact text first (#200). `docs/website/privacy.html` is out of date on
+  main: it still says AI prompts leave names out by default, and it doesn't
+  mention Game Plan, remembered name/style-note choices, or "Your name". Update
+  it before submission. Otherwise the private note enters a
   report, AI prompt or manual archive only through a separate per-export
   "Include private note(s)" opt-in (off every time) that shows the exact text,
   states it may hold personal or health information, and warns when names are
@@ -644,21 +646,26 @@ WHAT CHANGED IN 1.4.0
 - iPhone: an opponent's page has Prepare Game Plan. It builds a text summary of
   the singles matches recorded against that player, which the user can copy,
   share or open in an AI app of their choice. The app sends nothing itself.
-  Names and notes are included by default and can be switched off, or left out
-  note by note, before anything is shared.
+  Player names and playing-style notes are included by default (and remembered
+  if switched off); private match notes stay off by default and require an
+  explicit opt-in with exact-text review before anything is shared.
 - iPhone: players can have free-text playing-style notes. Player details and
   match notes now save only when the user taps Save.
 - Both: an optional "Your name" setting names the recorder in shared reports and
   AI prompts (only when player names are included), and an optional "Name for
   announcements" is spoken in score announcements. The AI Coach prompt now
   includes player names by default, like shared reports; it can be switched off.
-- Apple Watch: two match formats, FAST4 and Short Sets (which replaces Quick 4
-  Games in match setup). A banner at a deciding point reminds players that the
+- Apple Watch: two new match formats, FAST4 and Short Sets. Quick 4 Games stays
+  available in match setup. A banner at a deciding point reminds players that the
   receiver chooses the side.
 - Both: resumed matches record each play session, and matches are listed by
   finish date.
-- iPhone: the live scoreboard shows when the Watch can't be reached and pauses
-  iPhone input until it reconnects.
+- Both: the iPhone live scoreboard shows when the Watch can't be reached, pauses
+  iPhone input until it reconnects, and catches up automatically on reconnect.
+  Watch changeover and "Who serves next?" prompts now appear on iPhone and can
+  be answered from iPhone when iPhone Input is enabled.
+- iPhone: Trends' Serve & Return charts can be filtered by Both Sides, Deuce or
+  Ad.
 - iPhone: the system rating request (StoreKit requestReview) may appear after
   the user closes the report for a recently completed match. Settings > About
   adds Send Feedback (email) and Rate DeuceMate (App Store review page).

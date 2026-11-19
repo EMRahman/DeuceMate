@@ -89,7 +89,7 @@ public struct TaggedPlayer: Codable, Equatable, Hashable, Sendable, Identifiable
     /// never reaches an export that only opted into the structured profile.
     public var playingNotes: String?
 
-    public static let maxPlayingNotesLength = 280
+    public static let maxPlayingNotesLength = 4_000
 
     public var handedness: PlayerHandedness? {
         get { handednessRaw.flatMap(PlayerHandedness.init(rawValue:)) }

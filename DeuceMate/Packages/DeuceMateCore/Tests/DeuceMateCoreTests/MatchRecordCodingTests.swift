@@ -29,12 +29,14 @@ final class MatchRecordCodingTests: XCTestCase {
             matchType: .singles,
             matchFormat: .standard,
             matchElapsedSeconds: 3600,
-            setElapsedSeconds: [0: 1200, 1: 2400]
+            setElapsedSeconds: [0: 1200, 1: 2400],
+            checkpointRevision: 7
         )
 
         let data = try JSONEncoder().encode(record)
         let decoded = try JSONDecoder().decode(MatchRecord.self, from: data)
 
+        XCTAssertEqual(decoded.checkpointRevision, 7)
         XCTAssertEqual(decoded.id, record.id)
         XCTAssertEqual(decoded.iWon, true)
         XCTAssertEqual(decoded.setScores.count, 2)
@@ -283,6 +285,7 @@ final class MatchRecordCodingTests: XCTestCase {
 
         let decoded = try JSONDecoder().decode(MatchRecord.self, from: legacyJSON)
 
+        XCTAssertEqual(decoded.checkpointRevision, 0)
         XCTAssertEqual(decoded.setScores.count, 1)
         XCTAssertNil(decoded.endTime)
         XCTAssertNil(decoded.iWon)

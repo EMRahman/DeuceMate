@@ -138,6 +138,20 @@ the live scoreboard and — if enabled and on screen — speaks the score.
 `WatchMatchSyncService` → `PhoneMatchSyncService`, `LiveScoreboardView`,
 `LiveAnnouncementService`.*
 
+Phone live scoring is an online remote path through this same Watch model.
+The phone first requests current live state, permits one request at a time, and
+waits for a saved Watch response. Reconnect/foreground refreshes the live match
+independently of stored history; a lost response triggers a read without replaying
+the scoring action. Compact snapshots never become archive records. Pending
+categorisation phase (`AppState.pendingOutcome`, optional for older files) survives
+save/relaunch: shared selection and Back methods save changes from either device.
+A changeover acknowledgement saves and publishes the cleared phone
+input blocker. The changeover and doubles "Who serves next?" screens are sent to
+the phone as a prompt it can answer; the Watch applies the answer with its own
+button's method, so both screens clear together. A pending category remains actionable while a doubles server
+decision waits; only new scoring waits for both to finish. Persistence errors
+still block every phone action. See [sync-and-data-flow.md](sync-and-data-flow.md).
+
 **3 · Point categorisation (optional, watch or phone).** With outcome tracking on,
 a sheet asks how the point ended (winner, forced error, unforced error, double
 fault) and on which shot. The same pending point is mirrored to the phone so a
@@ -149,7 +163,9 @@ rate and step count — the raw material for all statistics and coaching.
 **Throughout: workout & changeovers.** The workout session collects heart rate,
 calories, steps and distance; at changeovers the watch prompts the players and can
 use the compass to confirm they're heading to the correct end.
-*Files: `WorkoutManager`, `ScoreViewModel`, `ContentView`.*
+With iPhone Input on, whoever holds the phone can tap OK (or choose the next
+doubles server) on the phone instead of the player doing it on the wrist.
+*Files: `WorkoutManager`, `ScoreViewModel`, `ContentView`, `LiveWatchPromptPanel`.*
 
 **4 · Stop or finish (watch).** A final point completes the configured format.
 The live **End Match** action instead closes the workout and parks the current
@@ -278,7 +294,9 @@ A resume candidate must be durably saved to live state before navigation/workout
 replacement. Only then is the archived checkpoint removed, so a failed write or
 immediate crash cannot destroy the only saved copy; a copy left behind is removed
 on the next launch. While live, the match is in live state and not in history.
-Park/finalize
+Resume advances the stored checkpoint revision. Park and finalization advance it
+again. If a crash leaves a published park alongside an older live file, recovery
+saves a higher live revision before removing the parked copy. Park/finalize
 must durably append before clearing/replacing the live match; failures remain visible.
 Unreadable/newer live states suspend writes and scoring, preserving original bytes.
 

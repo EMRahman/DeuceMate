@@ -2348,6 +2348,17 @@
     }
     else if (command === "undo") { if (pendingStat) undoPoint(); else undo(true); }
     else if (command === "secondServe") toggleSecondServe(true);
+    // Mirrors the native prompt answers (LiveWatchPrompt): the same functions
+    // as the Watch overlay's own buttons, so both screens clear together.
+    // "Who serves next?" is answered before a changeover, as on the Watch.
+    else if (command === "acknowledgeChangeover") {
+      if (!changeoverInfo || doublesDecisionPending() || pendingStat) return false;
+      ackChangeover();
+    } else if (command === "doublesServer") {
+      if (!doublesDecisionPending() || pendingStat || (value !== "me" && value !== "partner")) return false;
+      resolveDoublesTeamServer(state, value);
+      render();
+    }
     else if (command === "back" && pendingStat && sheetStep === 2) sheetBack();
     else if (command === "outcome" && pendingStat && sheetStep === 1 && !sheetBusy) {
       var T = window.DeuceMateTracking;

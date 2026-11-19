@@ -38,10 +38,18 @@ public protocol MatchSyncSessing: AnyObject {
     func queueUserInfo(_ userInfo: [String: Any])
     /// Background file transfer for payloads too large for `queueUserInfo`.
     func transferFile(at url: URL, metadata: [String: Any]?)
+    /// Coalesced latest-state dictionary delivery (survives unreachable peers).
+    func updateApplicationContext(_ context: [String: Any]) throws
+}
+
+public extension MatchSyncSessing {
+    func updateApplicationContext(_ context: [String: Any]) throws {}
 }
 
 public final class MatchSyncTransport {
     private let session: MatchSyncSessing
+    /// Called on the enqueueing thread, including an asynchronous live-send failure.
+    public var onBackgroundTransferQueued: (() -> Void)?
     private let logger: Logger
 
     /// Designated initialiser. Takes any `MatchSyncSessing` so tests can inject a
@@ -89,10 +97,33 @@ public final class MatchSyncTransport {
             )
             session.sendMessage(msg, replyHandler: nil) { [weak self] error in
                 self?.logger.error("sendRecord failed: \(error.localizedDescription, privacy: .public)")
-                if let ann = announcement { self?.queueAnnouncement(ann) }
+                if completedClearsActive {
+                    self?.queueCompletedRecord(data: data, payload: msg, announcement: announcement)
+                } else if let ann = announcement {
+                    self?.queueAnnouncement(ann)
+                }
             }
+        } else if completedClearsActive {
+            let msg = MatchSyncPayloadBuilder.checkpointPayload(
+                recordData: data,
+                recordID: record.id,
+                completedClearsActive: true,
+                announcement: announcement
+            )
+            queueCompletedRecord(data: data, payload: msg, announcement: announcement)
         } else if let ann = announcement {
             queueAnnouncement(ann)
+        }
+    }
+
+    private func queueCompletedRecord(data: Data, payload: [String: Any], announcement: String?) {
+        if data.count > matchSyncUserInfoSizeLimit {
+            transferAsFile(data, key: MatchSyncKey.singleMatch)
+            var control: [String: Any] = [MatchSyncKey.clearActiveMatch: true]
+            if let announcement { control[MatchSyncKey.liveAnnouncement] = announcement }
+            queueUserInfo(control)
+        } else {
+            queueUserInfo(payload)
         }
     }
 
@@ -124,7 +155,7 @@ public final class MatchSyncTransport {
         if data.count > matchSyncUserInfoSizeLimit {
             transferAsFile(data, key: MatchSyncKey.singleMatch)
         } else {
-            session.queueUserInfo(payload)
+            queueUserInfo(payload)
         }
     }
 
@@ -142,11 +173,35 @@ public final class MatchSyncTransport {
         if data.count > matchSyncUserInfoSizeLimit {
             transferAsFile(data, key: MatchSyncKey.matchHistory)
         } else {
-            session.queueUserInfo(MatchSyncPayloadBuilder.historyPayload(data: data))
+            queueUserInfo(MatchSyncPayloadBuilder.historyPayload(data: data))
         }
     }
 
     // MARK: - Control messages
+
+    /// Application reply, with no queue or retry. The caller owns its timeout.
+    public func requestLiveState(_ request: LiveMatchRequest,
+                                 completion: @escaping (Result<LiveMatchReply, Error>) -> Void) {
+        guard isActivated, isReachable else {
+            completion(.failure(NSError(domain: "LiveMatch", code: 1,
+                                        userInfo: [NSLocalizedDescriptionKey: "Watch is unavailable."])))
+            return
+        }
+        do {
+            let payload = try MatchSyncPayloadBuilder.liveRequest(request)
+            session.sendMessage(payload, replyHandler: { payload in
+                do {
+                    guard let data = payload[MatchSyncKey.liveReply] as? Data,
+                          data.count <= matchSyncUserInfoSizeLimit else {
+                        throw NSError(domain: "LiveMatch", code: 2)
+                    }
+                    let reply = try JSONDecoder().decode(LiveMatchReply.self, from: data)
+                    guard reply.version == 1 else { throw NSError(domain: "LiveMatch", code: 3) }
+                    completion(.success(reply))
+                } catch { completion(.failure(error)) }
+            }, errorHandler: { completion(.failure($0)) })
+        } catch { completion(.failure(error)) }
+    }
 
     /// Sends a control payload (e.g. `clearActiveMatch`, `requestFullHistory`).
     /// `queueOnFailure` controls whether unreachable / errored sends fall back
@@ -170,15 +225,30 @@ public final class MatchSyncTransport {
             session.sendMessage(payload, replyHandler: nil) { [weak self] error in
                 self?.logger.error("sendControl failed: \(error.localizedDescription, privacy: .public)")
                 if queueOnFailure {
-                    self?.session.queueUserInfo(payload)
+                    self?.queueUserInfo(payload)
                 } else {
                     onUndelivered?()
                 }
             }
         } else if queueOnFailure {
-            session.queueUserInfo(payload)
+            queueUserInfo(payload)
         } else {
             onUndelivered?()
+        }
+    }
+
+    /// Updates the WatchConnectivity application context with the latest
+    /// coalesced state dictionary. Returns true when an activated session
+    /// accepted the context.
+    @discardableResult
+    public func updateApplicationContext(_ context: [String: Any]) -> Bool {
+        guard isActivated else { return false }
+        do {
+            try session.updateApplicationContext(context)
+            return true
+        } catch {
+            logger.error("updateApplicationContext failed: \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 
@@ -220,8 +290,13 @@ public final class MatchSyncTransport {
 
     // MARK: - Private
 
+    private func queueUserInfo(_ payload: [String: Any]) {
+        session.queueUserInfo(payload)
+        onBackgroundTransferQueued?()
+    }
+
     private func queueAnnouncement(_ text: String) {
-        session.queueUserInfo([MatchSyncKey.liveAnnouncement: text])
+        queueUserInfo([MatchSyncKey.liveAnnouncement: text])
     }
 
     /// Data-at-rest class for the staged copy of a file transfer. The staged file
@@ -244,6 +319,7 @@ public final class MatchSyncTransport {
         do {
             try data.write(to: tmpURL, options: Self.stagedFileWriteOptions)
             session.transferFile(at: tmpURL, metadata: ["key": key])
+            onBackgroundTransferQueued?()
             // WCSession copies the file internally; clean up our temp copy.
             DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
                 try? FileManager.default.removeItem(at: tmpURL)

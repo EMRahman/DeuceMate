@@ -39,6 +39,7 @@ struct LivePointCategoryPanel: View {
     let pending: PendingPointInfo
     let outcome: PointOutcome?
     let detailedShotTrackingEnabled: Bool
+    let connectionHint: String?
     let onSelectOutcome: (PointOutcome) -> Void
     let onCommitEndingShot: (EndingShot) -> Void
     let onCancelOutcome: () -> Void
@@ -50,6 +51,11 @@ struct LivePointCategoryPanel: View {
                 endingShotStep(outcome: outcome)
             } else {
                 outcomeStep
+            }
+            if let connectionHint {
+                Text(connectionHint)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
         }
         .padding(.horizontal, 18)

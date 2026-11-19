@@ -40,10 +40,18 @@ private struct PhoneMomentumBadgeView: View {
     }
 }
 
+struct LiveScoreboardPresentation {
+    // UIKit reads this mask as the full-screen transition begins. Changing it
+    // in onAppear lets the scoreboard lay out its first frame in portrait.
+    var isPresented = false {
+        didSet { AppDelegate.orientationLock = isPresented ? .landscape : .portrait }
+    }
+}
+
 struct LiveScoreboardView: View {
+    let onClose: () -> Void
     @EnvironmentObject private var store: PhoneStatsStore
     @EnvironmentObject private var syncService: PhoneMatchSyncService
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.appTheme) private var theme
     @AppStorage("iPhoneInputEnabled") private var iPhoneInputEnabled: Bool = false
     /// Mirrors the watch's `statsTrackingEnabled` (synced via WatchConnectivity).
@@ -67,13 +75,26 @@ struct LiveScoreboardView: View {
 
     private var status: LiveScoreboardStatus {
         LiveScoreboardStatus(isWatchReachable: syncService.isWatchReachable,
-                             isInputEnabled: iPhoneInputEnabled)
+                             isInputEnabled: iPhoneInputEnabled && (syncService.liveState?.inputEnabled ?? false),
+                             isStateConfirmed: syncService.isLiveStateConfirmed,
+                             isRequestInFlight: syncService.isLiveRequestInFlight,
+                             blockingReason: syncService.liveState?.blockingReason,
+                             prompt: syncService.liveState?.prompt,
+                             retryCountdown: syncService.liveRetryCountdown)
     }
 
     /// A send failure outranks the steady status because it is about what the
     /// user just did.
     private var connectionMessage: String? {
-        shownCommandFailure != nil ? LiveScoreboardStatus.commandFailureMessage : status.detail
+        if shownCommandFailure != nil {
+            return syncService.liveCommandMessage ?? LiveScoreboardStatus.commandFailureMessage
+        }
+        return categoryConnectionHint == nil ? status.detail : nil
+    }
+
+    private var categoryConnectionHint: String? {
+        guard iPhoneInputEnabled, syncService.pendingPoint != nil, !status.isWatchReachable else { return nil }
+        return "Open DeuceMate on the Watch to enable iPhone scoring."
     }
 
     private var meColor:     Color { theme.colors.me }
@@ -95,6 +116,7 @@ struct LiveScoreboardView: View {
     private func chromeBot(for record: MatchRecord) -> CGFloat { showMomentum(for: record) ? 52 : 28 }
 
     private var record: MatchRecord? {
+        if let state = syncService.liveState { return state.record }
         guard let id = syncService.activeMatchID else { return nil }
         return store.history.first { $0.id == id }
     }
@@ -156,6 +178,13 @@ struct LiveScoreboardView: View {
                 VStack {
                     HStack(alignment: .top) {
                         liveBadge
+                        if !syncService.isLiveStateConfirmed && !syncService.isLiveRequestInFlight {
+                            Button(syncService.liveRetryCountdown == nil ? "Refresh" : "Retry Now") {
+                                syncService.requestLiveState()
+                            }
+                                .font(.caption)
+                                .accessibilityIdentifier("live-refresh")
+                        }
                         if let connectionMessage {
                             Text(connectionMessage)
                                 .font(.caption)
@@ -209,6 +238,7 @@ struct LiveScoreboardView: View {
                                 pending: pending,
                                 outcome: syncService.pendingPointOutcome,
                                 detailedShotTrackingEnabled: statsTrackingEnabled,
+                                connectionHint: categoryConnectionHint,
                                 onSelectOutcome: { outcome in
                                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                     syncService.sendSelectOutcome(outcome)
@@ -238,16 +268,52 @@ struct LiveScoreboardView: View {
                 .animation(.easeOut(duration: 0.22), value: syncService.pendingPoint)
                 .animation(.easeInOut(duration: 0.18), value: syncService.pendingPointOutcome)
 
+                // The Watch screen pausing play (changeover, "Who serves
+                // next?"). Shown to spectators too, so everyone courtside sees
+                // why scoring has paused; only iPhone Input gets buttons. The
+                // Watch never sends a prompt while a category is pending.
+                Group {
+                    if let prompt = syncService.liveState?.prompt, status.showsPrompt,
+                       syncService.pendingPoint == nil {
+                        VStack {
+                            Spacer()
+                            LiveWatchPromptPanel(prompt: prompt, status: status) { answer in
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                syncService.sendWatchPromptAnswer(answer)
+                            }
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 36)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
+                }
+                .animation(.easeOut(duration: 0.22), value: syncService.liveState?.prompt)
+
             } else {
                 VStack(spacing: 12) {
-                    Image(systemName: "checkmark.circle.fill")
+                    Image(systemName: syncService.isLiveStateConfirmed ? "checkmark.circle.fill" : "applewatch")
                         .font(.largeTitle)
-                        .foregroundStyle(.green)
-                    Text("Match ended")
+                        .foregroundStyle(syncService.isLiveStateConfirmed ? Color.green : Color.orange)
+                    Text(syncService.isLiveStateConfirmed ? "Match ended" : "Waiting for Watch")
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.white)
-                    Button("Close") { closeAndRestorePortrait() }
+                    if !syncService.isLiveStateConfirmed, let seconds = syncService.liveRetryCountdown {
+                        Text(LiveScoreboardStatus.retryMessage(seconds: seconds))
+                            .font(.callout)
+                            .foregroundStyle(Color.orange)
+                            .multilineTextAlignment(.center)
+                            .contentTransition(.numericText(countsDown: true))
+                            .animation(.default, value: seconds)
+                            .accessibilityIdentifier("live-retry-countdown")
+                    }
+                    Button("Close", action: onClose)
                         .buttonStyle(.borderedProminent)
+                    if !syncService.isLiveStateConfirmed {
+                        Button(syncService.liveRetryCountdown == nil ? "Refresh" : "Retry Now") {
+                            syncService.requestLiveState()
+                        }
+                            .disabled(syncService.isLiveRequestInFlight)
+                    }
                 }
             }
         }
@@ -268,6 +334,11 @@ struct LiveScoreboardView: View {
             UIAccessibility.post(notification: .announcement,
                                  argument: LiveScoreboardStatus.commandFailureMessage)
         }
+        .onChange(of: syncService.liveState?.prompt) { _, prompt in
+            guard let prompt, status.showsPrompt else { return }
+            UIAccessibility.post(notification: .announcement,
+                                 argument: [prompt.title, prompt.detail].compactMap { $0 }.joined(separator: ". "))
+        }
         .onChange(of: syncService.isWatchReachable) { _, _ in
             UIAccessibility.post(notification: .announcement,
                                  argument: status.detail ?? "Watch connected")
@@ -279,12 +350,11 @@ struct LiveScoreboardView: View {
             shownCommandFailure = nil
         }
         .onAppear {
+            syncService.requestLiveState()
             UIApplication.shared.isIdleTimerDisabled = true
-            lockLandscape()
         }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
-            restorePortrait()
         }
     }
 
@@ -389,33 +459,10 @@ struct LiveScoreboardView: View {
         return dy < 0
     }
 
-    // MARK: - Orientation
-
-    private func closeAndRestorePortrait() {
-        restorePortrait()
-        dismiss()
-    }
-
-    private func foregroundScene() -> UIWindowScene? {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive }
-    }
-
-    private func lockLandscape() {
-        AppDelegate.orientationLock = .landscape
-        foregroundScene()?.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape))
-    }
-
-    private func restorePortrait() {
-        AppDelegate.orientationLock = .portrait
-        foregroundScene()?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
-    }
-
     // MARK: - Chrome
 
     private var liveBadge: some View {
-        let tint: Color = status.isWatchReachable ? .red : .orange
+        let tint: Color = status.isWatchReachable && status.isStateConfirmed ? .red : .orange
         return HStack(spacing: 6) {
             Circle()
                 .fill(tint)
@@ -432,7 +479,7 @@ struct LiveScoreboardView: View {
     }
 
     private var closeButton: some View {
-        Button { closeAndRestorePortrait() } label: {
+        Button(action: onClose) {
             Image(systemName: "xmark.circle.fill")
                 .font(.title2)
                 .foregroundStyle(Color.white.opacity(0.5))
