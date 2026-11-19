@@ -781,7 +781,7 @@
   S.setMode = function (mode) {
     if (S.urlPresetActive && S.fast4Scene && mode !== "guide") {
       S.settings.track = mode === "stats";
-      S.loadFast4Scene(S.fast4Scene);
+      S.loadPresetScene(S.fast4Scene, S.presetFormat);
       return;
     }
     api.clear();
@@ -799,42 +799,81 @@
     b.addEventListener("click", function () { S.setMode(b.getAttribute("data-mode")); });
   });
 
-  /* ---- URL query preset & FAST4 rules simulator (try.html) ----------------- */
-  var FAST4_TIEBREAK_ENTRY = [
-    "me", "me", "me", "me",
-    "opponent", "opponent", "opponent", "opponent",
-    "me", "me", "me", "me",
-    "opponent", "opponent", "opponent", "opponent",
-    "me", "me", "me", "me",
-    "opponent", "opponent", "opponent", "opponent"
-  ];
-  var FAST4_SCENES = {
-    start: {
-      label: "0–0 Start",
-      points: [],
-      caption: "FAST4: First to 4 games wins. No-Ad deciding point at 40–40; 5-point tiebreak at 3–3. Swipe the watch or tap ▲ Win / ▼ Lose below."
+  /* ---- URL query preset & FAST4 / Short Sets simulator (try.html) ---------- */
+  function alternatingHolds(count) {
+    var out = [];
+    for (var g = 0; g < count; g++) {
+      var side = g % 2 === 0 ? "me" : "opponent";
+      out.push(side, side, side, side);
+    }
+    return out;
+  }
+  var FAST4_TIEBREAK_ENTRY = alternatingHolds(6);
+  var SHORTSET_TIEBREAK_ENTRY = alternatingHolds(8);
+  var PRESET_FORMATS = {
+    fast4: {
+      title: "FAST4 Simulator",
+      scenes: {
+        start: {
+          label: "0–0 Start",
+          points: [],
+          caption: "FAST4: First to 4 games wins. No-Ad deciding point at 40–40; 5-point tiebreak at 3–3. Swipe the watch or tap ▲ Win / ▼ Lose below."
+        },
+        deuce: {
+          label: "40–40 No-Ad",
+          points: ["me", "opponent", "me", "opponent", "me", "opponent"],
+          caption: "40–40 (No-Ad deuce): Sudden-death point — the watch shows '🎾 Receiver chooses side' and the next point wins the game."
+        },
+        tiebreak: {
+          label: "3–3 Tiebreak",
+          points: FAST4_TIEBREAK_ENTRY,
+          caption: "3–3 Tiebreak: First to 5 points (sudden death at 4–4). Server rotates after point 1, then every 2 points."
+        },
+        decider: {
+          label: "4–4 Decider",
+          points: FAST4_TIEBREAK_ENTRY.concat(["me", "opponent", "me", "opponent", "me", "opponent", "me", "opponent"]),
+          caption: "4–4 in the 3–3 Tiebreak: Sudden-death match point — the very next point wins the FAST4 set 4–3."
+        }
+      }
     },
-    deuce: {
-      label: "40–40 No-Ad",
-      points: ["me", "opponent", "me", "opponent", "me", "opponent"],
-      caption: "40–40 (No-Ad deuce): Sudden-death point — the watch shows '🎾 Receiver chooses side' and the next point wins the game."
-    },
-    tiebreak: {
-      label: "3–3 Tiebreak",
-      points: FAST4_TIEBREAK_ENTRY,
-      caption: "3–3 Tiebreak: First to 5 points (sudden death at 4–4). Server rotates after point 1, then every 2 points."
-    },
-    decider: {
-      label: "4–4 Decider",
-      points: FAST4_TIEBREAK_ENTRY.concat(["me", "opponent", "me", "opponent", "me", "opponent", "me", "opponent"]),
-      caption: "4–4 in the 3–3 Tiebreak: Sudden-death match point — the very next point wins the FAST4 set 4–3."
+    shortSets: {
+      title: "Short Sets Simulator",
+      scenes: {
+        start: {
+          label: "0–0 Start",
+          points: [],
+          caption: "Short Sets: First to 4 games by 2 (up to 5–3). No-Ad deciding point at 40–40; 7-point tiebreak at 4–4. Swipe the watch or tap ▲ Win / ▼ Lose below."
+        },
+        deuce: {
+          label: "40–40 No-Ad",
+          points: ["me", "opponent", "me", "opponent", "me", "opponent"],
+          caption: "40–40 (No-Ad deuce): Sudden-death point — the watch shows '🎾 Receiver chooses side' and the next point wins the game."
+        },
+        tiebreak: {
+          label: "4–4 Tiebreak",
+          points: SHORTSET_TIEBREAK_ENTRY,
+          caption: "4–4 Tiebreak: At 4–4 (4–3 plays on to 5–3 or 4–4), play a 7-point tiebreak (win by 2). Server rotates after point 1, then every 2 points."
+        },
+        decider: {
+          label: "6–5 Match Pt",
+          points: SHORTSET_TIEBREAK_ENTRY.concat(["me", "opponent", "me", "opponent", "me", "opponent", "me", "opponent", "me", "opponent", "me"]),
+          caption: "6–5 in the 4–4 Tiebreak: First to 7 points (win by 2) — win this point for the set (5–4), or lose for 6–6 and play on by 2."
+        }
+      }
     }
   };
-  var FAST4_SCENE_ORDER = ["start", "deuce", "tiebreak", "decider"];
-  var fast4Bar = null, fast4TypeBtn = null, fast4CaptionEl = null, fast4SceneBtns = [];
+  var PRESET_SCENE_ORDER = ["start", "deuce", "tiebreak", "decider"];
+  var fast4Bar = null, fast4TitleEl = null, fast4TypeBtn = null, fast4ScenesEl = null, fast4CaptionEl = null, fast4SceneBtns = [];
+
+  function activePreset() {
+    return PRESET_FORMATS[S.presetFormat] || PRESET_FORMATS.fast4;
+  }
 
   function syncFast4Bar() {
     if (!fast4Bar) return;
+    var preset = activePreset();
+    if (fast4TitleEl) fast4TitleEl.textContent = preset.title;
+    if (fast4ScenesEl) fast4ScenesEl.setAttribute("aria-label", preset.title + " scenarios");
     if (fast4TypeBtn) {
       var isDoubles = S.setup.type === "doubles";
       fast4TypeBtn.textContent = isDoubles ? "Doubles ⇄" : "Singles ⇄";
@@ -842,11 +881,13 @@
       fast4TypeBtn.setAttribute("aria-label", "Switch to " + (isDoubles ? "Singles" : "Doubles"));
     }
     fast4SceneBtns.forEach(function (btn) {
-      var active = btn.getAttribute("data-fast4-scene") === S.fast4Scene;
+      var key = btn.getAttribute("data-fast4-scene");
+      var active = key === S.fast4Scene;
+      btn.textContent = preset.scenes[key].label;
       btn.setAttribute("aria-pressed", active ? "true" : "false");
     });
-    if (fast4CaptionEl && FAST4_SCENES[S.fast4Scene]) {
-      fast4CaptionEl.textContent = FAST4_SCENES[S.fast4Scene].caption;
+    if (fast4CaptionEl && preset.scenes[S.fast4Scene]) {
+      fast4CaptionEl.textContent = preset.scenes[S.fast4Scene].caption;
     }
   }
 
@@ -854,45 +895,51 @@
     if (fast4Bar) return;
     var captionEl = root.parentNode ? root.parentNode.querySelector("[data-mode-caption]") : null;
     if (!captionEl || !captionEl.parentNode) return;
+    var preset = activePreset();
+    fast4TitleEl = h("span", { text: preset.title });
     fast4TypeBtn = h("button", {
       type: "button",
       class: "fast4-type-btn",
       "data-fast4-type": "",
       onclick: function () {
         S.setup.type = S.setup.type === "doubles" ? "singles" : "doubles";
-        S.loadFast4Scene(S.fast4Scene || "start");
+        S.loadPresetScene(S.fast4Scene || "start", S.presetFormat);
       }
     });
-    fast4SceneBtns = FAST4_SCENE_ORDER.map(function (key) {
+    fast4SceneBtns = PRESET_SCENE_ORDER.map(function (key) {
       return h("button", {
         type: "button",
         class: "fast4-scene-btn",
         "data-fast4-scene": key,
-        onclick: function () { S.loadFast4Scene(key); }
-      }, FAST4_SCENES[key].label);
+        onclick: function () { S.loadPresetScene(key, S.presetFormat); }
+      }, preset.scenes[key].label);
     });
+    fast4ScenesEl = h("div", { class: "fast4-scenes", role: "group", "aria-label": preset.title + " scenarios" }, fast4SceneBtns);
     fast4CaptionEl = h("p", { class: "fast4-caption", "data-fast4-caption": "" });
     fast4Bar = h("div", { class: "fast4-bar" },
-      h("div", { class: "fast4-head" }, h("span", { text: "FAST4 Simulator" }), fast4TypeBtn),
-      h("div", { class: "fast4-scenes", role: "group", "aria-label": "FAST4 scenarios" }, fast4SceneBtns),
+      h("div", { class: "fast4-head" }, fast4TitleEl, fast4TypeBtn),
+      fast4ScenesEl,
       fast4CaptionEl
     );
     captionEl.parentNode.insertBefore(fast4Bar, captionEl.nextSibling);
     syncFast4Bar();
   }
 
-  S.loadFast4Scene = function (sceneKey) {
-    if (!FAST4_SCENES[sceneKey]) sceneKey = "start";
+  S.loadPresetScene = function (sceneKey, formatId) {
+    var fmt = PRESET_FORMATS[formatId] ? formatId : (PRESET_FORMATS[S.presetFormat] ? S.presetFormat : "fast4");
+    var preset = PRESET_FORMATS[fmt];
+    if (!preset.scenes[sceneKey]) sceneKey = "start";
+    S.presetFormat = fmt;
     S.fast4Scene = sceneKey;
-    S.setup.format = "fast4";
+    S.setup.format = fmt;
     api.loadScenario({
       matchType: S.setup.type,
-      format: "fast4",
+      format: fmt,
       server: "me",
       doublesServer: "me",
       tracking: S.settings.track,
       compass: S.settings.compass
-    }, FAST4_SCENES[sceneKey].points);
+    }, preset.scenes[sceneKey].points);
     S.liveId = uid();
     S.headingLocked = false;
     S.matchPhase = "play";
@@ -901,19 +948,27 @@
     render();
     syncFast4Bar();
   };
+  S.loadFast4Scene = function (sceneKey, formatId) {
+    S.loadPresetScene(sceneKey, formatId || "fast4");
+  };
 
   function applyUrlPreset() {
     if ((root.closest && root.closest("#try")) || !window.location.search) return false;
     var params = new URLSearchParams(window.location.search);
     var isFast4Short = params.has("fast4");
+    var isShortSetShort = params.has("shortset") || params.has("shortsets");
     var rawFmt = params.get("format");
     var type = params.get("type");
     var scene = params.get("scene");
     var fmt = null;
     if (isFast4Short) {
       fmt = "fast4";
+    } else if (isShortSetShort) {
+      fmt = "shortSets";
     } else if (rawFmt) {
-      if (rawFmt.toLowerCase() === "fast4") fmt = "fast4";
+      var low = rawFmt.toLowerCase();
+      if (low === "fast4") fmt = "fast4";
+      else if (low === "shortset" || low === "shortsets") fmt = "shortSets";
       else {
         for (var i = 0; i < FORMATS.length; i++) {
           if (FORMATS[i].id === rawFmt) { fmt = FORMATS[i].id; break; }
@@ -921,15 +976,17 @@
       }
     }
     if (type === "doubles" || type === "singles") S.setup.type = type;
-    else if (isFast4Short) S.setup.type = "doubles";
-    if (!fmt && !(scene && FAST4_SCENES[scene])) return false;
+    else if (isFast4Short || isShortSetShort) S.setup.type = "doubles";
+    var hasKnownScene = !!(scene && PRESET_FORMATS.fast4.scenes[scene]);
+    if (!fmt && !hasKnownScene) return false;
     if (!fmt) fmt = "fast4";
     S.setup.format = fmt;
     S.urlPresetActive = true;
-    if (fmt === "fast4" || (scene && FAST4_SCENES[scene])) {
-      var defaultScene = isFast4Short ? "deuce" : "start";
+    if (fmt === "fast4" || fmt === "shortSets") {
+      var defaultScene = (isFast4Short || isShortSetShort) ? "deuce" : "start";
+      S.presetFormat = fmt;
       ensureFast4Bar();
-      S.loadFast4Scene(scene && FAST4_SCENES[scene] ? scene : defaultScene);
+      S.loadPresetScene(hasKnownScene ? scene : defaultScene, fmt);
       return true;
     }
     if (params.get("start") === "1") {
