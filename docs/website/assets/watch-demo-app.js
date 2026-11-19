@@ -779,6 +779,11 @@
     guide: "The animated Guide, running itself. Use Previous and Next to move through it."
   };
   S.setMode = function (mode) {
+    if (S.urlPresetActive && S.fast4Scene && mode !== "guide") {
+      S.settings.track = mode === "stats";
+      S.loadFast4Scene(S.fast4Scene);
+      return;
+    }
     api.clear();
     S.stack.length = 0; S.alert = null;
     S.matchPhase = "warmup"; S.liveId = null; S.headingLocked = false;
@@ -794,11 +799,154 @@
     b.addEventListener("click", function () { S.setMode(b.getAttribute("data-mode")); });
   });
 
+  /* ---- URL query preset & FAST4 rules simulator (try.html) ----------------- */
+  var FAST4_TIEBREAK_ENTRY = [
+    "me", "me", "me", "me",
+    "opponent", "opponent", "opponent", "opponent",
+    "me", "me", "me", "me",
+    "opponent", "opponent", "opponent", "opponent",
+    "me", "me", "me", "me",
+    "opponent", "opponent", "opponent", "opponent"
+  ];
+  var FAST4_SCENES = {
+    start: {
+      label: "0–0 Start",
+      points: [],
+      caption: "FAST4: First to 4 games wins. No-Ad deciding point at 40–40; 5-point tiebreak at 3–3. Swipe the watch or tap ▲ Win / ▼ Lose below."
+    },
+    deuce: {
+      label: "40–40 No-Ad",
+      points: ["me", "opponent", "me", "opponent", "me", "opponent"],
+      caption: "40–40 (No-Ad deuce): Sudden-death point — the watch shows '🎾 Receiver chooses side' and the next point wins the game."
+    },
+    tiebreak: {
+      label: "3–3 Tiebreak",
+      points: FAST4_TIEBREAK_ENTRY,
+      caption: "3–3 Tiebreak: First to 5 points (sudden death at 4–4). Server rotates after point 1, then every 2 points."
+    },
+    decider: {
+      label: "4–4 Decider",
+      points: FAST4_TIEBREAK_ENTRY.concat(["me", "opponent", "me", "opponent", "me", "opponent", "me", "opponent"]),
+      caption: "4–4 in the 3–3 Tiebreak: Sudden-death match point — the very next point wins the FAST4 set 4–3."
+    }
+  };
+  var FAST4_SCENE_ORDER = ["start", "deuce", "tiebreak", "decider"];
+  var fast4Bar = null, fast4TypeBtn = null, fast4CaptionEl = null, fast4SceneBtns = [];
+
+  function syncFast4Bar() {
+    if (!fast4Bar) return;
+    if (fast4TypeBtn) {
+      var isDoubles = S.setup.type === "doubles";
+      fast4TypeBtn.textContent = isDoubles ? "Doubles ⇄" : "Singles ⇄";
+      fast4TypeBtn.setAttribute("aria-pressed", String(isDoubles));
+      fast4TypeBtn.setAttribute("aria-label", "Switch to " + (isDoubles ? "Singles" : "Doubles"));
+    }
+    fast4SceneBtns.forEach(function (btn) {
+      var active = btn.getAttribute("data-fast4-scene") === S.fast4Scene;
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+    if (fast4CaptionEl && FAST4_SCENES[S.fast4Scene]) {
+      fast4CaptionEl.textContent = FAST4_SCENES[S.fast4Scene].caption;
+    }
+  }
+
+  function ensureFast4Bar() {
+    if (fast4Bar) return;
+    var captionEl = root.parentNode ? root.parentNode.querySelector("[data-mode-caption]") : null;
+    if (!captionEl || !captionEl.parentNode) return;
+    fast4TypeBtn = h("button", {
+      type: "button",
+      class: "fast4-type-btn",
+      "data-fast4-type": "",
+      onclick: function () {
+        S.setup.type = S.setup.type === "doubles" ? "singles" : "doubles";
+        S.loadFast4Scene(S.fast4Scene || "start");
+      }
+    });
+    fast4SceneBtns = FAST4_SCENE_ORDER.map(function (key) {
+      return h("button", {
+        type: "button",
+        class: "fast4-scene-btn",
+        "data-fast4-scene": key,
+        onclick: function () { S.loadFast4Scene(key); }
+      }, FAST4_SCENES[key].label);
+    });
+    fast4CaptionEl = h("p", { class: "fast4-caption", "data-fast4-caption": "" });
+    fast4Bar = h("div", { class: "fast4-bar" },
+      h("div", { class: "fast4-head" }, h("span", { text: "FAST4 Simulator" }), fast4TypeBtn),
+      h("div", { class: "fast4-scenes", role: "group", "aria-label": "FAST4 scenarios" }, fast4SceneBtns),
+      fast4CaptionEl
+    );
+    captionEl.parentNode.insertBefore(fast4Bar, captionEl.nextSibling);
+    syncFast4Bar();
+  }
+
+  S.loadFast4Scene = function (sceneKey) {
+    if (!FAST4_SCENES[sceneKey]) sceneKey = "start";
+    S.fast4Scene = sceneKey;
+    S.setup.format = "fast4";
+    api.loadScenario({
+      matchType: S.setup.type,
+      format: "fast4",
+      server: "me",
+      doublesServer: "me",
+      tracking: S.settings.track,
+      compass: S.settings.compass
+    }, FAST4_SCENES[sceneKey].points);
+    S.liveId = uid();
+    S.headingLocked = false;
+    S.matchPhase = "play";
+    S.stack = [{ id: "match" }];
+    S.alert = null;
+    render();
+    syncFast4Bar();
+  };
+
+  function applyUrlPreset() {
+    if ((root.closest && root.closest("#try")) || !window.location.search) return false;
+    var params = new URLSearchParams(window.location.search);
+    var isFast4Short = params.has("fast4");
+    var rawFmt = params.get("format");
+    var type = params.get("type");
+    var scene = params.get("scene");
+    var fmt = null;
+    if (isFast4Short) {
+      fmt = "fast4";
+    } else if (rawFmt) {
+      if (rawFmt.toLowerCase() === "fast4") fmt = "fast4";
+      else {
+        for (var i = 0; i < FORMATS.length; i++) {
+          if (FORMATS[i].id === rawFmt) { fmt = FORMATS[i].id; break; }
+        }
+      }
+    }
+    if (type === "doubles" || type === "singles") S.setup.type = type;
+    else if (isFast4Short) S.setup.type = "doubles";
+    if (!fmt && !(scene && FAST4_SCENES[scene])) return false;
+    if (!fmt) fmt = "fast4";
+    S.setup.format = fmt;
+    S.urlPresetActive = true;
+    if (fmt === "fast4" || (scene && FAST4_SCENES[scene])) {
+      var defaultScene = isFast4Short ? "deuce" : "start";
+      ensureFast4Bar();
+      S.loadFast4Scene(scene && FAST4_SCENES[scene] ? scene : defaultScene);
+      return true;
+    }
+    if (params.get("start") === "1") {
+      S.stack = [{ id: "match" }];
+      pickServer("me");
+      S.matchPhase = "play";
+      render();
+      return true;
+    }
+    return false;
+  }
+
   S.boot = function () {
     setPt();
     applyTheme();
     if (S.seedHistory) S.seedHistory();
-    render();
+    if (!applyUrlPreset()) render();
     // The demo starts with Health authorised, so the launch-time workoutManager.requestAuthorization sheet is skipped.
   };
 })();

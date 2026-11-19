@@ -903,11 +903,13 @@
       archive = saved.archive; S.history = saved.watch; tombstones = new Set(saved.tombstones || []);
       watchOnlyIDs = new Set(saved.watchOnlyIDs || []);
       if (saved.connection && ["ready", "connecting", "unavailable"].indexOf(saved.connection.activation) >= 0) Object.assign(connection, saved.connection);
+      var presetTrack = S.settings.track;
       Object.assign(settings, saved.settings || {}); S.health = settings.health || "authorized";
+      if (S.urlPresetActive) settings.track = presetTrack;
       cloudBackup = saved.cloudBackup || null; cloudState = saved.cloudState || "unavailable";
       api.configure({ tracking: settings.track, compass: settings.compass, health: S.health === "authorized" });
       S.applyTheme();
-      if (saved.live && saved.live.resume && !saved.live.endTime) {
+      if (!S.urlPresetActive && saved.live && saved.live.resume && !saved.live.endTime) {
         api.restore(saved.live); S.liveId = saved.live.id; S.matchPhase = "play"; S.push({ id: "match" });
       }
     }
