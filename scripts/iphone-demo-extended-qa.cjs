@@ -321,8 +321,13 @@ async function main() {
     }
 
     await mobile.page.evaluate(() => window.DeuceMatePhone.setSetting("track", true));
+    // One live command at a time (#203): wait for each Watch reply.
     await activate(await button(root, "2nd serve"));
+    await mobile.page.waitForFunction(() => window.DeuceMateShell.api.snapshot(false).resume.secondServe === true, null, { timeout: TIMEOUT });
+    await root.locator('.phone-live-extras button:not([disabled])', { hasText: "↓ Opp" }).waitFor({ timeout: TIMEOUT });
     await activate(await button(root, "↓ Opp"));
+    await mobile.page.waitForFunction(() => !!window.DeuceMateShell.api.phoneState().pending, null, { timeout: TIMEOUT })
+      .catch(() => {});
     check(!!(await mobile.page.evaluate(() => window.DeuceMateShell.api.phoneState().pending)),
       "a lost second serve should expose pending point categorization");
     await (await button(root, "Double Fault")).click();

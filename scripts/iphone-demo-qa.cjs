@@ -298,7 +298,11 @@ async function main() {
     await root.getByRole("button", { name: "Winner", exact: true }).click();
     await root.getByRole("button", { name: "Rally", exact: true }).click();
     await page.waitForFunction(() => !window.DeuceMateShell.api.phoneState().pending, null, { timeout: TIMEOUT });
+    // The phone sends one live command at a time (#203): wait for the Watch to
+    // apply the second serve before sending the point.
     await clickButton(page, "2nd serve");
+    await page.waitForFunction(() => window.DeuceMateShell.api.snapshot(false).resume.secondServe === true, null, { timeout: TIMEOUT });
+    await page.locator('#iphone-demo .phone-live-extras button:not([disabled])', { hasText: "↓ Opp" }).waitFor({ timeout: TIMEOUT });
     await clickButton(page, "↓ Opp");
     const doubleFault = root.getByRole("button", { name: "Double Fault", exact: true });
     await doubleFault.waitFor({ state: "visible", timeout: TIMEOUT });
