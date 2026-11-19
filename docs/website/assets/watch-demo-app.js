@@ -799,13 +799,18 @@
     b.addEventListener("click", function () { S.setMode(b.getAttribute("data-mode")); });
   });
 
-  /* ---- URL query preset & FAST4 / Short Sets simulator (try.html) ---------- */
+  /* ---- URL query preset & FAST4 / Short Sets / Perpetual Tiebreak simulator (try.html) */
   function alternatingHolds(count) {
     var out = [];
     for (var g = 0; g < count; g++) {
       var side = g % 2 === 0 ? "me" : "opponent";
       out.push(side, side, side, side);
     }
+    return out;
+  }
+  function alternatingPoints(count) {
+    var out = [];
+    for (var i = 0; i < count; i++) out.push(i % 2 === 0 ? "me" : "opponent");
     return out;
   }
   var FAST4_TIEBREAK_ENTRY = alternatingHolds(6);
@@ -858,6 +863,31 @@
           label: "6–5 Match Pt",
           points: SHORTSET_TIEBREAK_ENTRY.concat(["me", "opponent", "me", "opponent", "me", "opponent", "me", "opponent", "me", "opponent", "me"]),
           caption: "6–5 in the 4–4 Tiebreak: First to 7 points (win by 2) — win this point for the set (5–4), or lose for 6–6 and play on by 2."
+        }
+      }
+    },
+    perpetualSuperTiebreak: {
+      title: "Perpetual Tiebreak Simulator",
+      scenes: {
+        start: {
+          label: "0–0 Start",
+          points: [],
+          caption: "Perpetual Tiebreak: Continuous tiebreak scoring until your round or timer ends. First server serves 1 point from Deuce; then servers rotate every 2 points (Ad first, then Deuce)."
+        },
+        deuce: {
+          label: "1–0 (2-Pt Serve)",
+          points: ["me"],
+          caption: "1–0 (After Point 1): Balls change after the opening point — the next server now serves 2 points, starting from the Ad (left) court, then the Deuce (right) court."
+        },
+        tiebreak: {
+          label: "3–2 (6-Pt Switch)",
+          points: alternatingPoints(5),
+          caption: "3–2 (6th Point Next): Every 6 points (3–3, 6–6, 9–9…), the watch prompts players and balls to change ends (🔁 🎾 👥). Tap ▲ Win or ▼ Lose to see the changeover."
+        },
+        decider: {
+          label: "10–10 Plays On",
+          points: alternatingPoints(20),
+          caption: "10–10 (Continuous): Unlike a single 10-point tiebreak, Perpetual Tiebreak keeps running past 10 with 2-point serve rotation and 6-point end switches until you end the match."
         }
       }
     }
@@ -957,6 +987,7 @@
     var params = new URLSearchParams(window.location.search);
     var isFast4Short = params.has("fast4");
     var isShortSetShort = params.has("shortset") || params.has("shortsets");
+    var isPerpetualShort = params.has("perpetual") || params.has("perpetualtiebreak") || params.has("tiebreak");
     var rawFmt = params.get("format");
     var type = params.get("type");
     var scene = params.get("scene");
@@ -965,10 +996,13 @@
       fmt = "fast4";
     } else if (isShortSetShort) {
       fmt = "shortSets";
+    } else if (isPerpetualShort) {
+      fmt = "perpetualSuperTiebreak";
     } else if (rawFmt) {
       var low = rawFmt.toLowerCase();
       if (low === "fast4") fmt = "fast4";
       else if (low === "shortset" || low === "shortsets") fmt = "shortSets";
+      else if (low === "perpetual" || low === "perpetualtiebreak" || low === "perpetualsupertiebreak") fmt = "perpetualSuperTiebreak";
       else {
         for (var i = 0; i < FORMATS.length; i++) {
           if (FORMATS[i].id === rawFmt) { fmt = FORMATS[i].id; break; }
@@ -976,13 +1010,13 @@
       }
     }
     if (type === "doubles" || type === "singles") S.setup.type = type;
-    else if (isFast4Short || isShortSetShort) S.setup.type = "doubles";
+    else if (isFast4Short || isShortSetShort || isPerpetualShort) S.setup.type = "doubles";
     var hasKnownScene = !!(scene && PRESET_FORMATS.fast4.scenes[scene]);
     if (!fmt && !hasKnownScene) return false;
     if (!fmt) fmt = "fast4";
     S.setup.format = fmt;
     S.urlPresetActive = true;
-    if (fmt === "fast4" || fmt === "shortSets") {
+    if (PRESET_FORMATS[fmt]) {
       var defaultScene = (isFast4Short || isShortSetShort) ? "deuce" : "start";
       S.presetFormat = fmt;
       ensureFast4Bar();
