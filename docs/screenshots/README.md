@@ -41,6 +41,7 @@ shots so the gallery feels cohesive; only `06-themes.png` shows multiple themes.
 | 19 | `19-coaching-insights.jpg` | Website hero's result step: **Coaching Insights** above Pulse Coach. Copy of `docs/readme/coaching-insights.jpg` (the website can't load from outside its published folder), so recapture both together. |
 | 20 | `20-watch-tag-point.jpg` | Website hero's tagging step: the Watch **won-point sheet**. Copy of `docs/readme/watch-tag-point.jpg`, at that capture's 416×496 size. |
 | 21 | `21-trends.jpg` | Website **Trends** feature: filters above the Errors and Serve & Return charts. Copy of `docs/readme/trends.jpg`. |
+| 22 | `22-game-plan.jpg` | Website **Game Plan** feature: Prepare Game Plan as it opens. Copy of `docs/readme/game-plan.jpg`. |
 
 > **15–18 are manual captures** (see "Manual-only shots" below) — the automation
 > drives a live match, not the start screen, the setup sheet, or a set boundary.
@@ -252,6 +253,14 @@ is the same capture as `docs/readme/pulse-zones.jpg`.
    share sheet has no Messages or contacts to show.
 5. **Build:** `docs/readme/source/build.sh <iphone-dir> <watch-dir>
    <insights.png> <safari.png>`. It crops off Safari's address bar.
+6. **Game Plan (1.4.0):** run `ScreenshotTests/test_captureGamePlanScreens` on
+   the same dark simulator, with `TEST_RUNNER_DEUCEMATE_OPPONENT_NAME` set to
+   the most-played singles opponent. Export its `10-game-plan.png` with
+   `sips -s format jpeg -s formatOptions 84 --resampleWidth 780` to
+   `docs/readme/game-plan.jpg`, and copy that to
+   `docs/website/screenshots/22-game-plan.jpg`. Its `09-opponent-head-to-head.png`
+   can stand in for `readme-head-to-head.png`; both were taken this way on
+   19 November 2026.
 
 A simulator has no heart rate or calories, so the Watch crops keep only the score
 rows and the tag sheet. The hero's Watch is the physical-device capture `04`.
