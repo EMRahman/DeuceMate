@@ -41,8 +41,22 @@ async function startLive(page) {
   const status = () => page.evaluate(() => document.querySelector(".phone-live-status").innerText);
   await page.locator(".phone-scoreboard").first().focus(); await page.keyboard.press("ArrowUp"); await page.waitForTimeout(300);
   assert.equal(await status(), "", "a delivered command shows no message");
+  // Since #174/#203 input is gated while the Watch can't be reached, so a
+  // command is never sent then. "Not confirmed" is for a command that was sent
+  // but lost its connection before the Watch's reply.
   await page.evaluate(() => { window.DeuceMatePhone.connection.activation = "connecting"; window.DeuceMatePhone.render(); });
+  await page.waitForTimeout(100);
+  const gatedBefore = await page.evaluate(() => JSON.stringify(window.DeuceMateShell.api.stateRef()));
   await page.locator(".phone-scoreboard").first().focus(); await page.keyboard.press("ArrowUp"); await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => JSON.stringify(window.DeuceMateShell.api.stateRef())), gatedBefore, "no command is sent while connecting");
+  assert.match(await status(), /^Connecting/, "connecting state explains why input is unavailable");
+  await page.evaluate(() => { window.DeuceMatePhone.connection.activation = "ready"; window.DeuceMatePhone.refreshLiveState(); window.DeuceMatePhone.render(); });
+  await page.waitForFunction(() => document.querySelector(".phone-live-badge")?.textContent === "LIVE", null, { timeout: 5000 });
+  await page.evaluate(() => {
+    document.querySelector(".phone-scoreboard").dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+    window.DeuceMatePhone.connection.activation = "connecting"; // lost before the simulated 60 ms reply
+  });
+  await page.waitForTimeout(300);
   assert.equal(await status(), "Not confirmed by the Watch. Check the score before retrying.");
   await page.waitForTimeout(5400);
   assert.match(await status(), /^Connecting/, "failure message times out after 5 seconds");

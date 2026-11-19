@@ -123,6 +123,21 @@ async function fresh(browser, options = {}) {
   const root = page.locator("#iphone-demo");
   await root.waitFor({ state: "visible", timeout: TIMEOUT });
   await page.waitForFunction(() => !!window.DeuceMatePhone, null, { timeout: TIMEOUT });
+  // Start-up connects, fetches the live Watch state and syncs on short
+  // simulated delays, each redrawing the phone. Wait until the phone has been
+  // still for a moment so a test never holds a row that is about to be
+  // replaced (the swipe tests failed with "element is not attached").
+  await page.waitForFunction(() => {
+    const c = window.DeuceMatePhone.connection;
+    return c.activation !== "connecting" && !c.syncing;
+  }, null, { timeout: TIMEOUT });
+  await page.evaluate(quietMs => new Promise(resolve => {
+    const target = document.querySelector("#iphone-demo");
+    let timer = setTimeout(done, quietMs);
+    const observer = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(done, quietMs); });
+    function done() { observer.disconnect(); resolve(); }
+    observer.observe(target, { childList: true, subtree: true });
+  }), 300);
   return { context, page, root };
 }
 
@@ -796,15 +811,16 @@ async function testLiveReconnectAfterOfflineWatchScoring(browser) {
       shell.push({id: 'match'}); phone.navigate('live');
     });
     await c.page.waitForFunction(() => document.querySelector('.phone-live-badge')?.textContent === 'LIVE');
-    const before = await c.page.evaluate(() => window.DeuceMatePhone.liveRecord().resume.state.currentPointsMe);
+    // Perpetual Points counts every point as a tiebreak point on the one set.
+    const before = await c.page.evaluate(() => { const s = window.DeuceMatePhone.liveRecord().resume.state; return s.sets[s.sets.length - 1].tieBreakPointsMe; });
     await c.page.evaluate(() => {
       const phone = window.DeuceMatePhone;
       phone.connection.reachable = false; phone.render();
       const state = window.DeuceMateShell.api.stateRef();
-      state.currentPointsMe += 3; // Watch-only change while its phone cannot hear it.
+      state.sets[state.sets.length - 1].tieBreakPointsMe += 3; // Watch-only change while its phone cannot hear it.
       phone.sync(); phone.render();
     });
-    check(await c.page.evaluate(() => window.DeuceMatePhone.liveRecord().resume.state.currentPointsMe) === before,
+    check(await c.page.evaluate(() => { const s = window.DeuceMatePhone.liveRecord().resume.state; return s.sets[s.sets.length - 1].tieBreakPointsMe; }) === before,
       'offline phone retains the last received state');
     await c.page.evaluate(() => {
       const phone = window.DeuceMatePhone;
@@ -812,7 +828,7 @@ async function testLiveReconnectAfterOfflineWatchScoring(browser) {
     });
     check((await c.root.locator('.phone-live-badge').textContent()) === 'SYNCING WITH WATCH',
       'reachability must wait for a current-state response');
-    await c.page.waitForFunction(previous => window.DeuceMatePhone.liveRecord()?.resume.state.currentPointsMe === previous + 3,
+    await c.page.waitForFunction(previous => (s => s && s.sets[s.sets.length - 1].tieBreakPointsMe === previous + 3)(window.DeuceMatePhone.liveRecord()?.resume.state),
       before, {timeout: TIMEOUT});
     await c.page.waitForFunction(() => document.querySelector('.phone-live-badge')?.textContent === 'LIVE');
     // Two gestures before the response still represent only one request.
@@ -821,10 +837,10 @@ async function testLiveReconnectAfterOfflineWatchScoring(browser) {
       court.dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowUp', bubbles: true}));
       court.dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowUp', bubbles: true}));
     });
-    await c.page.waitForFunction(previous => window.DeuceMateShell.api.stateRef().currentPointsMe === previous + 4,
+    await c.page.waitForFunction(previous => (s => s.sets[s.sets.length - 1].tieBreakPointsMe === previous + 4)(window.DeuceMateShell.api.stateRef()),
       before, {timeout: TIMEOUT});
     await c.page.waitForTimeout(150);
-    check(await c.page.evaluate(() => window.DeuceMateShell.api.stateRef().currentPointsMe) === before + 4,
+    check(await c.page.evaluate(() => { const s = window.DeuceMateShell.api.stateRef(); return s.sets[s.sets.length - 1].tieBreakPointsMe; }) === before + 4,
       'a second gesture while awaiting confirmation must not score again');
     pass('offline Watch scoring catches up without another point; phone waits for each response');
   } finally { await close(c); }

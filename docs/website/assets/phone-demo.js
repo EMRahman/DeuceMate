@@ -12,7 +12,7 @@
   var lastSignature = "", announceSignature = "", syncing = false, renderQueued = false;
   var displayedLiveId = null, lastPhoneSwipe = -Infinity;
   var receivedLive = null, receivedPhoneState = {}, liveReady = false, liveRequestPending = false;
-  var liveRequestGeneration = 0, liveConnectionAvailable = false;
+  var liveRequestGeneration = 0, liveConnectionAvailable = false, liveCommandInFlight = false;
   function watchCanConnect() {
     return connection.paired && connection.reachable && connection.activation === "ready" && !connection.syncFailure;
   }
@@ -25,7 +25,7 @@
     liveReady = false;
     if (!watchCanConnect()) return;
     var generation = ++liveRequestGeneration;
-    liveRequestPending = true;
+    liveRequestPending = true; liveCommandInFlight = false;
     setTimeout(function () {
       if (generation !== liveRequestGeneration) return;
       liveRequestPending = false;
@@ -590,6 +590,9 @@
       if (wasLive) {
         finished = api.snapshot(true); finished.id = rec.id;
         api.clear(); S.liveId = null; S.popAll();
+        // The Watch ends its live match and replies, as natively, so the
+        // phone's last-received live board clears instead of going stale.
+        if (!liveRequestPending) receiveLiveState();
       } else {
         finished = copy(rec);
         var leader = E.leaderWhenStopped({ cfg: E.cfgFor(rec.format), sets: rec.sets, currentPointsMe: rec.currentPointsMe, currentPointsOpponent: rec.currentPointsOpponent });
@@ -656,11 +659,11 @@
     if (!settings.iPhoneInput || !watchCanConnect() || !liveReady || liveRequestPending) return;
     if (command === "point" && !receivedPhoneState.canScore) return;
     var matchID = displayedLiveId, generation = ++liveRequestGeneration;
-    liveRequestPending = true; queueRender();
+    liveRequestPending = true; liveCommandInFlight = true; queueRender();
     // Simulated request/reply latency. Only the existing Watch engine scores.
     setTimeout(function () {
       if (generation !== liveRequestGeneration) return;
-      liveRequestPending = false;
+      liveRequestPending = false; liveCommandInFlight = false;
       if (!watchCanConnect() || api.phoneCommand(command, value, matchID) === false) {
         reportCommandFailure(); refreshLiveState();
       } else {
@@ -806,7 +809,13 @@
     if (available !== liveConnectionAvailable) {
       liveConnectionAvailable = available;
       if (available) refreshLiveState();
-      else { liveRequestGeneration++; liveReady = false; liveRequestPending = false; }
+      else {
+        // A score command already sent but unanswered is ambiguous: report it
+        // (PhoneMatchSyncService counts undelivered commands) rather than
+        // dropping it silently. A read-only refresh just stops.
+        if (liveRequestPending && liveCommandInFlight) reportCommandFailure();
+        liveRequestGeneration++; liveReady = false; liveRequestPending = false; liveCommandInFlight = false;
+      }
     }
     var focusedKey = body.contains(document.activeElement) ? document.activeElement.dataset.focusKey : null;
     var theme = S.THEMES[settings.theme] || S.THEMES.default;
