@@ -22,11 +22,23 @@ through. All ten are 1320 x 2868 with no alpha — a set must be one size.
 | 3 | `iphone-6.9-marketing/03-ai-coach.png` | ad — AI coach hand-off |
 | 4 | `iphone-6.9/01-match-overview.png` | raw — result, Match Info and graph |
 | 5 | `iphone-6.9/08-compare-previous-match.png` | raw — Compare with Previous Match |
-| 6 | `iphone-6.9/03-match-stats.png` | raw |
-| 7 | `iphone-6.9/04-coaching-insights.png` | raw — ranked Coaching Insights |
-| 8 | `iphone-6.9/05-match-archive.png` | raw — Trends, Opponents and match history |
-| 9 | `iphone-6.9/09-opponent-head-to-head.png` | raw — opponent head-to-head and profile |
-| 10 | `iphone-6.9/06-trends-overview.png` | raw — Trends filters and Errors |
+| 6 | `iphone-6.9/04-coaching-insights.png` | raw — ranked Coaching Insights |
+| 7 | `iphone-6.9/05-match-archive.png` | raw — Trends, Opponents and match history |
+| 8 | `iphone-6.9/06-trends-overview.png` | raw — Trends filters and Errors |
+| 9 | `iphone-6.9/09-opponent-head-to-head.png` | raw — opponent playing style, head-to-head and Prepare Game Plan |
+| 10 | `iphone-6.9/10-game-plan.png` | raw — Prepare Game Plan, ready on arrival |
+
+### What changed for 1.4.0
+
+- **Remove in App Store Connect:** the 1.3.1 slot 6 (`03-match-stats.png`) and
+  slot 9 (the old opponent page).
+- **Upload, in this order:** the recaptured `iphone-6.9/09-opponent-head-to-head.png`
+  (condensed Playing Style card with notes, gear for Manage, Prepare Game Plan)
+  and the new `iphone-6.9/10-game-plan.png`. New uploads land at the end, so the
+  result is the order in the table above with no dragging: Trends moves up to
+  slot 8.
+- `03-match-stats.png` stays in this folder but is no longer uploaded. Ad 02
+  already shows match analysis, and Game Plan is 1.4.0's headline feature.
 
 ### What changed for 1.3.1
 
@@ -63,7 +75,7 @@ Watch section, where framing a Watch inside a drawn Watch adds nothing.
 
 Directory: [`iphone-6.9/`](./iphone-6.9/)
 
-All nine PNGs are **1320 x 2868**, portrait, with no alpha. Items 2 and 3 were
+All ten PNGs are **1320 x 2868**, portrait, with no alpha. Items 2 and 3 were
 captured on the iPhone 17 Pro Max simulator using the point-tracked match
 `44ACB61B-BBF0-444C-86BC-2A0125E0DF6D` (5 August 2026, 3-6 1-6, 124 tracked
 points), from `deucemate_archive_2026-08-06.json`. Items 5–7 were captured in
@@ -91,7 +103,16 @@ of the same archive.
    since 1.3.0)
 8. `08-compare-previous-match.png` - this match next to the previous match against
    the same opponent
-9. `09-opponent-head-to-head.png` - head-to-head, playing style, and past matches
+9. `09-opponent-head-to-head.png` - playing style card with notes, head-to-head,
+   Prepare Game Plan, and past matches
+10. `10-game-plan.png` - Prepare Game Plan as it opens: Upcoming, Matches,
+    Includes, Focus and the hand-off
+
+Items 9 and 10 were captured on 19 November 2026 for 1.4.0 on the iPhone 18 Pro
+Max simulator (iOS 27.2) by `ScreenshotTests.test_captureGamePlanScreens`, from a
+sanitized copy of the owner's 19 November archive: every player renamed to a
+generic name, all private notes removed, and the playing-style notes replaced by
+one invented note on the opponent shown.
 
 This one 6.9-inch set satisfies the iPhone screenshot-size requirement; do not
 mix in the older 6.3/6.5-inch files from `docs/website/screenshots/` for this

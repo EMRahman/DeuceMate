@@ -167,6 +167,44 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(disclosure.waitForExistence(timeout: 10))
     }
 
+    /// The 1.4.0 opponent page (condensed Playing Style card, gear for Manage)
+    /// and Prepare Game Plan, opened from it. Shows names and playing-style
+    /// notes, so seed a sanitized archive as for `test_captureMatchInfoScreens`
+    /// and set DEUCEMATE_OPPONENT_NAME to its most-played singles opponent.
+    @MainActor
+    func test_captureGamePlanScreens() throws {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Matches"].waitForExistence(timeout: 20))
+
+        let opponentsLink = app.buttons["opponents-section-link"]
+        for _ in 0..<4 where !opponentsLink.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(opponentsLink.waitForExistence(timeout: 10))
+        opponentsLink.tap()
+        let opponentName = ProcessInfo.processInfo.environment["DEUCEMATE_OPPONENT_NAME"] ?? "Alice Morgan"
+        let opponentRow = app.buttons
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'opponent-row-' AND label CONTAINS %@", opponentName))
+            .firstMatch
+        XCTAssertTrue(opponentRow.waitForExistence(timeout: 10))
+        opponentRow.tap()
+        XCTAssertTrue(app.buttons["opponent-manage-player"].waitForExistence(timeout: 10))
+        Thread.sleep(forTimeInterval: 1)
+        saveScreenshot("09-opponent-head-to-head")
+
+        let prepare = app.buttons["opponent-prepare-game-plan"]
+        for _ in 0..<4 where !prepare.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(prepare.waitForExistence(timeout: 10))
+        prepare.tap()
+        XCTAssertTrue(app.navigationBars["Prepare Game Plan"].waitForExistence(timeout: 10))
+        // Let the debounced off-main build finish so the estimate is filled in.
+        Thread.sleep(forTimeInterval: 3)
+        saveScreenshot("10-game-plan")
+    }
+
     /// Coaching Insights, from a match that earns several ranked observations.
     /// Point DEUCEMATE_TARGET_MATCH_ID at that match for this run.
     @MainActor

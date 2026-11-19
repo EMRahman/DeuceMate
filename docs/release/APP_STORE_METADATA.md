@@ -24,13 +24,15 @@ statistics. The submission is the iOS app (`ehsan.DeuceMate`); the watchOS app
 ## Promotional Text (170 characters max)
 
 ```
-Now track who you play: head-to-head records, match comparisons and private notes, alongside Apple Watch scoring and AI coaching. Free forever. No ads, no tracking.
+Plan for your next opponent with Game Plan, play FAST4, and track who you play, with Apple Watch scoring and AI coaching. Free forever. No ads, no tracking.
 ```
 
-**Character count:** 164 characters. Proposed for the 1.3.0 submission. It held
-back until 1.3.0 was approved because it describes 1.3.0 features, and it went
-live with 1.3.0 on 4 November 2026. The previous
-text (since the 1.1.0 submission, 19 August 2026): "Score on Apple Watch, tag how every point ended, then hand the match to your favourite AI for real coaching. Free forever. No ads, no tracking."
+**Character count:** 156 characters. Proposed for the 1.4.0 submission. Enter it
+on the 1.4.0 version page so it goes live with that version: it describes 1.4.0
+features, so it must not replace the live text before 1.4.0 is approved.
+
+The current live text (since 1.3.0, 4 November 2026): "Now track who you play: head-to-head records, match comparisons and private notes, alongside Apple Watch scoring and AI coaching. Free forever. No ads, no tracking."
+Before that (since the 1.1.0 submission, 19 August 2026): "Score on Apple Watch, tag how every point ended, then hand the match to your favourite AI for real coaching. Free forever. No ads, no tracking."
 
 Two deliberate choices carried over from the previous line:
 
@@ -53,14 +55,17 @@ file starts lying about what users actually see.
 ## Keywords (100 characters max)
 
 ```
-tennis,score,match,tiebreak,sports,watch,referee,umpire,deuce,padel,game,set,stats,opponent
+tennis,score,match,tiebreak,sports,watch,referee,umpire,deuce,padel,game,set,stats,opponent,fast4
 ```
+
+**Character count:** 97 of 100.
 
 **Optimization Notes:**
 - Focus on tennis-specific terms (deuce, tiebreak, set)
 - Include "padel" for the international tennis variant
 - "stats" covers the iPhone statistics feature set
 - "opponent" covers the 1.3.0 head-to-head records
+- "fast4" covers the format added in 1.4.0 (a common search term in club tennis)
 - No spaces after commas to maximize character count
 
 ---
@@ -132,6 +137,8 @@ KNOW WHO YOU PLAYED
 • See head-to-head records against each opponent
 • Compare a match with your previous one
 • Keep private notes that stay on your iPhone
+• Note how each player plays, in your own words
+• Prepare a game plan for your next match against an opponent, ready for the AI app you choose
 
 UNDERSTAND TRENDS ACROSS MATCHES
 
@@ -177,20 +184,20 @@ REQUIREMENTS
 Built by a recreational tennis player for players who want dependable scorekeeping without losing focus on the game.
 ```
 
-**Character count:** 3,765 characters (including line breaks; under 4,000)
+**Character count:** 3,935 characters (including line breaks; under 4,000). 1.4.0 adds
+the playing-style notes and Game Plan bullets under KNOW WHO YOU PLAYED.
 
 ---
 
 ## What's New (4000 characters max)
 
-> **Next release:** before finalising its text, confirm the manual testing gate in
-> [`SUBMISSION_REVIEW.md`](SUBMISSION_REVIEW.md#next-release--manual-testing-gate)
-> is complete. #174 and #175 have not been tested on a physical Watch yet.
-
 ### Version 1.4.0 - Game Plan, FAST4 and play sessions
 
-> **Draft — not final.** Written before the manual testing gate was complete.
-> Remove any line whose feature fails device testing or is deferred.
+**Final.** The owner approved this version for release on 19 November 2026 after
+testing it on the same iPhone and Apple Watch as 1.3.1 (see
+[`SUBMISSION_REVIEW.md`](SUBMISSION_REVIEW.md#release-candidate--140-build-18-13-november-2026)).
+It now also covers #209–#212: the reconnect recovery is part of the live
+scoreboard line, and that line says the scoreboard opens in landscape.
 
 ```
 Plan for your next match against a familiar opponent, and play FAST4.
@@ -214,7 +221,7 @@ NEW: MATCH FORMATS
 
 IMPROVED
 • When you resume a match, its reports show each session you played, and matches are listed by when they finished.
-• The iPhone live scoreboard shows when it can't reach your Apple Watch, pauses scoring from iPhone until it reconnects, and catches up automatically when your Watch is back in range. Watch changeover and "Who serves next?" prompts also appear on iPhone and can be answered there when iPhone Input is on.
+• The iPhone live scoreboard opens straight in landscape. It shows when it can't reach your Apple Watch, pauses scoring from iPhone until it reconnects, and catches up automatically when your Watch is back in range. Watch changeover and "Who serves next?" prompts also appear on iPhone and can be answered there when iPhone Input is on.
 • Split Trends' Serve & Return charts by deuce and ad side.
 • Player details and notes save only when you tap Save, so a stray edit can't overwrite them.
 • Workouts save to Health more reliably, including after the Watch app closes unexpectedly, and Apple Watch tells you if saving fails.
@@ -223,13 +230,14 @@ IMPROVED
 No account, subscription, ads, or tracking — just your tennis, on your devices.
 ```
 
-**Character count:** 2,038 characters (including line breaks; under 4,000)
+**Character count:** 2,070 characters (including line breaks; under 4,000)
 
 > **Scope.** The shipping targets are configured as version **1.4.0 (18)**. The
 > comparison baseline is the released `v1.3.1` tag; 1.3.2 and 1.3.3 were
 > TestFlight-only. This is a minor release because Game Plan, playing-style
 > notes and the new formats add user-facing features, the same reasoning as
-> 1.2.0 and 1.3.0. Revise this text if anything else merges before the archive.
+> 1.2.0 and 1.3.0. Quick 4 Games isn't listed: it was in 1.3.1 too, and #205
+> only undid its removal before release.
 
 ### Version 1.3.1 - Trends filters and swipe vibration
 
@@ -581,10 +589,11 @@ When completing the App Privacy questionnaire in App Store Connect:
   **1.4.0 to re-confirm:** Prepare Game Plan starts with player names and
   playing-style notes included (and remembers those choices), while private
   match notes stay off on every visit and require switching on and reviewing
-  the exact text first (#200). `docs/website/privacy.html` is out of date on
-  main: it still says AI prompts leave names out by default, and it doesn't
-  mention Game Plan, remembered name/style-note choices, or "Your name". Update
-  it before submission. Otherwise the private note enters a
+  the exact text first (#200). The matching `docs/website/privacy.html` update
+  is PR #201, held with the 1.4.0 website changes until 1.4.0 is approved: the
+  page is live on merge and would otherwise describe features the store build
+  doesn't have. None of 1.4.0 changes the "Data Not Collected" answer; re-check
+  the label on the 1.4.0 version page. Otherwise the private note enters a
   report, AI prompt or manual archive only through a separate per-export
   "Include private note(s)" opt-in (off every time) that shows the exact text,
   states it may hold personal or health information, and warns when names are
@@ -632,11 +641,11 @@ App Review Information persists across versions in App Store Connect, so the
 previous submission's text is probably still sitting in the field — check it
 rather than assuming the field is empty.
 
-### Draft for 1.4.0
+### 1.4.0
 
-> **Draft — not final.** Finalise it with the What's New text once the manual
-> testing gate is complete. Before submitting, confirm on a phone with no Watch
-> that the manual-entry route below does reach Prepare Game Plan.
+Final, with the What's New text above. Paste it in place of the 1.3.1 text that
+App Store Connect carries over. The manual-entry route to Prepare Game Plan is
+on the submission checklist in `SUBMISSION_REVIEW.md`.
 
 ```
 This is an update to a previously approved app. No new
@@ -660,8 +669,9 @@ WHAT CHANGED IN 1.4.0
   receiver chooses the side.
 - Both: resumed matches record each play session, and matches are listed by
   finish date.
-- Both: the iPhone live scoreboard shows when the Watch can't be reached, pauses
-  iPhone input until it reconnects, and catches up automatically on reconnect.
+- Both: the iPhone live scoreboard opens in landscape, shows when the Watch can't
+  be reached, pauses iPhone input until it reconnects, and catches up
+  automatically on reconnect.
   Watch changeover and "Who serves next?" prompts now appear on iPhone and can
   be answered from iPhone when iPhone Input is enabled.
 - iPhone: Trends' Serve & Return charts can be filtered by Both Sides, Deuce or
@@ -691,12 +701,12 @@ HealthKit (Watch at first launch; iPhone for per-point heart rate) and location
 usable with every prompt denied. No ATT, camera, mic, photos, contacts,
 calendar, notifications or Bluetooth.
 
-Devices tested: <fill in after TestFlight testing>.
+Devices tested: iPhone 16 (iOS 27.2) and Apple Watch Series 7 GPS (watchOS 26.6).
 ```
 
-### 1.3.1 (submitted)
+### 1.3.1 (released)
 
-Use the following for the 1.3.1 submission. It is comfortably under the 4,000-
+Used for the 1.3.1 submission. It is comfortably under the 4,000-
 character field limit.
 
 ```
