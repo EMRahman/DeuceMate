@@ -29,14 +29,30 @@ name in reports and AI prompts with AI Coach names on by default (#197), a
 separate name for announcements (#198), version/build in the Watch Guide
 (#202), live reconnect recovery with Watch-confirmed iPhone input (#203),
 Watch changeover / "Who serves next?" prompts shown and answerable on iPhone
-(#204), and Trends' Serve & Return split by deuce and ad side (#206). #192
+(#204), Trends' Serve & Return split by deuce and ad side (#206), live score
+recovery after the Watch reconnects (#209, #210, #211) and a live scoreboard
+that opens straight in landscape (#212). #192
 raised the watchOS minimum for the Watch **test** targets only; the shipping
 Watch app stays on watchOS 9.0.
 
-This candidate has not yet been archived, uploaded or tested on physical devices.
-Test targets keep their non-shipping version/build values. Build 18 is the next
-number recorded in this repository; confirm it is still unused in App Store
-Connect before upload, as Xcode has raised build numbers during previous uploads.
+**Owner approval, 19 November 2026.** The owner reported that this version was
+tested on the same devices as 1.3.1, iPhone 16 (iOS 27.2) and Apple Watch Series
+7 GPS (watchOS 26.6), and approved it for release. As with 1.3.0, the individual
+checks below and in the manual testing gate were not confirmed one by one, so
+their boxes stay open as a record of what the testing was meant to cover rather
+than as proof that each one ran.
+
+Test targets keep their non-shipping version/build values. Build 18 is the
+number recorded in this repository; Xcode has raised build numbers during
+previous uploads, so record the build App Store Connect actually shows for the
+submission here.
+
+**Website, README and demo wait for approval.** `docs/website/` is live on merge,
+so PR #201 holds the privacy policy update together with the 1.4.0 website copy,
+browser demo, website screenshots and README changes. Merge it once 1.4.0 is
+approved and released, updating the privacy policy's Last Updated date to the
+merge date. This document and `APP_STORE_METADATA.md` are not published, so they
+merge before submission.
 
 - [ ] Install it through TestFlight as an upgrade over the currently installed
   build. Confirm both apps report `1.4.0 (18)` (or the build number assigned at
@@ -53,10 +69,10 @@ Connect before upload, as Xcode has raised build numbers during previous uploads
   Include player names on, and that announcements say the short name (#197, #198).
 - [ ] Edit a player and a match note, then leave without saving. Confirm nothing
   is overwritten and emptying notes asks before deleting them (#194, #195).
-- [ ] **Blocker:** update `docs/website/privacy.html` for 1.4.0. It still says AI
-  prompts leave names out by default, and doesn't mention Game Plan, remembered
-  name/style-note choices, or "Your name" (#193, #197, #200). Then
-  re-confirm the App Privacy label, as noted in `APP_STORE_METADATA.md`.
+- [ ] Merge PR #201 (privacy policy for 1.4.0, plus the website, demo and README)
+  once 1.4.0 is approved and released. It still says AI prompts leave names out
+  by default until then. Re-confirm the App Privacy label ("Data Not Collected")
+  on the 1.4.0 version page, as noted in `APP_STORE_METADATA.md`.
 - [ ] Play a Short Sets and a FAST4 match on the Watch, including a tiebreak and a
   deciding point at deuce, and check the "Receiver chooses side" banner (#186).
   Start a Quick 4 Games match from setup and play it to 2–2 and the sudden-death
@@ -67,9 +83,16 @@ Connect before upload, as Xcode has raised build numbers during previous uploads
   clears both screens (#204).
 - [ ] In Trends > Serve & Return, switch between Both Sides, Deuce and Ad and
   confirm the filter persists across launches (#206).
-- [ ] Finalise the draft
-  [What's New and App Review notes](APP_STORE_METADATA.md#version-140---game-plan-fast4-and-play-sessions)
-  against what passed. Remove any line whose feature is deferred.
+- [x] Finalise the
+  [What's New and App Review notes](APP_STORE_METADATA.md#version-140---game-plan-fast4-and-play-sessions),
+  including #209–#212 and the tested devices.
+- [ ] On an iPhone with no Watch paired, follow the App Review notes' manual-entry
+  route to Prepare Game Plan.
+- [ ] In App Store Connect, on the 1.4.0 version page: promotional text, keywords,
+  description, What's New, App Review notes, the build, and the iPhone screenshots
+  listed under "What changed for 1.4.0" in
+  [`docs/app-store-screenshots/README.md`](../app-store-screenshots/README.md).
+- [ ] Submit for review.
 - [ ] Tag the uploaded commit `v1.4.0`.
 
 ## Workout save investigation — 9 November 2026
@@ -127,6 +150,10 @@ for current-state confirmation and one request in flight; no tests were skipped
 or assertions weakened to hide a failure.
 
 ## Next release — manual testing gate
+
+**1.4.0:** the owner approved the release on 19 November 2026 after testing on the
+same devices as 1.3.1; see the release candidate section above. The boxes below
+were not confirmed one by one.
 
 **Before writing release notes for the release after 1.3.1, confirm that every
 box below is ticked.** Two changes merged since `v1.3.1` have not been tested on a
