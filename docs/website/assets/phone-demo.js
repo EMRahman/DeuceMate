@@ -146,6 +146,7 @@
       person: '<circle cx="12" cy="7" r="4"/><path d="M4 21a8 8 0 0 1 16 0Z"/>',
       people: '<circle cx="9" cy="8" r="3.5"/><path d="M2 20a7 7 0 0 1 14 0Zm13-9a3 3 0 1 0 0-6m2 15h5a6 6 0 0 0-5-6"/>',
       note: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/>',
+      clipboard: '<rect x="5" y="4" width="14" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 11h7M9 15h7M9 19h4"/><circle cx="7.5" cy="11" r=".6"/><circle cx="7.5" cy="15" r=".6"/>',
       compare: '<path d="M7 4 3 8l4 4M3 8h14m0 4 4 4-4 4m4-4H7"/>',
       expand: '<path d="M9 3H3v6m0-6 7 7m5 11h6v-6m0 6-7-7"/>',
       signal: '<path d="M3 20v-4m6 4v-8m6 8V8m6 12V4" stroke-width="3"/>',
