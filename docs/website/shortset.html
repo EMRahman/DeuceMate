@@ -20,12 +20,16 @@
 
 <link rel="icon" type="image/png" href="assets/deucemate-logo.png">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<meta http-equiv="refresh" content="0; url=try.html?shortset#panel-watch">
+<meta http-equiv="refresh" content="0; url=doubles-tournaments-formats.html?format=shortSets">
 <script>
-window.location.replace("try.html" + (window.location.search || "?shortset") + (window.location.hash || "#panel-watch"));
+const parameters = new URLSearchParams(window.location.search);
+if (!parameters.has("type")) parameters.set("type", "doubles");
+if (!parameters.has("format")) parameters.set("format", "shortSets");
+const page = window.location.hash === "#panel-iphone" ? "try.html" : "doubles-tournaments-formats.html";
+window.location.replace(page + "?" + parameters + window.location.hash);
 </script>
 </head>
 <body style="background:#080b0a;color:#eef3f0;font-family:system-ui,-apple-system,sans-serif;padding:24px;text-align:center;">
-<p>Opening the <a href="try.html?shortset#panel-watch" style="color:#2fd08a;">Short Sets Tennis Rules Simulator</a>…</p>
+<p>Opening the <a href="doubles-tournaments-formats.html?format=shortSets" style="color:#2fd08a;">Short Sets Tennis Rules Simulator</a>…</p>
 </body>
 </html>

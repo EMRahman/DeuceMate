@@ -1,0 +1,94 @@
+.club-nav { justify-content:space-between; }
+.club-page { padding-top:clamp(30px,6vw,72px); padding-bottom:64px; }
+.club-page h1 { font-size:clamp(2.25rem,5vw,3.85rem); max-width:18ch; }
+.club-page > .lede { max-width:58ch; margin-bottom:26px; }
+.club-picker { display:flex; flex-wrap:wrap; gap:8px; }
+.club-picker button,
+.club-scenes button {
+  min-height:44px;
+  padding:8px 14px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--glass);
+  color:var(--ink);
+  font:inherit;
+  font-weight:650;
+  text-align:left;
+  cursor:pointer;
+}
+.club-picker button:hover, .club-scenes button:hover { border-color:var(--muted); }
+.club-picker button[aria-pressed=true],
+.club-scenes button[aria-pressed=true] {
+  background:#133126;
+  border-color:#2b8862;
+  color:#a2f0cc;
+}
+.club-page button:focus-visible, .club-page a:focus-visible {
+  outline:2px solid var(--green);
+  outline-offset:3px;
+}
+.club-practice { display:grid; grid-template-columns:minmax(240px,1fr) minmax(0,1.75fr); gap:16px; margin-top:16px; }
+.club-practice > section {
+  min-width:0;
+  padding:clamp(16px,3vw,28px);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--bg-2);
+}
+.club-scenarios h2, .club-board h2, .club-download h2 { font-size:1.4rem; }
+.club-scenarios p, .club-scene-note, .club-download p { color:var(--muted); margin:10px 0 18px; }
+.club-scenes { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.club-scenes button { font-size:.92rem; }
+.club-board-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+.club-type button { padding-inline:11px; font-size:.88rem; }
+.club-score { width:100%; border-collapse:separate; border-spacing:0; table-layout:fixed; }
+.club-score th, .club-score td { padding:7px 10px; text-align:right; }
+.club-score th:first-child { text-align:left; width:40%; }
+.club-score thead th { color:var(--muted); font-size:.82rem; font-weight:650; vertical-align:bottom; }
+.club-score tbody { background:#131c19; }
+.club-score tbody th { font-weight:650; overflow-wrap:anywhere; }
+.club-score tbody td { font-size:clamp(1.65rem,5vw,2.9rem); line-height:1.25; font-weight:800; font-variant-numeric:tabular-nums; }
+.club-score tbody tr + tr > * { border-top:1px solid var(--line); }
+.club-score [data-side=me] td { color:#59e4a6; }
+.club-score [data-side=opponent] td { color:#89baff; }
+.club-feedback { margin:14px 0; padding-left:12px; border-left:3px solid var(--gold); }
+.club-feedback p { margin:0; }
+#club-next { font-weight:700; }
+#club-result { color:var(--muted); font-size:.94rem; }
+.club-score-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.club-score-actions .btn { min-width:0; white-space:normal; text-align:center; line-height:1.25; }
+.club-score-actions .btn:disabled,
+.club-text-button:disabled { opacity:.45; cursor:default; transform:none; box-shadow:none; }
+.club-replay-actions { display:flex; flex-wrap:wrap; gap:16px; margin-top:8px; }
+.club-text-button {
+  min-height:44px;
+  padding:4px 0;
+  border:0;
+  background:transparent;
+  color:#a2f0cc;
+  font:inherit;
+  font-size:.9rem;
+  text-decoration:underline;
+  text-underline-offset:3px;
+  cursor:pointer;
+}
+.club-download {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:14px;
+  margin-top:24px;
+  padding:clamp(16px,3vw,26px);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+}
+.club-download p { margin-bottom:0; max-width:58ch; }
+@media (max-width:720px) {
+  .club-practice { grid-template-columns:minmax(0,1fr); }
+}
+@media (max-width:400px) {
+  .club-page { padding-inline:14px; }
+  .club-picker button { padding-inline:10px; font-size:.88rem; }
+  .club-score-actions .btn { padding-inline:8px; font-size:.9rem; }
+}

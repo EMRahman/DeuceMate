@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#080b0a">
+<title>Doubles Tournament Formats | DeuceMate</title>
+<meta name="description" content="Practise FAST4, Short Sets and Perpetual Tiebreak scoring for doubles. Try a deciding point, a tiebreak or a change of ends before your club tournament.">
+<link rel="canonical" href="https://emrahman.github.io/DeuceMate/doubles-tournaments-formats.html">
+<link rel="icon" type="image/png" href="assets/deucemate-logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="assets/club-formats.css">
+<script src="assets/watch-demo.js" defer></script>
+<script src="assets/club-scenarios.js" defer></script>
+<script src="assets/club-formats.js" defer></script>
+</head>
+<body>
+<div class="mesh-grid" aria-hidden="true"></div>
+<header class="nav scrolled">
+  <div class="wrap nav-inner club-nav">
+    <a class="brand" href="index.html" aria-label="DeuceMate home">
+      <img class="logo" src="assets/deucemate-logo.png" alt="" width="34" height="34">
+      DeuceMate
+    </a>
+    <a class="btn btn-primary btn-sm" href="https://apps.apple.com/app/id6757105622">Download free</a>
+  </div>
+</header>
+
+<main class="wrap club-page">
+  <h1>Doubles tournament formats</h1>
+  <p class="lede">Jump to a deciding point, a tiebreak or a change of ends. Play the next point and see what the score does.</p>
+
+  <div class="club-picker" role="group" aria-label="Match format">
+    <button type="button" data-format="fast4" aria-pressed="true">FAST4</button>
+    <button type="button" data-format="shortSets" aria-pressed="false">Short Sets</button>
+    <button type="button" data-format="perpetualSuperTiebreak" aria-pressed="false">Perpetual Tiebreak</button>
+  </div>
+
+  <div class="club-practice">
+    <section class="club-scenarios" aria-labelledby="club-scenario-title">
+      <h2 id="club-scenario-title">Jump to a score</h2>
+      <p id="club-rules">Win four games. At 3–3, play a tiebreak to five points. At 40–40, one point wins the game.</p>
+      <div class="club-scenes" role="group" aria-labelledby="club-scenario-title">
+        <button type="button" data-scene="start" aria-pressed="false">Start at 0–0</button>
+        <button type="button" data-scene="deuce" aria-pressed="true">40–40 no-ad</button>
+        <button type="button" data-scene="tiebreak" aria-pressed="false">3–3 in games</button>
+        <button type="button" data-scene="decider" aria-pressed="false">4–4 in tiebreak</button>
+      </div>
+    </section>
+
+    <section class="club-board" aria-labelledby="club-board-title">
+      <div class="club-board-head">
+        <h2 id="club-board-title">Scoreboard</h2>
+        <div class="club-picker club-type" role="group" aria-label="Singles or doubles">
+          <button type="button" data-type="doubles" aria-pressed="true">Doubles</button>
+          <button type="button" data-type="singles" aria-pressed="false">Singles</button>
+        </div>
+      </div>
+      <p class="club-scene-note" id="club-scene-note"></p>
+      <table class="club-score" aria-label="Match score">
+        <thead>
+          <tr><th scope="col">Side</th><th scope="col" data-games>Games</th><th scope="col" data-points-heading>Points</th></tr>
+        </thead>
+        <tbody>
+          <tr data-side="me"><th scope="row">You</th><td data-games>0</td><td data-points>40</td></tr>
+          <tr data-side="opponent"><th scope="row">Opponent</th><td data-games>0</td><td data-points>40</td></tr>
+        </tbody>
+      </table>
+      <div class="club-feedback" role="status" aria-atomic="true">
+        <p id="club-next"></p>
+        <p id="club-result"></p>
+      </div>
+      <div class="club-score-actions">
+        <button type="button" class="btn btn-primary" data-award="me">You win the point</button>
+        <button type="button" class="btn btn-ghost" data-award="opponent">Opponent wins</button>
+      </div>
+      <div class="club-replay-actions">
+        <button type="button" class="club-text-button" data-undo disabled>Undo point</button>
+        <button type="button" class="club-text-button" data-reset>Reset scenario</button>
+      </div>
+    </section>
+  </div>
+
+  <noscript><p>Enable JavaScript to play through the scoring examples.</p></noscript>
+
+  <aside class="club-download">
+    <div>
+      <h2>Let your Watch keep score</h2>
+      <p>Pick the format on Apple Watch and swipe after each point. DeuceMate tracks the score, the server and when to change ends.</p>
+    </div>
+    <a class="btn btn-primary" href="https://apps.apple.com/app/id6757105622">Download on the App Store</a>
+  </aside>
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <nav class="footer-links" aria-label="Footer">
+      <a href="index.html">DeuceMate</a>
+      <a href="try.html">Full Watch and iPhone demo</a>
+      <a href="support.html">Support</a>
+      <a href="privacy.html">Privacy</a>
+    </nav>
+    <p class="fine">© 2026 Ehsan Rahman</p>
+  </div>
+</footer>
+</body>
+</html>

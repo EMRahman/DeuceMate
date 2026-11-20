@@ -6,7 +6,7 @@
      Packages/DeuceMateCore/Sources/DeuceMateCore/Scoring/ScoringEngine.swift
      Packages/DeuceMateCore/Sources/DeuceMateCore/Models/ScoreTypes.swift
    Points, games, sets, tiebreaks, super tiebreaks, server rotation,
-   side-changes and all six formats — including doubles' four-player service
+   side-changes and all eight formats — including doubles' four-player service
    rotation — mirror the real engine so the experience matches the app.
    ========================================================================== */
 (function () {
@@ -170,6 +170,13 @@
     if (!state || !state.currentServer || !state.cfg || !state.cfg.noAdScoring || isMatchComplete(state)) return false;
     if (lastSet(state) && lastSet(state).isTieBreak) return false;
     return state.currentPointsMe === 3 && state.currentPointsOpponent === 3;
+  }
+
+  function isDeuceSide(state) {
+    if (state.cfg.fixedDeuceSide) return true;
+    var set = lastSet(state);
+    if (set && set.isTieBreak) return state.pointCountInTiebreak % 2 === 0;
+    return (state.currentPointsMe + state.currentPointsOpponent) % 2 === 0;
   }
 
   /* ---- The reducer (mirrors ScoringEngine.Engine.updateScore) ---- */
@@ -555,7 +562,7 @@
       isDecidingSuperTiebreak: isDecidingSuperTiebreak,
       applyDoublesSetup: applyDoublesSetup, resolveDoublesTeamServer: resolveDoublesTeamServer,
       leaderWhenStopped: leaderWhenStopped, nextSetRequiresEndsSwitch: nextSetRequiresEndsSwitch,
-      receiverChoosesServiceSide: receiverChoosesServiceSide,
+      receiverChoosesServiceSide: receiverChoosesServiceSide, isDeuceSide: isDeuceSide,
       cfgFor: cfgFor, setsWon: setsWon, FORMAT_LABELS: FORMAT_LABELS, clone: clone, changeoverReasonText: changeoverReasonText,
       DOUBLES_TEAM: DOUBLES_TEAM, DOUBLES_DISPLAY_NAME: DOUBLES_DISPLAY_NAME
     };
@@ -2113,12 +2120,6 @@
      panel. Heart rate and calories are invented — a browser has no HealthKit. */
   var courtBuilt = false, courtDots = null;
   var courtInitialHeading = 205, fakeHeading = 205;
-  function isDeuceSide() {
-    if (state.cfg.fixedDeuceSide) return true;
-    var last = lastSet(state);
-    if (last && last.isTieBreak) return state.pointCountInTiebreak % 2 === 0;
-    return (state.currentPointsMe + state.currentPointsOpponent) % 2 === 0;
-  }
   function isAtGameStart() {
     if (isMatchComplete(state)) return false;
     var last = lastSet(state);
@@ -2144,7 +2145,7 @@
       }
       courtBuilt = true;
     }
-    var server = state.currentServer, deuce = isDeuceSide();
+    var server = state.currentServer, deuce = isDeuceSide(state);
     var serverOnLeft = !server ? false : (server === "me" ? !deuce : deuce);
     el.court.setAttribute("data-server", server || "none");
     // top = opponent, bottom = me (CourtSideView draws the opponent on top)
