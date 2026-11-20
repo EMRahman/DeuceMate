@@ -71,6 +71,12 @@ async function checkClubFormats(browser, url) {
     assert.equal(await points("opp"), "40");
     assert.match(await next(), /receiver chooses the side/i);
     assert.match(await screen.locator("[data-reminder]").textContent(), /Receiver chooses side/);
+    assert.ok(await screen.locator(".app-clock").isVisible(), "watch clock is visible");
+    assert.match(await screen.locator(".app-clock").textContent(), /^\d{1,2}:\d{2}$/);
+    assert.ok(await screen.locator("[data-hr-val]").isVisible(), "heart rate badge is visible");
+    assert.match(await screen.locator("[data-hr-val]").textContent(), /^\d{2,3}$/);
+    assert.ok(await screen.locator("[data-foot]").isVisible(), "calories and elapsed footer is visible");
+    assert.match(await screen.locator("[data-foot]").textContent(), /🔥 \d+ kcal · 🕐 \d+ m \d+ s/);
     assert.ok(await undo.isDisabled(), "scenario's starting score can't be undone");
 
     await screen.scrollIntoViewIfNeeded();

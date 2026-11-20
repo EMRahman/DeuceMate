@@ -2282,6 +2282,11 @@
     resetOverlays();
     showToast(null);
     hasCompletedFirstGame = state.gameCount > 0;
+    var seededOffsetMs = (18 + seq.length * 28) * 1000;
+    matchStartTime = Date.now() - seededOffsetMs;
+    recordStart = matchStartTime;
+    curSetStartedAt = matchStartTime;
+    fakeHR = 118 + Math.min(34, Math.round(seq.length * 0.9));
     setClockSync();
     render();
   };
