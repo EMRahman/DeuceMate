@@ -590,9 +590,8 @@ When completing the App Privacy questionnaire in App Store Connect:
   playing-style notes included (and remembers those choices), while private
   match notes stay off on every visit and require switching on and reviewing
   the exact text first (#200). The matching `docs/website/privacy.html` update
-  is PR #201, held with the 1.4.0 website changes until 1.4.0 is approved: the
-  page is live on merge and would otherwise describe features the store build
-  doesn't have. None of 1.4.0 changes the "Data Not Collected" answer; re-check
+  shipped in PR #201, merged on 20 November 2026 once 1.4.0 was live on the
+  App Store. None of 1.4.0 changes the "Data Not Collected" answer; re-check
   the label on the 1.4.0 version page. Otherwise the private note enters a
   report, AI prompt or manual archive only through a separate per-export
   "Include private note(s)" opt-in (off every time) that shows the exact text,
@@ -641,7 +640,7 @@ App Review Information persists across versions in App Store Connect, so the
 previous submission's text is probably still sitting in the field — check it
 rather than assuming the field is empty.
 
-### 1.4.0
+### 1.4.0 (released)
 
 Final, with the What's New text above. Paste it in place of the 1.3.1 text that
 App Store Connect carries over. The manual-entry route to Prepare Game Plan is
