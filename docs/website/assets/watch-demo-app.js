@@ -779,6 +779,11 @@
     guide: "The animated Guide, running itself. Use Previous and Next to move through it."
   };
   S.setMode = function (mode) {
+    if (S.urlPresetActive && S.fast4Scene && mode !== "guide") {
+      S.settings.track = mode === "stats";
+      S.loadPresetScene(S.fast4Scene, S.presetFormat);
+      return;
+    }
     api.clear();
     S.stack.length = 0; S.alert = null;
     S.matchPhase = "warmup"; S.liveId = null; S.headingLocked = false;
@@ -794,11 +799,245 @@
     b.addEventListener("click", function () { S.setMode(b.getAttribute("data-mode")); });
   });
 
+  /* ---- URL query preset & FAST4 / Short Sets / Perpetual Tiebreak simulator (try.html) */
+  function alternatingHolds(count) {
+    var out = [];
+    for (var g = 0; g < count; g++) {
+      var side = g % 2 === 0 ? "me" : "opponent";
+      out.push(side, side, side, side);
+    }
+    return out;
+  }
+  function alternatingPoints(count) {
+    var out = [];
+    for (var i = 0; i < count; i++) out.push(i % 2 === 0 ? "me" : "opponent");
+    return out;
+  }
+  var FAST4_TIEBREAK_ENTRY = alternatingHolds(6);
+  var SHORTSET_TIEBREAK_ENTRY = alternatingHolds(8);
+  var PRESET_FORMATS = {
+    fast4: {
+      title: "FAST4 Simulator",
+      scenes: {
+        start: {
+          label: "0–0 Start",
+          points: [],
+          caption: "FAST4: First to 4 games wins. No-Ad deciding point at 40–40; 5-point tiebreak at 3–3. Swipe the watch or tap ▲ Win / ▼ Lose below."
+        },
+        deuce: {
+          label: "40–40 No-Ad",
+          points: ["me", "opponent", "me", "opponent", "me", "opponent"],
+          caption: "40–40 (No-Ad deuce): Sudden-death point — the watch shows '🎾 Receiver chooses side' and the next point wins the game."
+        },
+        tiebreak: {
+          label: "3–3 Tiebreak",
+          points: FAST4_TIEBREAK_ENTRY,
+          caption: "3–3 Tiebreak: First to 5 points (sudden death at 4–4). Server rotates after point 1, then every 2 points."
+        },
+        decider: {
+          label: "4–4 Decider",
+          points: FAST4_TIEBREAK_ENTRY.concat(["me", "opponent", "me", "opponent", "me", "opponent", "me", "opponent"]),
+          caption: "4–4 in the 3–3 Tiebreak: Sudden-death match point — the very next point wins the FAST4 set 4–3."
+        }
+      }
+    },
+    shortSets: {
+      title: "Short Sets Simulator",
+      scenes: {
+        start: {
+          label: "0–0 Start",
+          points: [],
+          caption: "Short Sets: First to 4 games by 2 (up to 5–3). No-Ad deciding point at 40–40; 7-point tiebreak at 4–4. Swipe the watch or tap ▲ Win / ▼ Lose below."
+        },
+        deuce: {
+          label: "40–40 No-Ad",
+          points: ["me", "opponent", "me", "opponent", "me", "opponent"],
+          caption: "40–40 (No-Ad deuce): Sudden-death point — the watch shows '🎾 Receiver chooses side' and the next point wins the game."
+        },
+        tiebreak: {
+          label: "4–4 Tiebreak",
+          points: SHORTSET_TIEBREAK_ENTRY,
+          caption: "4–4 Tiebreak: At 4–4 (4–3 plays on to 5–3 or 4–4), play a 7-point tiebreak (win by 2). Server rotates after point 1, then every 2 points."
+        },
+        decider: {
+          label: "6–5 Match Pt",
+          points: SHORTSET_TIEBREAK_ENTRY.concat(["me", "opponent", "me", "opponent", "me", "opponent", "me", "opponent", "me", "opponent", "me"]),
+          caption: "6–5 in the 4–4 Tiebreak: First to 7 points (win by 2) — win this point for the set (5–4), or lose for 6–6 and play on by 2."
+        }
+      }
+    },
+    perpetualSuperTiebreak: {
+      title: "Perpetual Tiebreak Simulator",
+      scenes: {
+        start: {
+          label: "0–0 Start",
+          points: [],
+          caption: "Perpetual Tiebreak: Continuous tiebreak scoring until your round or timer ends. First server serves 1 point from Deuce; then servers rotate every 2 points (Ad first, then Deuce)."
+        },
+        deuce: {
+          label: "1–0 (2-Pt Serve)",
+          points: ["me"],
+          caption: "1–0 (After Point 1): Balls change after the opening point — the next server now serves 2 points, starting from the Ad (left) court, then the Deuce (right) court."
+        },
+        tiebreak: {
+          label: "3–2 (6-Pt Switch)",
+          points: alternatingPoints(5),
+          caption: "3–2 (6th Point Next): Every 6 points (3–3, 6–6, 9–9…), the watch prompts players and balls to change ends (🔁 🎾 👥). Tap ▲ Win or ▼ Lose to see the changeover."
+        },
+        decider: {
+          label: "10–10 Plays On",
+          points: alternatingPoints(20),
+          caption: "10–10 (Continuous): Unlike a single 10-point tiebreak, Perpetual Tiebreak keeps running past 10 with 2-point serve rotation and 6-point end switches until you end the match."
+        }
+      }
+    }
+  };
+  var PRESET_SCENE_ORDER = ["start", "deuce", "tiebreak", "decider"];
+  var fast4Bar = null, fast4TitleEl = null, fast4TypeBtn = null, fast4ScenesEl = null, fast4CaptionEl = null, fast4SceneBtns = [];
+
+  function activePreset() {
+    return PRESET_FORMATS[S.presetFormat] || PRESET_FORMATS.fast4;
+  }
+
+  function syncFast4Bar() {
+    if (!fast4Bar) return;
+    var preset = activePreset();
+    if (fast4TitleEl) fast4TitleEl.textContent = preset.title;
+    if (fast4ScenesEl) fast4ScenesEl.setAttribute("aria-label", preset.title + " scenarios");
+    if (fast4TypeBtn) {
+      var isDoubles = S.setup.type === "doubles";
+      fast4TypeBtn.textContent = isDoubles ? "Doubles ⇄" : "Singles ⇄";
+      fast4TypeBtn.setAttribute("aria-pressed", String(isDoubles));
+      fast4TypeBtn.setAttribute("aria-label", "Switch to " + (isDoubles ? "Singles" : "Doubles"));
+    }
+    fast4SceneBtns.forEach(function (btn) {
+      var key = btn.getAttribute("data-fast4-scene");
+      var active = key === S.fast4Scene;
+      btn.textContent = preset.scenes[key].label;
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+    if (fast4CaptionEl && preset.scenes[S.fast4Scene]) {
+      fast4CaptionEl.textContent = preset.scenes[S.fast4Scene].caption;
+    }
+  }
+
+  function ensureFast4Bar() {
+    if (fast4Bar) return;
+    var captionEl = root.parentNode ? root.parentNode.querySelector("[data-mode-caption]") : null;
+    if (!captionEl || !captionEl.parentNode) return;
+    var preset = activePreset();
+    fast4TitleEl = h("span", { text: preset.title });
+    fast4TypeBtn = h("button", {
+      type: "button",
+      class: "fast4-type-btn",
+      "data-fast4-type": "",
+      onclick: function () {
+        S.setup.type = S.setup.type === "doubles" ? "singles" : "doubles";
+        S.loadPresetScene(S.fast4Scene || "start", S.presetFormat);
+      }
+    });
+    fast4SceneBtns = PRESET_SCENE_ORDER.map(function (key) {
+      return h("button", {
+        type: "button",
+        class: "fast4-scene-btn",
+        "data-fast4-scene": key,
+        onclick: function () { S.loadPresetScene(key, S.presetFormat); }
+      }, preset.scenes[key].label);
+    });
+    fast4ScenesEl = h("div", { class: "fast4-scenes", role: "group", "aria-label": preset.title + " scenarios" }, fast4SceneBtns);
+    fast4CaptionEl = h("p", { class: "fast4-caption", "data-fast4-caption": "" });
+    fast4Bar = h("div", { class: "fast4-bar" },
+      h("div", { class: "fast4-head" }, fast4TitleEl, fast4TypeBtn),
+      fast4ScenesEl,
+      fast4CaptionEl
+    );
+    captionEl.parentNode.insertBefore(fast4Bar, captionEl.nextSibling);
+    syncFast4Bar();
+  }
+
+  S.loadPresetScene = function (sceneKey, formatId) {
+    var fmt = PRESET_FORMATS[formatId] ? formatId : (PRESET_FORMATS[S.presetFormat] ? S.presetFormat : "fast4");
+    var preset = PRESET_FORMATS[fmt];
+    if (!preset.scenes[sceneKey]) sceneKey = "start";
+    S.presetFormat = fmt;
+    S.fast4Scene = sceneKey;
+    S.setup.format = fmt;
+    api.loadScenario({
+      matchType: S.setup.type,
+      format: fmt,
+      server: "me",
+      doublesServer: "me",
+      tracking: S.settings.track,
+      compass: S.settings.compass
+    }, preset.scenes[sceneKey].points);
+    S.liveId = uid();
+    S.headingLocked = false;
+    S.matchPhase = "play";
+    S.stack = [{ id: "match" }];
+    S.alert = null;
+    render();
+    syncFast4Bar();
+  };
+  S.loadFast4Scene = function (sceneKey, formatId) {
+    S.loadPresetScene(sceneKey, formatId || "fast4");
+  };
+
+  function applyUrlPreset() {
+    if ((root.closest && root.closest("#try")) || !window.location.search) return false;
+    var params = new URLSearchParams(window.location.search);
+    var isFast4Short = params.has("fast4");
+    var isShortSetShort = params.has("shortset") || params.has("shortsets");
+    var isPerpetualShort = params.has("perpetual") || params.has("perpetualtiebreak") || params.has("tiebreak");
+    var rawFmt = params.get("format");
+    var type = params.get("type");
+    var scene = params.get("scene");
+    var fmt = null;
+    if (isFast4Short) {
+      fmt = "fast4";
+    } else if (isShortSetShort) {
+      fmt = "shortSets";
+    } else if (isPerpetualShort) {
+      fmt = "perpetualSuperTiebreak";
+    } else if (rawFmt) {
+      var low = rawFmt.toLowerCase();
+      if (low === "fast4") fmt = "fast4";
+      else if (low === "shortset" || low === "shortsets") fmt = "shortSets";
+      else if (low === "perpetual" || low === "perpetualtiebreak" || low === "perpetualsupertiebreak") fmt = "perpetualSuperTiebreak";
+      else {
+        for (var i = 0; i < FORMATS.length; i++) {
+          if (FORMATS[i].id === rawFmt) { fmt = FORMATS[i].id; break; }
+        }
+      }
+    }
+    if (type === "doubles" || type === "singles") S.setup.type = type;
+    else if (isFast4Short || isShortSetShort || isPerpetualShort) S.setup.type = "doubles";
+    var hasKnownScene = !!(scene && PRESET_FORMATS.fast4.scenes[scene]);
+    if (!fmt && !hasKnownScene) return false;
+    if (!fmt) fmt = "fast4";
+    S.setup.format = fmt;
+    S.urlPresetActive = true;
+    if (PRESET_FORMATS[fmt]) {
+      var defaultScene = (isFast4Short || isShortSetShort) ? "deuce" : "start";
+      S.presetFormat = fmt;
+      ensureFast4Bar();
+      S.loadPresetScene(hasKnownScene ? scene : defaultScene, fmt);
+      return true;
+    }
+    if (params.get("start") === "1") {
+      S.stack = [{ id: "match" }];
+      pickServer("me");
+      S.matchPhase = "play";
+      render();
+      return true;
+    }
+    return false;
+  }
+
   S.boot = function () {
     setPt();
     applyTheme();
     if (S.seedHistory) S.seedHistory();
-    render();
+    if (!applyUrlPreset()) render();
     // The demo starts with Health authorised, so the launch-time workoutManager.requestAuthorization sheet is skipped.
   };
 })();

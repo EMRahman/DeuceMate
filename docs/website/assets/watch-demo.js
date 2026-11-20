@@ -2250,6 +2250,28 @@
     courtInitialHeading = fakeHeading = 205;
     startMatch();
   };
+  api.loadScenario = function (cfg, points) {
+    api.start(cfg);
+    var seq = points || [];
+    for (var i = 0; i < seq.length; i++) {
+      var winner = seq[i];
+      history.push({ snapshot: clone(state), momentum: momentum.slice(), secondServe: false, statsLen: stats.length });
+      if (history.length > 200) history.shift();
+      if (!state.cfg.disablesPointTracking && window.DeuceMateTracking) {
+        var pending = window.DeuceMateTracking.buildPendingPoint(state, winner, false);
+        stats.push(window.DeuceMateTracking.buildUncategorizedStat(pending));
+      }
+      var res = pointWon(state, winner);
+      state = res.state;
+      momentum.push(winner);
+      if (momentum.length > 8) momentum.shift();
+    }
+    resetOverlays();
+    showToast(null);
+    hasCompletedFirstGame = state.gameCount > 0;
+    setClockSync();
+    render();
+  };
   api.active = function () { return !!state; };
   api.complete = function () { return !!state && isMatchComplete(state); };
   api.hasProgress = function () {

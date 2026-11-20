@@ -496,7 +496,7 @@
   // Save. Back, a swipe, backdrop tap or Escape with unsaved changes asks first.
   function playerDetail(phone, p, onBack, draft) {
     var leaving = false, body = h("div", "mi-page"), original = p.name, who = { id: p.id, name: p.name }, n = playerMatchCount(phone, who).length;
-    var STYLE_KEYS = ["hand", "backhand", "style"], stored = {}, style = {};
+    var STYLE_KEYS = ["hand", "backhand", "style", "notes"], stored = {}, style = {};
     STYLE_KEYS.forEach(function (k) { stored[k] = p[k] || null; style[k] = draft ? draft[k] : stored[k]; });
     function nameDraft() { return clean(name.value); }
     function nameDirty() { var v = nameDraft(); return !!v && v !== original; }
@@ -509,7 +509,14 @@
     var name = h("input", "mi-name-input mi-block"); name.value = draft ? draft.name : p.name; name.maxLength = 40; name.setAttribute("aria-label", "Player name");
     name.addEventListener("input", function () { update(); });
     body.append(sectionTitle("Name"), group(null, name), footnote("Updates all " + n + " matches with this player."));
-    body.append(sectionTitle("Playing Style"), group(null, [["hand", HAND, "Handedness"], ["backhand", BACK, "Backhand"], ["style", STYLE, "Play Style"]].map(function (g) { return pickerRow(g[2], g[1], style[g[0]], function (v) { style[g[0]] = v || null; update(); }); })), unsaved);
+    // PlayerManageView: free-text playing notes (≤4,000 characters, live count), saved only with Save.
+    var notesArea = h("textarea", "mi-note-area mi-player-notes"), notesCount = h("span", "mi-note-count");
+    notesArea.value = style.notes || ""; notesArea.maxLength = NOTE_LIMIT; notesArea.placeholder = "How they serve, rally and handle pressure"; notesArea.setAttribute("aria-label", "Playing style notes");
+    notesArea.addEventListener("input", function () { var v = notesArea.value.slice(0, NOTE_LIMIT); style.notes = v.trim() ? v : null; update(); });
+    var notesFoot = h("div", "mi-note-foot"); notesFoot.append(h("span", "", ""), notesCount);
+    body.append(sectionTitle("Playing Style"), group(null, [["hand", HAND, "Handedness"], ["backhand", BACK, "Backhand"], ["style", STYLE, "Play Style"]].map(function (g) { return pickerRow(g[2], g[1], style[g[0]], function (v) { style[g[0]] = v || null; update(); }); })),
+      sectionTitle("Notes"), group(null, notesArea), notesFoot,
+      footnote("Your own notes on how this player plays. Used only in Prepare Game Plan, never in reports or AI Coach."), unsaved);
     var others = roster(phone).filter(function (q) { return !samePlayer(q, who); });
     var merge = phone.button("", function () {
       leaving = true;
@@ -519,8 +526,7 @@
     body.append(group(null, merge), footnote("If the same person was added twice, merge this entry into the other one. Every match then uses that player."));
     var forget = phone.button("", function () { leaving = true; phone.confirm("Forget " + original + "?", "Removes " + original + " from every match on this iPhone and, when it holds those matches, your Apple Watch. Scores are kept.", "Forget Player", function () { mapPlayers(phone, who, function () { return null; }); playersSheet(phone); }); }, "mi-row"); forget.append(h("span", "mi-row-title mi-destructive", "Forget Player"));
     body.append(group(null, forget), footnote("Removes " + original + " from every match on this iPhone and, when it holds those matches, your Apple Watch. Scores are kept."));
-    var save = phone.button("Save", function () {
-      if (!dirty()) return;
+    function commit() {
       var saved = Object.assign({}, style), newName = nameDirty() ? nameDraft() : null;
       mapPlayers(phone, who, function (q) { if (newName) q.name = newName; STYLE_KEYS.forEach(function (k) { q[k] = saved[k] || null; }); return q; });
       STYLE_KEYS.forEach(function (k) { p[k] = saved[k] || null; });
@@ -528,9 +534,26 @@
       // Redraw so the title shows the saved name.
       leaving = true;
       playerDetail(phone, current(), onBack);
+    }
+    var save = phone.button("Save", function () {
+      if (!dirty()) return;
+      if (stored.notes && !style.notes) { askDeleteNotes(snapshot()); return; }
+      commit();
     }, "mi-save");
+    // Saving an emptied notes field asks first (Delete Notes / Keep Notes); Escape keeps them.
+    function askDeleteNotes(kept) {
+      var chosen = false; leaving = true;
+      var content = h("div", "phone-confirmation");
+      content.append(h("p", "phone-note", "This player's playing style notes will be removed from every match on this iPhone."),
+        phone.button("Delete Notes", function () { chosen = true; phone.closeSheet(); style = Object.assign({}, kept); commit(); }, "phone-danger"),
+        phone.button("Keep Notes", function () { chosen = true; playerDetail(phone, current(), onBack, Object.assign({}, kept, { notes: stored.notes })); }, ""));
+      phone.showSheet("Delete playing style notes?", content, { presentation: "alert", cleanup: function () {
+        if (!chosen) setTimeout(function () { playerDetail(phone, current(), onBack, Object.assign({}, kept, { notes: stored.notes })); }, 0);
+      } });
+    }
     function update() {
       unsaved.textContent = dirty() ? "Unsaved changes. Tap Save to keep them." : "";
+      notesCount.textContent = notesArea.value.length.toLocaleString("en-US") + " / " + NOTE_LIMIT.toLocaleString("en-US");
       save.disabled = !dirty();
     }
     function back() {
@@ -564,7 +587,7 @@
       var t = r.tags; if (!t) return;
       (t.opponents || []).forEach(function (p) {
         var k = pid(p); if (!clean(p.name)) return;
-        var e = map[k] || (map[k] = { id: p.id, name: p.name, hand: p.hand, backhand: p.backhand, style: p.style, count: 0, last: 0 });
+        var e = map[k] || (map[k] = { id: p.id, name: p.name, hand: p.hand, backhand: p.backhand, style: p.style, notes: p.notes || null, count: 0, last: 0 });
         e.count++; e.last = Math.max(e.last, window.DeuceMateChronology.activity(r));
       });
     });
@@ -578,12 +601,21 @@
     if (label(HAND, entry.hand)) chips.push(label(HAND, entry.hand));
     if (label(BACK, entry.backhand)) chips.push(label(BACK, entry.backhand) + " backhand");
     if (label(STYLE, entry.style)) chips.push(label(STYLE, entry.style));
+    var styleCard = [];
     if (chips.length) {
       var chipRow = h("div", "mi-chip-row");
       chipRow.style.cssText = "display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:12px 16px";
       chips.forEach(function (c) { chipRow.append(h("span", "mi-chip", c)); });
-      body.append(group(null, [chipRow]));
+      styleCard.push(chipRow);
     }
+    if (entry.notes) {
+      // Notes capped at three lines; tap to expand (OpponentsView).
+      var notes = h("button", "mi-playing-notes", entry.notes); notes.type = "button"; notes.dataset.testid = "opponent-playing-notes";
+      notes.setAttribute("aria-expanded", "false");
+      notes.addEventListener("click", function () { var open = notes.classList.toggle("open"); notes.setAttribute("aria-expanded", String(open)); });
+      styleCard.push(notes);
+    }
+    if (styleCard.length) body.append(group(null, styleCard));
     var pending = matches.filter(function (r) { return !r.endTime; }), done = matches.filter(function (r) { return r.endTime; });
     var singles = done.filter(function (r) { return r.matchType !== "doubles" && (r.tags.opponents || []).length === 1; });
     var sc = [];
@@ -605,6 +637,13 @@
         var box = h("div", "mi-h2h"); box.append(h("div", "mi-h2h-main", "With " + t.partner.name + " vs " + t.opponents.map(function (p) { return p.name; }).join(" & ")), h("div", "mi-h2h-sub", w + (w === 1 ? " win" : " wins") + " \u00b7 " + l + (l === 1 ? " loss" : " losses") + " \u00b7 " + d + (d === 1 ? " draw" : " draws"))); return box;
       })));
       body.append(h("p", "phone-note mi-footer", "Each row uses the same partner and exact opponent pair. Matches with incomplete player tags are not grouped."));
+    }
+    if (window.DeuceMatePhoneGamePlan) {
+      var plan = phone.button("", function () { window.DeuceMatePhoneGamePlan.open(phone, entry); }, "mi-row");
+      plan.dataset.testid = "opponent-prepare-game-plan";
+      var planCopy = h("span", "mi-row-copy"); planCopy.append(h("span", "mi-row-title", "Prepare Game Plan"));
+      plan.append(phone.icon("clipboard"), planCopy, phone.icon("chevron"));
+      body.append(group(null, plan));
     }
     if (pending.length) body.append(group("Pending Matches", pending.map(function (r) { return matchRow(phone, r, function () { openRecord(phone, r); }); })));
     body.append(group("Past Matches", done.length ? done.map(function (r) { return matchRow(phone, r, function () { openRecord(phone, r); }); }) : h("div", "mi-kv-head", "No completed matches yet")));
@@ -643,6 +682,7 @@
     section: section, displayLine: displayLine, convertible: convertible, convertedTags: convertedTags,
     playersDroppedConvertingToSingles: playersDroppedConvertingToSingles, getNote: getNote, setNote: setNote,
     headToHead: headToHead, previousMatch: previousMatch, key: key,
-    opponentEntries: opponentEntries, playerKey: pid, competitions: COMPETITIONS
+    opponentEntries: opponentEntries, playerKey: pid, competitions: COMPETITIONS,
+    opponentSheet: opponentSheet, samePlayer: samePlayer, profileText: profileText, matchRow: matchRow, noteLimit: NOTE_LIMIT
   };
 })();

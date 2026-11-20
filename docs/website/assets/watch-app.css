@@ -496,3 +496,37 @@ button.trk-row { background: none; border: 0; padding: 0; width: 100%; text-alig
 
 /* Match details caption sits directly under the format line (MatchStatsView tagsLine), one truncating line. */
 .det-fmt + .det-fmt.det-tags { margin-top:-3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* ---- FAST4 rules simulator bar (shown on try.html?format=fast4) ---- */
+.watch-device .fast4-bar {
+  max-width: 440px; margin: -6px auto 18px; padding: 12px 14px;
+  border-radius: 14px; border: 1px solid rgba(255,214,10,.32);
+  background: rgba(255,214,10,.06); text-align: center;
+}
+.watch-device .fast4-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-bottom: 9px; font-size: .76rem; font-weight: 800;
+  letter-spacing: .04em; text-transform: uppercase; color: #ffe9a8;
+}
+.watch-device .fast4-type-btn {
+  cursor: pointer; font: inherit; font-size: .74rem; font-weight: 700;
+  color: var(--ink); background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.2); border-radius: 999px;
+  padding: 4px 11px; text-transform: none; letter-spacing: 0;
+}
+.watch-device .fast4-type-btn:hover { background: rgba(255,255,255,.16); }
+.watch-device .fast4-scenes {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
+}
+.watch-device .fast4-scene-btn {
+  cursor: pointer; font: inherit; font-size: .8rem; font-weight: 700;
+  color: var(--ink); background: var(--glass-2);
+  border: 1px solid var(--line); border-radius: 9px; padding: 7px 11px;
+}
+.watch-device .fast4-scene-btn:hover { border-color: rgba(255,255,255,.24); background: rgba(255,255,255,.1); }
+.watch-device .fast4-scene-btn[aria-pressed="true"] {
+  border-color: rgba(255,214,10,.65); background: rgba(255,214,10,.16); color: #ffe9a8;
+}
+.watch-device .fast4-caption {
+  margin: 9px 0 0; font-size: .82rem; line-height: 1.45; color: var(--ink);
+}

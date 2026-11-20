@@ -284,6 +284,35 @@ instead of dropdowns, grouped comparisons instead of tiles, set-grouped Points,
 and toolbar sharing), preserving the underlying behavior assertions. An empty
 Trends state asserts absence of **charts**, since its format-control icon is SVG.
 
+## Prepare Game Plan and playing style notes (19 November 2026)
+
+`phone-demo-gameplan.js` mirrors 1.4.0's Prepare Game Plan, opened from an
+opponent's page (between Head to Head and Pending/Past Matches, as in
+`OpponentsView`). The main screen is ready on arrival: Upcoming, Matches and
+Includes summary rows, Focus, the estimate with Copy Prompt / Share Evidence File,
+then Preview Evidence Pack and Advanced. Upcoming is pre-filled once per visit
+from the latest singles match against the opponent; an unfinished latest match
+switches the plan to finishing it and is always evidence. Evidence is singles
+only, Last 5 by default, with unfinished matches included and doubles disclosed.
+Includes follows `ExportInclusionDefaults`: names are the share menu's remembered
+choice, playing style notes have their own remembered key
+(`deucemate-gameplan-include-playing-notes`), and private notes start off on every
+visit and go in only through Choose Notes, which shows each note's exact text.
+
+`phone-demo-matchinfo.js` adds Save-only playing style notes (4,000 characters,
+live count, Delete Notes / Keep Notes when emptied) to Manage Player, and shows
+them under the chips on the opponent's page, clamped to three lines until tapped.
+The seed data gives Alice Morgan a note.
+
+Intentional differences: the pack keeps the native seven sections and their
+order but carries fewer figures (points, serve, return, double faults, winners and
+unforced errors, pooled Σ/Σ); the token estimate is a character-count
+approximation, not `GamePlanTokenEstimator`; Advanced offers Detail but always one
+file; Share downloads the `.md` file; nothing is sent anywhere. Health data is
+never read. `scripts/iphone-demo-gameplan-qa.cjs` covers the page, defaults,
+pack sections, names/notes withholding, the remembered and non-remembered
+choices, the finishing case and the notes editor.
+
 ## Current evidence (26 October 2026)
 
 The visual review was repeated against the saved native iPhone captures and the

@@ -167,7 +167,7 @@
     // Match details (phone-authored tags): a small cast so head-to-head records have something to show.
     // Alice plays 4 matches, Ben 2, and the doubles pairing (Sam with Dan & Eve) 2; one match is left untagged.
     var P = {
-      alice: { id: "demo-alice", name: "Alice Morgan", hand: "rightHanded", backhand: "oneHanded", style: "allCourt" },
+      alice: { id: "demo-alice", name: "Alice Morgan", hand: "rightHanded", backhand: "oneHanded", style: "allCourt", notes: "Big first serve out wide on the deuce side. Slices her backhand return; comes forward behind anything short." },
       ben: { id: "demo-ben", name: "Ben Carter", hand: "leftHanded", backhand: "twoHanded", style: "aggressiveBaseliner" },
       dan: { id: "demo-dan", name: "Dan Ortiz", hand: "rightHanded", backhand: "twoHanded", style: "counterpuncher" },
       eve: { id: "demo-eve", name: "Eve Park", hand: "rightHanded", backhand: "twoHanded", style: "serveAndVolley" },

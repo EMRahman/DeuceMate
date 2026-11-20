@@ -31,9 +31,15 @@ DeuceMate is a lightweight, native Apple Watch app for scoring tennis matches in
 
 ### See the pattern
 
-| <img src="docs/readme/trends.jpg" width="260" alt="Trends filters above charts of errors and serve performance"> | <img src="docs/readme/head-to-head.jpg" width="260" alt="Head-to-head record, playing style and past matches for one opponent"> | <img src="docs/readme/compare.jpg" width="260" alt="Match rates compared with the previous match against the same opponent"> |
-|:--:|:--:|:--:|
-| **Know what's improving and what's slipping.** | **Your record against every opponent.** | **See what changed since you last played them.** |
+| <img src="docs/readme/trends.jpg" width="260" alt="Trends filters above charts of errors and serve performance"> | <img src="docs/readme/compare.jpg" width="260" alt="Match rates compared with the previous match against the same opponent"> |
+|:--:|:--:|
+| **Know what's improving and what's slipping.** | **See what changed since you last played them.** |
+
+### Plan the next one
+
+| <img src="docs/readme/head-to-head.jpg" width="260" alt="An opponent's page: playing style chips and notes, head-to-head record, Prepare Game Plan and past matches"> | <img src="docs/readme/game-plan.jpg" width="260" alt="Prepare Game Plan: the upcoming match, the matches it draws on and what it includes, ready to copy or share"> |
+|:--:|:--:|
+| **Your record and notes on every opponent.** | **A game plan for your next match against them.** |
 
 ### Get coached, then share it
 
@@ -77,7 +83,9 @@ This project also showcases my ability to ship production-quality native iOS/wat
 - **Point outcome tracking** — tag every point with a cause and ending shot to unlock serve, return, break-point, pressure, rally-depth, and score-state analytics, filterable per set or whole match.
 - **Coaching insights** — Coaching Insights (up to three ranked observations per match) and PulseCoach (heart-rate-correlated insights), plus an interactive points-momentum graph with HR and steps overlays.
 - **Performance trends** — charts across your matches show what is improving and what is slipping, filterable by window, match type, format, competition type, and opponent.
-- **Match details and opponents** — add players, competition type, and a private note to any match, see your head-to-head record against each opponent, and compare a match with your previous one against them.
+- **Match details and opponents** — add players, competition type, and a private note to any match, keep playing-style notes on each player, see your head-to-head record against each opponent, and compare a match with your previous one against them.
+- **Prepare Game Plan** — from an opponent's page, gather what your singles matches against them show into a pack ready for the AI app you choose, set up from your last match against them (or for finishing it, if unfinished). Names and playing-style notes can be switched off, private notes go in only by opt-in, and DeuceMate never sends it anywhere itself.
+- **Your name** — optionally name yourself as the recorder in reports and AI prompts, with a shorter name for spoken announcements.
 - **AI coaching exports** — one tap builds a structured coaching prompt (including the raw point-by-point table) for ChatGPT, Claude, Gemini, and others, with a dual perspective mode so your opponent gets coached too.
 - **Shareable interactive web report** — export any match as a single self-contained HTML page (momentum chart with toggleable outcome/shot scatter, the full Me-vs-opponent stats with Stats/Points tabs and per-set filters, and a built-in AI-coach launcher) that opens in any browser, fully offline — no app, account, or server.
 - **Health & fitness** — optional HealthKit workout with live heart rate, calories, steps, distance, and per-set timers.

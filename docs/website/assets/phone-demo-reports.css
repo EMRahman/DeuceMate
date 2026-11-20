@@ -596,3 +596,23 @@
 .phone-device-dialog .mi-back svg { width:20px; height:20px; }
 .pr-trend-tag-row { justify-content:space-between; gap:12px; }
 .pr-trend-tag-row .pr-trend-format-label { max-width:48%; }
+/* Opponent playing notes (three lines, tap to expand) and Prepare Game Plan (phone-demo-gameplan.js). */
+.phone-device-dialog .mi-playing-notes { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden; width:100%; margin:0; padding:10px 16px 14px; border:0; border-top:1px solid var(--sheet-separator,rgba(128,128,128,.25)); background:transparent; color:var(--sheet-text); font:inherit; font-size:15px; line-height:1.35; text-align:left; white-space:pre-wrap; cursor:pointer; }
+.phone-device-dialog .mi-playing-notes.open { display:block; -webkit-line-clamp:unset; }
+.phone-device-dialog .mi-player-notes { min-height:120px; flex:none; }
+.phone-device-dialog .gp-page { display:flex; flex-direction:column; gap:8px; padding-bottom:20px; }
+.phone-device-dialog .gp-card { display:flex; flex-direction:column; }
+.phone-device-dialog .gp-row { display:flex; align-items:center; gap:10px; }
+.phone-device-dialog .gp-value { margin-left:auto; color:var(--sheet-secondary); font-size:15px; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60%; }
+.phone-device-dialog .gp-focus { width:100%; box-sizing:border-box; min-height:58px; padding:12px 16px; border:0; border-radius:inherit; background:transparent; color:var(--sheet-text); font:inherit; font-size:16px; resize:none; }
+.phone-device-dialog .gp-estimate { display:flex; flex-direction:column; gap:2px; padding:12px 16px; border-bottom:1px solid var(--sheet-separator,rgba(128,128,128,.25)); }
+.phone-device-dialog .gp-estimate span { color:var(--sheet-secondary); font-size:14px; }
+.phone-device-dialog .gp-action .mi-row-title { color:var(--sheet-tint); }
+.phone-device-dialog .gp-toggle { padding:10px 16px; }
+.phone-device-dialog .gp-choices { display:flex; flex-wrap:wrap; gap:6px; }
+.phone-device-dialog .gp-select { margin-left:auto; max-width:60%; padding:6px 8px; border:1px solid var(--sheet-separator,rgba(128,128,128,.3)); border-radius:8px; background:var(--sheet-bg); color:var(--sheet-text); font:inherit; }
+.phone-device-dialog .gp-match { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--sheet-separator,rgba(128,128,128,.2)); }
+.phone-device-dialog .gp-match:last-child { border-bottom:0; }
+.phone-device-dialog .gp-match-copy { display:flex; flex-direction:column; gap:2px; }
+.phone-device-dialog .gp-match-copy span { color:var(--sheet-secondary); font-size:13px; }
+.phone-device-dialog .gp-preview { width:100%; box-sizing:border-box; min-height:420px; padding:12px; border:0; border-radius:12px; background:var(--sheet-card); color:var(--sheet-text); font:12px/1.4 ui-monospace,monospace; resize:none; }
