@@ -49,55 +49,88 @@ const score = page => page.evaluate(() => document.querySelector("#watch-demo").
 
 async function checkClubFormats(browser, url) {
   const { context, page, errors } = await start(browser, { viewport: { width: 360, height: 800 }, hasTouch: true });
-  const games = side => page.locator(`[data-side=${side}] [data-games]`).textContent();
-  const points = side => page.locator(`[data-side=${side}] [data-points]`).textContent();
+  const screen = page.locator("[data-screen]");
+  const games = side => page.locator(`[data-${side}-cells] .w-cell`).textContent();
+  const points = side => page.locator(`[data-${side}-pts]`).textContent();
   const next = () => page.locator("#club-next").textContent();
-  const result = () => page.locator("#club-result").textContent();
   const click = name => page.getByRole("button", { name, exact: true }).click();
+  const win = page.locator("[data-pt-me]");
+  const lose = page.locator("[data-pt-opp]");
+  const undo = page.locator("[data-undo]");
+  const changeover = page.getByRole("dialog", { name: "Changeover" });
+  const acknowledge = () => changeover.getByRole("button", { name: "OK", exact: true }).click();
+  const clubUrl = new URL("doubles-tournaments-formats.html", url).href;
   try {
     await page.goto(url);
-    await page.getByRole("link", { name: "Practise FAST4, Short Sets and Perpetual Tiebreak" }).click();
-    await page.getByRole("heading", { name: "Doubles tournament formats" }).waitFor();
+    assert.equal(await page.locator('a[href*="doubles-tournaments-formats"]').count(), 0, "homepage keeps the tournament page unlisted");
+    await page.goto(clubUrl);
+    await screen.waitFor();
+    assert.equal(await page.locator('meta[name="robots"]').getAttribute("content"), "noindex");
     assert.equal(await page.getByRole("button", { name: "Doubles", exact: true }).getAttribute("aria-pressed"), "true");
-    assert.match(await next(), /receiver chooses the side/i);
-    await click("You win the point");
-    assert.equal(await games("me"), "1", "one point wins a no-ad game");
-    await click("Undo point");
     assert.equal(await points("me"), "40");
+    assert.equal(await points("opp"), "40");
+    assert.match(await next(), /receiver chooses the side/i);
+    assert.match(await screen.locator("[data-reminder]").textContent(), /Receiver chooses side/);
+    assert.ok(await undo.isDisabled(), "scenario's starting score can't be undone");
+
+    await screen.scrollIntoViewIfNeeded();
+    const box = await screen.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height * .7);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height * .4, { steps: 6 });
+    await page.mouse.up();
+    assert.equal(await games("me"), "1", "an upward swipe wins the no-ad game");
+    await acknowledge();
+    await undo.click();
+    assert.equal(await points("me"), "40");
+    assert.ok(await undo.isDisabled());
+
     await click("4–4 in tiebreak");
-    await click("Opponent wins");
-    assert.equal(await games("opponent"), "4", "FAST4 finishes on the point after 4–4");
+    await lose.tap();
+    assert.equal(await games("opp"), "4", "FAST4 finishes on the point after 4–4");
     assert.match(await next(), /Match complete/);
-    assert.ok(await page.getByRole("button", { name: "You win the point" }).isDisabled());
-    await click("Reset scenario");
-    assert.equal(await points("opponent"), "4");
+    assert.ok(await win.isDisabled());
+    await click("Replay scenario");
+    assert.equal(await points("opp"), "4");
 
     await click("Short Sets");
     await click("6–5 match point");
-    await click("Opponent wins");
-    await click("You win the point");
+    await lose.click();
+    await acknowledge();
+    await win.click();
+    await acknowledge();
     assert.equal(await points("me"), "7");
-    assert.equal(await points("opponent"), "6");
-    assert.ok(await page.getByRole("button", { name: "You win the point" }).isEnabled(), "7–6 needs one more point");
-    await click("You win the point");
+    assert.equal(await points("opp"), "6");
+    assert.ok(await win.isEnabled(), "7–6 needs one more point");
+    await win.click();
     assert.equal(await games("me"), "5");
     assert.match(await next(), /Match complete/);
 
     await click("Perpetual Tiebreak");
     await click("1–0 serve rotation");
     assert.match(await next(), /Opponent 1 serves from the ad/);
-    await click("You win the point");
+    assert.equal(await screen.locator("[data-opp-server] .w-doubles-name").textContent(), "S1");
+    await win.click();
     assert.match(await next(), /Opponent 1 serves from the deuce/);
-    await click("You win the point");
+    await win.click();
+    await acknowledge();
     assert.match(await next(), /Your partner serves from the ad/);
+    assert.equal(await screen.locator("[data-me-server] .w-doubles-name").textContent(), "Partner");
     await click("3–2 change ends next");
-    await click("You win the point");
-    assert.match(await result(), /players & balls change ends/, "4–2 is also six total points");
+    await win.click();
+    assert.match(await changeover.locator("[data-changeover-reason]").textContent(), /players & balls change ends/, "4–2 is also six total points");
+    assert.ok(await win.isDisabled(), "changeovers pause scoring");
+    await acknowledge();
+    assert.equal(await games("me"), "4");
+    await click("Reset scenario");
+    assert.equal(await games("me"), "3");
+    assert.ok(await changeover.isHidden());
     await click("10–10 plays on");
-    await click("You win the point");
-    await click("You win the point");
-    assert.equal(await points("me"), "12");
-    assert.ok(await page.getByRole("button", { name: "Opponent wins", exact: true }).isEnabled(), "perpetual play continues past a two-point lead after ten");
+    await win.click();
+    await acknowledge();
+    await win.click();
+    assert.equal(await games("me"), "12");
+    assert.ok(await lose.isEnabled(), "perpetual play continues past a two-point lead after ten");
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "practice page fits a mobile viewport");
     assert.match(await page.getByRole("link", { name: "Download on the App Store", exact: true }).getAttribute("href"), /id6757105622/);
 
@@ -112,6 +145,7 @@ async function checkClubFormats(browser, url) {
     assert.equal(await page.getByRole("button", { name: "Singles", exact: true }).getAttribute("aria-pressed"), "true");
 
     await page.goto(new URL("try.html?fast4&scene=decider", url).href);
+    assert.equal(await page.locator('a[href*="doubles-tournaments-formats"]').count(), 0, "public Watch demo keeps the tournament page unlisted");
     const watchScore = await page.evaluate(() => {
       const state = window.DeuceMateShell.api.stateRef();
       return [state.format, state.matchType, state.sets[0].tieBreakPointsMe, state.sets[0].tieBreakPointsOpponent];

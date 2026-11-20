@@ -747,14 +747,6 @@
     shellEl.addEventListener(ev, function (e) { e.stopPropagation(); });
   });
 
-  /* 1 watch point = screen width / 184 (the 44 mm reference), so the replica scales with the frame. */
-  function setPt() {
-    var w = screenEl.getBoundingClientRect().width;
-    if (w > 0) screenEl.style.setProperty("--pt", (w / 184) + "px");
-  }
-  window.addEventListener("resize", setPt);
-  if (window.ResizeObserver) new ResizeObserver(setPt).observe(screenEl);
-
   /* ---- Page-level mode switch (try.html): Score only / Score + stats / Guide.
      One watch, so a switch parks nothing — it returns to a fresh Home. ---- */
   var modeBtns = root.parentNode ? document.querySelectorAll("[data-mode]") : [];
@@ -927,7 +919,6 @@
   }
 
   S.boot = function () {
-    setPt();
     applyTheme();
     if (S.seedHistory) S.seedHistory();
     if (!applyUrlPreset()) render();
