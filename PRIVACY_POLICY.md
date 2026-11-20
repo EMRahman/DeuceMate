@@ -1,7 +1,7 @@
 # Privacy Policy for DeuceMate
 
 **Effective Date:** June 11, 2026  
-**Last Updated:** November 15, 2026
+**Last Updated:** November 20, 2026
 
 ## Overview
 
