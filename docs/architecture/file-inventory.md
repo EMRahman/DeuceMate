@@ -214,6 +214,8 @@ presentation/demo code; Swift remains the native behavior source.
 | File | What it does |
 |---|---|
 | `try.html`, `index.html` | Public Try entry, side-by-side Watch/iPhone hosts, script order and marketing navigation. The demo's markup and asset list live in `try.html` only. |
+| `doubles-tournaments-formats.html`, `assets/club-formats.js`, `assets/club-formats.css` | Practice scoreboard with next-serve and changeover feedback for FAST4, Short Sets and Perpetual Tiebreak. The `fast4.html`, `shortset.html`, `perpetual.html` and `tiebreak.html` shortcuts open this page. |
+| `assets/club-scenarios.js` | Starting scores, captions and format URL aliases shared by the practice page and Watch demo. |
 | `assets/home-demo.js` | Loads the demo from `try.html` into the home page's Try section when asked, and opens a sample match at Coaching Insights. Falls back to `try.html`. |
 | `assets/watch-demo.js` | Existing scoring reducer and Watch UI, plus the gated phone command adapter and history snapshots. |
 | `assets/watch-demo-app.js` | Watch app shell, shared demo settings/themes and screens. |
