@@ -909,13 +909,14 @@
   }
 
 
-  window.DeuceMateWatchUI = { buildCells: buildCells, setServerIcon: setServerIcon, watchPointLabel: watchPointLabel, DOUBLES_DISPLAY_NAME: DOUBLES_DISPLAY_NAME };
+  window.DeuceMateWatchUI = { mount: initWatchDemo, buildCells: buildCells, setServerIcon: setServerIcon, watchPointLabel: watchPointLabel, DOUBLES_DISPLAY_NAME: DOUBLES_DISPLAY_NAME };
 
   window.DeuceMateStatsUI = {
     content: buildStatsContent, empty: statsEmptyEl, divider: statsDivider
   };
 
   function initWatchDemo(root) {
+  if (root.__deuceMateApi) return root.__deuceMateApi;
   var compact = root.hasAttribute("data-compact");
   var useKeyboard = root.hasAttribute("data-keyboard");
 
@@ -1279,6 +1280,15 @@
   };
   if (appMode && el.screen) {
     el.screen.classList.add("app-mode");
+    // Scale the face from its 184-point reference width, including on narrow screens.
+    function setWatchScale() {
+      var width = el.screen.getBoundingClientRect().width;
+      if (width > 0) el.screen.style.setProperty("--pt", (width / 184) + "px");
+    }
+    setWatchScale();
+    window.addEventListener("resize", setWatchScale);
+    if (window.ResizeObserver) new ResizeObserver(setWatchScale).observe(el.screen);
+
     var previewing = null;
     var setPreview = function (target) {
       if (previewing === target) return;
@@ -2256,8 +2266,10 @@
     var seq = points || [];
     for (var i = 0; i < seq.length; i++) {
       var winner = seq[i];
-      history.push({ snapshot: clone(state), momentum: momentum.slice(), secondServe: false, statsLen: stats.length });
-      if (history.length > 200) history.shift();
+      if (cfg.undoSeededPoints !== false) {
+        history.push({ snapshot: clone(state), momentum: momentum.slice(), secondServe: false, statsLen: stats.length });
+        if (history.length > 200) history.shift();
+      }
       if (!state.cfg.disablesPointTracking && window.DeuceMateTracking) {
         var pending = window.DeuceMateTracking.buildPendingPoint(state, winner, false);
         stats.push(window.DeuceMateTracking.buildUncategorizedStat(pending));
@@ -2401,6 +2413,7 @@
 
   if (compact) { if (el.setup) el.setup.hidden = true; startMatch(); }
   if (appMode) { trackingEnabled = false; }
+  return api;
   } /* end initWatchDemo */
 
   var demos = document.querySelectorAll("#watch-demo, .watch-demo");

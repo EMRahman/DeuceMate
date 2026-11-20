@@ -1,4 +1,4 @@
-/* Club-format practice uses the same scoring reducer as the Watch demo. */
+/* Tournament presets drive the same Watch scoreboard used on try.html. */
 (function () {
   "use strict";
 
@@ -6,65 +6,56 @@
   const { formats, formatFromQuery } = window.DeuceMateClubScenarios;
   const page = document.querySelector(".club-page");
   const params = new URLSearchParams(window.location.search);
+  const options = page.querySelector(".club-options");
+  const host = page.querySelector("[data-club-watch]");
+  const loading = page.querySelector("[data-club-loading]");
+  const formatButtons = [...options.querySelectorAll("[data-format]")];
+  const typeButtons = [...options.querySelectorAll("[data-type]")];
+  const sceneButtons = [...options.querySelectorAll("[data-scene]")];
+  const rules = page.querySelector("#club-rules");
+  const caption = page.querySelector("#club-scene-note");
+  const next = page.querySelector("#club-next");
+  const summary = page.querySelector("#club-score-summary");
+  const doublesNames = { me: "You", partner: "Your partner", opponentS1: "Opponent 1", opponentS2: "Opponent 2" };
+
   let format = formatFromQuery(params) || "fast4";
   let type = params.get("type") === "singles" ? "singles" : "doubles";
   let scene = Object.hasOwn(formats[format].scenes, params.get("scene"))
     ? params.get("scene")
     : formats[format].defaultScene;
-  let state, history;
+  let api;
 
-  const formatButtons = Array.from(page.querySelectorAll("[data-format]"));
-  const typeButtons = Array.from(page.querySelectorAll("[data-type]"));
-  const sceneButtons = Array.from(page.querySelectorAll("[data-scene]"));
-  const awardButtons = Array.from(page.querySelectorAll("[data-award]"));
-  const undoButton = page.querySelector("[data-undo]");
-  const gamesCells = Array.from(page.querySelectorAll("[data-games]"));
-  const pointCells = Array.from(page.querySelectorAll("[data-points]"));
-  const pointsHeading = page.querySelector("[data-points-heading]");
-  const rules = page.querySelector("#club-rules");
-  const caption = page.querySelector("#club-scene-note");
-  const next = page.querySelector("#club-next");
-  const result = page.querySelector("#club-result");
-  const doublesNames = { me: "You", partner: "Your partner", opponentS1: "Opponent 1", opponentS2: "Opponent 2" };
-
-  function nextServe() {
+  function nextServe(state) {
     const server = type === "doubles"
       ? doublesNames[state.doublesServer]
       : state.currentServer === "me" ? "You" : "Opponent";
     const serving = server + (server === "You" ? " serve" : " serves");
     if (scoring.receiverChoosesServiceSide(state)) return serving + ". The receiver chooses the side for the deciding point.";
     const court = scoring.isDeuceSide(state) ? "deuce (right)" : "ad (left)";
-    return `${serving} from the ${court} court.`;
+    return serving + " from the " + court + " court.";
   }
 
-  function renderScore(message) {
+  function renderStatus() {
+    const state = api.stateRef();
     const set = scoring.lastSet(state);
     const winner = scoring.matchWinner(state);
     const points = set.isTieBreak
       ? [set.tieBreakPointsMe, set.tieBreakPointsOpponent]
       : scoring.regularPointStrings(state.currentPointsMe, state.currentPointsOpponent);
-    pointsHeading.textContent = set.isTieBreak ? "Tiebreak points" : "Points";
-    gamesCells.forEach(cell => { cell.hidden = !state.cfg.playRegularSets; });
-    gamesCells[1].textContent = set.gamesMe;
-    gamesCells[2].textContent = set.gamesOpponent;
-    pointCells.forEach((cell, index) => { cell.textContent = winner && !set.isTieBreak ? "–" : points[index]; });
-
-    next.textContent = winner
+    const games = "Games " + set.gamesMe + " to " + set.gamesOpponent + ".";
+    const pointScore = (set.isTieBreak ? "Tiebreak points " : "Points ") + points.join(" to ") + ".";
+    const score = [state.cfg.playRegularSets && games, (!winner || set.isTieBreak) && pointScore].filter(Boolean).join(" ");
+    const prompt = api.phoneState().changeover;
+    const status = winner
       ? (winner === "me" ? "Match complete. You win." : "Match complete. Opponent wins.")
-      : nextServe();
-    result.textContent = message;
-    awardButtons.forEach(button => { button.disabled = Boolean(winner); });
-    undoButton.disabled = history.length === 0;
+      : prompt ? prompt.reason + "." : nextServe(state);
+    if (summary.textContent !== score) summary.textContent = score;
+    if (next.textContent !== status) next.textContent = status;
   }
 
   function loadScene(updateUrl) {
     const preset = formats[format];
     const selected = preset.scenes[scene];
-    state = scoring.freshState(format, "me");
-    if (type === "doubles") scoring.applyDoublesSetup(state, "me");
-    for (const winner of selected.points) state = scoring.pointWon(state, winner).state;
-    history = [];
-
     rules.textContent = preset.rules;
     caption.textContent = selected.caption;
     formatButtons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.format === format)));
@@ -73,7 +64,8 @@
       button.textContent = preset.scenes[button.dataset.scene].label;
       button.setAttribute("aria-pressed", String(button.dataset.scene === scene));
     });
-    renderScore("Choose who wins the next point.");
+    api.loadScenario({ format, matchType: type, tracking: false, undoSeededPoints: false }, selected.points);
+    renderStatus();
 
     if (updateUrl) {
       const url = new URL(window.location.href);
@@ -82,38 +74,56 @@
     }
   }
 
-  function awardPoint(winner) {
-    history.push(state);
-    const played = scoring.pointWon(state, winner);
-    state = played.state;
-    const game = played.events.find(event => event.t === "gameWon");
-    const change = played.events.find(event => event.t === "changeover");
-    const side = winner === "me" ? "You win" : "Opponent wins";
-    const pointResult = side + (game ? " the game." : " the point.");
-    const changeover = change && !scoring.isMatchComplete(state) ? scoring.changeoverReasonText(change) : "";
-    renderScore(changeover ? pointResult + " " + changeover + "." : pointResult);
+  async function start() {
+    // Read only the Watch markup. The app shell and iPhone stay on try.html.
+    const response = await fetch("try.html");
+    if (!response.ok) throw new Error("Could not load the Watch demo");
+    const demo = new DOMParser().parseFromString(await response.text(), "text/html");
+    const watch = demo.querySelector("#watch-demo");
+    if (!watch) throw new Error("The Watch demo markup is missing");
+
+    watch.setAttribute("data-keyboard", "scoped");
+    const screen = watch.querySelector("[data-screen]");
+    screen.classList.add("playing");
+    watch.querySelector("[data-shell]").remove();
+    watch.querySelector("[data-hr]").remove();
+    watch.querySelector("[data-foot]").remove();
+    watch.querySelector("[data-secondserve]").remove();
+    watch.querySelector(".remote-label").remove();
+    watch.querySelector("[data-complete-end]").textContent = "Replay scenario";
+    host.append(watch);
+    api = window.DeuceMateWatchUI.mount(watch);
+    api.hooks.endMatch = () => {
+      loadScene(false);
+      screen.focus();
+    };
+    loadScene(false);
+    api.hooks.change = renderStatus;
+
+    formatButtons.forEach(button => button.addEventListener("click", () => {
+      if (format === button.dataset.format) return;
+      format = button.dataset.format;
+      scene = formats[format].defaultScene;
+      loadScene(true);
+    }));
+    typeButtons.forEach(button => button.addEventListener("click", () => {
+      if (type === button.dataset.type) return;
+      type = button.dataset.type;
+      loadScene(true);
+    }));
+    sceneButtons.forEach(button => button.addEventListener("click", () => {
+      scene = button.dataset.scene;
+      loadScene(true);
+    }));
+    options.querySelector("[data-club-reset]").addEventListener("click", () => loadScene(false));
+    options.inert = false;
+    loading.hidden = true;
   }
 
-  formatButtons.forEach(button => button.addEventListener("click", () => {
-    if (format === button.dataset.format) return;
-    format = button.dataset.format;
-    scene = formats[format].defaultScene;
-    loadScene(true);
-  }));
-  typeButtons.forEach(button => button.addEventListener("click", () => {
-    if (type === button.dataset.type) return;
-    type = button.dataset.type;
-    loadScene(true);
-  }));
-  sceneButtons.forEach(button => button.addEventListener("click", () => {
-    scene = button.dataset.scene;
-    loadScene(true);
-  }));
-  awardButtons.forEach(button => button.addEventListener("click", () => awardPoint(button.dataset.award)));
-  undoButton.addEventListener("click", () => {
-    state = history.pop();
-    renderScore("Last point undone.");
+  loading.textContent = "Loading the Watch simulator…";
+  start().catch(() => {
+    host.replaceChildren();
+    loading.textContent = "The Watch simulator could not load.";
+    page.querySelector("[data-club-fallback]").hidden = false;
   });
-  page.querySelector("[data-reset]").addEventListener("click", () => loadScene(false));
-  loadScene(false);
 })();
