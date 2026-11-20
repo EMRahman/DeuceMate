@@ -5,7 +5,15 @@ Current pre-flight review of DeuceMate against the
 focused on upload blockers, likely rejection reasons, and the manual work needed
 in App Store Connect.
 
-## Release candidate — 1.4.0 (build 18), 13 November 2026
+## Released — 1.4.0 (build 18)
+
+1.4.0 is live on the App Store. On 20 November 2026 the owner confirmed that
+the App Store version reports `1.4.0` build `18`, so Xcode did not raise the
+build number at upload this time. The submitted commit is tagged `v1.4.0`
+(`1d6bcc9`, #213). PR #201, with the 1.4.0 privacy policy, website, demo and
+README, merged on 20 November 2026. The checklist below is kept as written
+before submission. Its open boxes were not confirmed one by one, so they do not
+show that those checks ran.
 
 The iPhone app and embedded Apple Watch app are configured as
 `MARKETING_VERSION = 1.4.0` and `CURRENT_PROJECT_VERSION = 18` in both Debug and
@@ -56,7 +64,8 @@ merge before submission.
 
 - [ ] Install it through TestFlight as an upgrade over the currently installed
   build. Confirm both apps report `1.4.0 (18)` (or the build number assigned at
-  upload), and check that the existing archive is intact.
+  upload): Settings > About on iPhone, the foot of the Guide on Apple Watch
+  (#202). Check that the existing archive is intact.
 - [ ] Complete the [manual testing gate](#next-release--manual-testing-gate) and
   the [workout save checks](#workout-save-investigation--9-november-2026) below.
 - [ ] Exercise Prepare Game Plan from an opponent's page (#182, #193, #200),
@@ -69,7 +78,7 @@ merge before submission.
   Include player names on, and that announcements say the short name (#197, #198).
 - [ ] Edit a player and a match note, then leave without saving. Confirm nothing
   is overwritten and emptying notes asks before deleting them (#194, #195).
-- [ ] Merge PR #201 (privacy policy for 1.4.0, plus the website, demo and README)
+- [x] Merge PR #201 (privacy policy for 1.4.0, plus the website, demo and README)
   once 1.4.0 is approved and released. It still says AI prompts leave names out
   by default until then. Re-confirm the App Privacy label ("Data Not Collected")
   on the 1.4.0 version page, as noted in `APP_STORE_METADATA.md`.
@@ -92,8 +101,8 @@ merge before submission.
   description, What's New, App Review notes, the build, and the iPhone screenshots
   listed under "What changed for 1.4.0" in
   [`docs/app-store-screenshots/README.md`](../app-store-screenshots/README.md).
-- [ ] Submit for review.
-- [ ] Tag the uploaded commit `v1.4.0`.
+- [x] Submit for review.
+- [x] Tag the uploaded commit `v1.4.0`.
 
 ## Workout save investigation — 9 November 2026
 
