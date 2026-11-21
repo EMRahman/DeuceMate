@@ -58,7 +58,9 @@ A failed iPhone archive read blocks archive merges, updates and iCloud backup.
 The Matches screen offers Retry and keeps the live scoreboard accessible. A
 successful retry requests the Watch’s full history again. Archive deletion,
 manual entry and End at Current Score issue their Watch-side changes only after
-the local commit succeeds.
+the local commit succeeds. After a failed Watch delivery is saved on retry,
+the phone also sends the committed tags and match-type revisions for the
+retried IDs. Both a new delivery and Sync Now can trigger that retry.
 
 **Live recovery (16 November 2026):** activation, reconnect, phone foreground,
 opening the live board and Sync Now request the existing Watch model's current

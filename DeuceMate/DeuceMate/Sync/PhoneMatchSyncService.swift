@@ -218,7 +218,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
 
     func requestFullHistorySync() {
         // Retry any bodies received before a transient phone disk-write failure.
-        store?.mergeIncoming([])
+        reconcileTags(afterMerging: [])
         requestLiveState()
         transport.sendControl(MatchSyncPayloadBuilder.requestFullHistory(), queueOnFailure: true)
     }
@@ -1009,9 +1009,12 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     /// edit-time push or was upgraded from a build that ignored updates, and
     /// what returns a forgotten-player scrub to a stale watch copy.
     private func reconcileTags(afterMerging watchCopies: [MatchRecord]) {
-        guard let archive = store?.mergeIncoming(watchCopies) else { return }
-        send(MatchTags.pendingWatchUpdates(archive: archive, watchCopies: watchCopies, newlyHeld: []))
-        send(MatchTypeRevision.pendingWatchUpdates(archive: archive, watchCopies: watchCopies, newlyHeld: []))
+        guard let saved = store?.mergeIncoming(watchCopies),
+              !watchCopies.isEmpty || !saved.retriedIDs.isEmpty else { return }
+        // As with newly held manifest IDs, a retried ID may have no current
+        // peer metadata to compare. Send its committed tags and type revision.
+        send(MatchTags.pendingWatchUpdates(archive: saved.archive, watchCopies: watchCopies, newlyHeld: saved.retriedIDs))
+        send(MatchTypeRevision.pendingWatchUpdates(archive: saved.archive, watchCopies: watchCopies, newlyHeld: saved.retriedIDs))
     }
 
     /// UserDefaults key for the cached watch manifest. Phone-local persistence —

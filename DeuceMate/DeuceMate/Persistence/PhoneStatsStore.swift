@@ -624,14 +624,14 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     // MARK: - Merge incoming records from WatchConnectivity
 
-    /// Merges watch records (tags by their own clock, forgotten players
-    /// scrubbed) and returns the resulting archive, which the sync service
-    /// feeds to §6.1 reconciliation (`MatchTags.pendingWatchUpdates`).
+    /// Retained bodies may already have been scrubbed of forgotten players.
+    /// Reconcile their IDs against the committed archive after a successful
+    /// retry, even when the latest delivery contains different matches.
     @discardableResult
-    func mergeIncoming(_ incoming: [MatchRecord]) -> [MatchRecord]? {
+    func mergeIncoming(_ incoming: [MatchRecord]) -> (archive: [MatchRecord], retriedIDs: Set<UUID>)? {
         queue.sync {
             guard !canonicalWritesSuspended else { return nil }
-            if incoming.isEmpty && pendingWatchRecords.isEmpty { return records }
+            if incoming.isEmpty && pendingWatchRecords.isEmpty { return (records, []) }
             let copies = pendingWatchRecords.isEmpty ? incoming : MatchMergePolicy.merge(
                 incoming: incoming, into: pendingWatchRecords, tombstones: tombstones, forgottenPlayers: forgotten
             )
@@ -644,13 +644,14 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 )
                 return nil
             }
+            let retriedIDs = Set(pendingWatchRecords.map(\.id))
             pendingWatchRecords = []
-            return records
+            return (records, retriedIDs)
         }
     }
 
     @discardableResult
-    func mergeIncoming(_ record: MatchRecord) -> [MatchRecord]? {
+    func mergeIncoming(_ record: MatchRecord) -> (archive: [MatchRecord], retriedIDs: Set<UUID>)? {
         mergeIncoming([record])
     }
 
