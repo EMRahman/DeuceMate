@@ -186,7 +186,7 @@ struct PhoneStatsStoreTests {
             #expect(!store.retryArchiveLoad())
             #expect(!store.appendMatchDurably(record()))
             #expect(!store.deletePermanently(id: original.id))
-            #expect(store.mergeIncoming([record()]).isEmpty)
+            #expect(store.mergeIncoming([record()]) == nil)
             #expect(throws: (any Error).self) { try store.importManualArchive(data: manualArchive, mode: .replace) }
             #expect(throws: (any Error).self) { try store.exportManualArchiveData() }
             store.syncICloudBackup()

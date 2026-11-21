@@ -108,6 +108,26 @@ struct MatchTagsSyncTests {
         }
     }
 
+    @Test func failedWatchWriteSuppressesSyncSuccessAndRetriesAtFullSync() async throws {
+        let h = Harness()
+        defer { h.remove() }
+        let incoming = match()
+        try h.blockCanonicalWrites()
+        h.service.handle([.history([incoming, incoming]), .watchManifest([incoming.id])])
+        await drainMain()
+        #expect(h.store.watchArchiveSaveFailed)
+        #expect(h.service.lastSyncDate == nil)
+        #expect(h.store.loadHistory().isEmpty)
+
+        try h.unblockCanonicalWrites()
+        h.service.requestFullHistorySync()
+        h.service.handle([.watchManifest([incoming.id])])
+        await drainMain()
+        #expect(!h.store.watchArchiveSaveFailed)
+        #expect(h.service.lastSyncDate != nil)
+        #expect(h.relaunchedStore().loadHistory() == [incoming])
+    }
+
     @Test func editTimePushGoesOnlyToMatchesTheWatchHolds() async throws {
         let h = Harness()
         defer { h.remove() }

@@ -46,6 +46,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     @Published private(set) var history: [MatchRecord] = []
     @Published private(set) var isArchiveBlocked = false
+    @Published private(set) var watchArchiveSaveFailed = false
 
     /// Main-thread published mirror of `tombstones` so the list can hide a stale
     /// watch-mirror row for a match that was just permanently deleted (the watch
@@ -89,6 +90,16 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// Queue-confined authority for mutations and backup. Recomputed from the
     /// preserved files on every launch and explicit retry.
     private var canonicalWritesSuspended = false
+    /// Watch bodies that arrived after a healthy load but failed to commit.
+    /// Retry against the current archive, including any newer deletion intent.
+    private var pendingWatchRecords: [MatchRecord] = [] {
+        didSet {
+            let failed = !pendingWatchRecords.isEmpty
+            if oldValue.isEmpty != pendingWatchRecords.isEmpty {
+                DispatchQueue.main.async { self.watchArchiveSaveFailed = failed }
+            }
+        }
+    }
     /// The scheduled debounced backup push or restore download-retry, if any.
     private var pendingBackupSync: DispatchWorkItem?
     /// Last content successfully pushed to the ubiquity container; nil before the first push.
@@ -208,7 +219,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     // MARK: - StatsStoring
 
-    var archiveAvailableForSync: Bool { queue.sync { !canonicalWritesSuspended } }
+    var archiveAvailableForSync: Bool { queue.sync { !canonicalWritesSuspended && pendingWatchRecords.isEmpty } }
 
     func loadHistory() -> [MatchRecord] {
         queue.sync { records }
@@ -606,6 +617,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 tombstones: snapshot.tombstones,
                 forgotten: snapshot.forgottenPlayers
             ) else { throw TagEditError.notPersisted }
+            if mode == .replace { pendingWatchRecords = [] }
         }
         return preview
     }
@@ -616,21 +628,29 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// scrubbed) and returns the resulting archive, which the sync service
     /// feeds to §6.1 reconciliation (`MatchTags.pendingWatchUpdates`).
     @discardableResult
-    func mergeIncoming(_ incoming: [MatchRecord]) -> [MatchRecord] {
+    func mergeIncoming(_ incoming: [MatchRecord]) -> [MatchRecord]? {
         queue.sync {
-            let merged = MatchMergePolicy.merge(
-                incoming: incoming,
-                into: records,
-                tombstones: tombstones,
-                forgottenPlayers: forgotten
+            guard !canonicalWritesSuspended else { return nil }
+            if incoming.isEmpty && pendingWatchRecords.isEmpty { return records }
+            let copies = pendingWatchRecords.isEmpty ? incoming : MatchMergePolicy.merge(
+                incoming: incoming, into: pendingWatchRecords, tombstones: tombstones, forgottenPlayers: forgotten
             )
-            adoptOnQueue(records: merged, tombstones: tombstones)
+            let merged = MatchMergePolicy.merge(
+                incoming: copies, into: records, tombstones: tombstones, forgottenPlayers: forgotten
+            )
+            guard merged == records || adoptOnQueue(records: merged, tombstones: tombstones) else {
+                pendingWatchRecords = MatchMergePolicy.merge(
+                    incoming: copies, into: [], tombstones: tombstones, forgottenPlayers: forgotten
+                )
+                return nil
+            }
+            pendingWatchRecords = []
             return records
         }
     }
 
     @discardableResult
-    func mergeIncoming(_ record: MatchRecord) -> [MatchRecord] {
+    func mergeIncoming(_ record: MatchRecord) -> [MatchRecord]? {
         mergeIncoming([record])
     }
 

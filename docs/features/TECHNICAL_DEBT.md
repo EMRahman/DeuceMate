@@ -456,9 +456,9 @@ was closed unmerged; later live-state work implemented the guard.
 The Watch reports failed live saves, parking and finalization via
 `persistenceError`. The phone publishes archive mutations after a successful
 canonical write. Its manual import, entry, completion and permanent-deletion
-callers check durability before related actions. User-visible reporting and
-retry for ordinary disk-write failures during background Watch history merges
-remain follow-up work.
+callers check durability before related actions. On a transient Watch history write failure, the iPhone retains the received
+records in memory, reports the failure in Settings, and retries on the next
+Watch delivery or full sync request.
 
 ---
 

@@ -447,7 +447,11 @@ struct SettingsView: View {
                 }
                 .disabled(store.isArchiveBlocked || syncService.activationState != "Activated" || syncStatus == .inFlight)
 
-                if let syncStatus {
+                if store.watchArchiveSaveFailed {
+                    Text("Received matches couldn’t be saved to this iPhone. Free up storage if needed, then tap Sync Now to retry.")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                } else if let syncStatus {
                     switch syncStatus {
                     case .inFlight:
                         Text("Syncing…")

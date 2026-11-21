@@ -217,6 +217,8 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     }
 
     func requestFullHistorySync() {
+        // Retry any bodies received before a transient phone disk-write failure.
+        store?.mergeIncoming([])
         requestLiveState()
         transport.sendControl(MatchSyncPayloadBuilder.requestFullHistory(), queueOnFailure: true)
     }
@@ -1007,8 +1009,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     /// edit-time push or was upgraded from a build that ignored updates, and
     /// what returns a forgotten-player scrub to a stale watch copy.
     private func reconcileTags(afterMerging watchCopies: [MatchRecord]) {
-        guard let store else { return }
-        let archive = store.mergeIncoming(watchCopies)
+        guard let archive = store?.mergeIncoming(watchCopies) else { return }
         send(MatchTags.pendingWatchUpdates(archive: archive, watchCopies: watchCopies, newlyHeld: []))
         send(MatchTypeRevision.pendingWatchUpdates(archive: archive, watchCopies: watchCopies, newlyHeld: []))
     }
