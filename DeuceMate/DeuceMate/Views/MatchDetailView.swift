@@ -179,7 +179,8 @@ struct MatchDetailView: View {
             isAvailable: store.isICloudAvailable,
             isRestoring: store.isRestoringFromICloud,
             hasPendingRestore: store.pendingRestorePreview != nil,
-            isUploaded: store.isBackupUploaded
+            isUploaded: store.isBackupUploaded,
+            isArchiveSuspended: store.archiveProblem != nil
         )
         VStack(alignment: .leading, spacing: 4) {
             if syncService.isPaired {
@@ -222,7 +223,7 @@ struct MatchDetailView: View {
             }
             Label(iCloudStatus.text, systemImage: iCloudStatus.systemImage)
                 .foregroundStyle(
-                    iCloudStatus == .unavailable ? AnyShapeStyle(.orange) :
+                    iCloudStatus == .unavailable || iCloudStatus == .paused ? AnyShapeStyle(.orange) :
                     iCloudStatus == .pendingRestore ? AnyShapeStyle(.blue) :
                     AnyShapeStyle(.secondary)
                 )

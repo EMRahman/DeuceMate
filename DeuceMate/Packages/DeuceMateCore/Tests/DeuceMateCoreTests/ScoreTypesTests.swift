@@ -34,6 +34,26 @@ final class ScoreTypesTests: XCTestCase {
                        .partner)
     }
 
+    // MARK: - Player / MatchType (TECHNICAL_DEBT #18)
+
+    func test_player_rawValuesArePersistedIdentifiers() throws {
+        // Every point's server/winner reaches persisted JSON; one renamed raw
+        // value makes the whole archive file undecodable.
+        let persisted: [(Player, String)] = [(.me, "me"), (.opponent, "opponent")]
+        for (player, raw) in persisted {
+            XCTAssertEqual(player.rawValue, raw)
+            XCTAssertEqual(try JSONDecoder().decode(Player.self, from: Data("\"\(raw)\"".utf8)), player)
+        }
+    }
+
+    func test_matchType_rawValuesArePersistedIdentifiers() throws {
+        let persisted: [(MatchType, String)] = [(.singles, "singles"), (.doubles, "doubles")]
+        for (type, raw) in persisted {
+            XCTAssertEqual(type.rawValue, raw)
+            XCTAssertEqual(try JSONDecoder().decode(MatchType.self, from: Data("\"\(raw)\"".utf8)), type)
+        }
+    }
+
     // MARK: - MatchFormat
 
     func test_matchFormat_rawValuesArePersistedIdentifiers() throws {

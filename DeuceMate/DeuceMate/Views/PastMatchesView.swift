@@ -130,6 +130,14 @@ struct PastMatchesView: View {
                     .filter { $0.id != activeID }
                     .sorted(by: MatchChronology.newestFirst)
 
+            // An archive that couldn't be loaded is explained first: the list
+            // below may be incomplete and nothing is being saved (TECHNICAL_DEBT #18).
+            if let problem = store.archiveProblem {
+                Section {
+                    ArchiveProblemNotice(problem: problem)
+                }
+            }
+
             // Trends — reads store.history directly, not pastRecords,
             // since watch-mirror rows may carry no stats (§6.1 of
             // docs/features/PERFORMANCE_TRENDS_PLAN.md).
@@ -297,7 +305,15 @@ struct PastMatchesView: View {
 
     @ViewBuilder
     private var emptyStateView: some View {
-        if syncService.isActivating {
+        if let problem = store.archiveProblem {
+            // Never "No Matches Yet" when the saved archive couldn't be loaded.
+            VStack(alignment: .leading, spacing: 16) {
+                ArchiveProblemNotice(problem: problem)
+                iCloudStatusLabel
+                    .font(.footnote)
+            }
+            .padding(.horizontal, 24)
+        } else if syncService.isActivating {
             VStack(spacing: 12) {
                 ProgressView()
                 Text("Connecting to Apple Watch…")
@@ -355,12 +371,17 @@ struct PastMatchesView: View {
             isAvailable: store.isICloudAvailable,
             isRestoring: store.isRestoringFromICloud,
             hasPendingRestore: store.pendingRestorePreview != nil,
-            isUploaded: store.isBackupUploaded
+            isUploaded: store.isBackupUploaded,
+            isArchiveSuspended: store.archiveProblem != nil
         )
         switch status {
         case .backedUp, .restoring, .pendingUpload:
             Label(status.text, systemImage: status.systemImage)
                 .foregroundStyle(.secondary)
+        case .paused:
+            // Explained by `ArchiveProblemNotice`; there is nothing to tap.
+            Label(status.text, systemImage: status.systemImage)
+                .foregroundStyle(.orange)
         case .pendingRestore:
             Button { showRestorePrompt = true } label: {
                 HStack(spacing: 4) {

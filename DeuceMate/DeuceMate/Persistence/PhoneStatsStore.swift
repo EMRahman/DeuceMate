@@ -16,9 +16,10 @@
 //
 // Initial restore rules are pure and live in Core (`ArchiveBackupPolicy`).
 // Tombstones are backed up alongside records, so a fresh-install restore does
-// not resurrect deleted matches. A read failure is never treated as an empty
-// archive: writes derived from a failed read are suppressed so they can't
-// clobber data.
+// not resurrect deleted matches. A read or decode failure is never treated as
+// an empty archive: the file stays in place, writes and iCloud pushes derived
+// from it are suppressed so they can't clobber data, and `archiveProblem`
+// tells the user (TECHNICAL_DEBT #18).
 //
 // Match tags (opponent / partner names, competition type — MATCH_TAGS_PLAN.md)
 // ride on `MatchRecord` and therefore live in the canonical archive and its
@@ -66,6 +67,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// `false` = pushed to the local replica, daemon upload in progress;
     /// `true` = both files confirmed uploaded.
     @Published private(set) var isBackupUploaded: Bool? = nil
+    /// Non-nil when a canonical archive file (history, tombstones or the
+    /// forgotten-player ledger) exists but could not be read or decoded at
+    /// launch. Writes and iCloud pushes are then suspended for the process and
+    /// the archive screen explains why the list looks empty (TECHNICAL_DEBT #18).
+    @Published private(set) var archiveProblem: ArchiveLoadProblem? = nil
     /// Whether the user's iCloud account/container is currently usable. When
     /// false the archive still works in full (it is device-local); backup
     /// pushes and initial restore pause until iCloud returns.
@@ -84,12 +90,16 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// Forgotten player ids (MATCH_TAGS_PLAN.md §6.2). Persisted and backed up
     /// with the tombstones; unioned, never shrunk, by every inbound path.
     private var forgotten = ForgottenPlayerLedger()
-    /// Set when a canonical file exists but could not be read at launch (I/O or
-    /// protection error — distinct from "missing"). All disk writes and backup
-    /// passes are then suppressed for the rest of the process so state derived
-    /// from a failed read can never overwrite the real archive; the app keeps
-    /// working in memory and the next clean launch reloads everything.
-    private var canonicalWritesSuspended = false
+    /// Set when a canonical file exists but could not be used at launch: an
+    /// I/O or protection error (`.unreadable`), or bytes that do not decode
+    /// (`.undecodable` — damaged, or written by a newer build). Neither is
+    /// "missing". All disk writes and backup passes are then suppressed for the
+    /// rest of the process so state derived from a failed read can never
+    /// overwrite the real archive or its iCloud copy; the app keeps working in
+    /// memory. The file stays in place, so the next launch either loads it or
+    /// reaches the same diagnosis — never a silently empty archive.
+    private var canonicalSuspension: ArchiveLoadProblem?
+    private var canonicalWritesSuspended: Bool { canonicalSuspension != nil }
     /// The scheduled debounced backup push or restore download-retry, if any.
     private var pendingBackupSync: DispatchWorkItem?
     /// Last content successfully pushed to the ubiquity container; nil before the first push.
@@ -173,14 +183,15 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     init(storageConfiguration: StorageConfiguration) {
         self.storageConfiguration = storageConfiguration
-        let initial = queue.sync { () -> ([MatchRecord], Set<UUID>, Bool, ForgottenPlayerLedger) in
+        let initial = queue.sync { () -> ([MatchRecord], Set<UUID>, Bool, ForgottenPlayerLedger, ArchiveLoadProblem?) in
             migrateLegacyDocumentsArchiveIfNeeded()
             loadCanonicalOnQueue()
-            return (records, tombstones, shouldAttemptInitialRestoreOnQueue, forgotten)
+            return (records, tombstones, shouldAttemptInitialRestoreOnQueue, forgotten, canonicalSuspension)
         }
         history = initial.0
         tombstoneIDs = initial.1
         forgottenPlayers = initial.3
+        archiveProblem = initial.4
         // Fresh local archive setup with iCloud signed in: show "Restoring from
         // iCloud…" until the first restore attempt settles, so an initially
         // short list reads as in-progress rather than data loss.
@@ -285,13 +296,14 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     // MARK: - Match tags (MATCH_TAGS_PLAN.md §4–§6)
 
     /// Why a user edit of match details or the player roster did not happen.
-    /// Shared by `updateTags` and the Players actions (rename, merge, forget).
+    /// Shared by `updateTags`, the Players actions (rename, merge, forget) and
+    /// manual archive import (`.notPersisted` only).
     enum TagEditError: LocalizedError, Equatable {
         case matchNotFound
         case matchInProgress
         /// The canonical archive (or the forgotten-player ledger) could not be
         /// written — storage failed, or writes are suspended after an
-        /// unreadable launch read. The edit was rolled back in memory, so
+        /// unreadable or undecodable launch read (`archiveProblem`). The edit was rolled back in memory, so
         /// nothing changed and nothing may be pushed to the watch.
         case notPersisted
 
@@ -595,7 +607,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             noteCount: archive.notes?.filter { !$0.isCleared }.count ?? 0
         )
 
-        queue.sync {
+        // All-or-nothing, like a user edit: an import that only lived in memory
+        // (writes suspended after an unusable launch read, or a failed write)
+        // would vanish on relaunch, so it is rolled back and reported instead
+        // of claimed as success — and the caller leaves private notes alone.
+        try queue.sync {
             let snapshot = ManualMatchArchiveBackup.importSnapshot(
                 importing: archive.records,
                 into: records,
@@ -604,11 +620,20 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 currentForgottenPlayers: forgotten,
                 importedForgottenPlayers: archive.forgottenPlayers
             )
-            adoptOnQueue(
+            let previousRecords = records
+            let previousTombstones = tombstones
+            let previousForgotten = forgotten
+            guard adoptOnQueue(
                 records: snapshot.records,
                 tombstones: snapshot.tombstones,
                 forgotten: snapshot.forgottenPlayers
-            )
+            ) else {
+                records = previousRecords
+                tombstones = previousTombstones
+                forgotten = previousForgotten
+                publishOnQueue()
+                throw TagEditError.notPersisted
+            }
         }
         return preview
     }
@@ -722,31 +747,50 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         }
     }
 
+    /// Records why canonical writes stop, keeping the more persistent reason
+    /// when several files fail.
+    private func suspendCanonicalWrites(_ problem: ArchiveLoadProblem) {
+        canonicalSuspension = problem.combined(with: canonicalSuspension)
+    }
+
     private func loadCanonicalOnQueue() {
-        switch Self.readCanonicalFile([UUID].self, at: canonicalTombstoneURL) {
+        // Score-bearing files fail closed: a file that exists but can't be used
+        // is preserved in place and suspends writes. Deleting or moving it here
+        // would make the next launch see "missing" and write an empty archive
+        // over the iCloud backup (TECHNICAL_DEBT #18).
+        switch Self.readCanonicalFile([UUID].self, at: canonicalTombstoneURL, whenUndecodable: .preserveInPlace) {
         case .loaded(let ids):
             tombstones = Set(ids)
-        case .missing, .corrupt:
-            break // corrupt file was moved aside; initial restore may refill what it can
+        case .missing:
+            break
         case .unreadable:
-            canonicalWritesSuspended = true
+            suspendCanonicalWrites(.unreadable)
+        case .undecodable, .corrupt:
+            // Losing tombstones would resurrect deleted matches.
+            suspendCanonicalWrites(.undecodable)
         }
-        switch Self.readCanonicalFile(ForgottenPlayerLedger.self, at: canonicalForgottenPlayersURL) {
+        switch Self.readCanonicalFile(ForgottenPlayerLedger.self, at: canonicalForgottenPlayersURL, whenUndecodable: .preserveInPlace) {
         case .loaded(let ledger):
             forgotten = ledger
-        case .missing, .corrupt:
-            break // pre-tags archive, or moved aside; the archive itself was scrubbed when each forget ran
+        case .missing:
+            break // pre-tags archive; the archive itself was scrubbed when each forget ran
         case .unreadable:
-            canonicalWritesSuspended = true
+            suspendCanonicalWrites(.unreadable)
+        case .undecodable, .corrupt:
+            // Losing the ledger would drop the user's deletion intent.
+            suspendCanonicalWrites(.undecodable)
         }
         let loadedRecords: [MatchRecord]
-        switch Self.readCanonicalFile([MatchRecord].self, at: canonicalHistoryURL) {
+        switch Self.readCanonicalFile([MatchRecord].self, at: canonicalHistoryURL, whenUndecodable: .preserveInPlace) {
         case .loaded(let loaded):
             loadedRecords = loaded
-        case .missing, .corrupt:
-            loadedRecords = [] // corrupt file was moved aside; initial restore may refill what it can
+        case .missing:
+            loadedRecords = []
         case .unreadable:
-            canonicalWritesSuspended = true
+            suspendCanonicalWrites(.unreadable)
+            loadedRecords = []
+        case .undecodable, .corrupt:
+            suspendCanonicalWrites(.undecodable)
             loadedRecords = []
         }
 
@@ -759,11 +803,13 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 phoneStoreLogger.error("Failed to reapply Health sidecar backup exclusion: \(error.localizedDescription, privacy: .public)")
             }
         }
+        // The Health sidecar is a reconstructable projection, not score-bearing
+        // data: a damaged one is moved aside and the archive keeps working.
         let health: [MatchHealthData]
-        switch Self.readCanonicalFile([MatchHealthData].self, at: healthSidecarURL) {
+        switch Self.readCanonicalFile([MatchHealthData].self, at: healthSidecarURL, whenUndecodable: .moveAside) {
         case .loaded(let loaded):
             health = loaded
-        case .missing, .corrupt, .unreadable:
+        case .missing, .corrupt, .undecodable, .unreadable:
             health = []
         }
 
@@ -783,8 +829,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 phoneStoreLogger.notice("Migrated canonical archive to the backup-excluded Health sidecar")
             }
         }
-        if canonicalWritesSuspended {
-            phoneStoreLogger.error("Canonical archive unreadable; running in-memory with writes suspended")
+        if let canonicalSuspension {
+            phoneStoreLogger.error("Canonical archive \(canonicalSuspension.rawValue, privacy: .public); file preserved, running in-memory with writes and iCloud backup suspended")
         }
     }
 
@@ -796,15 +842,29 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private enum CanonicalRead<T> {
         case loaded(T)
         case missing
-        /// Bytes were readable but not decodable. The file was moved aside (kept
-        /// for recovery) so the store can start clean without destroying it.
+        /// Bytes were readable but not decodable, and the file was moved aside
+        /// (`.moveAside` — the reconstructable Health sidecar only).
         case corrupt
+        /// Bytes were readable but not decodable, and the file was left where
+        /// it is (`.preserveInPlace` — score-bearing files). Never `missing`.
+        case undecodable
         /// The file exists but could not be read (I/O / protection error). Must
         /// never be conflated with `missing` — see `canonicalWritesSuspended`.
         case unreadable
     }
 
-    private static func readCanonicalFile<T: Decodable>(_ type: T.Type, at url: URL) -> CanonicalRead<T> {
+    private enum UndecodableHandling {
+        /// Leave the bytes in place so every launch reaches the same diagnosis.
+        case preserveInPlace
+        /// Move the file to `<name>.corrupt` so the store can start that file clean.
+        case moveAside
+    }
+
+    private static func readCanonicalFile<T: Decodable>(
+        _ type: T.Type,
+        at url: URL,
+        whenUndecodable handling: UndecodableHandling
+    ) -> CanonicalRead<T> {
         guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
         let data: Data
         do {
@@ -817,6 +877,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             return .loaded(try JSONDecoder().decode(T.self, from: data))
         } catch {
             phoneStoreLogger.error("Failed to decode \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            guard handling == .moveAside else { return .undecodable }
             let aside = url.appendingPathExtension("corrupt")
             try? FileManager.default.removeItem(at: aside)
             try? FileManager.default.moveItem(at: url, to: aside)

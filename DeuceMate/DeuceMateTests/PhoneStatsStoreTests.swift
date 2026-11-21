@@ -22,6 +22,7 @@ struct PhoneStatsStoreTests {
         var historyURL: URL { canonical.appendingPathComponent("matchHistory.json") }
         var tombstoneURL: URL { canonical.appendingPathComponent("deletedMatchIDs.json") }
         var healthURL: URL { canonical.appendingPathComponent("healthData.json") }
+        var ledgerURL: URL { canonical.appendingPathComponent("forgottenPlayers.json") }
 
         func makeStore() -> PhoneStatsStore {
             PhoneStatsStore(storageConfiguration: .init(
@@ -313,5 +314,117 @@ struct PhoneStatsStoreTests {
         #expect(store.loadHistory().count == 1)
         #expect(!FileManager.default.fileExists(atPath: fixture.historyURL.path))
         #expect(!FileManager.default.fileExists(atPath: fixture.healthURL.path))
+    }
+
+    // MARK: - Undecodable canonical files fail closed (TECHNICAL_DEBT #18)
+
+    /// A real archive written by a build that knows an outcome this one
+    /// doesn't: valid JSON whose single unknown enum value fails the whole
+    /// `[MatchRecord]` decode — the archive-wide amplifier #18 describes.
+    private func archiveFromNewerBuild() throws -> Data {
+        let json = String(decoding: try JSONEncoder().encode([record(health: false)]), as: UTF8.self)
+        let newer = json.replacingOccurrences(of: "\"outcome\":\"winner\"", with: "\"outcome\":\"smash\"")
+        #expect(newer != json)
+        #expect((try? JSONDecoder().decode([MatchRecord].self, from: Data(newer.utf8))) == nil)
+        return Data(newer.utf8)
+    }
+
+    @Test func cleanLoadReportsNoArchiveProblem() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try encode([record().strippingHealthData()], to: fixture.historyURL)
+
+        #expect(fixture.makeStore().archiveProblem == nil)
+    }
+
+    @Test func undecodableMainIsPreservedInPlaceAndSuspendsWritesAcrossRelaunch() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try archiveFromNewerBuild()
+        try original.write(to: fixture.historyURL)
+
+        let store = fixture.makeStore()
+        #expect(store.archiveProblem == .undecodable)
+        store.appendMatch(record())
+        store.deletePermanently(id: UUID())
+
+        // In memory only: the file is byte-for-byte untouched and never moved
+        // aside, so the next launch cannot mistake it for a missing archive.
+        #expect(store.loadHistory().count == 1)
+        #expect(try Data(contentsOf: fixture.historyURL) == original)
+        #expect(!FileManager.default.fileExists(atPath: fixture.historyURL.appendingPathExtension("corrupt").path))
+        #expect(!FileManager.default.fileExists(atPath: fixture.tombstoneURL.path))
+        #expect(!FileManager.default.fileExists(atPath: fixture.healthURL.path))
+
+        // The regression this guards: before #18 the file was moved aside, so
+        // a relaunch saw "missing", resumed writes and pushed an empty archive.
+        let relaunched = fixture.makeStore()
+        #expect(relaunched.archiveProblem == .undecodable)
+        relaunched.appendMatch(record())
+        #expect(try Data(contentsOf: fixture.historyURL) == original)
+    }
+
+    @Test func undecodableTombstonesSuspendWrites() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let damaged = Data("[\"not-a-uuid\"]".utf8)
+        try damaged.write(to: fixture.tombstoneURL)
+
+        let store = fixture.makeStore()
+        store.appendMatch(record())
+
+        // Losing tombstones would let a later sync or restore resurrect deletions.
+        #expect(store.archiveProblem == .undecodable)
+        #expect(!FileManager.default.fileExists(atPath: fixture.historyURL.path))
+        #expect(try Data(contentsOf: fixture.tombstoneURL) == damaged)
+    }
+
+    @Test func undecodableForgottenPlayerLedgerSuspendsWrites() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let existing = record().strippingHealthData()
+        try encode([existing], to: fixture.historyURL)
+        let damaged = Data("not json {{{".utf8)
+        try damaged.write(to: fixture.ledgerURL)
+
+        let store = fixture.makeStore()
+        store.appendMatch(record())
+
+        // Dropping the ledger would forget which players the user asked to forget.
+        #expect(store.archiveProblem == .undecodable)
+        #expect(try Data(contentsOf: fixture.ledgerURL) == damaged)
+        #expect(try JSONDecoder().decode([MatchRecord].self, from: Data(contentsOf: fixture.historyURL)) == [existing])
+    }
+
+    @Test func unreadableMainReportsUnreadableProblem() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(at: fixture.historyURL, withIntermediateDirectories: true)
+
+        #expect(fixture.makeStore().archiveProblem == .unreadable)
+    }
+
+    @Test func undecodableOutranksUnreadableWhenBothFail() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(at: fixture.tombstoneURL, withIntermediateDirectories: true)
+        try archiveFromNewerBuild().write(to: fixture.historyURL)
+
+        #expect(fixture.makeStore().archiveProblem == .undecodable)
+    }
+
+    @Test func manualImportWhileSuspendedFailsInsteadOfClaimingSuccess() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try archiveFromNewerBuild()
+        try original.write(to: fixture.historyURL)
+        let store = fixture.makeStore()
+        let archive = try ManualMatchArchiveBackup.encode(records: [record()])
+
+        #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
+            try store.importManualArchive(data: archive, mode: .replace)
+        }
+        #expect(store.loadHistory().isEmpty)
+        #expect(try Data(contentsOf: fixture.historyURL) == original)
     }
 }

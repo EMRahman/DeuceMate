@@ -53,7 +53,7 @@ when the item should constrain future changes.
 
 | # | Area | Item | Application risk | Work band / trigger | Effort |
 |---|------|------|------------------|---------------------|--------|
-| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact; low–medium likelihood** | **Now** | Medium, staged |
+| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | Stage 1 landed (iPhone fails closed; all six enums pinned). Remaining: backup-push floor, recovery, open enums | **Now** — backup floor next | Medium, staged |
 | [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | **High** | **Now**, in the persistence-safety programme | Medium — PR #108 exists to re-read |
 | [27](#27--prevent-unrecorded-fitness-workouts-with-manager-tests-and-crash-recovery) | Health / Reliability | Prevent unrecorded Fitness workouts with manager tests and crash recovery | High impact when a workout is lost; remaining likelihood unverified | **Now**; physical-Watch save/sync checks before release | Medium, staged |
 | [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | **High when schemas diverge** | **Before any persisted-model, enum, or wire-shape change** | Medium |
@@ -328,8 +328,53 @@ remedy is deleting the app — which takes the sandbox, and the `.corrupt` file,
 with it. `assertionFailure()` gives the same signal in Debug and compiles away in
 Release.
 
+**Status — stage 1 implemented (21 November 2026).**
+
+- `PhoneStatsStore` now fails closed. A history, tombstone or forgotten-player
+  ledger file that exists but is unreadable *or undecodable* stays **in place**,
+  byte-for-byte, and suspends every canonical write and iCloud push. The old
+  move-aside to `.corrupt` was the real hole. Suspension only lasts for the
+  process, so on the next launch the moved file read as "missing", writes
+  resumed and an empty archive was pushed over the backup. With the file kept
+  in place, every launch reaches the same diagnosis. Only the reconstructable
+  Health sidecar is still moved aside.
+- The reason is published as `archiveProblem` (Core `ArchiveLoadProblem`:
+  `unreadable` / `undecodable`). `ArchiveProblemNotice` replaces "No Matches Yet"
+  and leads the list. The iCloud indicator reads **iCloud backup paused**
+  (`ICloudBackupCopy.paused`). The copy promises no recovery this build can't
+  offer.
+- Manual archive import now throws `.notPersisted` and rolls back if it can't be
+  written, instead of reporting success for a change that only lives in memory.
+- Raw values are pinned for all six persisted enums (`Player`, `MatchType`,
+  `PointOutcome` and `EndingShot` added). The `PointOutcome`/`EndingShot` tests
+  also pin the case count, so a new case is a deliberate test edit.
+- Tests: `PhoneStatsStoreTests` (undecodable main, tombstones and ledger kept
+  byte-for-byte and still suspended after a relaunch, import refused, precedence),
+  `ArchiveLoadProblemTests`, `ICloudBackupCopyTests`, `ScoreTypesTests`,
+  `PointStatTests`.
+
+**Remaining, in order:**
+
+1. **Backup-push floor** (defence in depth, described above). Put the decision in
+   Core (`ArchiveBackupPolicy`) so it is testable without iCloud. Two details:
+   on the first push of a process, read the backup's ids as the baseline
+   (missing → push; still downloading → defer); and write tombstones and the
+   ledger as a **union** with the backup's. Today `pushBackupOnQueue` writes the
+   local set, which could shrink them.
+2. **Explicit recovery** from the notice: restore from the iCloud backup (now
+   protected), recover readable matches with an element-wise decode that reports
+   counts, or start a new archive with a confirmation. Needs #19's version
+   diagnosis to call a newer-format file what it is.
+3. **Open enums.** The standard root fix for "one unknown value fails the whole
+   file": decode unknown raw values as a preserved `unknown(String)` (Protocol
+   Buffers' open enums) instead of throwing. `CompetitionType` already follows
+   this raw-string pattern. Do this before the next persisted enum gains a case.
+   It removes the most likely trigger, but stages 1–2 are still needed for any
+   other damage.
+
 **Key files:** `ScoreTypes.swift`, `PointStat.swift`, `StatsStore.swift`,
 `PhoneStatsStore.swift` (`readCanonicalFile`, `pushBackupOnQueue`),
+`ArchiveLoadProblem.swift`, `ArchiveProblemNotice.swift`,
 `ScoreViewModel.swift` (`AppState`, `loadState`).
 
 ---
