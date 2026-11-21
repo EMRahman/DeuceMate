@@ -466,4 +466,77 @@ struct PhoneStatsStoreTests {
         )
         #expect(Set(decoded.map(\.id)) == Set([matchA.id, matchB.id]))
     }
+
+    @Test func backupPushPreservesRemoteDeletionLedgersWhenHistoryWriteIsWithheld() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let accountAContainer = fixture.root.appendingPathComponent("iCloudA", isDirectory: true)
+        let accountBContainer = fixture.root.appendingPathComponent("iCloudB", isDirectory: true)
+        let accountCContainer = fixture.root.appendingPathComponent("iCloudC", isDirectory: true)
+        try FileManager.default.createDirectory(at: accountAContainer, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: accountBContainer, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: accountCContainer, withIntermediateDirectories: true)
+
+        let matchA = record()
+        let matchB = record()
+        let localDeletedID = UUID()
+        let remoteDeletedID = UUID()
+        let localForgottenID = UUID()
+        let remoteForgottenID = UUID()
+
+        let store = fixture.makeStore()
+        store.saveHistory([matchA])
+        store.deletePermanently(id: localDeletedID)
+        _ = try store.forgetPlayer(localForgottenID)
+        store.pushBackupForTesting(to: accountAContainer, identityToken: "account-a")
+
+        let accountBHistoryURL = accountBContainer.appendingPathComponent("matchHistory.json")
+        let accountBTombstoneURL = accountBContainer.appendingPathComponent("deletedMatchIDs.json")
+        let accountBLedgerURL = accountBContainer.appendingPathComponent("forgottenPlayers.json")
+        let existingAccountBHistory = try PersistedArchiveCodec.encodeEnvelope(
+            [matchA, matchB],
+            format: PersistedArchiveCodec.historyFormat
+        )
+        try existingAccountBHistory.write(to: accountBHistoryURL)
+        try PersistedArchiveCodec.encodeEnvelope(
+            [remoteDeletedID],
+            format: PersistedArchiveCodec.tombstonesFormat
+        ).write(to: accountBTombstoneURL)
+        try JSONEncoder().encode(ForgottenPlayerLedger(playerIDs: [remoteForgottenID]))
+            .write(to: accountBLedgerURL)
+
+        store.pushBackupForTesting(to: accountBContainer, identityToken: "account-b")
+
+        #expect(try Data(contentsOf: accountBHistoryURL) == existingAccountBHistory)
+        let mergedTombstones = try PersistedArchiveCodec.decode(
+            [UUID].self,
+            from: Data(contentsOf: accountBTombstoneURL),
+            expectedFormat: PersistedArchiveCodec.tombstonesFormat
+        )
+        #expect(Set(mergedTombstones) == Set([remoteDeletedID, localDeletedID]))
+        let mergedLedger = try JSONDecoder().decode(
+            ForgottenPlayerLedger.self,
+            from: Data(contentsOf: accountBLedgerURL)
+        )
+        #expect(mergedLedger == ForgottenPlayerLedger(playerIDs: [remoteForgottenID, localForgottenID]))
+
+        let accountCHistoryURL = accountCContainer.appendingPathComponent("matchHistory.json")
+        let accountCTombstoneURL = accountCContainer.appendingPathComponent("deletedMatchIDs.json")
+        let accountCLedgerURL = accountCContainer.appendingPathComponent("forgottenPlayers.json")
+        let existingAccountCHistory = try PersistedArchiveCodec.encodeEnvelope(
+            [matchA, matchB],
+            format: PersistedArchiveCodec.historyFormat
+        )
+        let newerTombstonesData = Data(#"{"format":"deucemate.deletedMatchIDs","schemaVersion":2,"items":[]}"#.utf8)
+        let newerLedgerData = Data(#"{"schemaVersion":2,"playerIDs":[]}"#.utf8)
+        try existingAccountCHistory.write(to: accountCHistoryURL)
+        try newerTombstonesData.write(to: accountCTombstoneURL)
+        try newerLedgerData.write(to: accountCLedgerURL)
+
+        store.pushBackupForTesting(to: accountCContainer, identityToken: "account-c")
+
+        #expect(try Data(contentsOf: accountCHistoryURL) == existingAccountCHistory)
+        #expect(try Data(contentsOf: accountCTombstoneURL) == newerTombstonesData)
+        #expect(try Data(contentsOf: accountCLedgerURL) == newerLedgerData)
+    }
 }

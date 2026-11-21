@@ -1297,7 +1297,33 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private enum BackupBaseline {
         case ids(Set<UUID>)
         case deferDownloading
-        case withholdNewerSchema
+        case withhold
+
+        var isDownloading: Bool {
+            if case .deferDownloading = self { return true }
+            return false
+        }
+    }
+
+    private enum AdditiveLedgerInspection<T> {
+        case write(T, needsWrite: Bool)
+        case deferDownloading
+        case preserveExisting
+
+        var isDownloading: Bool {
+            if case .deferDownloading = self { return true }
+            return false
+        }
+
+        var isPreservingExisting: Bool {
+            if case .preserveExisting = self { return true }
+            return false
+        }
+    }
+
+    private struct BackupForgottenPlayerLedgerPayload: Decodable {
+        let schemaVersion: Int?
+        let playerIDs: [UUID]
     }
 
     private func pushBackupOnQueue(
@@ -1318,25 +1344,37 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             lastPushedIdentityToken = nil
         }
         do {
-            // Deletion intent first, so a partially pushed backup never pairs
-            // the newer archive with an older ledger. Tombstones remain additive
-            // even if the record-file write is withheld or deferred.
-            try coordinatedWriteBackup(snapshot.forgottenPlayers, to: Self.backupLedgerURL(besides: historyURL))
-            try coordinatedWriteBackup(Array(snapshot.tombstones), to: tombstoneURL)
-            let baselineIDs: Set<UUID>
-            switch baselineRecordIDsForBackupPush(at: historyURL, currentToken: currentToken) {
-            case .ids(let ids):
-                baselineIDs = ids
-            case .deferDownloading:
+            // Deletion intent first (unioned with any readable remote ledgers and
+            // preserving uninspectable/newer ones untouched), so a partially
+            // pushed backup never pairs a newer archive with an older ledger
+            // and never erases another device's tombstones or forgotten IDs.
+            let ledgerURL = Self.backupLedgerURL(besides: historyURL)
+            let ledgerInspection = inspectBackupLedger(merging: snapshot.forgottenPlayers, at: ledgerURL)
+            if case .write(let mergedLedger, let needsWrite) = ledgerInspection, needsWrite {
+                try coordinatedWriteBackup(mergedLedger, to: ledgerURL)
+            }
+            let tombstoneInspection = inspectBackupTombstones(merging: snapshot.tombstones, at: tombstoneURL)
+            if case .write(let mergedTombstones, let needsWrite) = tombstoneInspection, needsWrite {
+                try coordinatedWriteBackup(Array(mergedTombstones), to: tombstoneURL)
+            }
+
+            let historyBaseline = baselineRecordIDsForBackupPush(at: historyURL, currentToken: currentToken)
+            if ledgerInspection.isDownloading
+                || tombstoneInspection.isDownloading
+                || historyBaseline.isDownloading {
                 if storageConfiguration.startsICloudSync && retriesRemaining > 0 {
                     let delay = Self.backupRetryDelays[Self.backupRetryDelays.count - retriesRemaining]
                     scheduleICloudBackupSyncOnQueue(after: delay, retriesRemaining: retriesRemaining - 1)
                 }
                 phoneStoreLogger.notice("iCloud backup baseline downloading or unreadable; deferring history write")
                 return
-            case .withholdNewerSchema:
+            }
+            guard !ledgerInspection.isPreservingExisting,
+                  !tombstoneInspection.isPreservingExisting,
+                  case .ids(let baselineIDs) = historyBaseline else {
                 return
             }
+
             switch ArchiveBackupPolicy.evaluatePush(
                 candidate: snapshot,
                 overwriting: baselineIDs,
@@ -1358,6 +1396,59 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             // Push failures are recoverable: the canonical archive is safe
             // on-device and the next trigger retries the same content.
             phoneStoreLogger.error("iCloud backup push failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func inspectBackupLedger(
+        merging local: ForgottenPlayerLedger,
+        at url: URL
+    ) -> AdditiveLedgerInspection<ForgottenPlayerLedger> {
+        switch backupFileState(at: url) {
+        case .missing:
+            return .write(local, needsWrite: true)
+        case .downloading:
+            return .deferDownloading
+        case .ready(let existingData):
+            do {
+                let payload = try JSONDecoder().decode(BackupForgottenPlayerLedgerPayload.self, from: existingData)
+                let version = payload.schemaVersion ?? 1
+                guard (1...ForgottenPlayerLedger.currentSchemaVersion).contains(version) else {
+                    phoneStoreLogger.error("Preserving iCloud backup forgotten-player ledger: remote uses unsupported schema \(version, privacy: .public)")
+                    return .preserveExisting
+                }
+                let existing = ForgottenPlayerLedger(playerIDs: Set(payload.playerIDs))
+                let merged = local.union(existing)
+                return .write(merged, needsWrite: merged != existing)
+            } catch {
+                phoneStoreLogger.error("Preserving iCloud backup forgotten-player ledger: remote file could not be decoded (\(error.localizedDescription, privacy: .public))")
+                return .preserveExisting
+            }
+        }
+    }
+
+    private func inspectBackupTombstones(
+        merging local: Set<UUID>,
+        at url: URL
+    ) -> AdditiveLedgerInspection<Set<UUID>> {
+        switch backupFileState(at: url) {
+        case .missing:
+            return .write(local, needsWrite: true)
+        case .downloading:
+            return .deferDownloading
+        case .ready(let existingData):
+            do {
+                let existing = try PersistedArchiveCodec.decode(
+                    [UUID].self,
+                    from: existingData,
+                    expectedFormat: PersistedArchiveCodec.tombstonesFormat
+                )
+                let existingSet = Set(existing)
+                let merged = local.union(existingSet)
+                return .write(merged, needsWrite: merged != existingSet)
+            } catch {
+                phoneStoreLogger.error("Preserving iCloud backup tombstones: remote file could not be decoded (\(error.localizedDescription, privacy: .public))")
+                return .preserveExisting
+            }
         }
     }
 
@@ -1383,9 +1474,10 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 return .ids(Set(existing.map(\.id)))
             } catch PersistedArchiveCodec.CodecError.newerSchemaVersion(let version) {
                 phoneStoreLogger.error("Withheld iCloud backup history write: remote backup uses newer schema \(version, privacy: .public)")
-                return .withholdNewerSchema
+                return .withhold
             } catch {
-                return .ids([])
+                phoneStoreLogger.error("Withheld iCloud backup history write: remote backup could not be decoded (\(error.localizedDescription, privacy: .public))")
+                return .withhold
             }
         }
     }
