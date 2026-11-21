@@ -53,7 +53,7 @@ when the item should constrain future changes.
 
 | # | Area | Item | Application risk | Work band / trigger | Effort |
 |---|------|------|------------------|---------------------|--------|
-| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | Stage 1 landed (iPhone fails closed; all six enums pinned). Remaining: backup-push floor, recovery, open enums | **Now** — backup floor next | Medium, staged |
+| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | Stages 1–2 landed (iPhone fails closed; all six enums pinned; iCloud push floor). Remaining: recovery, open enums | Recovery needs product decisions; open enums before the next persisted-enum case | Medium, staged |
 | [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | **High** | **Now**, in the persistence-safety programme | Medium — PR #108 exists to re-read |
 | [27](#27--prevent-unrecorded-fitness-workouts-with-manager-tests-and-crash-recovery) | Health / Reliability | Prevent unrecorded Fitness workouts with manager tests and crash recovery | High impact when a workout is lost; remaining likelihood unverified | **Now**; physical-Watch save/sync checks before release | Medium, staged |
 | [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | **High when schemas diverge** | **Before any persisted-model, enum, or wire-shape change** | Medium |
@@ -353,28 +353,55 @@ Release.
   `ArchiveLoadProblemTests`, `ICloudBackupCopyTests`, `ScoreTypesTests`,
   `PointStatTests`.
 
+**Status — stage 2 implemented (21 November 2026): the iCloud push floor.**
+
+- Every push goes through Core's `BackupPushGuard`. A match that was in the
+  backup may leave it only when the loss is explained by a tombstone or a
+  confirmed Replace import. Otherwise the record file is withheld and the
+  backup keeps its matches. Tombstones and the ledger are still pushed, because
+  they only make the backup safer.
+- **The baseline is a local manifest, not the remote file.** `backupManifest.json`
+  holds the ids this iPhone last pushed in full (ids only). A Replace import
+  rewrites it, so the replaced matches may leave the backup. When the manifest
+  is missing (first push after updating, or after a restore), the push reads
+  the ids in the backup instead. It decodes them as `BackupRecordID`, so a
+  backup with newer-format records is still protected. If the backup is still
+  downloading, the push defers.
+- **Two corrections to the plan above, found while implementing:**
+  - A Replace import drops matches without tombstoning them. A tombstone-only
+    rule would have withheld every push after a Replace, permanently, hence the
+    manifest rewrite.
+  - Imports also *lift* tombstones for matches they bring back. A plain union
+    with the backup's tombstones would have re-hidden them, so the union
+    excludes any id being pushed.
+- **The withheld state is visible.** `isBackupWithheld` makes the indicator read
+  **iCloud backup paused**. A withheld push is a fault in the log. Today it can
+  only follow a bug: the corrupt-load path that used to cause it is closed by
+  stage 1. The ledger is pushed from local state, not unioned with the backup's,
+  because the ledger only grows and an unusable local ledger now suspends
+  writes.
+- **Tests** run the real push path against a local folder
+  (`StorageConfiguration.backupContainerURL`), alongside the pure
+  `BackupPushGuardTests`. With the guard disabled, exactly the two lost-match
+  store tests fail.
+
 **Remaining, in order:**
 
-1. **Backup-push floor** (defence in depth, described above). Put the decision in
-   Core (`ArchiveBackupPolicy`) so it is testable without iCloud. Two details:
-   on the first push of a process, read the backup's ids as the baseline
-   (missing → push; still downloading → defer); and write tombstones and the
-   ledger as a **union** with the backup's. Today `pushBackupOnQueue` writes the
-   local set, which could shrink them.
-2. **Explicit recovery** from the notice: restore from the iCloud backup (now
+1. **Explicit recovery** from the notice: restore from the iCloud backup (now
    protected), recover readable matches with an element-wise decode that reports
    counts, or start a new archive with a confirmation. Needs #19's version
-   diagnosis to call a newer-format file what it is.
-3. **Open enums.** The standard root fix for "one unknown value fails the whole
+   diagnosis to call a newer-format file what it is. It should also give a way
+   out of a withheld push: today that state lasts until the lost matches come
+   back or a Replace import accepts their loss.
+2. **Open enums.** The standard root fix for "one unknown value fails the whole
    file": decode unknown raw values as a preserved `unknown(String)` (Protocol
    Buffers' open enums) instead of throwing. `CompetitionType` already follows
    this raw-string pattern. Do this before the next persisted enum gains a case.
-   It removes the most likely trigger, but stages 1–2 are still needed for any
-   other damage.
+   It removes the most likely trigger; stages 1–2 still cover any other damage.
 
 **Key files:** `ScoreTypes.swift`, `PointStat.swift`, `StatsStore.swift`,
 `PhoneStatsStore.swift` (`readCanonicalFile`, `pushBackupOnQueue`),
-`ArchiveLoadProblem.swift`, `ArchiveProblemNotice.swift`,
+`ArchiveLoadProblem.swift`, `ArchiveProblemNotice.swift`, `BackupPushGuard.swift`,
 `ScoreViewModel.swift` (`AppState`, `loadState`).
 
 ---

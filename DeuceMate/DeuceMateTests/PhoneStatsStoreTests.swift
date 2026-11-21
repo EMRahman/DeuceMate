@@ -41,6 +41,27 @@ struct PhoneStatsStoreTests {
             ))
         }
 
+        /// A local folder standing in for the iCloud container, so the real
+        /// push path (and its guard) runs without iCloud.
+        var backup: URL { root.appendingPathComponent("Backup", isDirectory: true) }
+        var backupHistoryURL: URL { backup.appendingPathComponent("matchHistory.json") }
+        var backupTombstoneURL: URL { backup.appendingPathComponent("deletedMatchIDs.json") }
+        var manifestURL: URL { canonical.appendingPathComponent("backupManifest.json") }
+
+        /// A store past its one-time initial restore that pushes to `backup`.
+        func makeBackingUpStore() throws -> PhoneStatsStore {
+            try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
+            try JSONEncoder().encode(true)
+                .write(to: canonical.appendingPathComponent("archiveInitialized.json"))
+            let backupURL = backup
+            return PhoneStatsStore(storageConfiguration: .init(
+                canonicalDirectoryURL: canonical,
+                legacyDocumentsDirectoryURL: legacyDocuments,
+                startsICloudSync: true,
+                backupContainerURL: { backupURL }
+            ))
+        }
+
         func remove() {
             try? FileManager.default.removeItem(at: root)
         }
@@ -426,5 +447,120 @@ struct PhoneStatsStoreTests {
         }
         #expect(store.loadHistory().isEmpty)
         #expect(try Data(contentsOf: fixture.historyURL) == original)
+    }
+
+    // MARK: - iCloud backup push guard (TECHNICAL_DEBT #18)
+
+    /// Runs a push now (cancelling the debounced one) and waits for it:
+    /// `loadHistory()` is a barrier on the store's serial queue, and the main
+    /// queue hop publishes `isBackupWithheld`.
+    private func pushNow(_ store: PhoneStatsStore) async -> Bool {
+        store.syncICloudBackup()
+        _ = store.loadHistory()
+        return await MainActor.run { store.isBackupWithheld }
+    }
+
+    private func backupIDs(_ fixture: Fixture) throws -> Set<UUID> {
+        Set(try JSONDecoder().decode([MatchRecord].self, from: Data(contentsOf: fixture.backupHistoryURL)).map(\.id))
+    }
+
+    @Test func pushWritesTheBackupAndRemembersWhatItPushed() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let match = record()
+        try encode([match.strippingHealthData()], to: fixture.historyURL)
+        let store = try fixture.makeBackingUpStore()
+
+        #expect(await pushNow(store) == false)
+        #expect(try backupIDs(fixture) == [match.id])
+        let manifest = try JSONDecoder().decode(BackupManifest.self, from: Data(contentsOf: fixture.manifestURL))
+        #expect(manifest.recordIDs == [match.id])
+    }
+
+    @Test func deletingTheOnlyMatchStillEmptiesTheBackup() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let match = record()
+        try encode([match.strippingHealthData()], to: fixture.historyURL)
+        let store = try fixture.makeBackingUpStore()
+        _ = await pushNow(store)
+
+        store.deletePermanently(id: match.id)
+
+        #expect(await pushNow(store) == false)
+        #expect(try backupIDs(fixture).isEmpty)
+        #expect(try JSONDecoder().decode([UUID].self, from: Data(contentsOf: fixture.backupTombstoneURL)) == [match.id])
+    }
+
+    @Test func unexplainedLossKeepsTheBackupsRecords() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        // The archive lists one match, but this iPhone last backed up two and
+        // nothing records deleting the second: the loss is unexplained.
+        let kept = record(), lost = record()
+        try encode([kept.strippingHealthData()], to: fixture.historyURL)
+        try encode(BackupManifest(recordIDs: [kept.id, lost.id], tombstones: []), to: fixture.manifestURL)
+        try FileManager.default.createDirectory(at: fixture.backup, withIntermediateDirectories: true)
+        let backupBytes = try JSONEncoder().encode([kept.strippingHealthData(), lost.strippingHealthData()])
+        try backupBytes.write(to: fixture.backupHistoryURL)
+        let store = try fixture.makeBackingUpStore()
+
+        #expect(await pushNow(store) == true)
+        #expect(try Data(contentsOf: fixture.backupHistoryURL) == backupBytes)
+        // Tombstones are still pushed: they only make the backup safer.
+        #expect(FileManager.default.fileExists(atPath: fixture.backupTombstoneURL.path))
+    }
+
+    @Test func withoutAManifestTheBaselineIsReadFromTheBackup() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        // First push after updating: no manifest yet, so the ids already in
+        // the backup are the baseline — including a record from a newer build
+        // that this build can't fully decode.
+        let kept = record()
+        try encode([kept.strippingHealthData()], to: fixture.historyURL)
+        try FileManager.default.createDirectory(at: fixture.backup, withIntermediateDirectories: true)
+        let newerID = UUID()
+        let backupBytes = Data("""
+        [\(String(decoding: try JSONEncoder().encode(kept.strippingHealthData()), as: UTF8.self)),
+         {"id":"\(newerID.uuidString)","stats":[{"outcome":"smash"}]}]
+        """.utf8)
+        try backupBytes.write(to: fixture.backupHistoryURL)
+        let store = try fixture.makeBackingUpStore()
+
+        #expect(await pushNow(store) == true)
+        #expect(try Data(contentsOf: fixture.backupHistoryURL) == backupBytes)
+    }
+
+    @Test func confirmedReplaceImportMayShrinkTheBackup() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let old = record(), replacement = record()
+        try encode([old.strippingHealthData()], to: fixture.historyURL)
+        let store = try fixture.makeBackingUpStore()
+        _ = await pushNow(store)
+
+        try store.importManualArchive(
+            data: ManualMatchArchiveBackup.encode(records: [replacement]),
+            mode: .replace
+        )
+
+        #expect(await pushNow(store) == false)
+        #expect(try backupIDs(fixture) == [replacement.id])
+    }
+
+    @Test func mergeImportPushesWithoutWithholding() async throws {
+        // Merge never drops matches, so the guard has nothing to withhold.
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let existing = record(), added = record()
+        try encode([existing.strippingHealthData()], to: fixture.historyURL)
+        let store = try fixture.makeBackingUpStore()
+        _ = await pushNow(store)
+
+        try store.importManualArchive(data: ManualMatchArchiveBackup.encode(records: [added]), mode: .merge)
+
+        #expect(await pushNow(store) == false)
+        #expect(try backupIDs(fixture) == [existing.id, added.id])
     }
 }

@@ -35,10 +35,11 @@ public enum ICloudBackupCopy: CaseIterable, Sendable {
     /// until both backup files report `.ubiquitousItemIsUploaded == true`, and
     /// also when nothing has ever been pushed (nil receipt → don't claim backed up).
     case pendingUpload
-    /// The local archive could not be loaded (`ArchiveLoadProblem`), so the
-    /// store has suspended every write and backup push. The existing iCloud
-    /// copy is left exactly as it was — never claim "Backed up" or "Waiting to
-    /// upload" here, because nothing will be uploaded until this is resolved.
+    /// Backup pushes are on hold and the existing iCloud copy is left as it
+    /// was: either the local archive could not be loaded (`ArchiveLoadProblem`,
+    /// all writes suspended) or the push guard kept the backup's records
+    /// because matches would have left it unexplained (`BackupPushGuard`).
+    /// Never claim "Backed up" or "Waiting to upload" here.
     case paused
 
     /// Short status label (not a full sentence) for the indicator strip.
@@ -73,8 +74,8 @@ public enum ICloudBackupCopy: CaseIterable, Sendable {
     ///
     /// Resolution order (higher entries win):
     /// 1. Toggle off → `.notBackedUp`
-    /// 2. Archive writes suspended → `.paused` (outranks availability: even
-    ///    once iCloud returns, nothing is pushed until the archive loads)
+    /// 2. Backup paused (archive unreadable, or push withheld) → `.paused`
+    ///    (outranks availability: even once iCloud returns, nothing is pushed)
     /// 3. iCloud unavailable → `.unavailable`
     /// 4. Restore in flight → `.restoring`
     /// 5. Restore prompt pending user decision → `.pendingRestore`
@@ -86,10 +87,10 @@ public enum ICloudBackupCopy: CaseIterable, Sendable {
         isRestoring: Bool = false,
         hasPendingRestore: Bool = false,
         isUploaded: Bool? = nil,
-        isArchiveSuspended: Bool = false
+        isBackupPaused: Bool = false
     ) -> ICloudBackupCopy {
         guard isEnabled else { return .notBackedUp }
-        if isArchiveSuspended { return .paused }
+        if isBackupPaused { return .paused }
         guard isAvailable else { return .unavailable }
         if isRestoring { return .restoring }
         if hasPendingRestore { return .pendingRestore }

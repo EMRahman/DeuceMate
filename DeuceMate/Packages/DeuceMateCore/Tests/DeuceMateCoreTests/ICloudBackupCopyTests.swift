@@ -89,10 +89,10 @@ final class ICloudBackupCopyTests: XCTestCase {
     // MARK: - Archive suspended (TECHNICAL_DEBT #18)
 
     func test_current_pausedWhenArchiveSuspended_outranksEverythingButToggleOff() {
-        XCTAssertEqual(ICloudBackupCopy.current(isEnabled: true, isAvailable: true, isUploaded: true, isArchiveSuspended: true), .paused)
-        XCTAssertEqual(ICloudBackupCopy.current(isEnabled: true, isAvailable: false, isArchiveSuspended: true), .paused)
-        XCTAssertEqual(ICloudBackupCopy.current(isEnabled: true, isAvailable: true, isRestoring: true, hasPendingRestore: true, isArchiveSuspended: true), .paused)
-        XCTAssertEqual(ICloudBackupCopy.current(isEnabled: false, isAvailable: true, isArchiveSuspended: true), .notBackedUp)
+        XCTAssertEqual(ICloudBackupCopy.current(isEnabled: true, isAvailable: true, isUploaded: true, isBackupPaused: true), .paused)
+        XCTAssertEqual(ICloudBackupCopy.current(isEnabled: true, isAvailable: false, isBackupPaused: true), .paused)
+        XCTAssertEqual(ICloudBackupCopy.current(isEnabled: true, isAvailable: true, isRestoring: true, hasPendingRestore: true, isBackupPaused: true), .paused)
+        XCTAssertEqual(ICloudBackupCopy.current(isEnabled: false, isAvailable: true, isBackupPaused: true), .notBackedUp)
         XCTAssertNotEqual(ICloudBackupCopy.paused.text, ICloudBackupCopy.backedUp.text)
     }
 }

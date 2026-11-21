@@ -72,6 +72,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// launch. Writes and iCloud pushes are then suspended for the process and
     /// the archive screen explains why the list looks empty (TECHNICAL_DEBT #18).
     @Published private(set) var archiveProblem: ArchiveLoadProblem? = nil
+    /// True when the last backup push kept the backup's records because the
+    /// archive had lost matches with no tombstone or confirmed Replace to
+    /// explain it (`BackupPushGuard`, TECHNICAL_DEBT #18). The indicator then
+    /// reads "iCloud backup paused" instead of claiming an upload.
+    @Published private(set) var isBackupWithheld = false
     /// Whether the user's iCloud account/container is currently usable. When
     /// false the archive still works in full (it is device-local); backup
     /// pushes and initial restore pause until iCloud returns.
@@ -102,9 +107,17 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private var canonicalWritesSuspended: Bool { canonicalSuspension != nil }
     /// The scheduled debounced backup push or restore download-retry, if any.
     private var pendingBackupSync: DispatchWorkItem?
-    /// Last content successfully pushed to the ubiquity container; nil before the first push.
-    /// Used to skip redundant iCloud writes when nothing has changed.
+    /// Last outgoing content a push handled (pushed, or withheld by the guard);
+    /// nil before the first push. Used to skip redundant iCloud writes when
+    /// nothing has changed.
     private var lastPushedSnapshot: ArchiveBackupPolicy.Snapshot?
+    /// What this iPhone last pushed in full (`backupManifest.json`): the
+    /// baseline `BackupPushGuard` checks every push against. nil when it has
+    /// never been written or can't be read; the push then reads the ids
+    /// already in the backup instead.
+    private var backupManifest: BackupManifest?
+    /// Queue-confined copy of `isBackupWithheld`.
+    private var isBackupWithheldOnQueue = false
     /// The ubiquity identity token at the time of the last successful push.
     /// A different token means a different iCloud account — we must push even if content is unchanged.
     private var lastPushedIdentityToken: AnyHashable?
@@ -125,23 +138,32 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private static let initializedFilename = "archiveInitialized.json"
     private static let healthFilename = "healthData.json"
     private static let forgottenPlayersFilename = "forgottenPlayers.json"
+    private static let backupManifestFilename = "backupManifest.json"
 
     struct StorageConfiguration {
         let canonicalDirectoryURL: URL
         let legacyDocumentsDirectoryURL: URL
         let startsICloudSync: Bool
         let backupExcluder: (URL) throws -> Void
+        /// Where the iCloud backup files live; nil = iCloud unavailable.
+        /// Production asks for the ubiquity container (this may block briefly,
+        /// so it is only called on the store queue). Tests pass a local folder
+        /// so the real push path can run without iCloud.
+        let backupContainerURL: () -> URL?
 
         init(
             canonicalDirectoryURL: URL,
             legacyDocumentsDirectoryURL: URL,
             startsICloudSync: Bool,
-            backupExcluder: ((URL) throws -> Void)? = nil
+            backupExcluder: ((URL) throws -> Void)? = nil,
+            backupContainerURL: (() -> URL?)? = nil
         ) {
             self.canonicalDirectoryURL = canonicalDirectoryURL
             self.legacyDocumentsDirectoryURL = legacyDocumentsDirectoryURL
             self.startsICloudSync = startsICloudSync
             self.backupExcluder = backupExcluder ?? { try PhoneStatsStore.excludeFromBackup($0) }
+            self.backupContainerURL = backupContainerURL
+                ?? { FileManager.default.url(forUbiquityContainerIdentifier: nil) }
         }
 
         static var production: StorageConfiguration {
@@ -173,6 +195,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     }
     private var canonicalForgottenPlayersURL: URL {
         canonicalDirectoryURL.appendingPathComponent(Self.forgottenPlayersFilename)
+    }
+    private var backupManifestURL: URL {
+        canonicalDirectoryURL.appendingPathComponent(Self.backupManifestFilename)
     }
 
     // MARK: - Init
@@ -634,6 +659,15 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 publishOnQueue()
                 throw TagEditError.notPersisted
             }
+            if mode == .replace {
+                // The user confirmed replacing the archive, so the backup may
+                // now drop what the file didn't contain. Without this the push
+                // guard would keep the replaced matches in the backup forever.
+                recordBackupManifestOnQueue(BackupManifest(
+                    recordIDs: Set(records.map(\.id)),
+                    tombstones: tombstones
+                ))
+            }
         }
         return preview
     }
@@ -829,6 +863,13 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 phoneStoreLogger.notice("Migrated canonical archive to the backup-excluded Health sidecar")
             }
         }
+        // A missing or unreadable manifest only means the next push reads its
+        // baseline from the backup itself — never a reason to suspend.
+        if case .loaded(let manifest) = Self.readCanonicalFile(
+            BackupManifest.self, at: backupManifestURL, whenUndecodable: .moveAside
+        ) {
+            backupManifest = manifest
+        }
         if let canonicalSuspension {
             phoneStoreLogger.error("Canonical archive \(canonicalSuspension.rawValue, privacy: .public); file preserved, running in-memory with writes and iCloud backup suspended")
         }
@@ -1015,7 +1056,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         // May block briefly while the daemon sets the container up — we are on
         // the store's utility queue, never the main thread. nil = signed out /
         // iCloud Drive off; the archive keeps working locally.
-        guard let container = FileManager.default.url(forUbiquityContainerIdentifier: nil) else {
+        guard let container = storageConfiguration.backupContainerURL() else {
             // Container absent (signed out or iCloud Drive off). Leave the marker absent
             // so the NSUbiquityIdentityDidChange notification triggers a reconcile before
             // the first push when iCloud becomes available.
@@ -1032,7 +1073,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 retriesRemaining: retriesRemaining
             )
         } else {
-            pushBackupOnQueue(historyURL: backupHistoryURL, tombstoneURL: backupTombstoneURL)
+            pushBackupOnQueue(
+                historyURL: backupHistoryURL,
+                tombstoneURL: backupTombstoneURL,
+                retriesRemaining: retriesRemaining
+            )
             finishRestoreIndicator()
         }
     }
@@ -1142,7 +1187,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         queue.async { [weak self] in
             guard let self, let decoded = pendingRestoreDecoded else { return }
             pendingRestoreDecoded = nil
-            guard let container = FileManager.default.url(forUbiquityContainerIdentifier: nil) else {
+            guard let container = storageConfiguration.backupContainerURL() else {
                 return
             }
             let historyURL = container.appendingPathComponent(Self.historyFilename)
@@ -1182,29 +1227,106 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         ArchiveBackupPolicy.backupSnapshot(records: records, tombstones: tombstones, forgottenPlayers: forgotten)
     }
 
-    private func pushBackupOnQueue(historyURL: URL, tombstoneURL: URL) {
+    /// Pushes the archive through `BackupPushGuard`: a match may leave the
+    /// backup only with a tombstone or a confirmed Replace (TECHNICAL_DEBT #18).
+    private func pushBackupOnQueue(historyURL: URL, tombstoneURL: URL, retriesRemaining: Int = 0) {
         let currentToken = FileManager.default.ubiquityIdentityToken as? AnyHashable
-        let snapshot = backupSnapshotOnQueue()
-        guard snapshot != lastPushedSnapshot || currentToken != lastPushedIdentityToken else {
+        let outgoing = backupSnapshotOnQueue()
+        guard outgoing != lastPushedSnapshot || currentToken != lastPushedIdentityToken else {
             // Content unchanged — still read the upload status so the indicator
             // stays current (the daemon may have finished uploading since last check).
-            readUploadStatusOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL)
+            if !isBackupWithheldOnQueue {
+                readUploadStatusOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL)
+            }
             return
         }
+
+        let baseline: BackupManifest?
+        if let backupManifest {
+            baseline = backupManifest
+        } else {
+            switch backupBaselineOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL) {
+            case .ready(let manifest):
+                baseline = manifest
+            case .downloading:
+                // Never push over a backup we haven't been able to compare against.
+                guard retriesRemaining > 0 else {
+                    phoneStoreLogger.notice("iCloud backup still downloading; deferring the push to the next trigger")
+                    return
+                }
+                let delay = Self.backupRetryDelays[Self.backupRetryDelays.count - retriesRemaining]
+                scheduleICloudBackupSyncOnQueue(after: delay, retriesRemaining: retriesRemaining - 1)
+                return
+            }
+        }
+
         do {
-            // Deletion intent first, so a partially pushed backup never pairs
-            // the newer archive with an older ledger.
-            try coordinatedWriteBackup(snapshot.forgottenPlayers, to: Self.backupLedgerURL(besides: historyURL))
-            try coordinatedWriteBackup(snapshot.records, to: historyURL)
-            try coordinatedWriteBackup(Array(snapshot.tombstones), to: tombstoneURL)
-            lastPushedSnapshot = snapshot
+            switch BackupPushGuard.decision(outgoing: outgoing, baseline: baseline) {
+            case .push(let snapshot):
+                // Deletion intent first, so a partially pushed backup never pairs
+                // the newer archive with an older ledger.
+                try coordinatedWriteBackup(snapshot.forgottenPlayers, to: Self.backupLedgerURL(besides: historyURL))
+                try coordinatedWriteBackup(snapshot.records, to: historyURL)
+                try coordinatedWriteBackup(Array(snapshot.tombstones), to: tombstoneURL)
+                recordBackupManifestOnQueue(BackupManifest(pushed: snapshot))
+                setBackupWithheldOnQueue(false)
+                readUploadStatusOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL)
+            case .withholdRecords(let snapshot, let unexplained):
+                // Tombstones and the ledger only ever make the backup safer.
+                try coordinatedWriteBackup(snapshot.forgottenPlayers, to: Self.backupLedgerURL(besides: historyURL))
+                try coordinatedWriteBackup(Array(snapshot.tombstones), to: tombstoneURL)
+                phoneStoreLogger.fault("iCloud backup kept: \(unexplained.count, privacy: .public) match(es) would leave it with no deletion or Replace to explain it")
+                setBackupWithheldOnQueue(true)
+            }
+            lastPushedSnapshot = outgoing
             lastPushedIdentityToken = currentToken
-            readUploadStatusOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL)
         } catch {
             // Push failures are recoverable: the canonical archive is safe
             // on-device and the next trigger retries the same content.
             phoneStoreLogger.error("iCloud backup push failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    private enum BackupBaseline {
+        /// nil = no backup has been written yet, so there is nothing to protect.
+        case ready(BackupManifest?)
+        case downloading
+    }
+
+    /// The ids already in the backup, read only when this iPhone has no
+    /// manifest (first push after updating, or after a restore). Records are
+    /// decoded as ids only, so a backup whose full records this build can't
+    /// read — a newer format — is still protected.
+    private func backupBaselineOnQueue(historyURL: URL, tombstoneURL: URL) -> BackupBaseline {
+        let historyState = backupFileState(at: historyURL)
+        let tombstoneState = backupFileState(at: tombstoneURL)
+        if historyState.isDownloading || tombstoneState.isDownloading { return .downloading }
+        let ids = decodeBackup([BackupRecordID].self, from: historyState).value
+        let tombstones = decodeBackup([UUID].self, from: tombstoneState).value
+        // A missing or unreadable-as-ids history has nothing this guard could protect.
+        guard ids != nil || tombstones != nil else { return .ready(nil) }
+        return .ready(BackupManifest(
+            recordIDs: Set((ids ?? []).map(\.id)),
+            tombstones: Set(tombstones ?? [])
+        ))
+    }
+
+    /// Remembers the new baseline in memory and on disk. A failed write only
+    /// means the next launch reads the baseline from the backup instead.
+    private func recordBackupManifestOnQueue(_ manifest: BackupManifest) {
+        backupManifest = manifest
+        do {
+            try FileManager.default.createDirectory(at: canonicalDirectoryURL, withIntermediateDirectories: true)
+            try Self.write(manifest, to: backupManifestURL)
+        } catch {
+            phoneStoreLogger.error("Failed to save the backup manifest: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func setBackupWithheldOnQueue(_ withheld: Bool) {
+        guard withheld != isBackupWithheldOnQueue else { return }
+        isBackupWithheldOnQueue = withheld
+        DispatchQueue.main.async { self.isBackupWithheld = withheld }
     }
 
     /// Reads `.ubiquitousItemIsUploadedKey` on both backup files and publishes the
