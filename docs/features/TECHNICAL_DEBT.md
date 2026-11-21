@@ -335,7 +335,7 @@ Release.
 **Containment implemented (21 November 2026):**
 - `PhoneStatsStore` fails closed on `.corrupt`, `.unreadable`, and `.newerVersion` canonical files (`matchHistory.json`, `deletedMatchIDs.json`, `forgottenPlayers.json`): original bytes are preserved in place (no longer moved to `.corrupt` where a second launch would read `.missing`), `canonicalWritesSuspended = true` suspends local writes and iCloud pushes, and `persistenceWarning` is published to `PastMatchesView`. Only the reconstructable `healthData.json` sidecar continues to quarantine to `.corrupt` and degrade gracefully.
 - All six persisted enums (`DoublesServer`, `MatchFormat`, `MatchType`, `Player`, `PointOutcome`, `EndingShot`) now have pinned raw-value tests in `ScoreTypesTests` and `PointStatTests`.
-- `ArchiveBackupPolicy.evaluatePush(candidate:overwriting:)` enforces the tombstone-qualified backup floor in `PhoneStatsStore.pushBackupOnQueue`: additive tombstones and forgotten-player updates still write, while unexplained record shrinkage is withheld.
+- `ArchiveBackupPolicy.evaluatePush(candidate:overwriting:explicitlyReplacedIDs:)` enforces the tombstone-qualified backup floor in `PhoneStatsStore.pushBackupOnQueue`: additive tombstones and forgotten-player updates still write, explicit `.replace` drops persist in `replacedMatchIDs.json` until the backup write lands, `.downloading` baselines defer and retry, and unexplained record shrinkage or newer-schema remote backups are withheld.
 - **Remaining:** explicit user-confirmed element-wise `Lossy<T>` recovery action if a corrupt canonical file ever needs partial salvage.
 
 ---

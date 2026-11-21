@@ -381,4 +381,55 @@ struct PhoneStatsStoreTests {
         #expect(try Data(contentsOf: fixture.historyURL) == newerBytes)
         #expect(!FileManager.default.fileExists(atPath: fixture.healthURL.path))
     }
+
+    @Test func manualReplacePersistsReplacementIntentAcrossRelaunchUntilBackupPushSucceeds() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let backupContainer = fixture.root.appendingPathComponent("iCloudBackup", isDirectory: true)
+        try FileManager.default.createDirectory(at: backupContainer, withIntermediateDirectories: true)
+        let backupHistoryURL = backupContainer.appendingPathComponent("matchHistory.json")
+        let replacedIDsURL = fixture.canonical.appendingPathComponent("replacedMatchIDs.json")
+
+        let dropped = record()
+        let replacement = record()
+        let store = fixture.makeStore()
+        store.saveHistory([dropped])
+        store.pushBackupForTesting(to: backupContainer)
+
+        // Replace local archive while iCloud push hasn't run yet.
+        let archiveData = try ManualMatchArchiveBackup.encode(records: [replacement])
+        try store.importManualArchive(data: archiveData, mode: .replace)
+        #expect(FileManager.default.fileExists(atPath: replacedIDsURL.path))
+
+        // Relaunch before backup push succeeds; replacement intent must survive
+        // even across another local save, and allow the backup overwrite once pushed.
+        let relaunched = fixture.makeStore()
+        let addedLater = record()
+        relaunched.appendMatch(addedLater)
+        #expect(FileManager.default.fileExists(atPath: replacedIDsURL.path))
+
+        relaunched.pushBackupForTesting(to: backupContainer)
+        let backedUp = try JSONDecoder().decode([MatchRecord].self, from: Data(contentsOf: backupHistoryURL))
+        #expect(Set(backedUp.map(\.id)) == Set([replacement.id, addedLater.id]))
+        #expect(!FileManager.default.fileExists(atPath: replacedIDsURL.path))
+    }
+
+    @Test func backupPushDefersWhenRemoteBaselineIsUnreadableOrDownloading() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let backupContainer = fixture.root.appendingPathComponent("iCloudBackup", isDirectory: true)
+        try FileManager.default.createDirectory(at: backupContainer, withIntermediateDirectories: true)
+        let backupHistoryURL = backupContainer.appendingPathComponent("matchHistory.json")
+        // A directory at the remote backup history URL causes coordinatedRead to fail,
+        // exercising `.downloading` on `backupFileState(at:)` without overwriting it.
+        try FileManager.default.createDirectory(at: backupHistoryURL, withIntermediateDirectories: true)
+
+        let store = fixture.makeStore()
+        store.saveHistory([record()])
+        store.pushBackupForTesting(to: backupContainer)
+
+        var isDirectory: ObjCBool = false
+        #expect(FileManager.default.fileExists(atPath: backupHistoryURL.path, isDirectory: &isDirectory))
+        #expect(isDirectory.boolValue)
+    }
 }

@@ -128,6 +128,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private static let initializedFilename = "archiveInitialized.json"
     private static let healthFilename = "healthData.json"
     private static let forgottenPlayersFilename = "forgottenPlayers.json"
+    private static let replacedMatchIDsFilename = "replacedMatchIDs.json"
 
     struct StorageConfiguration {
         let canonicalDirectoryURL: URL
@@ -176,6 +177,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     }
     private var canonicalForgottenPlayersURL: URL {
         canonicalDirectoryURL.appendingPathComponent(Self.forgottenPlayersFilename)
+    }
+    private var canonicalReplacedMatchIDsURL: URL {
+        canonicalDirectoryURL.appendingPathComponent(Self.replacedMatchIDsFilename)
     }
 
     // MARK: - Init
@@ -611,6 +615,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
         queue.sync {
             let previousIDs = Set(records.map(\.id))
+            let previousReplaced = explicitlyReplacedRecordIDs
             let snapshot = ManualMatchArchiveBackup.importSnapshot(
                 importing: archive.records,
                 into: records,
@@ -619,14 +624,16 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 currentForgottenPlayers: forgotten,
                 importedForgottenPlayers: archive.forgottenPlayers
             )
-            let didWrite = adoptOnQueue(
+            if mode == .replace {
+                let droppedByReplace = previousIDs.subtracting(Set(snapshot.records.map(\.id)))
+                explicitlyReplacedRecordIDs.formUnion(droppedByReplace)
+            }
+            if !adoptOnQueue(
                 records: snapshot.records,
                 tombstones: snapshot.tombstones,
                 forgotten: snapshot.forgottenPlayers
-            )
-            if didWrite && mode == .replace {
-                let droppedByReplace = previousIDs.subtracting(Set(snapshot.records.map(\.id)))
-                explicitlyReplacedRecordIDs.formUnion(droppedByReplace)
+            ) && canonicalWritesSuspended {
+                explicitlyReplacedRecordIDs = previousReplaced
             }
         }
         return preview
@@ -743,6 +750,14 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             // stripped main even though its local Health projection is dropped.
             try Self.write(split.stripped, to: canonicalHistoryURL)
             try Self.write(Array(tombstones), to: canonicalTombstoneURL)
+            if explicitlyReplacedRecordIDs.isEmpty {
+                if FileManager.default.fileExists(atPath: canonicalReplacedMatchIDsURL.path) {
+                    try FileManager.default.removeItem(at: canonicalReplacedMatchIDsURL)
+                }
+            } else {
+                let sortedReplaced = explicitlyReplacedRecordIDs.sorted { $0.uuidString < $1.uuidString }
+                try Self.write(sortedReplaced, to: canonicalReplacedMatchIDsURL)
+            }
             return true
         } catch {
             phoneStoreLogger.error("Failed to write canonical archive: \(error.localizedDescription, privacy: .public)")
@@ -763,6 +778,18 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             break
         case .newerVersion, .corrupt, .unreadable:
             recordCanonicalReadFailure(tombstoneRead)
+        }
+        let replacedRead = Self.readCanonicalJSONFile(
+            [UUID].self,
+            at: canonicalReplacedMatchIDsURL
+        )
+        switch replacedRead {
+        case .loaded(let ids):
+            explicitlyReplacedRecordIDs = Set(ids)
+        case .missing:
+            explicitlyReplacedRecordIDs = []
+        case .newerVersion, .corrupt, .unreadable:
+            recordCanonicalReadFailure(replacedRead)
         }
         let ledgerRead = Self.readCanonicalJSONFile(
             ForgottenPlayerLedger.self,
@@ -1086,7 +1113,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 retriesRemaining: retriesRemaining
             )
         } else {
-            pushBackupOnQueue(historyURL: backupHistoryURL, tombstoneURL: backupTombstoneURL)
+            pushBackupOnQueue(
+                historyURL: backupHistoryURL,
+                tombstoneURL: backupTombstoneURL,
+                retriesRemaining: retriesRemaining
+            )
             finishRestoreIndicator()
         }
     }
@@ -1244,7 +1275,23 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         ArchiveBackupPolicy.backupSnapshot(records: records, tombstones: tombstones, forgottenPlayers: forgotten)
     }
 
-    private func pushBackupOnQueue(historyURL: URL, tombstoneURL: URL) {
+    /// Test hook exercising `pushBackupOnQueue` against a local container directory
+    /// without relying on a live iCloud ubiquity session.
+    func pushBackupForTesting(to containerURL: URL, retriesRemaining: Int = 0) {
+        queue.sync {
+            let historyURL = containerURL.appendingPathComponent(Self.historyFilename)
+            let tombstoneURL = containerURL.appendingPathComponent(Self.tombstoneFilename)
+            pushBackupOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL, retriesRemaining: retriesRemaining)
+        }
+    }
+
+    private enum BackupBaseline {
+        case ids(Set<UUID>)
+        case deferDownloading
+        case withholdNewerSchema
+    }
+
+    private func pushBackupOnQueue(historyURL: URL, tombstoneURL: URL, retriesRemaining: Int = 0) {
         let currentToken = FileManager.default.ubiquityIdentityToken as? AnyHashable
         let snapshot = backupSnapshotOnQueue()
         guard snapshot != lastPushedSnapshot || currentToken != lastPushedIdentityToken else {
@@ -1256,10 +1303,21 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         do {
             // Deletion intent first, so a partially pushed backup never pairs
             // the newer archive with an older ledger. Tombstones remain additive
-            // even if the record-file write is withheld.
+            // even if the record-file write is withheld or deferred.
             try coordinatedWriteBackup(snapshot.forgottenPlayers, to: Self.backupLedgerURL(besides: historyURL))
             try coordinatedWriteBackup(Array(snapshot.tombstones), to: tombstoneURL)
-            guard let baselineIDs = baselineRecordIDsForBackupPush(at: historyURL) else {
+            let baselineIDs: Set<UUID>
+            switch baselineRecordIDsForBackupPush(at: historyURL) {
+            case .ids(let ids):
+                baselineIDs = ids
+            case .deferDownloading:
+                if storageConfiguration.startsICloudSync && retriesRemaining > 0 {
+                    let delay = Self.backupRetryDelays[Self.backupRetryDelays.count - retriesRemaining]
+                    scheduleICloudBackupSyncOnQueue(after: delay, retriesRemaining: retriesRemaining - 1)
+                }
+                phoneStoreLogger.notice("iCloud backup baseline downloading or unreadable; deferring history write")
+                return
+            case .withholdNewerSchema:
                 return
             }
             switch ArchiveBackupPolicy.evaluatePush(
@@ -1269,7 +1327,10 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             ) {
             case .allow:
                 try coordinatedWriteBackup(snapshot.records, to: historyURL)
-                explicitlyReplacedRecordIDs.removeAll()
+                if !explicitlyReplacedRecordIDs.isEmpty {
+                    explicitlyReplacedRecordIDs.removeAll()
+                    try? FileManager.default.removeItem(at: canonicalReplacedMatchIDsURL)
+                }
                 lastPushedSnapshot = snapshot
                 lastPushedIdentityToken = currentToken
                 readUploadStatusOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL)
@@ -1283,25 +1344,29 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         }
     }
 
-    private func baselineRecordIDsForBackupPush(at historyURL: URL) -> Set<UUID>? {
+    private func baselineRecordIDsForBackupPush(at historyURL: URL) -> BackupBaseline {
         if let lastPushedSnapshot {
-            return Set(lastPushedSnapshot.records.map(\.id))
+            return .ids(Set(lastPushedSnapshot.records.map(\.id)))
         }
-        guard case .ready(let existingData) = backupFileState(at: historyURL) else {
-            return []
-        }
-        do {
-            let existing = try PersistedArchiveCodec.decode(
-                [MatchRecord].self,
-                from: existingData,
-                expectedFormat: PersistedArchiveCodec.historyFormat
-            )
-            return Set(existing.map(\.id))
-        } catch PersistedArchiveCodec.CodecError.newerSchemaVersion(let version) {
-            phoneStoreLogger.error("Withheld iCloud backup history write: remote backup uses newer schema \(version, privacy: .public)")
-            return nil
-        } catch {
-            return []
+        switch backupFileState(at: historyURL) {
+        case .missing:
+            return .ids([])
+        case .downloading:
+            return .deferDownloading
+        case .ready(let existingData):
+            do {
+                let existing = try PersistedArchiveCodec.decode(
+                    [MatchRecord].self,
+                    from: existingData,
+                    expectedFormat: PersistedArchiveCodec.historyFormat
+                )
+                return .ids(Set(existing.map(\.id)))
+            } catch PersistedArchiveCodec.CodecError.newerSchemaVersion(let version) {
+                phoneStoreLogger.error("Withheld iCloud backup history write: remote backup uses newer schema \(version, privacy: .public)")
+                return .withholdNewerSchema
+            } catch {
+                return .ids([])
+            }
         }
     }
 
