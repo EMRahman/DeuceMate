@@ -998,7 +998,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                 logger.error("decode error for \(key, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
-        if didSync { markSynced() }
+        if didSync, store?.archiveAvailableForSync != false { markSynced() }
     }
 
     /// Merges watch record bodies, then applies §6.1 rule 1: any id whose
@@ -1067,6 +1067,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     /// Apply `transform` to the current mirror, publish the result, and persist
     /// it. Must run on the main thread — it mutates the `@Published` mirror.
     private func updateMirror(_ transform: ([MatchRecord]) -> [MatchRecord]) {
+        guard store?.isArchiveBlocked != true else { return }
         var updated = transform(watchMirror)
         // A stale watch copy must not expose a forgotten player, even as a
         // display-only watch-only row (MATCH_TAGS_PLAN.md §3).

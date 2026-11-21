@@ -71,6 +71,8 @@ struct PastMatchesView: View {
     @State private var showManualEntry = false
     @State private var showICloudGuide = false
     @State private var showRestorePrompt = false
+    @State private var archiveRetryFailed = false
+    @State private var showDeleteFailure = false
     @State private var pendingDelete: PendingDelete?
     @State private var matchRowFrameCache = MatchRowFrameCache()
     // Retain the origin through dismissal; clearing the pending item must not
@@ -202,7 +204,22 @@ struct PastMatchesView: View {
     @ViewBuilder
     private var screenContent: some View {
         Group {
-            if hasNoRows {
+            if store.isArchiveBlocked {
+                List {
+                    Section("iPhone archive unavailable") {
+                        Text("DeuceMate couldn’t read the match archive. Archive changes and iCloud backup are paused.")
+                        Button("Retry") {
+                            archiveRetryFailed = !store.retryArchiveLoad()
+                            if !archiveRetryFailed { syncService.requestFullHistorySync() }
+                        }
+                        if archiveRetryFailed {
+                            Text("The archive is still unavailable. Its files have been preserved.")
+                                .font(.footnote)
+                        }
+                    }
+                    liveMatchSection(activeID: syncService.activeMatchID, pastRecordsEmpty: false)
+                }
+            } else if hasNoRows {
                 ScrollView {
                     emptyStateView
                         .padding(.top, 60)
@@ -225,6 +242,7 @@ struct PastMatchesView: View {
                     Image(systemName: "square.and.pencil")
                 }
                 .accessibilityLabel("Manual match entry")
+                .disabled(store.isArchiveBlocked)
             }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -266,6 +284,9 @@ struct PastMatchesView: View {
                 iCloudGuideSheet
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)
+            }
+            .alert("Match could not be deleted on this iPhone", isPresented: $showDeleteFailure) {
+                Button("OK", role: .cancel) {}
             }
             .alert(
                 "iCloud Backup Found",
@@ -641,7 +662,11 @@ struct PastMatchesView: View {
     /// Permanent deletion: drop the phone's retained copy and, when the match is
     /// also on the watch, issue the watch-side delete so it can't re-sync back.
     private func performPermanentDelete(_ pending: PendingDelete) {
-        store.deletePermanently(id: pending.record.id)
+        guard store.deletePermanently(id: pending.record.id) else {
+            pendingDelete = nil
+            showDeleteFailure = true
+            return
+        }
         // Permanent deletion also removes the match's private note (§4.1). If
         // the notes file is unreadable it is left untouched rather than
         // rewritten; the orphaned entry is harmless and never displayed.

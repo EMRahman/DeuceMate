@@ -53,8 +53,8 @@ when the item should constrain future changes.
 
 | # | Area | Item | Application risk | Work band / trigger | Effort |
 |---|------|------|------------------|---------------------|--------|
-| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact; low–medium likelihood** | **Now** | Medium, staged |
-| [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | **High** | **Now**, in the persistence-safety programme | Medium — PR #108 exists to re-read |
+| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Archive read containment and persisted-enum guards implemented; backup shrinkage guard and explicit salvage remain | High impact if an unexplained shrinkage reaches backup | Follow-up | Medium, staged |
+| [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable Watch live state | Implemented | Version-specific diagnosis tracked in #19 | — |
 | [27](#27--prevent-unrecorded-fitness-workouts-with-manager-tests-and-crash-recovery) | Health / Reliability | Prevent unrecorded Fitness workouts with manager tests and crash recovery | High impact when a workout is lost; remaining likelihood unverified | **Now**; physical-Watch save/sync checks before release | Medium, staged |
 | [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | **High when schemas diverge** | **Before any persisted-model, enum, or wire-shape change** | Medium |
 | [2](#2--add-a-monotonic-record-revision-before-queued-checkpoints) | Sync | Order Watch archive checkpoints | Implemented for updated pairs | Legacy-to-legacy merges retain arrival order | — |
@@ -239,24 +239,14 @@ file that contains the old raw value undecodable.
 `decodeIfPresent` is not a defence: it returns `nil` for a *missing* key but
 throws for a key that is present with an unrecognised value.
 
-**Why it matters more than it looks — the decode is atomic.** Both archives
-decode `[MatchRecord]` in a single call (`StatsStore._loadHistoryUnsafe`,
-`PhoneStatsStore.readCanonicalFile`), so **one** point in **one** old match takes
-down **every** match in the file. A format played twice a year ago costs the
-whole archive. The cascade, worst first:
-
-1. **Phone archive quarantined.** `readCanonicalFile` moves `matchHistory.json`
-   aside to `.corrupt` and the store starts from an empty list.
-2. **iCloud backup overwritten.** `pushBackupOnQueue` builds its snapshot
-   straight from `records` with no emptiness floor, and `lastPushedSnapshot` is
-   per-process — so the next push writes the now-empty archive over the backup.
-   This is the only irreversible hop; everything else leaves a file on disk.
-3. **Watch archive invisible and silently read-only.** `loadHistoryOrNil()`
-   returns `nil`; the refuse-to-overwrite guard correctly protects the file, but
-   `appendMatch` then bails, so every subsequently finished match is dropped
-   without a word.
-4. **Live match reset.** `loadState()`'s catch resets in-memory state and the
-   next `saveState()` overwrites `appState.json`.
+**Contained on iPhone:** A failed decode previously moved the history aside
+and allowed an empty archive to replace the iCloud backup. History, deleted
+match IDs and forgotten-player deletion intent are now validated before any
+archive mutation or initial restore. A failed load preserves those bytes and
+blocks publication, edits, manual transfers and backup. Retry rereads the files
+and requests Watch history once the archive is available. Health sidecar
+failures continue to degrade independently. Watch history and live state also
+have read guards, and a failed durable park/finalization retains live state.
 
 **The same break runs in both directions.** *Adding* a case is safe for a new app
 reading old data, but an **old** app reading data a newer one wrote hits the
@@ -277,20 +267,9 @@ risk to contain.
 
 **Safest implementation sequence:**
 
-- **Fail closed on score-bearing canonical data first.** A readable file that
-  cannot be decoded is not an empty archive. A decode failure in either the
-  canonical match history or its tombstones must preserve/quarantine the bytes,
-  suspend canonical writes, and suppress iCloud pushes for the process — the
-  same hard stop `.unreadable` already provides. The Health sidecar is different:
-  it is a reconstructable projection and may continue to degrade independently
-  without blocking score persistence.
-- **Pin the raw values in tests immediately, but state the limit accurately.**
-  `ScoreTypesTests.test_doublesServer_rawValuesArePersistedIdentifiers` (added
-  in #104) already does this for `DoublesServer`; extend the pattern to the other
-  five. This cheaply catches deletion, renaming, and raw-value drift. It does
-  **not** protect an old client from a newly added case, arbitrary corrupt JSON,
-  a missing required field, or an unbumped schema version, so it is a guard —
-  not the complete fix.
+- **Implemented:** fail closed on unreadable and undecodable canonical data,
+  detect orphaned quarantines from older builds, and pin the six persisted enum
+  vocabularies in Core tests. Compatibility fixtures protect historical values.
 - **Add the version/refuse-to-overwrite shape in #19.** Decode failure and
   unsupported-newer-format are different diagnoses even though both must block
   automatic writes.
@@ -317,10 +296,11 @@ risk to contain.
   possible, require a deliberate recovery action, and do not resume automatic
   backup until the recovered state is accepted.
 
-**Tests required by the first containment PR:** a readable-but-undecodable main
-history suspends writes; a corrupt tombstone file does the same; neither state
-pushes an empty backup; and a legitimate tombstoned deletion — including
-deleting the only match — can still push a smaller or empty archive.
+**Regression coverage:** `PhoneStatsStoreTests` exercises two launches, an
+unknown point outcome, damaged deletion files, a real backup destination,
+explicit retry, last-match deletion, and legacy quarantine before migration.
+Any additional backup shrinkage guard must also handle an explicitly confirmed
+manual Replace, which can remove records without tombstoning them.
 
 **Not the answer:** a `fatalError` in the catch. `loadState()` runs on every
 launch, so the bad value on disk produces a crash loop whose only user-side
@@ -329,7 +309,7 @@ with it. `assertionFailure()` gives the same signal in Debug and compiles away i
 Release.
 
 **Key files:** `ScoreTypes.swift`, `PointStat.swift`, `StatsStore.swift`,
-`PhoneStatsStore.swift` (`readCanonicalFile`, `pushBackupOnQueue`),
+`PhoneStatsStore.swift` (`readArchiveFile`, `pushBackupOnQueue`),
 `ScoreViewModel.swift` (`AppState`, `loadState`).
 
 ---
@@ -422,13 +402,9 @@ the empty file becomes the truth). Assessed against this codebase:
 
 *Applies:*
 
-- Decode-failure-then-write-empty is the phone's exact path today
-  (`readCanonicalFile` → `.corrupt` → `loadedRecords = []` →
-  `pushBackupOnQueue` with no floor). Tracked in #18.
-- "Never silently replace on failure; move the original aside." Partially done:
-  the watch `StatsStore` read guard (#4b) and the phone's `.corrupt` quarantine
-  both do it; `appState.json` does not.
-- Version plus refuse-to-overwrite-newer. Missing everywhere. The manual archive
+- #18 now blocks archive changes and backup after an iPhone read or decode
+  failure. Watch history and live state also preserve unreadable files.
+- Version plus refuse-to-overwrite-newer. Still needed for the canonical history and its wire format. The manual archive
   has the version and detects a mismatch, but refuses symmetrically rather than
   only refusing *newer*, and it never writes back over the imported file, so it
   does not demonstrate the overwrite half either.
@@ -470,51 +446,19 @@ but treat its two deliverables separately.
 
 #### 4a-read — Fail closed on an unreadable live state
 
-**What:** `loadState()` catches a missing file, an I/O failure, corrupt JSON,
-and a future-schema decode failure identically. It resets roughly 20 fields to
-a fresh match. `saveState()` runs on the next point and can then overwrite the
-checkpoint it merely failed to read. A transient protection/I/O problem or one
-unknown persisted enum can therefore erase the live match within one point.
-
-**Application risk: high.** The probability is low, but a live tennis score is
-time-sensitive and often cannot be reconstructed after play continues. The
-watch archive already understands “read failure ≠ empty”; live state does not.
-
-**Proposed fix:** Distinguish “file genuinely absent” (normal first launch) from
-“file exists but could not be read/decoded”. Preserve or quarantine the latter,
-publish a critical persistence state, and block automatic state overwrite until
-the user explicitly abandons/resets or a recovery succeeds. Pair it with #19's
-`version > supported` diagnosis so “newer format” is reported accurately rather
-than called corruption. User-facing copy must say only what the app can really
-do; retaining bytes is not the same as offering a recovery path.
-
-**Attempted and closed: PR #108.** It reported failures through a shared
-`PersistenceHealth` model in Core, moved the unreadable file aside before the
-reset, promoted a failed restore to `.critical`, and added a scoreboard chip so
-a mid-match failure is visible where it happens. Verified green locally (Core,
-watch and iOS suites). Closed unmerged pending the wider persistence programme,
-not because the work was wrong. Re-read it before re-attempting. Findings to
-resolve: stale inventory counts, copy promising unavailable recovery, no cleanup
-policy for quarantined files, and `persistenceHealth` not clearing on an
-intentional `resetMatch()`.
+**Implemented.** Watch `ScoreViewModel.loadState()` distinguishes an absent
+checkpoint from an unreadable one. A failed restore preserves the checkpoint,
+sets `stateWritesBlocked` and reports `persistenceError`. The earlier PR #108
+was closed unmerged; later live-state work implemented the guard.
 
 #### 4a-write — Surface save failures
 
-**What:** The watch live-state writer reports failure only through a `print`
-inside `#if DEBUG`; release builds emit nothing. The two history stores use
-`os.Logger`, which reaches the unified log but not the person continuing to
-score. Failed phone canonical writes also publish the new in-memory archive even
-though it may disappear on process termination.
-
-**Application risk: medium impact, low likelihood.** Class-B protection and
-atomic writes make failure uncommon, but storage/I/O failures still mean the
-latest score or archive mutation is not durable.
-
-**Proposed fix:** Reuse the persistence-health model established by 4a-read.
-Show a small but visible warning on the live scoreboard for live-state failure,
-and on history/settings for archive failure. Clear it only after a successful
-write or a deliberate reset that the model defines as resolving the condition;
-do not clear it merely because the view disappeared.
+The Watch reports failed live saves, parking and finalization via
+`persistenceError`. The phone publishes archive mutations after a successful
+canonical write. Its manual import, entry, completion and permanent-deletion
+callers check durability before related actions. User-visible reporting and
+retry for ordinary disk-write failures during background Watch history merges
+remain follow-up work.
 
 ---
 

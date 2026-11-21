@@ -45,6 +45,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     static let shared = PhoneStatsStore()
 
     @Published private(set) var history: [MatchRecord] = []
+    @Published private(set) var isArchiveBlocked = false
+
     /// Main-thread published mirror of `tombstones` so the list can hide a stale
     /// watch-mirror row for a match that was just permanently deleted (the watch
     /// delete may still be queued and the cached mirror not yet pruned).
@@ -84,11 +86,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// Forgotten player ids (MATCH_TAGS_PLAN.md §6.2). Persisted and backed up
     /// with the tombstones; unioned, never shrunk, by every inbound path.
     private var forgotten = ForgottenPlayerLedger()
-    /// Set when a canonical file exists but could not be read at launch (I/O or
-    /// protection error — distinct from "missing"). All disk writes and backup
-    /// passes are then suppressed for the rest of the process so state derived
-    /// from a failed read can never overwrite the real archive; the app keeps
-    /// working in memory and the next clean launch reloads everything.
+    /// Queue-confined authority for mutations and backup. Recomputed from the
+    /// preserved files on every launch and explicit retry.
     private var canonicalWritesSuspended = false
     /// The scheduled debounced backup push or restore download-retry, if any.
     private var pendingBackupSync: DispatchWorkItem?
@@ -120,17 +119,20 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         let canonicalDirectoryURL: URL
         let legacyDocumentsDirectoryURL: URL
         let startsICloudSync: Bool
+        let backupContainer: () -> URL?
         let backupExcluder: (URL) throws -> Void
 
         init(
             canonicalDirectoryURL: URL,
             legacyDocumentsDirectoryURL: URL,
             startsICloudSync: Bool,
+            backupContainer: @escaping () -> URL? = { FileManager.default.url(forUbiquityContainerIdentifier: nil) },
             backupExcluder: ((URL) throws -> Void)? = nil
         ) {
             self.canonicalDirectoryURL = canonicalDirectoryURL
             self.legacyDocumentsDirectoryURL = legacyDocumentsDirectoryURL
             self.startsICloudSync = startsICloudSync
+            self.backupContainer = backupContainer
             self.backupExcluder = backupExcluder ?? { try PhoneStatsStore.excludeFromBackup($0) }
         }
 
@@ -174,10 +176,10 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     init(storageConfiguration: StorageConfiguration) {
         self.storageConfiguration = storageConfiguration
         let initial = queue.sync { () -> ([MatchRecord], Set<UUID>, Bool, ForgottenPlayerLedger) in
-            migrateLegacyDocumentsArchiveIfNeeded()
             loadCanonicalOnQueue()
             return (records, tombstones, shouldAttemptInitialRestoreOnQueue, forgotten)
         }
+        isArchiveBlocked = canonicalWritesSuspended
         history = initial.0
         tombstoneIDs = initial.1
         forgottenPlayers = initial.3
@@ -205,6 +207,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     }
 
     // MARK: - StatsStoring
+
+    var archiveAvailableForSync: Bool { queue.sync { !canonicalWritesSuspended } }
 
     func loadHistory() -> [MatchRecord] {
         queue.sync { records }
@@ -234,6 +238,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// Score). Replacement keeps stored tags and match-type revision by their
     /// own clocks — the caller's copy may predate an edit made while it was open.
     func appendMatch(_ record: MatchRecord) {
+        appendMatchDurably(record)
+    }
+
+    @discardableResult
+    func appendMatchDurably(_ record: MatchRecord) -> Bool {
         queue.sync {
             var updated = records
             let prior = updated.first(where: { $0.id == record.id })
@@ -243,7 +252,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 .mergingTags(prior?.tags)
                 .mergingMatchTypeRevision(prior?.matchTypeRevision)
             updated.append(forgotten.scrubbed(merged, now: Date()))
-            adoptOnQueue(records: updated, tombstones: tombstones)
+            return adoptOnQueue(records: updated, tombstones: tombstones)
         }
     }
 
@@ -265,11 +274,12 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// it. Callers separately issue a watch-side delete when the match is also
     /// on the watch, so "permanent" means gone everywhere, and remove the
     /// match's private notes from `MatchNotesStore`.
-    func deletePermanently(id: UUID) {
+    @discardableResult
+    func deletePermanently(id: UUID) -> Bool {
         queue.sync {
             var updatedTombstones = tombstones
             updatedTombstones.insert(id)
-            adoptOnQueue(
+            return adoptOnQueue(
                 records: records.filter { $0.id != id },
                 tombstones: updatedTombstones
             )
@@ -524,6 +534,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     private func applyRosterMutation(_ mutate: ([MatchRecord]) -> RosterMutation) throws -> Set<UUID> {
         try queue.sync {
+            guard !canonicalWritesSuspended else { throw TagEditError.notPersisted }
             let mutation = mutate(records)
             guard !mutation.affectedMatchIDs.isEmpty else { return [] }
             try commitUserEditOnQueue(records: mutation.records)
@@ -531,27 +542,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         }
     }
 
-    /// Adopts a user-initiated edit all-or-nothing. Background paths (watch
-    /// merges, imports) keep their in-memory result when a write fails so the
-    /// session stays usable; an edit the user is waiting on must instead
-    /// report failure honestly. If the canonical files were not all written
-    /// (storage error, or writes suspended after an unreadable launch read),
-    /// the previous archive and ledger are restored and republished and
-    /// `TagEditError.notPersisted` is thrown, so the UI shows exactly what a
-    /// relaunch would load and the caller never pushes the edit to the watch.
-    /// (`writeCanonicalOnQueue` writes the ledger first, so a `forget` that
-    /// fails part-way may still take effect at the next launch — the safe
-    /// direction — but success is never reported for one that isn't durable.)
     private func commitUserEditOnQueue(
         records newRecords: [MatchRecord],
         forgotten newForgotten: ForgottenPlayerLedger? = nil
     ) throws {
-        let previousRecords = records
-        let previousForgotten = forgotten
         guard adoptOnQueue(records: newRecords, tombstones: tombstones, forgotten: newForgotten) else {
-            records = previousRecords
-            forgotten = previousForgotten
-            publishOnQueue()
             throw TagEditError.notPersisted
         }
     }
@@ -564,7 +559,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// "Include private notes" opt-in); `nil` omits the section entirely.
     func exportManualArchiveData(notes: [MatchNote]? = nil) throws -> Data {
         try queue.sync {
-            try ManualMatchArchiveBackup.encode(
+            guard !canonicalWritesSuspended else { throw ArchiveReadError.unavailable }
+            return try ManualMatchArchiveBackup.encode(
                 records: records,
                 forgottenPlayers: forgotten.isEmpty ? nil : forgotten,
                 notes: notes
@@ -595,7 +591,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             noteCount: archive.notes?.filter { !$0.isCleared }.count ?? 0
         )
 
-        queue.sync {
+        try queue.sync {
+            guard !canonicalWritesSuspended else { throw ArchiveReadError.unavailable }
             let snapshot = ManualMatchArchiveBackup.importSnapshot(
                 importing: archive.records,
                 into: records,
@@ -604,11 +601,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 currentForgottenPlayers: forgotten,
                 importedForgottenPlayers: archive.forgottenPlayers
             )
-            adoptOnQueue(
+            guard adoptOnQueue(
                 records: snapshot.records,
                 tombstones: snapshot.tombstones,
                 forgotten: snapshot.forgottenPlayers
-            )
+            ) else { throw TagEditError.notPersisted }
         }
         return preview
     }
@@ -649,22 +646,16 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         tombstones newTombstones: Set<UUID>,
         forgotten newForgotten: ForgottenPlayerLedger? = nil
     ) -> Bool {
-        records = Self.sortedNewestFirst(newRecords)
-        tombstones = newTombstones
-        if let newForgotten { forgotten = forgotten.union(newForgotten) }
-        let didWrite = writeCanonicalOnQueue()
-        publishOnQueue()
-        guard didWrite else {
-            // During the initial restore phase the pending item is a restore
-            // retry (reading from iCloud, not pushing to it) — leave it running.
-            // Only cancel in steady state, where the pending item would push
-            // current in-memory state that never reached disk.
-            if !shouldAttemptInitialRestoreOnQueue {
-                pendingBackupSync?.cancel()
-                pendingBackupSync = nil
-            }
+        guard !canonicalWritesSuspended else { return false }
+        let sorted = Self.sortedNewestFirst(newRecords)
+        let ledger = newForgotten.map { forgotten.union($0) } ?? forgotten
+        guard writeCanonicalOnQueue(records: sorted, tombstones: newTombstones, forgotten: ledger) else {
             return false
         }
+        records = sorted
+        tombstones = newTombstones
+        forgotten = ledger
+        publishOnQueue()
         if storageConfiguration.startsICloudSync {
             scheduleICloudBackupSyncOnQueue(after: Self.backupPushDebounce, retriesRemaining: Self.backupRetryDelays.count)
         }
@@ -685,7 +676,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     }
 
     @discardableResult
-    private func writeCanonicalOnQueue() -> Bool {
+    private func writeCanonicalOnQueue(records: [MatchRecord], tombstones: Set<UUID>, forgotten: ForgottenPlayerLedger) -> Bool {
         guard !canonicalWritesSuspended else { return false }
         do {
             let split = HealthSidecarPolicy.split(records)
@@ -723,33 +714,6 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     }
 
     private func loadCanonicalOnQueue() {
-        switch Self.readCanonicalFile([UUID].self, at: canonicalTombstoneURL) {
-        case .loaded(let ids):
-            tombstones = Set(ids)
-        case .missing, .corrupt:
-            break // corrupt file was moved aside; initial restore may refill what it can
-        case .unreadable:
-            canonicalWritesSuspended = true
-        }
-        switch Self.readCanonicalFile(ForgottenPlayerLedger.self, at: canonicalForgottenPlayersURL) {
-        case .loaded(let ledger):
-            forgotten = ledger
-        case .missing, .corrupt:
-            break // pre-tags archive, or moved aside; the archive itself was scrubbed when each forget ran
-        case .unreadable:
-            canonicalWritesSuspended = true
-        }
-        let loadedRecords: [MatchRecord]
-        switch Self.readCanonicalFile([MatchRecord].self, at: canonicalHistoryURL) {
-        case .loaded(let loaded):
-            loadedRecords = loaded
-        case .missing, .corrupt:
-            loadedRecords = [] // corrupt file was moved aside; initial restore may refill what it can
-        case .unreadable:
-            canonicalWritesSuspended = true
-            loadedRecords = []
-        }
-
         // Reassert the file flag before a corrupt sidecar can be moved to a
         // recovery file. The moved quarantine copy still contains Health data.
         if FileManager.default.fileExists(atPath: healthSidecarURL.path) {
@@ -759,13 +723,37 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 phoneStoreLogger.error("Failed to reapply Health sidecar backup exclusion: \(error.localizedDescription, privacy: .public)")
             }
         }
-        let health: [MatchHealthData]
-        switch Self.readCanonicalFile([MatchHealthData].self, at: healthSidecarURL) {
-        case .loaded(let loaded):
-            health = loaded
-        case .missing, .corrupt, .unreadable:
-            health = []
+
+        let loadedRecords: [MatchRecord]
+        do {
+            // Validate all three files before migration, publication or any
+            // write. Unknown deletion intent makes even a readable history unsafe.
+            let deleted = try Self.readArchiveFile([UUID].self, at: canonicalTombstoneURL)
+            let ledger = try Self.readArchiveFile(ForgottenPlayerLedger.self, at: canonicalForgottenPlayersURL)
+            let history = try Self.readArchiveFile([MatchRecord].self, at: canonicalHistoryURL)
+            // Both files precede the initialization marker, even for an empty
+            // archive. The forgotten-player ledger was added later and is optional.
+            if history == nil || deleted == nil,
+               try Self.readArchiveFile(Bool.self, at: canonicalInitializedURL) == true {
+                throw ArchiveReadError.unavailable
+            }
+            if let history {
+                loadedRecords = history
+                tombstones = Set(deleted ?? [])
+            } else {
+                let migrated = try migrateLegacyDocumentsArchiveIfNeeded(deleted: deleted ?? [])
+                loadedRecords = migrated.records
+                tombstones = migrated.tombstones
+            }
+            forgotten = ledger ?? ForgottenPlayerLedger()
+            canonicalWritesSuspended = false
+        } catch {
+            canonicalWritesSuspended = true
+            phoneStoreLogger.error("Archive load blocked: \(error.localizedDescription, privacy: .public)")
+            return
         }
+
+        let health = readHealthSidecar()
 
         let loadedHadHealth = !HealthSidecarPolicy.split(loadedRecords).health.isEmpty
         let merged = HealthSidecarPolicy.merge(stripped: loadedRecords, health: health)
@@ -778,13 +766,48 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         // The pre-sidecar canonical file was full-fidelity. Content detection is
         // the migration marker: once rewritten successfully, the main file has
         // no Health fields and this path never runs again.
-        if (loadedHadHealth || neededScrub) && !canonicalWritesSuspended {
-            if writeCanonicalOnQueue() {
+        if loadedHadHealth || neededScrub {
+            if writeCanonicalOnQueue(records: records, tombstones: tombstones, forgotten: forgotten) {
                 phoneStoreLogger.notice("Migrated canonical archive to the backup-excluded Health sidecar")
             }
         }
-        if canonicalWritesSuspended {
-            phoneStoreLogger.error("Canonical archive unreadable; running in-memory with writes suspended")
+    }
+
+    /// Re-read from disk, then allow backup and Watch reconciliation only if the
+    /// archive, deleted IDs and forgotten-player ledger are all usable again.
+    @MainActor
+    func retryArchiveLoad() -> Bool {
+        let recovered = queue.sync {
+            if canonicalWritesSuspended { loadCanonicalOnQueue() }
+            guard !canonicalWritesSuspended else { return false }
+            publishOnQueue()
+            return true
+        }
+        isArchiveBlocked = !recovered
+        if recovered && storageConfiguration.startsICloudSync { syncICloudBackup() }
+        return recovered
+    }
+
+    private enum ArchiveReadError: LocalizedError {
+        case unavailable
+
+        var errorDescription: String? {
+            "DeuceMate couldn’t read the iPhone archive. Archive changes and iCloud backup are paused."
+        }
+    }
+
+    /// Only an actual file-not-found error means absence. Older builds moved
+    /// undecodable files aside. A lone quarantine must also block setup.
+    private static func readArchiveFile<T: Decodable>(_ type: T.Type, at url: URL) throws -> T? {
+        do {
+            return try JSONDecoder().decode(type, from: Data(contentsOf: url))
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            do {
+                _ = try FileManager.default.attributesOfItem(atPath: url.appendingPathExtension("corrupt").path)
+            } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+                return nil
+            }
+            throw ArchiveReadError.unavailable
         }
     }
 
@@ -793,34 +816,15 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             && !FileManager.default.fileExists(atPath: canonicalInitializedURL.path)
     }
 
-    private enum CanonicalRead<T> {
-        case loaded(T)
-        case missing
-        /// Bytes were readable but not decodable. The file was moved aside (kept
-        /// for recovery) so the store can start clean without destroying it.
-        case corrupt
-        /// The file exists but could not be read (I/O / protection error). Must
-        /// never be conflated with `missing` — see `canonicalWritesSuspended`.
-        case unreadable
-    }
-
-    private static func readCanonicalFile<T: Decodable>(_ type: T.Type, at url: URL) -> CanonicalRead<T> {
-        guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
-        let data: Data
+    private func readHealthSidecar() -> [MatchHealthData] {
+        guard let data = try? Data(contentsOf: healthSidecarURL) else { return [] }
         do {
-            data = try Data(contentsOf: url)
+            return try JSONDecoder().decode([MatchHealthData].self, from: data)
         } catch {
-            phoneStoreLogger.error("Failed to read \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            return .unreadable
-        }
-        do {
-            return .loaded(try JSONDecoder().decode(T.self, from: data))
-        } catch {
-            phoneStoreLogger.error("Failed to decode \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            let aside = url.appendingPathExtension("corrupt")
+            let aside = healthSidecarURL.appendingPathExtension("corrupt")
             try? FileManager.default.removeItem(at: aside)
-            try? FileManager.default.moveItem(at: url, to: aside)
-            return .corrupt
+            try? FileManager.default.moveItem(at: healthSidecarURL, to: aside)
+            return []
         }
     }
 
@@ -891,32 +895,21 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// and rewrite it through the new canonical writer — never move it as-is —
     /// so upgraded users get the new until-first-unlock protection class instead
     /// of inheriting the old complete-protection metadata.
-    private func migrateLegacyDocumentsArchiveIfNeeded() {
-        let fm = FileManager.default
-        guard !fm.fileExists(atPath: canonicalHistoryURL.path) else { return }
+    private func migrateLegacyDocumentsArchiveIfNeeded(deleted: [UUID]) throws -> (records: [MatchRecord], tombstones: Set<UUID>) {
         let documents = storageConfiguration.legacyDocumentsDirectoryURL
         let legacyHistory = documents.appendingPathComponent(Self.historyFilename)
-        let legacyTombstoneURL = documents.appendingPathComponent(Self.tombstoneFilename)
-        guard fm.fileExists(atPath: legacyHistory.path) || fm.fileExists(atPath: legacyTombstoneURL.path) else {
-            return
-        }
-        do {
-            let legacyRecords = try Self.readLegacyFile([MatchRecord].self, at: legacyHistory) ?? []
-            let legacyTombstones = try Self.readLegacyFile([UUID].self, at: legacyTombstoneURL) ?? []
-            try fm.createDirectory(at: canonicalDirectoryURL, withIntermediateDirectories: true)
-            try Self.write(Self.sortedNewestFirst(legacyRecords), to: canonicalHistoryURL)
-            try Self.write(legacyTombstones, to: canonicalTombstoneURL)
-            try? fm.removeItem(at: legacyHistory)
-            try? fm.removeItem(at: legacyTombstoneURL)
-            phoneStoreLogger.notice("Migrated legacy Documents archive into the canonical store")
-        } catch {
-            phoneStoreLogger.error("Legacy archive migration failed: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    private static func readLegacyFile<T: Decodable>(_ type: T.Type, at url: URL) throws -> T? {
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        return try JSONDecoder().decode(T.self, from: Data(contentsOf: url))
+        let legacyDeletes = documents.appendingPathComponent(Self.tombstoneFilename)
+        let history = try Self.readArchiveFile([MatchRecord].self, at: legacyHistory)
+        let legacyIDs = try Self.readArchiveFile([UUID].self, at: legacyDeletes)
+        let tombstones = Set(deleted).union(legacyIDs ?? [])
+        guard history != nil || legacyIDs != nil else { return ([], tombstones) }
+        let records = Self.sortedNewestFirst((history ?? []).filter { !tombstones.contains($0.id) })
+        try FileManager.default.createDirectory(at: canonicalDirectoryURL, withIntermediateDirectories: true)
+        try Self.write(Array(tombstones), to: canonicalTombstoneURL)
+        try Self.write(records, to: canonicalHistoryURL)
+        try? FileManager.default.removeItem(at: legacyHistory)
+        try? FileManager.default.removeItem(at: legacyDeletes)
+        return (records, tombstones)
     }
 
     // MARK: - iCloud backup (push + initial restore)
@@ -954,7 +947,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         // May block briefly while the daemon sets the container up — we are on
         // the store's utility queue, never the main thread. nil = signed out /
         // iCloud Drive off; the archive keeps working locally.
-        guard let container = FileManager.default.url(forUbiquityContainerIdentifier: nil) else {
+        guard let container = storageConfiguration.backupContainer() else {
             // Container absent (signed out or iCloud Drive off). Leave the marker absent
             // so the NSUbiquityIdentityDidChange notification triggers a reconcile before
             // the first push when iCloud becomes available.
@@ -1059,7 +1052,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         records = snapshot.records
         tombstones = snapshot.tombstones
         forgotten = snapshot.forgottenPlayers
-        guard writeCanonicalOnQueue(), markArchiveInitializedOnQueue() else {
+        guard writeCanonicalOnQueue(records: records, tombstones: tombstones, forgotten: forgotten), markArchiveInitializedOnQueue() else {
             records = previousRecords
             tombstones = previousTombstones
             forgotten = previousForgotten
@@ -1081,7 +1074,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         queue.async { [weak self] in
             guard let self, let decoded = pendingRestoreDecoded else { return }
             pendingRestoreDecoded = nil
-            guard let container = FileManager.default.url(forUbiquityContainerIdentifier: nil) else {
+            guard let container = storageConfiguration.backupContainer() else {
                 return
             }
             let historyURL = container.appendingPathComponent(Self.historyFilename)

@@ -445,7 +445,7 @@ struct SettingsView: View {
                 } label: {
                     Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
                 }
-                .disabled(syncService.activationState != "Activated" || syncStatus == .inFlight)
+                .disabled(store.isArchiveBlocked || syncService.activationState != "Activated" || syncStatus == .inFlight)
 
                 if let syncStatus {
                     switch syncStatus {
@@ -519,12 +519,16 @@ struct SettingsView: View {
                 } label: {
                     Label("Export Match Archive", systemImage: "square.and.arrow.up")
                 }
+                .disabled(store.isArchiveBlocked)
                 Button {
                     showArchiveImporter = true
                 } label: {
                     Label("Import Match Archive", systemImage: "square.and.arrow.down")
                 }
-                if let archiveTransferStatus {
+                .disabled(store.isArchiveBlocked)
+                if store.isArchiveBlocked {
+                    Text("Archive unavailable. Return to Matches to retry.")
+                } else if let archiveTransferStatus {
                     Text(archiveTransferStatus.message)
                         .font(.footnote)
                         .foregroundStyle(archiveTransferStatus.isSuccess ? .green : .red)

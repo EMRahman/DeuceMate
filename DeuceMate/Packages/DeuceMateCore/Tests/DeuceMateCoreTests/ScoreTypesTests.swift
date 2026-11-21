@@ -59,6 +59,20 @@ final class ScoreTypesTests: XCTestCase {
         XCTAssertTrue(MatchFormat.userSelectable.contains(.fast4))
     }
 
+    func test_historicalPlayerMatchTypeOutcomeAndEndingShotValuesRemainDecodable() throws {
+        func check<T: Decodable & RawRepresentable & Equatable>(_ cases: [(String, T)]) throws where T.RawValue == String {
+            for (saved, expected) in cases {
+                XCTAssertEqual(expected.rawValue, saved)
+                XCTAssertEqual(try JSONDecoder().decode(T.self, from: JSONEncoder().encode(saved)), expected)
+            }
+        }
+        try check([("me", Player.me), ("opponent", .opponent)])
+        try check([("singles", MatchType.singles), ("doubles", .doubles)])
+        try check([("doubleFault", PointOutcome.doubleFault), ("winner", .winner), ("forcedError", .forcedError),
+                   ("unforcedError", .unforcedError), ("uncategorized", .uncategorized)])
+        try check([("serve", EndingShot.serve), ("return", .return), ("servePlusOne", .servePlusOne), ("rally", .rally)])
+    }
+
     // MARK: - SetScore
 
     func test_setScore_defaultsToAnUnplayedRegularSet() {

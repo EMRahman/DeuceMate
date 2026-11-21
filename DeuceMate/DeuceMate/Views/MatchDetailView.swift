@@ -50,6 +50,7 @@ struct MatchDetailView: View {
     /// Retired export generations whose files the open share sheet is still
     /// handing out; deleted when that sheet closes (`releaseHeldExports`).
     @State private var exportGenerationsHeldByShare: Set<ExportStaging.Generation> = []
+    @State private var showSaveFailure = false
     @State private var showEndAtCurrentScoreConfirmation = false
     @State private var showMatchInfoEditor = false
     @State private var showNotesEditor = false
@@ -918,6 +919,9 @@ struct MatchDetailView: View {
         .sheet(isPresented: $showAICoachSheet) {
             aiCoachSheet
         }
+        .alert("Match could not be saved to this iPhone", isPresented: $showSaveFailure) {
+            Button("OK", role: .cancel) {}
+        }
         .confirmationDialog(
             "End at current score?",
             isPresented: $showEndAtCurrentScoreConfirmation,
@@ -1035,7 +1039,10 @@ struct MatchDetailView: View {
         let completed = latest.endingAtCurrentScore()
         let shouldUpdateWatch = syncService.onWatchIDs.contains(record.id)
             || syncService.activeMatchID == record.id
-        store.appendMatch(completed)
+        guard store.appendMatchDurably(completed) else {
+            showSaveFailure = true
+            return
+        }
         if shouldUpdateWatch {
             syncService.sendMatchToWatch(completed)
         }

@@ -134,8 +134,104 @@ struct PhoneStatsStoreTests {
         var isDirectory: ObjCBool = false
         #expect(FileManager.default.fileExists(atPath: fixture.historyURL.path, isDirectory: &isDirectory))
         #expect(isDirectory.boolValue)
-        #expect(store.loadHistory().count == 1) // in-memory operation still succeeds
+        #expect(store.isArchiveBlocked)
+        #expect(store.loadHistory().isEmpty)
         #expect(!FileManager.default.fileExists(atPath: fixture.healthURL.path))
+    }
+
+    @MainActor
+    @Test(arguments: ["matchHistory.json", "deletedMatchIDs.json", "forgottenPlayers.json"])
+    func undecodableFileBlocksTwoLaunchesAndBackupUntilSuccessfulRetry(filename: String) throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let backup = fixture.root.appendingPathComponent("Backup", isDirectory: true)
+        try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
+        let config = PhoneStatsStore.StorageConfiguration(
+            canonicalDirectoryURL: fixture.canonical,
+            legacyDocumentsDirectoryURL: fixture.legacyDocuments,
+            startsICloudSync: false,
+            backupContainer: { backup }
+        )
+        let original = record(health: false)
+        let second = record(health: false)
+        let damagedURL = fixture.canonical.appendingPathComponent(filename)
+        let cloudHistory = backup.appendingPathComponent("matchHistory.json")
+        let cloudDeletes = backup.appendingPathComponent("deletedMatchIDs.json")
+        let cloudLedger = backup.appendingPathComponent("forgottenPlayers.json")
+        let initial = PhoneStatsStore(storageConfiguration: config)
+        initial.saveHistory([original, second])
+        try encode(true, to: fixture.canonical.appendingPathComponent("archiveInitialized.json"))
+        initial.syncICloudBackup()
+        _ = initial.loadHistory() // drain the serial queue, including the requested backup
+
+        let backupURLs = [cloudHistory, cloudDeletes, cloudLedger]
+        let before = try backupURLs.map { try Data(contentsOf: $0) }
+        let goodBytes = try Data(contentsOf: damagedURL)
+        let badBytes: Data
+        if filename == "matchHistory.json" {
+            // A single unrecognized enum in otherwise well-formed match history.
+            var json = try #require(JSONSerialization.jsonObject(with: goodBytes) as? [[String: Any]])
+            var points = try #require(json[0]["stats"] as? [[String: Any]])
+            points[0]["outcome"] = "futureOutcome"
+            json[0]["stats"] = points
+            badBytes = try JSONSerialization.data(withJSONObject: json)
+        } else {
+            badBytes = Data("incomplete json".utf8)
+        }
+        try badBytes.write(to: damagedURL)
+        let manualArchive = try ManualMatchArchiveBackup.encode(records: [original])
+        for _ in 0..<2 {
+            let store = PhoneStatsStore(storageConfiguration: config)
+            #expect(store.isArchiveBlocked)
+            #expect(!store.retryArchiveLoad())
+            #expect(!store.appendMatchDurably(record()))
+            #expect(!store.deletePermanently(id: original.id))
+            #expect(store.mergeIncoming([record()]).isEmpty)
+            #expect(throws: (any Error).self) { try store.importManualArchive(data: manualArchive, mode: .replace) }
+            #expect(throws: (any Error).self) { try store.exportManualArchiveData() }
+            store.syncICloudBackup()
+            #expect(store.loadHistory().isEmpty)
+            #expect(try Data(contentsOf: damagedURL) == badBytes)
+            #expect(try backupURLs.map { try Data(contentsOf: $0) } == before)
+        }
+
+        let store = PhoneStatsStore(storageConfiguration: config)
+        try goodBytes.write(to: damagedURL)
+        #expect(store.retryArchiveLoad())
+        #expect(Set(store.loadHistory().map(\.id)) == [original.id, second.id])
+        #expect(store.deletePermanently(id: original.id))
+        #expect(store.deletePermanently(id: second.id))
+        store.syncICloudBackup()
+        #expect(store.loadHistory().isEmpty)
+        #expect(try JSONDecoder().decode([MatchRecord].self, from: Data(contentsOf: cloudHistory)).isEmpty)
+        #expect(try JSONDecoder().decode(Set<UUID>.self, from: Data(contentsOf: cloudDeletes)) == [original.id, second.id])
+    }
+
+    @Test(arguments: ["matchHistory.json", "deletedMatchIDs.json"])
+    func initializedArchiveRequiresHistoryAndTombstones(filename: String) throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        fixture.makeStore().appendMatch(record())
+        try encode(true, to: fixture.canonical.appendingPathComponent("archiveInitialized.json"))
+        try FileManager.default.removeItem(at: fixture.canonical.appendingPathComponent(filename))
+        #expect(fixture.makeStore().isArchiveBlocked)
+    }
+
+    @Test func oldQuarantineBlocksLegacyMigrationAndFirstLaunchSetup() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let quarantine = fixture.historyURL.appendingPathExtension("corrupt")
+        let legacyHistory = fixture.legacyDocuments.appendingPathComponent("matchHistory.json")
+        let evidence = Data("preserved archive".utf8)
+        try evidence.write(to: quarantine)
+        try encode([record()], to: legacyHistory)
+
+        let store = fixture.makeStore()
+        #expect(store.isArchiveBlocked)
+        #expect(!store.appendMatchDurably(record()))
+        #expect(try Data(contentsOf: quarantine) == evidence)
+        #expect(FileManager.default.fileExists(atPath: legacyHistory.path))
+        #expect(!FileManager.default.fileExists(atPath: fixture.historyURL.path))
     }
 
     @Test func manualImportBackfillsMissingSidecarAndExportStaysFullFidelity() throws {
@@ -308,9 +404,8 @@ struct PhoneStatsStoreTests {
 
         store.appendMatch(record())
 
-        // The in-memory operation still succeeds, but nothing is persisted, so a
-        // failed read can never overwrite the real archive with a partial one.
-        #expect(store.loadHistory().count == 1)
+        #expect(store.isArchiveBlocked)
+        #expect(store.loadHistory().isEmpty)
         #expect(!FileManager.default.fileExists(atPath: fixture.historyURL.path))
         #expect(!FileManager.default.fileExists(atPath: fixture.healthURL.path))
     }

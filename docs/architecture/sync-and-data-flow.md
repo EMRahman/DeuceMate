@@ -54,6 +54,12 @@ matches and a fresh Watch has none, it directs the user to open a match and choo
 are refreshed through `sessionWatchStateDidChange`, rather than remaining frozen
 at activation.
 
+A failed iPhone archive read blocks archive merges, updates and iCloud backup.
+The Matches screen offers Retry and keeps the live scoreboard accessible. A
+successful retry requests the Watch’s full history again. Archive deletion,
+manual entry and End at Current Score issue their Watch-side changes only after
+the local commit succeeds.
+
 **Live recovery (16 November 2026):** activation, reconnect, phone foreground,
 opening the live board and Sync Now request the existing Watch model's current
 state through `liveRequest`/`liveReply`. A compact display-only snapshot carries
