@@ -539,4 +539,51 @@ struct PhoneStatsStoreTests {
         #expect(try Data(contentsOf: accountCTombstoneURL) == newerTombstonesData)
         #expect(try Data(contentsOf: accountCLedgerURL) == newerLedgerData)
     }
+
+    @Test func manualImportRemovesRestoredMatchFromRemoteBackupTombstonesWhilePreservingOthers() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let backupContainer = fixture.root.appendingPathComponent("iCloudBackup", isDirectory: true)
+        try FileManager.default.createDirectory(at: backupContainer, withIntermediateDirectories: true)
+        let backupHistoryURL = backupContainer.appendingPathComponent("matchHistory.json")
+        let backupTombstoneURL = backupContainer.appendingPathComponent("deletedMatchIDs.json")
+        let restoredIDsURL = fixture.canonical.appendingPathComponent("restoredMatchIDs.json")
+
+        let restoredMatch = record()
+        let unrelatedDeletedMatch = record()
+        let exportData = try ManualMatchArchiveBackup.encode(records: [restoredMatch])
+
+        let store = fixture.makeStore()
+        store.saveHistory([restoredMatch, unrelatedDeletedMatch])
+        store.deletePermanently(id: restoredMatch.id)
+        store.deletePermanently(id: unrelatedDeletedMatch.id)
+        store.pushBackupForTesting(to: backupContainer)
+
+        let pushedTombstones = try JSONDecoder().decode([UUID].self, from: Data(contentsOf: backupTombstoneURL))
+        #expect(Set(pushedTombstones) == Set([restoredMatch.id, unrelatedDeletedMatch.id]))
+
+        try store.importManualArchive(data: exportData, mode: .merge)
+        #expect(FileManager.default.fileExists(atPath: restoredIDsURL.path))
+
+        let relaunched = fixture.makeStore()
+        relaunched.pushBackupForTesting(to: backupContainer)
+
+        let updatedTombstones = try JSONDecoder().decode([UUID].self, from: Data(contentsOf: backupTombstoneURL))
+        #expect(Set(updatedTombstones) == Set([unrelatedDeletedMatch.id]))
+        let updatedHistory = try PersistedArchiveCodec.decode(
+            [MatchRecord].self,
+            from: Data(contentsOf: backupHistoryURL),
+            expectedFormat: PersistedArchiveCodec.historyFormat
+        )
+        #expect(Set(updatedHistory.map(\.id)) == Set([restoredMatch.id]))
+        #expect(!FileManager.default.fileExists(atPath: restoredIDsURL.path))
+
+        let restoredSnapshot = ArchiveBackupPolicy.initialRestore(
+            localRecords: [],
+            localTombstones: [],
+            backupRecords: updatedHistory,
+            backupTombstones: Set(updatedTombstones)
+        )
+        #expect(Set(restoredSnapshot.records.map(\.id)) == Set([restoredMatch.id]))
+    }
 }
