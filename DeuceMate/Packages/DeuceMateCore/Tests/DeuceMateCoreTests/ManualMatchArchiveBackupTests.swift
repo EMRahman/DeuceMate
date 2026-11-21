@@ -175,6 +175,21 @@ final class ManualMatchArchiveBackupTests: XCTestCase {
 
         XCTAssertThrowsError(try ManualMatchArchiveBackup.decode(data)) { error in
             XCTAssertEqual(error as? ManualMatchArchiveBackup.ArchiveError, .unsupportedSchemaVersion(99))
+            XCTAssertTrue(error.localizedDescription.contains("Update DeuceMate"))
+        }
+    }
+
+    func test_decode_rejectsZeroSchemaVersion() throws {
+        let archive = ManualMatchArchiveBackup.Archive(
+            schemaVersion: 0,
+            exportedAt: exportedAt,
+            records: []
+        )
+        let data = try JSONEncoder.iso8601ManualArchiveTestEncoder.encode(archive)
+
+        XCTAssertThrowsError(try ManualMatchArchiveBackup.decode(data)) { error in
+            XCTAssertEqual(error as? ManualMatchArchiveBackup.ArchiveError, .unsupportedSchemaVersion(0))
+            XCTAssertFalse(error.localizedDescription.contains("newer version"))
         }
     }
 

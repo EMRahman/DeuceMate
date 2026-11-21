@@ -31,6 +31,7 @@ func styledScore(_ score: String, superSize: CGFloat) -> AttributedString {
 struct MatchHistoryView: View {
     @EnvironmentObject private var viewModel: ScoreViewModel
     @State private var records: [MatchRecord] = []
+    @State private var isHistoryUnreadable = false
     @State private var selected: MatchRecord?
 
     private static let dateFormatter: DateFormatter = {
@@ -42,16 +43,31 @@ struct MatchHistoryView: View {
     var body: some View {
         Group {
             if records.isEmpty {
-                VStack(spacing: 8) {
-                    Text("No past matches yet.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Text("Finish a match to see it here. Enable Point Outcome Tracking to include full match stats.")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                if isHistoryUnreadable {
+                    VStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text("Match history could not be read.")
+                            .font(.footnote)
+                            .multilineTextAlignment(.center)
+                        Text("Saved matches are preserved and won't be overwritten.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
+                } else {
+                    VStack(spacing: 8) {
+                        Text("No past matches yet.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Text("Finish a match to see it here. Enable Point Outcome Tracking to include full match stats.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
                 }
-                .padding()
             } else {
                 List {
                     ForEach(records) { record in
@@ -61,7 +77,7 @@ struct MatchHistoryView: View {
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 StatsStore.shared.removeMatch(id: record.id)
-                                records = StatsStore.shared.loadHistory()
+                                reloadHistory()
                                 WatchMatchSyncService.shared.sendManifest()
                             } label: {
                                 Label("Delete", systemImage: "trash")
@@ -81,13 +97,13 @@ struct MatchHistoryView: View {
             }
         }
         .onAppear {
-            records = StatsStore.shared.loadHistory()
+            reloadHistory()
         }
         .onReceive(NotificationCenter.default.publisher(for: .watchMatchHistoryDidChange)) { _ in
-            records = StatsStore.shared.loadHistory()
+            reloadHistory()
         }
         .sheet(item: $selected, onDismiss: {
-            records = StatsStore.shared.loadHistory()
+            reloadHistory()
         }) { record in
             MatchStatsView(stats: record.stats,
                            setScores: record.setScores,
@@ -204,6 +220,16 @@ struct MatchHistoryView: View {
             return MatchChronology.caption(record, formatter: MatchHistoryView.dateFormatter)
         }
         return hasPointOutcomeStats(record) ? "Match Stats" : "Score Only Match"
+    }
+
+    private func reloadHistory() {
+        if let loaded = StatsStore.shared.loadHistoryOrNil() {
+            records = loaded
+            isHistoryUnreadable = false
+        } else {
+            records = []
+            isHistoryUnreadable = true
+        }
     }
 
     private func hasPointOutcomeStats(_ record: MatchRecord) -> Bool {

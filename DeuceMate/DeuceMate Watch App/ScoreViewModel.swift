@@ -2060,12 +2060,16 @@ class ScoreViewModel: ObservableObject {
             && !hasInProgressMatchData
     }
 
+    private enum LiveStateLoadError: Error {
+        case newerVersion(Int)
+    }
+
     func loadState() {
         stateRestorationSucceeded = false
         do {
             let data = try Data(contentsOf: stateFileURL)
             let state = try JSONDecoder().decode(AppState.self, from: data)
-            guard state.version <= 7 else { throw CocoaError(.coderReadCorrupt) }
+            guard state.version <= 7 else { throw LiveStateLoadError.newerVersion(state.version) }
             stateWritesBlocked = false
             persistenceError = nil
             stateRestorationSucceeded = true
@@ -2123,6 +2127,11 @@ class ScoreViewModel: ObservableObject {
                 }
             }
             dropStoredCopyOfLiveMatch()
+        } catch LiveStateLoadError.newerVersion {
+            stateRestorationSucceeded = false
+            stateWritesBlocked = true
+            persistenceError = "Saved match requires a newer version of DeuceMate. Update the app to continue."
+            return
         } catch {
             stateRestorationSucceeded = (error as? CocoaError)?.code == .fileReadNoSuchFile
             stateWritesBlocked = !stateRestorationSucceeded

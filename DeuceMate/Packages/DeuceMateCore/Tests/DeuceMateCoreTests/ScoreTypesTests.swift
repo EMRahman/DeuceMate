@@ -5,6 +5,32 @@ import XCTest
 
 final class ScoreTypesTests: XCTestCase {
 
+    // MARK: - Player & MatchType
+
+    func test_player_rawValuesArePersistedIdentifiers() throws {
+        // Raw values reach persisted match JSON (`matchHistory.json`, `appState.json`) —
+        // renaming or deleting a case breaks archives.
+        let persisted: [(Player, String)] = [
+            (.me, "me"),
+            (.opponent, "opponent")
+        ]
+        for (player, raw) in persisted {
+            XCTAssertEqual(player.rawValue, raw)
+            XCTAssertEqual(try JSONDecoder().decode(Player.self, from: Data("\"\(raw)\"".utf8)), player)
+        }
+    }
+
+    func test_matchType_rawValuesArePersistedIdentifiers() throws {
+        let persisted: [(MatchType, String)] = [
+            (.singles, "singles"),
+            (.doubles, "doubles")
+        ]
+        for (matchType, raw) in persisted {
+            XCTAssertEqual(matchType.rawValue, raw)
+            XCTAssertEqual(try JSONDecoder().decode(MatchType.self, from: Data("\"\(raw)\"".utf8)), matchType)
+        }
+    }
+
     // MARK: - DoublesServer
 
     func test_doublesServer_teamMembership() {

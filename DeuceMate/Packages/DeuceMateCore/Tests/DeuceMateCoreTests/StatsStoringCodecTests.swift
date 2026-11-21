@@ -75,4 +75,41 @@ final class StatsStoringCodecTests: XCTestCase {
         """
         XCTAssertThrowsError(try MemoryStore.decode(Data(json.utf8)))
     }
+
+    func test_persistedArchiveCodec_envelopeRoundTripAndRecordsKeyCompatibility() throws {
+        let records = [makeRecord()]
+        let data = try PersistedArchiveCodec.encodeEnvelope(
+            records,
+            format: PersistedArchiveCodec.historyFormat
+        )
+        XCTAssertEqual(try MemoryStore.decode(data), records)
+
+        let recordsPayload = try JSONEncoder().encode(records)
+        let recordsText = String(decoding: recordsPayload, as: UTF8.self)
+        let altJSON = #"{"format":"deucemate.matchHistory","schemaVersion":1,"records":\#(recordsText)}"#
+        XCTAssertEqual(try MemoryStore.decode(Data(altJSON.utf8)), records)
+    }
+
+    func test_persistedArchiveCodec_rejectsNewerSchemaVersionBeforeDecodingItems() {
+        // Even if the inner items contain a future enum case, schemaVersion > 1
+        // must surface `.newerSchemaVersion(2)` rather than a generic decode error.
+        let futureJSON = """
+        {"format":"deucemate.matchHistory","schemaVersion":2,"items":[{"matchFormat":"futureFormat"}]}
+        """
+        XCTAssertThrowsError(try MemoryStore.decode(Data(futureJSON.utf8))) { error in
+            XCTAssertEqual(error as? PersistedArchiveCodec.CodecError, .newerSchemaVersion(2))
+        }
+    }
+
+    func test_persistedArchiveCodec_rejectsWrongFormatAndZeroSchemaVersion() {
+        let wrongFormat = #"{"format":"other.app","schemaVersion":1,"items":[]}"#
+        XCTAssertThrowsError(try MemoryStore.decode(Data(wrongFormat.utf8))) { error in
+            XCTAssertEqual(error as? PersistedArchiveCodec.CodecError, .wrongFormat("other.app"))
+        }
+
+        let zeroVersion = #"{"format":"deucemate.matchHistory","schemaVersion":0,"items":[]}"#
+        XCTAssertThrowsError(try MemoryStore.decode(Data(zeroVersion.utf8))) { error in
+            XCTAssertEqual(error as? PersistedArchiveCodec.CodecError, .unsupportedSchemaVersion(0))
+        }
+    }
 }

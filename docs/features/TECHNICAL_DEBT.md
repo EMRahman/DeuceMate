@@ -53,15 +53,15 @@ when the item should constrain future changes.
 
 | # | Area | Item | Application risk | Work band / trigger | Effort |
 |---|------|------|------------------|---------------------|--------|
-| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact; low–medium likelihood** | **Now** | Medium, staged |
-| [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | **High** | **Now**, in the persistence-safety programme | Medium — PR #108 exists to re-read |
+| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Containment landed**; explicit recovery tool deferred | **Deferred** (containment & floor shipped) | Small (recovery UI only) |
+| [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | **Implemented**; corrupt-match reset hatch deferred | **Deferred** (fail-closed & version check shipped) | Small (reset action only) |
 | [27](#27--prevent-unrecorded-fitness-workouts-with-manager-tests-and-crash-recovery) | Health / Reliability | Prevent unrecorded Fitness workouts with manager tests and crash recovery | High impact when a workout is lost; remaining likelihood unverified | **Now**; physical-Watch save/sync checks before release | Medium, staged |
-| [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | **High when schemas diverge** | **Before any persisted-model, enum, or wire-shape change** | Medium |
+| [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | **Dual-format readers & range gates landed**; emit v1 envelopes on write in a later release | **Before emitting schema v2** | Small (write flip later) |
 | [2](#2--add-a-monotonic-record-revision-before-queued-checkpoints) | Sync | Order Watch archive checkpoints | Implemented for updated pairs | Legacy-to-legacy merges retain arrival order | — |
 | [28](#28--recover-current-live-state-and-confirm-courtside-phone-input) | Sync / UX | Recover current live state and confirm courtside phone input | Reconnect fix implemented; device timing unverified | Implemented in working branch; physical-device validation pending | Medium, staged |
-| [3](#3--replace-stringly-typed-settings-keys-with-typed-keys) | Settings | Replace stringly-typed settings keys with typed keys | Medium today; **high change risk** | Next engineering-risk cleanup after persistence containment | Large, splittable per setting category |
+| [3](#3--replace-stringly-typed-settings-keys-with-typed-keys) | Settings | Replace stringly-typed settings keys with typed keys | Medium today; **high change risk** | Next engineering-risk cleanup | Large, splittable per setting category |
 | [20](#20--make-health-derived-field-classification-mechanically-exhaustive) | Health/Privacy | Make Health-derived field classification mechanically exhaustive | No current bug; **high privacy risk on expansion** | Before adding any Health-derived field or export surface | Medium design; small first guards |
-| [4a-write](#4a-write--surface-save-failures) | Persistence | Surface live-state and archive save failures | Medium impact; low likelihood | After, or alongside, read containment | Small–medium |
+| [4a-write](#4a-write--surface-save-failures) | Persistence | Surface live-state and archive save failures | **Implemented** across Watch live/history & iPhone archive/settings | Optional recovery polish | Small |
 | [26](#26--match-info-swipe-down-and-player-name-save-gaps) | Data loss | Match Info swipe-down and player-name save gaps | Low; swipe discard is accepted, a failed name save may show no error | Next Match Info change | Small |
 | [23](#23--validate-manual-match-scores-and-explain-invalid-input) | Correctness | Validate manual match scores and explain invalid input | Medium; inconsistent records can be resumed on Watch | Next manual-entry fix, after persistence containment | Small–medium |
 | [24](#24--add-accessible-watch-scoring-actions) | Accessibility | Add accessible Watch scoring actions | Core scoring has no named accessibility actions | Coordinate with walkthrough shared controls | Small–medium |
@@ -329,8 +329,14 @@ with it. `assertionFailure()` gives the same signal in Debug and compiles away i
 Release.
 
 **Key files:** `ScoreTypes.swift`, `PointStat.swift`, `StatsStore.swift`,
-`PhoneStatsStore.swift` (`readCanonicalFile`, `pushBackupOnQueue`),
-`ScoreViewModel.swift` (`AppState`, `loadState`).
+`PhoneStatsStore.swift` (`readCanonicalArchiveFile`, `readCanonicalJSONFile`, `pushBackupOnQueue`),
+`ArchiveBackupPolicy.swift` (`evaluatePush`), `ScoreViewModel.swift` (`AppState`, `loadState`).
+
+**Containment implemented (21 November 2026):**
+- `PhoneStatsStore` fails closed on `.corrupt`, `.unreadable`, and `.newerVersion` canonical files (`matchHistory.json`, `deletedMatchIDs.json`, `forgottenPlayers.json`): original bytes are preserved in place (no longer moved to `.corrupt` where a second launch would read `.missing`), `canonicalWritesSuspended = true` suspends local writes and iCloud pushes, and `persistenceWarning` is published to `PastMatchesView`. Only the reconstructable `healthData.json` sidecar continues to quarantine to `.corrupt` and degrade gracefully.
+- All six persisted enums (`DoublesServer`, `MatchFormat`, `MatchType`, `Player`, `PointOutcome`, `EndingShot`) now have pinned raw-value tests in `ScoreTypesTests` and `PointStatTests`.
+- `ArchiveBackupPolicy.evaluatePush(candidate:overwriting:)` enforces the tombstone-qualified backup floor in `PhoneStatsStore.pushBackupOnQueue`: additive tombstones and forgotten-player updates still write, while unexplained record shrinkage is withheld.
+- **Remaining:** explicit user-confirmed element-wise `Lossy<T>` recovery action if a corrupt canonical file ever needs partial salvage.
 
 ---
 
@@ -455,10 +461,16 @@ for **enum cases**, where both adding and removing break the reader. That is
 this repo's actual exposure, and it is why #18 exists as a separate item.
 
 **Key files:** `ScoreViewModel.swift` (`AppState.version`),
-`Persistence/StatsStoring.swift` (the unversioned archive codec),
+`Persistence/StatsStoring.swift` (`PersistedArchiveCodec`),
 `Sync/MatchSyncMessage.swift` (`decodeArray`), `Sync/SyncIncomingPayload.swift`,
-`Persistence/ManualMatchArchiveBackup.swift` (envelope and error copy worth
-reusing; its equality gate is not).
+`Persistence/ManualMatchArchiveBackup.swift` (`supportedSchemaVersions`),
+`PhoneStatsStore.swift`, Watch `StatsStore.swift`.
+
+**Readers & range gates implemented (21 November 2026):**
+- `PersistedArchiveCodec` decodes both legacy bare JSON arrays (`[MatchRecord]`, `[UUID]`) and the schema-v1 envelope (`{"format": ..., "schemaVersion": 1, "items": ...}`), inspecting `format` and `schemaVersion` before decoding inner items so a future schema throws `.newerSchemaVersion` instead of a generic decode error. `StatsStoring.decode`, `MatchSyncMessage.decodeArray`, `PhoneStatsStore`, and Watch `StatsStore` all route through it.
+- `ManualMatchArchiveBackup` now validates `supportedSchemaVersions.contains(...)` (`1...1`) instead of `== supportedSchemaVersion`, and `.unsupportedSchemaVersion` distinguishes newer versions ("Update DeuceMate to import it.") from older/invalid ones.
+- Watch `ScoreViewModel.loadState()` distinguishes `LiveStateLoadError.newerVersion` from generic corruption and refuses writes with an update prompt.
+- **Remaining:** flip encoders in a later release to emit the v1 envelope on write once deployed builds include the dual-format readers.
 
 ---
 
@@ -515,6 +527,12 @@ Show a small but visible warning on the live scoreboard for live-state failure,
 and on history/settings for archive failure. Clear it only after a successful
 write or a deliberate reset that the model defines as resolving the condition;
 do not clear it merely because the view disappeared.
+
+**Implemented (21 November 2026):**
+- Watch `ScoreViewModel.loadState()` already sets `stateWritesBlocked = true` and `persistenceError` on unreadable/corrupt/future `appState.json` (surfaced in `ContentView`, `HomeView`, and `MatchStatsView`), and now distinguishes `LiveStateLoadError.newerVersion` from corruption.
+- Watch `MatchHistoryView` uses `StatsStore.loadHistoryOrNil()` and displays a preserved-history warning when `nil` rather than the normal empty state.
+- iPhone `PhoneStatsStore` publishes `persistenceWarning` on canonical read failure (`.corrupt`, `.unreadable`, `.newerVersion`) and on local save failure (`!didWrite`), clearing it only when a subsequent write succeeds; `PastMatchesView` (populated list and empty state) and `SettingsView` (Backup & Transfer) surface the warning.
+- **Remaining:** optional explicit "Reset Unreadable Match" recovery button for genuinely corrupt Watch `appState.json` (never for `.newerVersion`).
 
 ---
 

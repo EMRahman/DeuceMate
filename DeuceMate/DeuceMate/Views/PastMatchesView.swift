@@ -108,6 +108,14 @@ struct PastMatchesView: View {
     @ViewBuilder
     private var archiveList: some View {
         List {
+            if let warning = store.persistenceWarning {
+                Section {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+            }
+
             // Compute archive data once at the top so both sections can
             // reference pastRecords (e.g. the live-match footer needs it).
             let archiveIDs = Set(store.history.map(\.id))
@@ -297,7 +305,19 @@ struct PastMatchesView: View {
 
     @ViewBuilder
     private var emptyStateView: some View {
-        if syncService.isActivating {
+        VStack(spacing: 16) {
+            if let warning = store.persistenceWarning {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal)
+            }
+
+            if syncService.isActivating {
             VStack(spacing: 12) {
                 ProgressView()
                 Text("Connecting to Apple Watch…")
@@ -340,6 +360,7 @@ struct PastMatchesView: View {
                 iCloudStatusLabel
                     .font(.footnote)
             }
+        }
         }
     }
 

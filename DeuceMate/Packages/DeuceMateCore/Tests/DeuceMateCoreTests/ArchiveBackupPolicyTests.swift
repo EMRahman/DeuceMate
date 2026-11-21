@@ -74,6 +74,57 @@ final class ArchiveBackupPolicyTests: XCTestCase {
         XCTAssertEqual(snapshot.tombstones, [deleted.id])
     }
 
+    func test_evaluatePush_allowsGrowthAndTombstonedDeletionIncludingLastMatch() {
+        let first = makeRecord(endTime: Date(), iWon: true)
+        let second = makeRecord(endTime: Date(), iWon: false)
+
+        // Adding or retaining records is allowed.
+        let growth = ArchiveBackupPolicy.backupSnapshot(records: [first, second], tombstones: [])
+        XCTAssertEqual(ArchiveBackupPolicy.evaluatePush(candidate: growth, overwriting: [first.id]), .allow)
+
+        // Tombstoned deletion of the only match yields an empty record set and must be allowed.
+        let deletedOnly = ArchiveBackupPolicy.backupSnapshot(records: [], tombstones: [first.id])
+        XCTAssertEqual(ArchiveBackupPolicy.evaluatePush(candidate: deletedOnly, overwriting: [first.id]), .allow)
+
+        // Explicit manual-archive replace drops records without tombstones and must be allowed,
+        // while any other unexplained missing ID is still withheld.
+        let replacement = makeRecord(endTime: Date(), iWon: true)
+        let replaceSnapshot = ArchiveBackupPolicy.backupSnapshot(records: [replacement], tombstones: [])
+        XCTAssertEqual(
+            ArchiveBackupPolicy.evaluatePush(
+                candidate: replaceSnapshot,
+                overwriting: [first.id],
+                explicitlyReplacedIDs: [first.id]
+            ),
+            .allow
+        )
+        XCTAssertEqual(
+            ArchiveBackupPolicy.evaluatePush(
+                candidate: replaceSnapshot,
+                overwriting: [first.id, second.id],
+                explicitlyReplacedIDs: [first.id]
+            ),
+            .withholdRecordWrite(unexplainedMissingIDs: [second.id])
+        )
+    }
+
+    func test_evaluatePush_withholdsUnexplainedShrinkageWithoutTombstones() {
+        let first = makeRecord(endTime: Date(), iWon: true)
+        let second = makeRecord(endTime: Date(), iWon: false)
+
+        let emptyUntombstoned = ArchiveBackupPolicy.backupSnapshot(records: [], tombstones: [])
+        XCTAssertEqual(
+            ArchiveBackupPolicy.evaluatePush(candidate: emptyUntombstoned, overwriting: [first.id, second.id]),
+            .withholdRecordWrite(unexplainedMissingIDs: [first.id, second.id])
+        )
+
+        let partial = ArchiveBackupPolicy.backupSnapshot(records: [first], tombstones: [])
+        XCTAssertEqual(
+            ArchiveBackupPolicy.evaluatePush(candidate: partial, overwriting: [first.id, second.id]),
+            .withholdRecordWrite(unexplainedMissingIDs: [second.id])
+        )
+    }
+
     func test_backupSnapshot_sortsNewestFirst() {
         let oldest = makeRecord(startTime: Date(timeIntervalSince1970: 100), endTime: Date(), iWon: true)
         let newest = makeRecord(startTime: Date(timeIntervalSince1970: 200), endTime: Date(), iWon: false)

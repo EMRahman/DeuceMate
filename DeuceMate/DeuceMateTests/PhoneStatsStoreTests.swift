@@ -311,7 +311,74 @@ struct PhoneStatsStoreTests {
         // The in-memory operation still succeeds, but nothing is persisted, so a
         // failed read can never overwrite the real archive with a partial one.
         #expect(store.loadHistory().count == 1)
+        #expect(store.persistenceWarning != nil)
         #expect(!FileManager.default.fileExists(atPath: fixture.historyURL.path))
+        #expect(!FileManager.default.fileExists(atPath: fixture.healthURL.path))
+    }
+
+    @Test func corruptMainSuspendsWritesAndPreservesOriginalBytesAcrossRelaunches() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let bytes = Data(#"[{"matchFormat":"retiredUnknownOrCorrupt"}]"#.utf8)
+        try bytes.write(to: fixture.historyURL)
+
+        let firstLaunch = fixture.makeStore()
+        #expect(firstLaunch.persistenceWarning != nil)
+        firstLaunch.appendMatch(record())
+        #expect(try Data(contentsOf: fixture.historyURL) == bytes)
+        #expect(!FileManager.default.fileExists(atPath: fixture.historyURL.appendingPathExtension("corrupt").path))
+        #expect(!FileManager.default.fileExists(atPath: fixture.healthURL.path))
+
+        // Second launch must still see the preserved file and remain suspended.
+        let secondLaunch = fixture.makeStore()
+        #expect(secondLaunch.persistenceWarning != nil)
+        secondLaunch.appendMatch(record())
+        #expect(try Data(contentsOf: fixture.historyURL) == bytes)
+    }
+
+    @Test func corruptTombstoneFileSuspendsWritesAndPreservesBytes() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = record().strippingHealthData()
+        try encode([original], to: fixture.historyURL)
+        let corruptTombstones = Data("not valid json {{{".utf8)
+        try corruptTombstones.write(to: fixture.tombstoneURL)
+
+        let store = fixture.makeStore()
+        #expect(store.persistenceWarning != nil)
+        store.appendMatch(record())
+
+        #expect(try Data(contentsOf: fixture.tombstoneURL) == corruptTombstones)
+        #expect(try JSONDecoder().decode([MatchRecord].self, from: Data(contentsOf: fixture.historyURL)) == [original])
+    }
+
+    @Test func corruptForgottenPlayersFileSuspendsWritesAndPreservesBytes() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let ledgerURL = fixture.canonical.appendingPathComponent("forgottenPlayers.json")
+        let corruptLedger = Data("not valid json {{{".utf8)
+        try corruptLedger.write(to: ledgerURL)
+
+        let store = fixture.makeStore()
+        #expect(store.persistenceWarning != nil)
+        store.appendMatch(record())
+
+        #expect(try Data(contentsOf: ledgerURL) == corruptLedger)
+        #expect(!FileManager.default.fileExists(atPath: fixture.historyURL.path))
+    }
+
+    @Test func newerSchemaEnvelopeInMainSuspendsWritesWithUpdateWarning() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let newerBytes = Data(#"{"format":"deucemate.matchHistory","schemaVersion":2,"items":[]}"#.utf8)
+        try newerBytes.write(to: fixture.historyURL)
+
+        let store = fixture.makeStore()
+        let warning = try #require(store.persistenceWarning)
+        #expect(warning.contains("newer version"))
+        store.appendMatch(record())
+
+        #expect(try Data(contentsOf: fixture.historyURL) == newerBytes)
         #expect(!FileManager.default.fileExists(atPath: fixture.healthURL.path))
     }
 }

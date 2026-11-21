@@ -514,6 +514,11 @@ struct SettingsView: View {
             }
 
             Section {
+                if let warning = store.persistenceWarning {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
                 Button {
                     showArchiveExportDisclosure = true
                 } label: {

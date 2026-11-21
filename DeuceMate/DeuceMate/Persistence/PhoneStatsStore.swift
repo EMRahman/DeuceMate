@@ -66,6 +66,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// `false` = pushed to the local replica, daemon upload in progress;
     /// `true` = both files confirmed uploaded.
     @Published private(set) var isBackupUploaded: Bool? = nil
+    /// Non-nil when a canonical archive file could not be read or decoded (or
+    /// came from a newer schema version), or when the latest local save failed.
+    @Published private(set) var persistenceWarning: String? = nil
     /// Whether the user's iCloud account/container is currently usable. When
     /// false the archive still works in full (it is device-local); backup
     /// pushes and initial restore pause until iCloud returns.
@@ -84,17 +87,27 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// Forgotten player ids (MATCH_TAGS_PLAN.md §6.2). Persisted and backed up
     /// with the tombstones; unioned, never shrunk, by every inbound path.
     private var forgotten = ForgottenPlayerLedger()
-    /// Set when a canonical file exists but could not be read at launch (I/O or
-    /// protection error — distinct from "missing"). All disk writes and backup
-    /// passes are then suppressed for the rest of the process so state derived
-    /// from a failed read can never overwrite the real archive; the app keeps
-    /// working in memory and the next clean launch reloads everything.
+    /// Set when a canonical file exists but could not be read or decoded at
+    /// launch (distinct from "missing"), or came from a newer schema version.
+    /// All disk writes and backup passes are then suppressed for the rest of
+    /// the process so state derived from a failed read can never overwrite the
+    /// real archive; the app keeps working in memory without clobbering disk.
     private var canonicalWritesSuspended = false
+    /// Queue-confined backing value for `persistenceWarning`.
+    private var currentPersistenceWarning: String? = nil
+
+    private static let unreadableArchiveWarning = "Saved match archive on this iPhone could not be read. Existing data is preserved and won't be overwritten."
+    private static let newerArchiveWarning = "Saved match archive was created by a newer version of DeuceMate. Update DeuceMate to save changes."
+    private static let saveFailedWarning = "Latest archive changes could not be saved to this iPhone's storage."
     /// The scheduled debounced backup push or restore download-retry, if any.
     private var pendingBackupSync: DispatchWorkItem?
     /// Last content successfully pushed to the ubiquity container; nil before the first push.
     /// Used to skip redundant iCloud writes when nothing has changed.
     private var lastPushedSnapshot: ArchiveBackupPolicy.Snapshot?
+    /// Match IDs explicitly dropped by a confirmed `.replace` manual import
+    /// (which intentionally omits tombstones per sync-and-data-flow.md §6), held
+    /// until the resulting iCloud backup write lands.
+    private var explicitlyReplacedRecordIDs: Set<UUID> = []
     /// The ubiquity identity token at the time of the last successful push.
     /// A different token means a different iCloud account — we must push even if content is unchanged.
     private var lastPushedIdentityToken: AnyHashable?
@@ -173,14 +186,15 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     init(storageConfiguration: StorageConfiguration) {
         self.storageConfiguration = storageConfiguration
-        let initial = queue.sync { () -> ([MatchRecord], Set<UUID>, Bool, ForgottenPlayerLedger) in
+        let initial = queue.sync { () -> ([MatchRecord], Set<UUID>, Bool, ForgottenPlayerLedger, String?) in
             migrateLegacyDocumentsArchiveIfNeeded()
             loadCanonicalOnQueue()
-            return (records, tombstones, shouldAttemptInitialRestoreOnQueue, forgotten)
+            return (records, tombstones, shouldAttemptInitialRestoreOnQueue, forgotten, currentPersistenceWarning)
         }
         history = initial.0
         tombstoneIDs = initial.1
         forgottenPlayers = initial.3
+        persistenceWarning = initial.4
         // Fresh local archive setup with iCloud signed in: show "Restoring from
         // iCloud…" until the first restore attempt settles, so an initially
         // short list reads as in-progress rather than data loss.
@@ -596,6 +610,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         )
 
         queue.sync {
+            let previousIDs = Set(records.map(\.id))
             let snapshot = ManualMatchArchiveBackup.importSnapshot(
                 importing: archive.records,
                 into: records,
@@ -604,11 +619,15 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 currentForgottenPlayers: forgotten,
                 importedForgottenPlayers: archive.forgottenPlayers
             )
-            adoptOnQueue(
+            let didWrite = adoptOnQueue(
                 records: snapshot.records,
                 tombstones: snapshot.tombstones,
                 forgotten: snapshot.forgottenPlayers
             )
+            if didWrite && mode == .replace {
+                let droppedByReplace = previousIDs.subtracting(Set(snapshot.records.map(\.id)))
+                explicitlyReplacedRecordIDs.formUnion(droppedByReplace)
+            }
         }
         return preview
     }
@@ -653,6 +672,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         tombstones = newTombstones
         if let newForgotten { forgotten = forgotten.union(newForgotten) }
         let didWrite = writeCanonicalOnQueue()
+        if didWrite {
+            currentPersistenceWarning = nil
+        } else if !canonicalWritesSuspended {
+            currentPersistenceWarning = Self.saveFailedWarning
+        }
         publishOnQueue()
         guard didWrite else {
             // During the initial restore phase the pending item is a restore
@@ -675,11 +699,15 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         let recordsSnapshot = records
         let tombstoneSnapshot = tombstones
         let forgottenSnapshot = forgotten
+        let warningSnapshot = currentPersistenceWarning
         DispatchQueue.main.async {
             self.history = recordsSnapshot
             self.tombstoneIDs = tombstoneSnapshot
             if self.forgottenPlayers != forgottenSnapshot {
                 self.forgottenPlayers = forgottenSnapshot
+            }
+            if self.persistenceWarning != warningSnapshot {
+                self.persistenceWarning = warningSnapshot
             }
         }
     }
@@ -723,30 +751,44 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     }
 
     private func loadCanonicalOnQueue() {
-        switch Self.readCanonicalFile([UUID].self, at: canonicalTombstoneURL) {
+        let tombstoneRead = Self.readCanonicalArchiveFile(
+            [UUID].self,
+            at: canonicalTombstoneURL,
+            expectedFormat: PersistedArchiveCodec.tombstonesFormat
+        )
+        switch tombstoneRead {
         case .loaded(let ids):
             tombstones = Set(ids)
-        case .missing, .corrupt:
-            break // corrupt file was moved aside; initial restore may refill what it can
-        case .unreadable:
-            canonicalWritesSuspended = true
+        case .missing:
+            break
+        case .newerVersion, .corrupt, .unreadable:
+            recordCanonicalReadFailure(tombstoneRead)
         }
-        switch Self.readCanonicalFile(ForgottenPlayerLedger.self, at: canonicalForgottenPlayersURL) {
+        let ledgerRead = Self.readCanonicalJSONFile(
+            ForgottenPlayerLedger.self,
+            at: canonicalForgottenPlayersURL
+        )
+        switch ledgerRead {
         case .loaded(let ledger):
             forgotten = ledger
-        case .missing, .corrupt:
-            break // pre-tags archive, or moved aside; the archive itself was scrubbed when each forget ran
-        case .unreadable:
-            canonicalWritesSuspended = true
+        case .missing:
+            break // pre-tags archive
+        case .newerVersion, .corrupt, .unreadable:
+            recordCanonicalReadFailure(ledgerRead)
         }
         let loadedRecords: [MatchRecord]
-        switch Self.readCanonicalFile([MatchRecord].self, at: canonicalHistoryURL) {
+        let historyRead = Self.readCanonicalArchiveFile(
+            [MatchRecord].self,
+            at: canonicalHistoryURL,
+            expectedFormat: PersistedArchiveCodec.historyFormat
+        )
+        switch historyRead {
         case .loaded(let loaded):
             loadedRecords = loaded
-        case .missing, .corrupt:
-            loadedRecords = [] // corrupt file was moved aside; initial restore may refill what it can
-        case .unreadable:
-            canonicalWritesSuspended = true
+        case .missing:
+            loadedRecords = []
+        case .newerVersion, .corrupt, .unreadable:
+            recordCanonicalReadFailure(historyRead)
             loadedRecords = []
         }
 
@@ -760,10 +802,10 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             }
         }
         let health: [MatchHealthData]
-        switch Self.readCanonicalFile([MatchHealthData].self, at: healthSidecarURL) {
+        switch Self.readHealthSidecarFile(at: healthSidecarURL) {
         case .loaded(let loaded):
             health = loaded
-        case .missing, .corrupt, .unreadable:
+        case .missing, .newerVersion, .corrupt, .unreadable:
             health = []
         }
 
@@ -784,7 +826,22 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             }
         }
         if canonicalWritesSuspended {
-            phoneStoreLogger.error("Canonical archive unreadable; running in-memory with writes suspended")
+            phoneStoreLogger.error("Canonical archive read failed; running in-memory with writes suspended")
+        }
+    }
+
+    private func recordCanonicalReadFailure<T>(_ result: CanonicalRead<T>) {
+        switch result {
+        case .loaded, .missing:
+            break
+        case .newerVersion:
+            canonicalWritesSuspended = true
+            currentPersistenceWarning = Self.newerArchiveWarning
+        case .corrupt, .unreadable:
+            canonicalWritesSuspended = true
+            if currentPersistenceWarning == nil {
+                currentPersistenceWarning = Self.unreadableArchiveWarning
+            }
         }
     }
 
@@ -796,31 +853,89 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private enum CanonicalRead<T> {
         case loaded(T)
         case missing
-        /// Bytes were readable but not decodable. The file was moved aside (kept
-        /// for recovery) so the store can start clean without destroying it.
+        /// Payload carries a schema version higher than this build supports.
+        /// Bytes are left untouched and writes are suspended.
+        case newerVersion(Int)
+        /// Bytes were readable but not decodable. Canonical files are left
+        /// untouched and writes are suspended; only the reconstructable Health
+        /// sidecar quarantines corrupt bytes and regenerates.
         case corrupt
         /// The file exists but could not be read (I/O / protection error). Must
         /// never be conflated with `missing` — see `canonicalWritesSuspended`.
         case unreadable
     }
 
-    private static func readCanonicalFile<T: Decodable>(_ type: T.Type, at url: URL) -> CanonicalRead<T> {
+    private enum BytesRead {
+        case data(Data)
+        case missing
+        case unreadable
+    }
+
+    private static func readCanonicalBytes(at url: URL) -> BytesRead {
         guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
-        let data: Data
         do {
-            data = try Data(contentsOf: url)
+            return .data(try Data(contentsOf: url))
         } catch {
             phoneStoreLogger.error("Failed to read \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return .unreadable
         }
-        do {
-            return .loaded(try JSONDecoder().decode(T.self, from: data))
-        } catch {
-            phoneStoreLogger.error("Failed to decode \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            let aside = url.appendingPathExtension("corrupt")
-            try? FileManager.default.removeItem(at: aside)
-            try? FileManager.default.moveItem(at: url, to: aside)
-            return .corrupt
+    }
+
+    private static func readCanonicalArchiveFile<T: Decodable>(
+        _ type: T.Type,
+        at url: URL,
+        expectedFormat: String
+    ) -> CanonicalRead<T> {
+        switch readCanonicalBytes(at: url) {
+        case .missing:
+            return .missing
+        case .unreadable:
+            return .unreadable
+        case .data(let data):
+            do {
+                return .loaded(try PersistedArchiveCodec.decode(type, from: data, expectedFormat: expectedFormat))
+            } catch PersistedArchiveCodec.CodecError.newerSchemaVersion(let version) {
+                phoneStoreLogger.error("Newer schema (\(version, privacy: .public)) in \(url.lastPathComponent, privacy: .public); preserving file")
+                return .newerVersion(version)
+            } catch {
+                phoneStoreLogger.error("Failed to decode \(url.lastPathComponent, privacy: .public); preserving bytes: \(error.localizedDescription, privacy: .public)")
+                return .corrupt
+            }
+        }
+    }
+
+    private static func readCanonicalJSONFile<T: Decodable>(_ type: T.Type, at url: URL) -> CanonicalRead<T> {
+        switch readCanonicalBytes(at: url) {
+        case .missing:
+            return .missing
+        case .unreadable:
+            return .unreadable
+        case .data(let data):
+            do {
+                return .loaded(try JSONDecoder().decode(type, from: data))
+            } catch {
+                phoneStoreLogger.error("Failed to decode \(url.lastPathComponent, privacy: .public); preserving bytes: \(error.localizedDescription, privacy: .public)")
+                return .corrupt
+            }
+        }
+    }
+
+    private static func readHealthSidecarFile(at url: URL) -> CanonicalRead<[MatchHealthData]> {
+        switch readCanonicalBytes(at: url) {
+        case .missing:
+            return .missing
+        case .unreadable:
+            return .unreadable
+        case .data(let data):
+            do {
+                return .loaded(try JSONDecoder().decode([MatchHealthData].self, from: data))
+            } catch {
+                phoneStoreLogger.error("Failed to decode \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                let aside = url.appendingPathExtension("corrupt")
+                try? FileManager.default.removeItem(at: aside)
+                try? FileManager.default.moveItem(at: url, to: aside)
+                return .corrupt
+            }
         }
     }
 
@@ -1001,8 +1116,16 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             return
         }
 
-        let decodedRecords = decodeBackup([MatchRecord].self, from: historyState)
-        let decodedTombstones = decodeBackup([UUID].self, from: tombstoneState)
+        let decodedRecords = decodeBackup(
+            [MatchRecord].self,
+            from: historyState,
+            expectedFormat: PersistedArchiveCodec.historyFormat
+        )
+        let decodedTombstones = decodeBackup(
+            [UUID].self,
+            from: tombstoneState,
+            expectedFormat: PersistedArchiveCodec.tombstonesFormat
+        )
         let decodedLedger = decodeBackup(ForgottenPlayerLedger.self, from: ledgerState)
         guard decodedRecords.isUsable, decodedTombstones.isUsable, decodedLedger.isUsable else {
             phoneStoreLogger.error("Initial iCloud restore skipped because backup data is corrupt")
@@ -1132,17 +1255,53 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         }
         do {
             // Deletion intent first, so a partially pushed backup never pairs
-            // the newer archive with an older ledger.
+            // the newer archive with an older ledger. Tombstones remain additive
+            // even if the record-file write is withheld.
             try coordinatedWriteBackup(snapshot.forgottenPlayers, to: Self.backupLedgerURL(besides: historyURL))
-            try coordinatedWriteBackup(snapshot.records, to: historyURL)
             try coordinatedWriteBackup(Array(snapshot.tombstones), to: tombstoneURL)
-            lastPushedSnapshot = snapshot
-            lastPushedIdentityToken = currentToken
-            readUploadStatusOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL)
+            guard let baselineIDs = baselineRecordIDsForBackupPush(at: historyURL) else {
+                return
+            }
+            switch ArchiveBackupPolicy.evaluatePush(
+                candidate: snapshot,
+                overwriting: baselineIDs,
+                explicitlyReplacedIDs: explicitlyReplacedRecordIDs
+            ) {
+            case .allow:
+                try coordinatedWriteBackup(snapshot.records, to: historyURL)
+                explicitlyReplacedRecordIDs.removeAll()
+                lastPushedSnapshot = snapshot
+                lastPushedIdentityToken = currentToken
+                readUploadStatusOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL)
+            case .withholdRecordWrite(let missing):
+                phoneStoreLogger.error("Withheld iCloud backup history write: \(missing.count, privacy: .public) record(s) disappeared without tombstones")
+            }
         } catch {
             // Push failures are recoverable: the canonical archive is safe
             // on-device and the next trigger retries the same content.
             phoneStoreLogger.error("iCloud backup push failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func baselineRecordIDsForBackupPush(at historyURL: URL) -> Set<UUID>? {
+        if let lastPushedSnapshot {
+            return Set(lastPushedSnapshot.records.map(\.id))
+        }
+        guard case .ready(let existingData) = backupFileState(at: historyURL) else {
+            return []
+        }
+        do {
+            let existing = try PersistedArchiveCodec.decode(
+                [MatchRecord].self,
+                from: existingData,
+                expectedFormat: PersistedArchiveCodec.historyFormat
+            )
+            return Set(existing.map(\.id))
+        } catch PersistedArchiveCodec.CodecError.newerSchemaVersion(let version) {
+            phoneStoreLogger.error("Withheld iCloud backup history write: remote backup uses newer schema \(version, privacy: .public)")
+            return nil
+        } catch {
+            return []
         }
     }
 
@@ -1176,10 +1335,17 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         }
     }
 
-    private func decodeBackup<T: Decodable>(_ type: T.Type, from state: BackupFileState) -> DecodedBackup<T> {
+    private func decodeBackup<T: Decodable>(
+        _ type: T.Type,
+        from state: BackupFileState,
+        expectedFormat: String? = nil
+    ) -> DecodedBackup<T> {
         guard case .ready(let data) = state else { return .missing }
         do {
-            return .loaded(try JSONDecoder().decode(T.self, from: data))
+            if let expectedFormat {
+                return .loaded(try PersistedArchiveCodec.decode(type, from: data, expectedFormat: expectedFormat))
+            }
+            return .loaded(try JSONDecoder().decode(type, from: data))
         } catch {
             phoneStoreLogger.error("iCloud backup decode failed: \(error.localizedDescription, privacy: .public)")
             return .corrupt

@@ -66,6 +66,32 @@ public enum ArchiveBackupPolicy {
         )
     }
 
+    public enum BackupPushDecision: Equatable, Sendable {
+        case allow
+        /// Record IDs present in the backup baseline being overwritten that are
+        /// neither in `candidate.records` nor in `candidate.tombstones`.
+        /// The record-file write must be withheld while additive tombstone and
+        /// forgotten-player writes still proceed.
+        case withholdRecordWrite(unexplainedMissingIDs: Set<UUID>)
+    }
+
+    /// Evaluates whether `candidate` may overwrite an existing backup holding
+    /// `existingRecordIDs`. Shrinkage (including down to `[]`) is allowed when
+    /// every disappeared ID is accounted for in `candidate.tombstones` or was
+    /// dropped by an explicit manual-archive replace (`explicitlyReplacedIDs`).
+    /// Unexplained shrinkage is withheld so a failed/partial local state can
+    /// never clobber a good iCloud backup.
+    public static func evaluatePush(
+        candidate: Snapshot,
+        overwriting existingRecordIDs: Set<UUID>,
+        explicitlyReplacedIDs: Set<UUID> = []
+    ) -> BackupPushDecision {
+        let keptIDs = Set(candidate.records.map(\.id))
+        let accountedFor = keptIDs.union(candidate.tombstones).union(explicitlyReplacedIDs)
+        let unexplained = existingRecordIDs.subtracting(accountedFor)
+        return unexplained.isEmpty ? .allow : .withholdRecordWrite(unexplainedMissingIDs: unexplained)
+    }
+
     /// Restore an iCloud backup only during local archive initialization.
     ///
     /// This is deliberately not the WatchConnectivity merge policy. The watch is

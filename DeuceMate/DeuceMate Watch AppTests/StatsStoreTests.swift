@@ -86,6 +86,26 @@ struct StatsStoreTests {
         #expect(store.loadHistory() == [])         // UI read paths still degrade to []
     }
 
+    @Test func version1EnvelopeLoadsAndFutureVersionRefusesOverwrite() throws {
+        let url = makeTempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let saved = makeRecord()
+        let v1 = try PersistedArchiveCodec.encodeEnvelope(
+            [saved],
+            format: PersistedArchiveCodec.historyFormat
+        )
+        try v1.write(to: url)
+        let v1Store = StatsStore(fileURL: url)
+        #expect(v1Store.loadHistoryOrNil() == [saved])
+
+        let v2 = Data(#"{"format":"deucemate.matchHistory","schemaVersion":2,"items":[]}"#.utf8)
+        try v2.write(to: url)
+        let v2Store = StatsStore(fileURL: url)
+        #expect(v2Store.loadHistoryOrNil() == nil)
+        #expect(!v2Store.appendMatchDurably(makeRecord()))
+        #expect(try Data(contentsOf: url) == v2)
+    }
+
     @Test func appendDoesNotOverwriteCorruptFile() throws {
         let url = makeTempURL()
         defer { try? FileManager.default.removeItem(at: url) }

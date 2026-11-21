@@ -72,6 +72,37 @@ final class PointStatTests: XCTestCase {
                        Set(PointOutcome.allCases).subtracting([.uncategorized]))
     }
 
+    func test_pointOutcome_rawValuesArePersistedIdentifiers() throws {
+        // Raw values reach persisted match JSON (`matchHistory.json`, `appState.json`) —
+        // renaming or deleting a case breaks archives.
+        let persisted: [(PointOutcome, String)] = [
+            (.doubleFault, "doubleFault"),
+            (.winner, "winner"),
+            (.forcedError, "forcedError"),
+            (.unforcedError, "unforcedError"),
+            (.uncategorized, "uncategorized")
+        ]
+        XCTAssertEqual(persisted.count, PointOutcome.allCases.count)
+        for (outcome, raw) in persisted {
+            XCTAssertEqual(outcome.rawValue, raw)
+            XCTAssertEqual(try JSONDecoder().decode(PointOutcome.self, from: Data("\"\(raw)\"".utf8)), outcome)
+        }
+    }
+
+    func test_endingShot_rawValuesArePersistedIdentifiers() throws {
+        let persisted: [(EndingShot, String)] = [
+            (.serve, "serve"),
+            (.return, "return"),
+            (.servePlusOne, "servePlusOne"),
+            (.rally, "rally")
+        ]
+        XCTAssertEqual(persisted.count, EndingShot.allCases.count)
+        for (shot, raw) in persisted {
+            XCTAssertEqual(shot.rawValue, raw)
+            XCTAssertEqual(try JSONDecoder().decode(EndingShot.self, from: Data("\"\(raw)\"".utf8)), shot)
+        }
+    }
+
     // MARK: - Health projection
 
     func test_strippingHealthData_keepsTennisFactsAndDropsHealthOnly() {

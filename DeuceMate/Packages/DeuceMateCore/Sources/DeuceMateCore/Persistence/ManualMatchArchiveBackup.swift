@@ -7,7 +7,10 @@ import Foundation
 /// HealthKit-derived heart rate, steps, distance, and calories.
 public enum ManualMatchArchiveBackup {
     public static let format = "deucemate.matchArchive"
+    // Bump only when an incompatible change cannot be decoded by older builds,
+    // and retain migration/decoder support in `supportedSchemaVersions`.
     public static let supportedSchemaVersion = 1
+    public static let supportedSchemaVersions: ClosedRange<Int> = 1...supportedSchemaVersion
 
     /// Upper bound on the raw bytes of an imported archive file. An imported file
     /// is the only genuinely externally-sourced input in the app (it may have been
@@ -115,6 +118,9 @@ public enum ManualMatchArchiveBackup {
             case .wrongFormat:
                 return "This file is not a DeuceMate match archive."
             case .unsupportedSchemaVersion(let version):
+                if version > supportedSchemaVersion {
+                    return "This DeuceMate archive was created by a newer version of DeuceMate (version \(version)). Update DeuceMate to import it."
+                }
                 return "This DeuceMate archive version is not supported: \(version)."
             case .tooManyRecords(let count):
                 return "This archive contains too many matches to import: \(count)."
@@ -224,7 +230,7 @@ public enum ManualMatchArchiveBackup {
 
     private static func validate(_ archive: Archive) throws {
         guard archive.format == format else { throw ArchiveError.wrongFormat(archive.format) }
-        guard archive.schemaVersion == supportedSchemaVersion else {
+        guard supportedSchemaVersions.contains(archive.schemaVersion) else {
             throw ArchiveError.unsupportedSchemaVersion(archive.schemaVersion)
         }
         guard archive.records.count <= maxArchiveRecords else {

@@ -219,8 +219,12 @@ final class StatsStore: WatchStatsStoring {
     private func _loadHistoryUnsafe() -> [MatchRecord]? {
         do {
             let data = try Data(contentsOf: fileURL)
-            return try JSONDecoder().decode([MatchRecord].self, from: data)
-                .sorted(by: MatchChronology.newestFirst)
+            return try PersistedArchiveCodec.decode(
+                [MatchRecord].self,
+                from: data,
+                expectedFormat: PersistedArchiveCodec.historyFormat
+            )
+            .sorted(by: MatchChronology.newestFirst)
         } catch CocoaError.fileReadNoSuchFile {
             return []
         } catch {
