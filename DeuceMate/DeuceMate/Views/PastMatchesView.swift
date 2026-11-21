@@ -71,6 +71,7 @@ struct PastMatchesView: View {
     @State private var showManualEntry = false
     @State private var showICloudGuide = false
     @State private var showRestorePrompt = false
+    @State private var recovery = ArchiveRecoveryModel()
     @State private var pendingDelete: PendingDelete?
     @State private var matchRowFrameCache = MatchRowFrameCache()
     // Retain the origin through dismissal; clearing the pending item must not
@@ -134,7 +135,11 @@ struct PastMatchesView: View {
             // below may be incomplete and nothing is being saved (TECHNICAL_DEBT #18).
             if let problem = store.archiveProblem {
                 Section {
-                    ArchiveProblemNotice(problem: problem)
+                    ArchiveProblemNotice(problem: problem, recovery: recovery, store: store)
+                }
+            } else if store.isBackupWithheld {
+                Section {
+                    BackupWithheldNotice(count: store.withheldBackupMatchCount, recovery: recovery, store: store)
                 }
             }
 
@@ -247,6 +252,7 @@ struct PastMatchesView: View {
     var body: some View {
         NavigationStack {
             screenContent
+            .archiveRecoveryPresentations(recovery, store: store)
             .sheet(item: $selected, onDismiss: requestReviewIfEarned) { record in
                 NavigationStack {
                     MatchDetailView(record: record)
@@ -308,7 +314,15 @@ struct PastMatchesView: View {
         if let problem = store.archiveProblem {
             // Never "No Matches Yet" when the saved archive couldn't be loaded.
             VStack(alignment: .leading, spacing: 16) {
-                ArchiveProblemNotice(problem: problem)
+                ArchiveProblemNotice(problem: problem, recovery: recovery, store: store)
+                iCloudStatusLabel
+                    .font(.footnote)
+            }
+            .padding(.horizontal, 24)
+        } else if store.isBackupWithheld {
+            // Nor when the backup still holds matches this iPhone lost.
+            VStack(alignment: .leading, spacing: 16) {
+                BackupWithheldNotice(count: store.withheldBackupMatchCount, recovery: recovery, store: store)
                 iCloudStatusLabel
                     .font(.footnote)
             }
@@ -379,7 +393,8 @@ struct PastMatchesView: View {
             Label(status.text, systemImage: status.systemImage)
                 .foregroundStyle(.secondary)
         case .paused:
-            // Explained by `ArchiveProblemNotice`; there is nothing to tap.
+            // Explained (with its actions) by `ArchiveProblemNotice` or
+            // `BackupWithheldNotice` on this screen; there is nothing to tap.
             Label(status.text, systemImage: status.systemImage)
                 .foregroundStyle(.orange)
         case .pendingRestore:

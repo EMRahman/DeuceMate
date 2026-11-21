@@ -72,11 +72,13 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// launch. Writes and iCloud pushes are then suspended for the process and
     /// the archive screen explains why the list looks empty (TECHNICAL_DEBT #18).
     @Published private(set) var archiveProblem: ArchiveLoadProblem? = nil
-    /// True when the last backup push kept the backup's records because the
-    /// archive had lost matches with no tombstone or confirmed Replace to
-    /// explain it (`BackupPushGuard`, TECHNICAL_DEBT #18). The indicator then
-    /// reads "iCloud backup paused" instead of claiming an upload.
-    @Published private(set) var isBackupWithheld = false
+    /// How many matches the last backup push kept in the backup because they
+    /// had left this iPhone with no tombstone or confirmed Replace to explain
+    /// it (`BackupPushGuard`, TECHNICAL_DEBT #18); 0 when nothing is withheld.
+    /// The archive screen then offers Bring Them Back / Remove from Backup.
+    @Published private(set) var withheldBackupMatchCount = 0
+    /// The indicator reads "iCloud backup paused" instead of claiming an upload.
+    var isBackupWithheld: Bool { withheldBackupMatchCount > 0 }
     /// Whether the user's iCloud account/container is currently usable. When
     /// false the archive still works in full (it is device-local); backup
     /// pushes and initial restore pause until iCloud returns.
@@ -116,8 +118,12 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// never been written or can't be read; the push then reads the ids
     /// already in the backup instead.
     private var backupManifest: BackupManifest?
-    /// Queue-confined copy of `isBackupWithheld`.
-    private var isBackupWithheldOnQueue = false
+    /// The matches the last push withheld, and the baseline it compared
+    /// against; empty / nil when nothing is withheld. `withheldBackupMatchCount`
+    /// mirrors the count on main.
+    private var withheldMatchIDs: Set<UUID> = []
+    private var withheldBaseline: BackupManifest?
+    private var isBackupWithheldOnQueue: Bool { !withheldMatchIDs.isEmpty }
     /// The ubiquity identity token at the time of the last successful push.
     /// A different token means a different iCloud account — we must push even if content is unchanged.
     private var lastPushedIdentityToken: AnyHashable?
@@ -139,6 +145,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private static let healthFilename = "healthData.json"
     private static let forgottenPlayersFilename = "forgottenPlayers.json"
     private static let backupManifestFilename = "backupManifest.json"
+    /// Copies kept by recovery before it replaces anything: the preserved
+    /// archive files, or the backup's record file (TECHNICAL_DEBT #18).
+    private static let recoveredDirectoryName = "Recovered"
 
     struct StorageConfiguration {
         let canonicalDirectoryURL: URL
@@ -637,6 +646,19 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         // would vanish on relaunch, so it is rolled back and reported instead
         // of claimed as success — and the caller leaves private notes alone.
         try queue.sync {
+            // A confirmed Replace is a way out of a suspended archive: the
+            // preserved files are copied aside first, then replaced. A Merge
+            // into an archive that couldn't be loaded would hide that the
+            // damaged matches aren't in it, so it stays refused.
+            let suspension = mode == .replace ? canonicalSuspension : nil
+            if suspension != nil {
+                do {
+                    _ = try copyPreservedFilesAsideOnQueue()
+                } catch {
+                    throw TagEditError.notPersisted
+                }
+                canonicalSuspension = nil
+            }
             let snapshot = ManualMatchArchiveBackup.importSnapshot(
                 importing: archive.records,
                 into: records,
@@ -656,8 +678,12 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 records = previousRecords
                 tombstones = previousTombstones
                 forgotten = previousForgotten
+                canonicalSuspension = suspension ?? canonicalSuspension
                 publishOnQueue()
                 throw TagEditError.notPersisted
+            }
+            if suspension != nil {
+                publishArchiveProblemOnQueue()
             }
             if mode == .replace {
                 // The user confirmed replacing the archive, so the backup may
@@ -670,6 +696,310 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             }
         }
         return preview
+    }
+
+    // MARK: - Recovery (TECHNICAL_DEBT #18, stage 3)
+    //
+    // The ways out of a suspended archive and a withheld backup push. Each one
+    // that replaces something copies it first: the preserved archive files go
+    // to `MatchArchive/Recovered/<time>/`, and so does the backup's record file
+    // before "Remove from Backup" lets matches leave it. Nothing is deleted.
+
+    enum RecoveryError: Error, Equatable {
+        /// The canonical files couldn't be written; nothing changed.
+        case notPersisted
+        /// iCloud is unavailable, still downloading, or the backup unreadable.
+        case backupUnavailable
+        /// None of the withheld matches could be read from the backup.
+        case nothingReadable
+    }
+
+    /// Reads the canonical files again ("Try Again"). Anything that arrived
+    /// while writes were suspended (Watch syncs, deletions) is kept on top of
+    /// what loads. Returns the problem that remains, nil when the archive is
+    /// back to normal and saving again.
+    func retryArchiveLoad() async -> ArchiveLoadProblem? {
+        await onQueue { self.retryArchiveLoadOnQueue() }
+    }
+
+    /// Copies the preserved archive files ("Save a Copy") into a fresh
+    /// temporary folder for the share sheet. The originals stay in place.
+    func copyPreservedArchiveForSharing() throws -> [URL] {
+        try queue.sync {
+            let folder = FileManager.default.temporaryDirectory
+                .appendingPathComponent("DeuceMate Archive Copy \(UUID().uuidString)", isDirectory: true)
+            return try copyPreservedFilesOnQueue(to: folder)
+        }
+    }
+
+    /// What "Restore from iCloud" would restore, read fresh from the backup.
+    func iCloudRestoreOffer() async -> ICloudArchiveRestore {
+        await onQueue {
+            switch self.readFullBackupOnQueue() {
+            case .loaded(let backup):
+                guard !backup.records.records.isEmpty else { return .noBackup }
+                return .available(
+                    .from(records: backup.records.records),
+                    newerFormatCount: backup.records.undecodableCount
+                )
+            case .unavailable(let offer):
+                return offer
+            }
+        }
+    }
+
+    /// Restores a suspended archive from the iCloud backup, on top of whatever
+    /// this iPhone holds in memory (`ArchiveBackupPolicy.initialRestore`), with
+    /// Health values from the local sidecar put back. Returns how many matches
+    /// the archive then holds.
+    func restoreArchiveFromICloud() async throws -> Int {
+        try await onQueueThrowing { () throws -> Int in
+            guard case .loaded(let backup) = self.readFullBackupOnQueue(),
+                  !backup.records.records.isEmpty else {
+                throw RecoveryError.backupUnavailable
+            }
+            let snapshot = ArchiveBackupPolicy.initialRestore(
+                localRecords: self.records,
+                localTombstones: self.tombstones,
+                backupRecords: backup.records.records,
+                backupTombstones: backup.tombstones,
+                localForgottenPlayers: self.forgotten,
+                backupForgottenPlayers: backup.forgotten
+            )
+            let restored = HealthSidecarPolicy.merge(stripped: snapshot.records, health: self.localHealthSidecarOnQueue())
+            try self.replaceSuspendedArchiveOnQueue(
+                records: restored,
+                tombstones: snapshot.tombstones,
+                forgotten: snapshot.forgottenPlayers
+            )
+            self.markArchiveInitializedOnQueue()
+            return self.records.count
+        }
+    }
+
+    /// "Bring Them Back": copies the withheld matches from the backup into the
+    /// archive and pushes again. Returns how many came back and how many this
+    /// build couldn't read (those stay withheld, so the backup keeps them).
+    func bringBackWithheldMatches() async throws -> (restored: Int, stillMissing: Int) {
+        try await onQueueThrowing { () throws -> (restored: Int, stillMissing: Int) in
+            let wanted = self.withheldMatchIDs
+            guard !wanted.isEmpty else { return (0, 0) }
+            guard let container = self.storageConfiguration.backupContainerURL() else {
+                throw RecoveryError.backupUnavailable
+            }
+            let historyURL = container.appendingPathComponent(Self.historyFilename)
+            let tombstoneURL = container.appendingPathComponent(Self.tombstoneFilename)
+            guard case .loaded(let list) = self.decodeBackup(LenientRecordList.self, from: self.backupFileState(at: historyURL)) else {
+                throw RecoveryError.backupUnavailable
+            }
+            let found = list.records.filter { wanted.contains($0.id) }
+            guard !found.isEmpty else { throw RecoveryError.nothingReadable }
+            let merged = MatchMergePolicy.merge(
+                incoming: found,
+                into: self.records,
+                tombstones: self.tombstones,
+                forgottenPlayers: self.forgotten
+            )
+            let previous = self.records
+            guard self.adoptOnQueue(records: merged, tombstones: self.tombstones) else {
+                self.records = previous
+                self.publishOnQueue()
+                throw RecoveryError.notPersisted
+            }
+            self.pushNowOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL)
+            return (found.count, wanted.count - found.count)
+        }
+    }
+
+    /// "Remove from Backup": the user accepts that the withheld matches leave
+    /// the backup. The backup's record file is copied to this iPhone first,
+    /// then only those ids stop being protected (`acceptingLoss`).
+    func removeWithheldMatchesFromBackup() async throws {
+        try await onQueueThrowing {
+            let accepted = self.withheldMatchIDs
+            guard !accepted.isEmpty, let baseline = self.withheldBaseline else { return }
+            guard let container = self.storageConfiguration.backupContainerURL() else {
+                throw RecoveryError.backupUnavailable
+            }
+            let historyURL = container.appendingPathComponent(Self.historyFilename)
+            let tombstoneURL = container.appendingPathComponent(Self.tombstoneFilename)
+            switch self.backupFileState(at: historyURL) {
+            case .ready(let data):
+                let folder = try self.newRecoveredFolderOnQueue()
+                try data.write(to: folder.appendingPathComponent("iCloud-" + Self.historyFilename), options: .atomic)
+            case .missing:
+                break // nothing in the backup to keep a copy of
+            case .downloading:
+                throw RecoveryError.backupUnavailable
+            }
+            self.recordBackupManifestOnQueue(baseline.acceptingLoss(of: accepted))
+            self.pushNowOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL)
+        }
+    }
+
+    // MARK: Recovery helpers
+
+    private func onQueue<T>(_ work: @escaping () -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: work()) }
+        }
+    }
+
+    private func onQueueThrowing<T>(_ work: @escaping () throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async { continuation.resume(with: Result { try work() }) }
+        }
+    }
+
+    private func retryArchiveLoadOnQueue() -> ArchiveLoadProblem? {
+        guard canonicalSuspension != nil else { return nil }
+        let heldRecords = records
+        let heldTombstones = tombstones
+        let heldForgotten = forgotten
+        canonicalSuspension = nil
+        records = []
+        tombstones = []
+        forgotten = ForgottenPlayerLedger()
+        loadCanonicalOnQueue()
+
+        tombstones.formUnion(heldTombstones)
+        forgotten = forgotten.union(heldForgotten)
+        let loaded = forgotten.scrubbed(records.filter { !tombstones.contains($0.id) }, now: Date())
+        let combined = MatchMergePolicy.merge(
+            incoming: heldRecords,
+            into: loaded,
+            tombstones: tombstones,
+            forgottenPlayers: forgotten
+        )
+        if canonicalSuspension == nil {
+            adoptOnQueue(records: combined, tombstones: tombstones)
+        } else {
+            records = Self.sortedNewestFirst(combined)
+            publishOnQueue()
+        }
+        publishArchiveProblemOnQueue()
+        return canonicalSuspension
+    }
+
+    /// Adopts a replacement for a suspended archive: copies the preserved
+    /// files aside, lifts the suspension and writes. On any failure the
+    /// suspension and the in-memory archive are put back.
+    private func replaceSuspendedArchiveOnQueue(
+        records newRecords: [MatchRecord],
+        tombstones newTombstones: Set<UUID>,
+        forgotten newForgotten: ForgottenPlayerLedger
+    ) throws {
+        let suspension = canonicalSuspension
+        if suspension != nil {
+            do {
+                _ = try copyPreservedFilesAsideOnQueue()
+            } catch {
+                throw RecoveryError.notPersisted
+            }
+        }
+        let previous = (records, tombstones, forgotten)
+        canonicalSuspension = nil
+        guard adoptOnQueue(records: newRecords, tombstones: newTombstones, forgotten: newForgotten) else {
+            (records, tombstones, forgotten) = previous
+            canonicalSuspension = suspension
+            publishOnQueue()
+            throw RecoveryError.notPersisted
+        }
+        publishArchiveProblemOnQueue()
+    }
+
+    private func publishArchiveProblemOnQueue() {
+        let problem = canonicalSuspension
+        DispatchQueue.main.async { self.archiveProblem = problem }
+    }
+
+    /// The score-bearing canonical files that exist (history, tombstones,
+    /// forgotten-player ledger). The Health sidecar is never copied: it must
+    /// stay backup-excluded, and recovery merges it back instead.
+    private var preservedFileURLs: [URL] {
+        [canonicalHistoryURL, canonicalTombstoneURL, canonicalForgottenPlayersURL]
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// Copies (never moves) the preserved files into `folder`. Copying first
+    /// means a file that can't even be read stops the recovery before
+    /// anything is overwritten.
+    private func copyPreservedFilesOnQueue(to folder: URL) throws -> [URL] {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return try preservedFileURLs.map { url in
+            let copy = folder.appendingPathComponent(url.lastPathComponent)
+            try FileManager.default.copyItem(at: url, to: copy)
+            return copy
+        }
+    }
+
+    @discardableResult
+    private func copyPreservedFilesAsideOnQueue() throws -> [URL] {
+        try copyPreservedFilesOnQueue(to: newRecoveredFolderOnQueue())
+    }
+
+    private func newRecoveredFolderOnQueue() throws -> URL {
+        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let folder = canonicalDirectoryURL
+            .appendingPathComponent(Self.recoveredDirectoryName, isDirectory: true)
+            .appendingPathComponent("\(stamp) \(UUID().uuidString.prefix(8))", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }
+
+    private func localHealthSidecarOnQueue() -> [MatchHealthData] {
+        if case .loaded(let health) = Self.readCanonicalFile(
+            [MatchHealthData].self, at: healthSidecarURL, whenUndecodable: .moveAside
+        ) {
+            return health
+        }
+        return []
+    }
+
+    private struct FullBackup {
+        let records: LenientRecordList
+        let tombstones: Set<UUID>
+        let forgotten: ForgottenPlayerLedger?
+    }
+
+    /// The whole backup for "Restore from iCloud". Records are read one at a
+    /// time; tombstones and the ledger must read cleanly, or the restore could
+    /// bring back what the user deleted or forgot.
+    private enum FullBackupRead {
+        case loaded(FullBackup)
+        case unavailable(ICloudArchiveRestore)
+    }
+
+    private func readFullBackupOnQueue() -> FullBackupRead {
+        guard let container = storageConfiguration.backupContainerURL() else {
+            return .unavailable(.iCloudUnavailable)
+        }
+        let historyState = backupFileState(at: container.appendingPathComponent(Self.historyFilename))
+        let tombstoneState = backupFileState(at: container.appendingPathComponent(Self.tombstoneFilename))
+        let ledgerState = backupFileState(at: container.appendingPathComponent(Self.forgottenPlayersFilename))
+        if historyState.isDownloading || tombstoneState.isDownloading || ledgerState.isDownloading {
+            return .unavailable(.downloading)
+        }
+        let records = decodeBackup(LenientRecordList.self, from: historyState)
+        let tombstones = decodeBackup([UUID].self, from: tombstoneState)
+        let ledger = decodeBackup(ForgottenPlayerLedger.self, from: ledgerState)
+        guard records.isUsable, tombstones.isUsable, ledger.isUsable else { return .unavailable(.unreadable) }
+        guard let list = records.value else { return .unavailable(.noBackup) }
+        return .loaded(FullBackup(
+            records: list,
+            tombstones: Set(tombstones.value ?? []),
+            forgotten: ledger.value
+        ))
+    }
+
+    /// Pushes now instead of after the debounce, so the indicator and the
+    /// withheld notice update as soon as a recovery action finishes.
+    private func pushNowOnQueue(historyURL: URL, tombstoneURL: URL) {
+        pendingBackupSync?.cancel()
+        pendingBackupSync = nil
+        guard !canonicalWritesSuspended, !shouldAttemptInitialRestoreOnQueue else { return }
+        lastPushedSnapshot = nil
+        pushBackupOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL)
     }
 
     // MARK: - Merge incoming records from WatchConnectivity
@@ -1269,14 +1599,14 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 try coordinatedWriteBackup(snapshot.records, to: historyURL)
                 try coordinatedWriteBackup(Array(snapshot.tombstones), to: tombstoneURL)
                 recordBackupManifestOnQueue(BackupManifest(pushed: snapshot))
-                setBackupWithheldOnQueue(false)
+                setBackupWithheldOnQueue([], baseline: nil)
                 readUploadStatusOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL)
             case .withholdRecords(let snapshot, let unexplained):
                 // Tombstones and the ledger only ever make the backup safer.
                 try coordinatedWriteBackup(snapshot.forgottenPlayers, to: Self.backupLedgerURL(besides: historyURL))
                 try coordinatedWriteBackup(Array(snapshot.tombstones), to: tombstoneURL)
                 phoneStoreLogger.fault("iCloud backup kept: \(unexplained.count, privacy: .public) match(es) would leave it with no deletion or Replace to explain it")
-                setBackupWithheldOnQueue(true)
+                setBackupWithheldOnQueue(unexplained, baseline: baseline)
             }
             lastPushedSnapshot = outgoing
             lastPushedIdentityToken = currentToken
@@ -1323,10 +1653,12 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         }
     }
 
-    private func setBackupWithheldOnQueue(_ withheld: Bool) {
-        guard withheld != isBackupWithheldOnQueue else { return }
-        isBackupWithheldOnQueue = withheld
-        DispatchQueue.main.async { self.isBackupWithheld = withheld }
+    private func setBackupWithheldOnQueue(_ ids: Set<UUID>, baseline: BackupManifest?) {
+        withheldBaseline = ids.isEmpty ? nil : baseline
+        guard ids != withheldMatchIDs else { return }
+        withheldMatchIDs = ids
+        let count = ids.count
+        DispatchQueue.main.async { self.withheldBackupMatchCount = count }
     }
 
     /// Reads `.ubiquitousItemIsUploadedKey` on both backup files and publishes the

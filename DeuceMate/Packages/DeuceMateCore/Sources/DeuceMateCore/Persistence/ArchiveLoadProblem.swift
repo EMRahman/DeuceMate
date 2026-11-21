@@ -11,7 +11,9 @@
 // The copy states only what the app really does: it has not deleted anything,
 // it is not saving or backing up, and the Watch still holds its recent matches
 // (the Watch is the source of live scoring and keeps `WatchHistory.cap`
-// matches). It does not promise a recovery action this build cannot offer.
+// matches). The recovery actions themselves (Try Again, Restore from iCloud,
+// Save a Copy) are buttons worded in `ArchiveRecoveryCopy`; the message only
+// hints at them, so it never promises one that isn't on screen.
 import Foundation
 
 public enum ArchiveLoadProblem: String, CaseIterable, Sendable {
@@ -40,7 +42,7 @@ public enum ArchiveLoadProblem: String, CaseIterable, Sendable {
         let common = "DeuceMate has left them untouched and won't save changes or back up to iCloud until this is resolved. Your Apple Watch keeps its recent matches."
         switch self {
         case .unreadable:
-            return "This iPhone couldn't open your saved matches. \(common) Restart DeuceMate to try again."
+            return "This iPhone couldn't open your saved matches. \(common) This is often temporary, so try again in a moment."
         case .undecodable:
             return "This version of DeuceMate couldn't read your saved matches. \(common) If an update to DeuceMate is available, install it."
         }

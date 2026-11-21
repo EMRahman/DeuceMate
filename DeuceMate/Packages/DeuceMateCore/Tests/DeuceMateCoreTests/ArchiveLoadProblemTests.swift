@@ -25,10 +25,11 @@ final class ArchiveLoadProblemTests: XCTestCase {
                 XCTAssertFalse(message.contains(overclaim), "\(problem) copy must not say \"\(overclaim)\"")
             }
         }
-        // Only the transient diagnosis suggests a restart; only the
+        // Only the transient diagnosis suggests trying again (stage 3 put a
+        // Try Again button beside it, replacing "Restart DeuceMate"); only the
         // deterministic one suggests an update.
-        XCTAssertTrue(ArchiveLoadProblem.unreadable.message.contains("Restart"))
-        XCTAssertFalse(ArchiveLoadProblem.undecodable.message.contains("Restart"))
+        XCTAssertTrue(ArchiveLoadProblem.unreadable.message.contains("try again"))
+        XCTAssertFalse(ArchiveLoadProblem.undecodable.message.contains("try again"))
         XCTAssertTrue(ArchiveLoadProblem.undecodable.message.contains("update"))
     }
 }

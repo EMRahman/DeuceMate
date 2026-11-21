@@ -104,6 +104,22 @@ final class BackupPushGuardTests: XCTestCase {
         )
     }
 
+    func test_acceptingALoss_letsOnlyThoseMatchesLeave() {
+        // "Remove from Backup" for a and b; c goes missing later and is still protected.
+        let a = record(), b = record(), c = record(), kept = record(), deleted = UUID()
+        let baseline = BackupManifest(recordIDs: [a.id, b.id, c.id, kept.id], tombstones: [deleted])
+        let accepted = baseline.acceptingLoss(of: [a.id, b.id])
+        XCTAssertEqual(accepted, BackupManifest(recordIDs: [c.id, kept.id], tombstones: [deleted]))
+        XCTAssertEqual(
+            BackupPushGuard.decision(outgoing: snapshot([kept, c]), baseline: accepted),
+            .push(snapshot([kept, c], tombstones: [deleted]))
+        )
+        XCTAssertEqual(
+            BackupPushGuard.decision(outgoing: snapshot([kept]), baseline: accepted),
+            .withholdRecords(snapshot([kept], tombstones: [deleted]), unexplained: [c.id])
+        )
+    }
+
     func test_manifestOfAPushedSnapshot_recordsItsIDsAndTombstones() throws {
         let a = record(), deleted = UUID()
         let manifest = BackupManifest(pushed: snapshot([a], tombstones: [deleted]))

@@ -434,7 +434,7 @@ struct PhoneStatsStoreTests {
         #expect(fixture.makeStore().archiveProblem == .undecodable)
     }
 
-    @Test func manualImportWhileSuspendedFailsInsteadOfClaimingSuccess() throws {
+    @Test func manualMergeWhileSuspendedFailsInsteadOfClaimingSuccess() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let original = try archiveFromNewerBuild()
@@ -442,8 +442,10 @@ struct PhoneStatsStoreTests {
         let store = fixture.makeStore()
         let archive = try ManualMatchArchiveBackup.encode(records: [record()])
 
+        // A Merge into an archive that couldn't be loaded would hide that the
+        // damaged matches aren't in it, so it stays refused.
         #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
-            try store.importManualArchive(data: archive, mode: .replace)
+            try store.importManualArchive(data: archive, mode: .merge)
         }
         #expect(store.loadHistory().isEmpty)
         #expect(try Data(contentsOf: fixture.historyURL) == original)
@@ -562,5 +564,182 @@ struct PhoneStatsStoreTests {
 
         #expect(await pushNow(store) == false)
         #expect(try backupIDs(fixture) == [existing.id, added.id])
+    }
+
+    // MARK: - Recovery (TECHNICAL_DEBT #18, stage 3)
+
+    /// Every file recovery kept under `MatchArchive/Recovered/<time>/`.
+    private func recoveredFiles(_ fixture: Fixture) throws -> [URL] {
+        let root = fixture.canonical.appendingPathComponent("Recovered", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: root.path) else { return [] }
+        return try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+            .flatMap { try FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil) }
+    }
+
+    @Test func confirmedReplaceImportRecoversASuspendedArchiveAndKeepsACopy() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try archiveFromNewerBuild()
+        try original.write(to: fixture.historyURL)
+        let store = fixture.makeStore()
+        let replacement = record()
+
+        // Stage 1 refused this; a confirmed Replace is now a way out.
+        try store.importManualArchive(data: ManualMatchArchiveBackup.encode(records: [replacement]), mode: .replace)
+
+        #expect(await MainActor.run { store.archiveProblem } == nil)
+        #expect(store.loadHistory().map(\.id) == [replacement.id])
+        #expect(try JSONDecoder().decode([MatchRecord].self, from: Data(contentsOf: fixture.historyURL)).map(\.id) == [replacement.id])
+        let kept = try recoveredFiles(fixture)
+        #expect(kept.map(\.lastPathComponent) == ["matchHistory.json"])
+        #expect(try Data(contentsOf: kept[0]) == original)
+    }
+
+    @Test func tryAgainLoadsTheArchiveOnceReadableAndKeepsWhatArrivedMeanwhile() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(at: fixture.historyURL, withIntermediateDirectories: true)
+        let store = fixture.makeStore()
+        #expect(store.archiveProblem == .unreadable)
+        let arrived = record()
+        store.appendMatch(arrived) // in memory only while suspended
+
+        // The temporary problem clears: the real archive is readable again.
+        let saved = record()
+        try FileManager.default.removeItem(at: fixture.historyURL)
+        try encode([saved.strippingHealthData()], to: fixture.historyURL)
+
+        #expect(await store.retryArchiveLoad() == nil)
+        #expect(await MainActor.run { store.archiveProblem } == nil)
+        #expect(Set(store.loadHistory().map(\.id)) == [saved.id, arrived.id])
+        let onDisk = try JSONDecoder().decode([MatchRecord].self, from: Data(contentsOf: fixture.historyURL))
+        #expect(Set(onDisk.map(\.id)) == [saved.id, arrived.id])
+    }
+
+    @Test func tryAgainThatStillFailsChangesNothing() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try archiveFromNewerBuild()
+        try original.write(to: fixture.historyURL)
+        let store = fixture.makeStore()
+        let arrived = record()
+        store.appendMatch(arrived)
+
+        #expect(await store.retryArchiveLoad() == .undecodable)
+        #expect(await MainActor.run { store.archiveProblem } == .undecodable)
+        #expect(store.loadHistory().map(\.id) == [arrived.id])
+        #expect(try Data(contentsOf: fixture.historyURL) == original)
+    }
+
+    @Test func saveACopySharesThePreservedFilesAndLeavesThemInPlace() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try archiveFromNewerBuild()
+        try original.write(to: fixture.historyURL)
+        try encode([UUID()], to: fixture.tombstoneURL)
+        let store = fixture.makeStore()
+
+        let copies = try store.copyPreservedArchiveForSharing()
+        defer { copies.forEach { try? FileManager.default.removeItem(at: $0.deletingLastPathComponent()) } }
+
+        #expect(Set(copies.map(\.lastPathComponent)) == ["matchHistory.json", "deletedMatchIDs.json"])
+        let historyCopy = try #require(copies.first { $0.lastPathComponent == "matchHistory.json" })
+        #expect(try Data(contentsOf: historyCopy) == original)
+        #expect(try Data(contentsOf: fixture.historyURL) == original)
+        #expect(store.archiveProblem == .undecodable)
+    }
+
+    @Test func restoreFromICloudReplacesAnUndecodableArchiveAndKeepsACopy() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try archiveFromNewerBuild()
+        try original.write(to: fixture.historyURL)
+        // The backup is health-stripped; the local sidecar still has the values.
+        let backedUp = record()
+        try encode(HealthSidecarPolicy.split([backedUp]).health, to: fixture.healthURL)
+        try FileManager.default.createDirectory(at: fixture.backup, withIntermediateDirectories: true)
+        try encode([backedUp.strippingHealthData()], to: fixture.backupHistoryURL)
+        try encode([UUID](), to: fixture.backupTombstoneURL)
+        let store = try fixture.makeBackingUpStore()
+        #expect(store.archiveProblem == .undecodable)
+        let arrived = record()
+        store.appendMatch(arrived)
+
+        guard case .available(let preview, let newer) = await store.iCloudRestoreOffer() else {
+            Issue.record("expected the backup to be offered")
+            return
+        }
+        #expect(preview.recordCount == 1)
+        #expect(newer == 0)
+
+        #expect(try await store.restoreArchiveFromICloud() == 2)
+        #expect(await MainActor.run { store.archiveProblem } == nil)
+        let restored = store.loadHistory()
+        #expect(Set(restored.map(\.id)) == [backedUp.id, arrived.id])
+        #expect(restored.first { $0.id == backedUp.id }?.totalSteps == 1_234)
+        let kept = try recoveredFiles(fixture)
+        #expect(try Data(contentsOf: #require(kept.first { $0.lastPathComponent == "matchHistory.json" })) == original)
+        // Saving and backing up resume.
+        #expect(await pushNow(store) == false)
+        #expect(try backupIDs(fixture) == [backedUp.id, arrived.id])
+    }
+
+    @Test func restoreOfferExplainsAMissingBackupAndChangesNothing() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try archiveFromNewerBuild()
+        try original.write(to: fixture.historyURL)
+        let store = try fixture.makeBackingUpStore()
+
+        #expect(await store.iCloudRestoreOffer() == .noBackup)
+        await #expect(throws: PhoneStatsStore.RecoveryError.backupUnavailable) {
+            try await store.restoreArchiveFromICloud()
+        }
+        #expect(try Data(contentsOf: fixture.historyURL) == original)
+        #expect(try recoveredFiles(fixture).isEmpty)
+    }
+
+    /// The `unexplainedLossKeepsTheBackupsRecords` setup: the backup holds
+    /// `kept` and `lost`, the archive only `kept`, and nothing explains it.
+    private func withheldSetup(_ fixture: Fixture) async throws -> (PhoneStatsStore, kept: MatchRecord, lost: MatchRecord, backupBytes: Data) {
+        let kept = record(), lost = record()
+        try encode([kept.strippingHealthData()], to: fixture.historyURL)
+        try encode(BackupManifest(recordIDs: [kept.id, lost.id], tombstones: []), to: fixture.manifestURL)
+        try FileManager.default.createDirectory(at: fixture.backup, withIntermediateDirectories: true)
+        let backupBytes = try JSONEncoder().encode([kept.strippingHealthData(), lost.strippingHealthData()])
+        try backupBytes.write(to: fixture.backupHistoryURL)
+        let store = try fixture.makeBackingUpStore()
+        #expect(await pushNow(store) == true)
+        #expect(await MainActor.run { store.withheldBackupMatchCount } == 1)
+        return (store, kept, lost, backupBytes)
+    }
+
+    @Test func bringBackRestoresTheWithheldMatchesAndResumesTheBackup() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let (store, kept, lost, _) = try await withheldSetup(fixture)
+
+        let result = try await store.bringBackWithheldMatches()
+
+        #expect(result.restored == 1 && result.stillMissing == 0)
+        #expect(Set(store.loadHistory().map(\.id)) == [kept.id, lost.id])
+        #expect(await MainActor.run { store.isBackupWithheld } == false)
+        #expect(try backupIDs(fixture) == [kept.id, lost.id])
+    }
+
+    @Test func removeFromBackupLetsOnlyTheWithheldMatchesGoAndKeepsACopy() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let (store, kept, _, backupBytes) = try await withheldSetup(fixture)
+
+        try await store.removeWithheldMatchesFromBackup()
+
+        #expect(await MainActor.run { store.isBackupWithheld } == false)
+        #expect(try backupIDs(fixture) == [kept.id])
+        let copy = try #require(try recoveredFiles(fixture).first)
+        #expect(copy.lastPathComponent == "iCloud-matchHistory.json")
+        #expect(try Data(contentsOf: copy) == backupBytes)
+        // The archive itself is untouched: removing from the backup is not a delete.
+        #expect(store.loadHistory().map(\.id) == [kept.id])
     }
 }

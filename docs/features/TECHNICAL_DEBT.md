@@ -53,7 +53,7 @@ when the item should constrain future changes.
 
 | # | Area | Item | Application risk | Work band / trigger | Effort |
 |---|------|------|------------------|---------------------|--------|
-| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | Stages 1–2 landed (iPhone fails closed; all six enums pinned; iCloud push floor). Remaining: recovery, open enums | Recovery needs product decisions; open enums before the next persisted-enum case | Medium, staged |
+| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | Stages 1–3 landed (iPhone fails closed; all six enums pinned; iCloud push floor; recovery actions). Remaining: open enums | Open enums before the next persisted-enum case (with #19) | Medium, staged |
 | [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | **High** | **Now**, in the persistence-safety programme | Medium — PR #108 exists to re-read |
 | [27](#27--prevent-unrecorded-fitness-workouts-with-manager-tests-and-crash-recovery) | Health / Reliability | Prevent unrecorded Fitness workouts with manager tests and crash recovery | High impact when a workout is lost; remaining likelihood unverified | **Now**; physical-Watch save/sync checks before release | Medium, staged |
 | [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | **High when schemas diverge** | **Before any persisted-model, enum, or wire-shape change** | Medium |
@@ -385,19 +385,63 @@ Release.
   `BackupPushGuardTests`. With the guard disabled, exactly the two lost-match
   store tests fail.
 
-**Remaining, in order:**
+**Status — stage 3 implemented (21 November 2026): explicit recovery.**
 
-1. **Explicit recovery** from the notice: restore from the iCloud backup (now
-   protected), recover readable matches with an element-wise decode that reports
-   counts, or start a new archive with a confirmation. Needs #19's version
-   diagnosis to call a newer-format file what it is. It should also give a way
-   out of a withheld push: today that state lasts until the lost matches come
-   back or a Replace import accepts their loss.
-2. **Open enums.** The standard root fix for "one unknown value fails the whole
+Every way out is a deliberate action on the archive screen, and each one that
+replaces something copies it first, to `MatchArchive/Recovered/<time>/` on the
+iPhone. Nothing is deleted. Copy lives in Core's `ArchiveRecovery.swift`.
+
+- **Couldn't be opened (`unreadable`, often temporary): Try Again.**
+  `retryArchiveLoad()` reads the files again. Anything that arrived while writes
+  were suspended (Watch syncs, deletions) is kept on top of what loads. If the
+  read still fails, nothing changes.
+- **Couldn't be read (`undecodable`): Restore from iCloud, or Save a Copy.**
+  Restore shows the backup's match count and newest date, then asks. It combines
+  the backup with what this iPhone holds in memory (`ArchiveBackupPolicy.initialRestore`),
+  puts the local Health sidecar's values back, and copies the preserved files
+  aside before writing. Save a Copy shares the untouched files.
+- **A confirmed Replace import is now also a way out.** It copies the preserved
+  files aside, then replaces them. A Merge into an unloaded archive is still
+  refused, because it would hide that the damaged matches aren't in it. This
+  deliberately changes a stage 1 test (`manualImportWhileSuspended…` became
+  `manualMergeWhileSuspended…`).
+- **Withheld push: Bring Them Back, or Remove from Backup.** The notice states
+  how many matches are in the backup but not on the iPhone
+  (`withheldBackupMatchCount`). Bring Them Back merges them from the backup.
+  Remove from Backup asks first, copies the backup's record file to the iPhone,
+  then rewrites the manifest with `BackupManifest.acceptingLoss(of:)`. Only those
+  ids stop being protected: a later loss is still withheld, and no tombstone is
+  written, so the Watch can still sync them back.
+- **Backups are read one match at a time** (`LenientRecordList`). A match from a
+  newer build no longer stops every other match from coming back. Skipped
+  matches are counted and reported, and they stay in the backup because the
+  push guard still protects them. The backup's tombstones and ledger must still
+  read cleanly, or the restore is refused, since it could bring back a deletion.
+- **Tests:** the pure parts are in `ArchiveRecoveryTests` and
+  `BackupPushGuardTests`. `PhoneStatsStoreTests` runs every action against real
+  files and a local folder standing in for iCloud. Disabling the copy-aside or
+  the keep-what-arrived merge fails the matching store tests.
+
+**Not done, deliberately:**
+
+- **Salvaging the readable matches from the damaged local file itself.**
+  `LenientRecordList` could do it, but it is lossy. The defaults above were
+  chosen instead: Restore from iCloud, a backup file, or an update to
+  DeuceMate. Revisit this if a user has no backup at all.
+- **The `Recovered/` folder is never cleaned up** and isn't shown in the app.
+  It is small (ids, scores and tags; never Health data) and it exists only after
+  a recovery.
+- **Not checked on a device:** real iCloud downloads and upload state, and two
+  iPhones on one Apple ID.
+
+**Remaining:**
+
+1. **Open enums.** The standard root fix for "one unknown value fails the whole
    file": decode unknown raw values as a preserved `unknown(String)` (Protocol
    Buffers' open enums) instead of throwing. `CompetitionType` already follows
-   this raw-string pattern. Do this before the next persisted enum gains a case.
-   It removes the most likely trigger; stages 1–2 still cover any other damage.
+   this raw-string pattern. Do this before the next persisted enum gains a case,
+   together with #19's version diagnosis. It removes the most likely trigger;
+   stages 1–3 still cover any other damage.
 
 **Key files:** `ScoreTypes.swift`, `PointStat.swift`, `StatsStore.swift`,
 `PhoneStatsStore.swift` (`readCanonicalFile`, `pushBackupOnQueue`),

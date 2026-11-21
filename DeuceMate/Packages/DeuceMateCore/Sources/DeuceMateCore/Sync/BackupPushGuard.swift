@@ -40,6 +40,13 @@ public struct BackupManifest: Codable, Equatable, Sendable {
     public init(pushed snapshot: ArchiveBackupPolicy.Snapshot) {
         self.init(recordIDs: Set(snapshot.records.map(\.id)), tombstones: snapshot.tombstones)
     }
+
+    /// The user confirmed these matches may leave the backup ("Remove from
+    /// Backup"). Only these ids stop being protected: a loss that appears
+    /// later is still withheld, and the backup's deletions are kept.
+    public func acceptingLoss(of ids: Set<UUID>) -> BackupManifest {
+        BackupManifest(recordIDs: recordIDs.subtracting(ids), tombstones: tombstones)
+    }
 }
 
 public enum BackupPushDecision: Equatable, Sendable {
