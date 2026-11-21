@@ -1277,11 +1277,20 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     /// Test hook exercising `pushBackupOnQueue` against a local container directory
     /// without relying on a live iCloud ubiquity session.
-    func pushBackupForTesting(to containerURL: URL, retriesRemaining: Int = 0) {
+    func pushBackupForTesting(
+        to containerURL: URL,
+        retriesRemaining: Int = 0,
+        identityToken: AnyHashable? = FileManager.default.ubiquityIdentityToken as? AnyHashable
+    ) {
         queue.sync {
             let historyURL = containerURL.appendingPathComponent(Self.historyFilename)
             let tombstoneURL = containerURL.appendingPathComponent(Self.tombstoneFilename)
-            pushBackupOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL, retriesRemaining: retriesRemaining)
+            pushBackupOnQueue(
+                historyURL: historyURL,
+                tombstoneURL: tombstoneURL,
+                retriesRemaining: retriesRemaining,
+                currentToken: identityToken
+            )
         }
     }
 
@@ -1291,14 +1300,22 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         case withholdNewerSchema
     }
 
-    private func pushBackupOnQueue(historyURL: URL, tombstoneURL: URL, retriesRemaining: Int = 0) {
-        let currentToken = FileManager.default.ubiquityIdentityToken as? AnyHashable
+    private func pushBackupOnQueue(
+        historyURL: URL,
+        tombstoneURL: URL,
+        retriesRemaining: Int = 0,
+        currentToken: AnyHashable? = FileManager.default.ubiquityIdentityToken as? AnyHashable
+    ) {
         let snapshot = backupSnapshotOnQueue()
         guard snapshot != lastPushedSnapshot || currentToken != lastPushedIdentityToken else {
             // Content unchanged — still read the upload status so the indicator
             // stays current (the daemon may have finished uploading since last check).
             readUploadStatusOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL)
             return
+        }
+        if currentToken != lastPushedIdentityToken {
+            lastPushedSnapshot = nil
+            lastPushedIdentityToken = nil
         }
         do {
             // Deletion intent first, so a partially pushed backup never pairs
@@ -1307,7 +1324,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             try coordinatedWriteBackup(snapshot.forgottenPlayers, to: Self.backupLedgerURL(besides: historyURL))
             try coordinatedWriteBackup(Array(snapshot.tombstones), to: tombstoneURL)
             let baselineIDs: Set<UUID>
-            switch baselineRecordIDsForBackupPush(at: historyURL) {
+            switch baselineRecordIDsForBackupPush(at: historyURL, currentToken: currentToken) {
             case .ids(let ids):
                 baselineIDs = ids
             case .deferDownloading:
@@ -1344,8 +1361,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         }
     }
 
-    private func baselineRecordIDsForBackupPush(at historyURL: URL) -> BackupBaseline {
-        if let lastPushedSnapshot {
+    private func baselineRecordIDsForBackupPush(
+        at historyURL: URL,
+        currentToken: AnyHashable?
+    ) -> BackupBaseline {
+        if let lastPushedSnapshot, currentToken == lastPushedIdentityToken {
             return .ids(Set(lastPushedSnapshot.records.map(\.id)))
         }
         switch backupFileState(at: historyURL) {

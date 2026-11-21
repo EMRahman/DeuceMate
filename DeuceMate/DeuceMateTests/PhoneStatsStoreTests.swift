@@ -432,4 +432,38 @@ struct PhoneStatsStoreTests {
         #expect(FileManager.default.fileExists(atPath: backupHistoryURL.path, isDirectory: &isDirectory))
         #expect(isDirectory.boolValue)
     }
+
+    @Test func backupPushReevaluatesDestinationBaselineWhenICloudIdentityChanges() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let accountAContainer = fixture.root.appendingPathComponent("iCloudA", isDirectory: true)
+        let accountBContainer = fixture.root.appendingPathComponent("iCloudB", isDirectory: true)
+        try FileManager.default.createDirectory(at: accountAContainer, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: accountBContainer, withIntermediateDirectories: true)
+
+        let matchA = record()
+        let matchB = record()
+
+        let store = fixture.makeStore()
+        store.saveHistory([matchA])
+        store.pushBackupForTesting(to: accountAContainer, identityToken: "account-a")
+
+        let accountBHistoryURL = accountBContainer.appendingPathComponent("matchHistory.json")
+        let existingAccountBData = try PersistedArchiveCodec.encodeEnvelope(
+            [matchA, matchB],
+            format: PersistedArchiveCodec.historyFormat
+        )
+        try existingAccountBData.write(to: accountBHistoryURL)
+
+        store.pushBackupForTesting(to: accountBContainer, identityToken: "account-b")
+
+        let persistedBytes = try Data(contentsOf: accountBHistoryURL)
+        #expect(persistedBytes == existingAccountBData)
+        let decoded = try PersistedArchiveCodec.decode(
+            [MatchRecord].self,
+            from: persistedBytes,
+            expectedFormat: PersistedArchiveCodec.historyFormat
+        )
+        #expect(Set(decoded.map(\.id)) == Set([matchA.id, matchB.id]))
+    }
 }
