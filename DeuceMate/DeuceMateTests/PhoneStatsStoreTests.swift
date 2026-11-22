@@ -937,4 +937,47 @@ struct PhoneStatsStoreTests {
         #expect(try Data(contentsOf: accountB.appendingPathComponent("matchHistory.json")) == accountBBytes)
         #expect(await MainActor.run { store.isBackupWithheld } == false)
     }
+
+    @Test func interruptedDeleteReplaysPersistedTombstonesOnRelaunch() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let kept = record(health: false)
+        let deleted = record(health: false)
+        // Simulate a crash after writing deletedMatchIDs.json but before rewriting matchHistory.json.
+        try encode([kept, deleted], to: fixture.historyURL)
+        try encode([deleted.id], to: fixture.tombstoneURL)
+
+        let store = fixture.makeStore()
+        #expect(store.archiveProblem == nil)
+        #expect(store.loadHistory().map(\.id) == [kept.id])
+        let persisted = try JSONDecoder().decode([MatchRecord].self, from: Data(contentsOf: fixture.historyURL))
+        #expect(persisted.map(\.id) == [kept.id])
+    }
+
+    @Test func bringBackWithheldMatchesFiltersExistingLocalRecordsMatchingRemoteTombstones() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let kept = record(health: false)
+        let deletedRemotely = record(health: false)
+        let withheld = record(health: false)
+
+        try encode([kept, deletedRemotely], to: fixture.historyURL)
+        try encode([UUID](), to: fixture.tombstoneURL)
+        try encode(
+            BackupManifest(recordIDs: [kept.id, deletedRemotely.id, withheld.id], tombstones: [], identityKey: "account-a"),
+            to: fixture.manifestURL
+        )
+        try FileManager.default.createDirectory(at: fixture.backup, withIntermediateDirectories: true)
+        try encode([kept, withheld], to: fixture.backupHistoryURL)
+        try encode([deletedRemotely.id], to: fixture.backupTombstoneURL)
+
+        let store = try fixture.makeBackingUpStore(startsICloudSync: false)
+        #expect(await pushNow(store) == true)
+
+        let result = try await store.bringBackWithheldMatches()
+        #expect(result.restored == 1 && result.stillMissing == 0)
+        #expect(Set(store.loadHistory().map(\.id)) == [kept.id, withheld.id])
+        let persistedTombstones = try JSONDecoder().decode([UUID].self, from: Data(contentsOf: fixture.tombstoneURL))
+        #expect(Set(persistedTombstones) == [deletedRemotely.id])
+    }
 }

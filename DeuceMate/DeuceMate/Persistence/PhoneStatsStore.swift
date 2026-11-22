@@ -840,7 +840,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             let merged = mergedForgotten.scrubbed(
                 MatchMergePolicy.merge(
                     incoming: found,
-                    into: self.records,
+                    into: self.records.filter { !mergedTombstones.contains($0.id) },
                     tombstones: mergedTombstones,
                     forgottenPlayers: mergedForgotten
                 ),
@@ -1345,18 +1345,22 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
         let loadedHadHealth = !HealthSidecarPolicy.split(loadedRecords).health.isEmpty
         let merged = HealthSidecarPolicy.merge(stripped: loadedRecords, health: health)
-        // The ledger is written before the archive, so an interrupted forget
-        // can leave an older archive still naming the player; finish it here.
-        let scrubbed = forgotten.scrubbed(merged, now: Date())
-        let neededScrub = scrubbed != merged
+        // Deletion intent (`forgottenPlayers` and `deletedMatchIDs`) is written
+        // BEFORE `matchHistory.json`, so an interrupted delete or forget can
+        // leave an older `matchHistory.json` still containing a tombstoned
+        // match or forgotten player; replay both here before publishing.
+        let withoutDeleted = merged.filter { !tombstones.contains($0.id) }
+        let neededTombstoneReplay = withoutDeleted.count != merged.count
+        let scrubbed = forgotten.scrubbed(withoutDeleted, now: Date())
+        let neededScrub = scrubbed != withoutDeleted
         records = Self.sortedNewestFirst(scrubbed)
 
         // The pre-sidecar canonical file was full-fidelity. Content detection is
         // the migration marker: once rewritten successfully, the main file has
         // no Health fields and this path never runs again.
-        if loadedHadHealth || neededScrub {
+        if loadedHadHealth || neededTombstoneReplay || neededScrub {
             if writeCanonicalOnQueue(records: records, tombstones: tombstones, forgotten: forgotten) {
-                phoneStoreLogger.notice("Migrated canonical archive to the backup-excluded Health sidecar")
+                phoneStoreLogger.notice("Reconciled canonical archive with Health sidecar and deletion ledgers")
             }
         }
 
