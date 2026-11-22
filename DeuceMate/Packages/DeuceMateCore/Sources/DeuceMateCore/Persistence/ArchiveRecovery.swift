@@ -123,6 +123,21 @@ public enum ArchiveRecoveryCopy {
     public static let saveCopyFailedMessage = "DeuceMate couldn't copy the files. They're still on this iPhone, untouched."
 }
 
+/// Alerts when the user's own save or permanent delete couldn't be written
+/// (manual entry, End at Current Score, Delete Permanently). The store rolls
+/// the change back, so the copy only ever says nothing changed — and, while
+/// the archive is suspended, points at the notice that explains why.
+public enum ArchiveSaveFailureCopy {
+    public static let matchNotSavedTitle = "Match Not Saved"
+    public static let matchNotDeletedTitle = "Match Not Deleted"
+
+    public static func message(savingPaused: Bool) -> String {
+        savingPaused
+            ? "Saving is paused until the problem described on the Matches screen is resolved. Nothing has been changed."
+            : "This iPhone couldn't save the change. Nothing has been changed. Try again, or restart DeuceMate if this keeps happening."
+    }
+}
+
 /// The notice, buttons and results when a backup push was withheld because
 /// matches left this iPhone with no deletion or Replace to explain it.
 public enum BackupWithheldCopy {

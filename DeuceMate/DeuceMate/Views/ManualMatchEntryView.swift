@@ -46,6 +46,8 @@ struct ManualMatchEntryView: View {
     @State private var currentServer: Player = .me
     @State private var doublesServer: DoublesServer = .me
     @State private var isOnSecondServe: Bool = false
+    /// Why Save didn't save; the form stays open with everything entered.
+    @State private var saveFailure: String?
 
     private var currentSetIndex: Int { completedSetCount }
     private var isDecidingSet: Bool { currentSetIndex == 2 }
@@ -113,6 +115,14 @@ struct ManualMatchEntryView: View {
             .onChange(of: currentGamesMe) { _, _ in resetTiebreakIfLeftSixAll() }
             .onChange(of: currentGamesOpp) { _, _ in resetTiebreakIfLeftSixAll() }
             .navigationTitle("Manual Entry")
+            .alert(
+                ArchiveSaveFailureCopy.matchNotSavedTitle,
+                isPresented: Binding(get: { saveFailure != nil }, set: { if !$0 { saveFailure = nil } })
+            ) {
+                Button("OK") {}
+            } message: {
+                Text(saveFailure ?? "")
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -273,7 +283,13 @@ struct ManualMatchEntryView: View {
 
     private func save() {
         guard let record = buildRecord() else { return }
-        store.appendMatch(record)
+        // Only a match that is on disk is sent to the Watch or reported as saved.
+        do {
+            try store.commitMatch(record)
+        } catch {
+            saveFailure = ArchiveSaveFailureCopy.message(savingPaused: store.archiveProblem != nil)
+            return
+        }
         syncService.sendManualMatch(record)
         dismiss()
     }

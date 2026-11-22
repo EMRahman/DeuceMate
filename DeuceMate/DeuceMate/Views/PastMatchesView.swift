@@ -73,6 +73,10 @@ struct PastMatchesView: View {
     @State private var showRestorePrompt = false
     @State private var recovery = ArchiveRecoveryModel()
     @State private var pendingDelete: PendingDelete?
+    /// Why a permanent delete didn't happen; the match is still listed. Shown
+    /// in the confirmation popover itself, because an alert presented while
+    /// that popover is closing may never appear.
+    @State private var deleteFailure: String?
     @State private var matchRowFrameCache = MatchRowFrameCache()
     // Retain the origin through dismissal; clearing the pending item must not
     // move the popover's source while its dismissal animation is still running.
@@ -238,6 +242,8 @@ struct PastMatchesView: View {
                     Image(systemName: "square.and.pencil")
                 }
                 .accessibilityLabel("Manual match entry")
+                // Saving is paused; the notice above the list explains why.
+                .disabled(store.archiveProblem != nil)
             }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -528,44 +534,73 @@ struct PastMatchesView: View {
     @ViewBuilder
     private func permanentDeletePopover(for pending: PendingDelete) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("Delete permanently?", systemImage: "exclamationmark.triangle.fill")
-                .font(.headline)
-                .foregroundStyle(.red)
-
-            Group {
-                if pending.onWatch {
-                    Text("This deletes the match from iPhone and Apple Watch for good — this can't be undone.")
-                } else {
-                    Text("This deletes the match from iPhone for good — this can't be undone.")
-                }
+            if let deleteFailure {
+                permanentDeleteFailure(deleteFailure)
+            } else {
+                permanentDeleteConfirmation(for: pending)
             }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-
-            Divider()
-
-            Button(role: .destructive) {
-                performPermanentDelete(pending)
-            } label: {
-                Text("Delete Permanently")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
-
-            Button(role: .cancel) {
-                pendingDelete = nil
-            } label: {
-                Text("Cancel")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
         }
         .padding()
         .frame(width: 320)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("permanent-delete-popover")
         .presentationCompactAdaptation(.popover)
+        .onDisappear { deleteFailure = nil }
+    }
+
+    @ViewBuilder
+    private func permanentDeleteFailure(_ message: String) -> some View {
+        Label(ArchiveSaveFailureCopy.matchNotDeletedTitle, systemImage: "exclamationmark.triangle.fill")
+            .font(.headline)
+            .foregroundStyle(.orange)
+        Text(message)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        Button {
+            pendingDelete = nil
+        } label: {
+            Text("OK")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .accessibilityIdentifier("permanent-delete-failure-ok")
+    }
+
+    @ViewBuilder
+    private func permanentDeleteConfirmation(for pending: PendingDelete) -> some View {
+        Label("Delete permanently?", systemImage: "exclamationmark.triangle.fill")
+            .font(.headline)
+            .foregroundStyle(.red)
+
+        Group {
+            if pending.onWatch {
+                Text("This deletes the match from iPhone and Apple Watch for good — this can't be undone.")
+            } else {
+                Text("This deletes the match from iPhone for good — this can't be undone.")
+            }
+        }
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+
+        Divider()
+
+        Button(role: .destructive) {
+            performPermanentDelete(pending)
+        } label: {
+            Text("Delete Permanently")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(.red)
+
+        Button(role: .cancel) {
+            pendingDelete = nil
+        } label: {
+            Text("Cancel")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
     }
 
     /// Resolves a row's storage location from the phone archive and the watch
@@ -677,7 +712,15 @@ struct PastMatchesView: View {
     /// Permanent deletion: drop the phone's retained copy and, when the match is
     /// also on the watch, issue the watch-side delete so it can't re-sync back.
     private func performPermanentDelete(_ pending: PendingDelete) {
-        store.deletePermanently(id: pending.record.id)
+        // All-or-nothing: if the tombstone can't be written, keep the note and
+        // don't delete on the Watch, or a relaunch would show a match the
+        // Watch no longer has while its note is gone.
+        do {
+            try store.commitPermanentDeletion(id: pending.record.id)
+        } catch {
+            deleteFailure = ArchiveSaveFailureCopy.message(savingPaused: store.archiveProblem != nil)
+            return
+        }
         // Permanent deletion also removes the match's private note (§4.1). If
         // the notes file is unreadable it is left untouched rather than
         // rewritten; the orphaned entry is harmless and never displayed.

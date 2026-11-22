@@ -89,4 +89,12 @@ final class ArchiveRecoveryTests: XCTestCase {
         XCTAssertTrue(BackupWithheldCopy.failedMessage.contains("Nothing has been changed"))
         XCTAssertTrue(ArchiveRecoveryCopy.stillUnavailableMessage.contains("Nothing has been changed"))
     }
+
+    func testSaveFailureCopySaysNothingChangedAndNamesThePauseOnlyWhenPaused() {
+        for paused in [true, false] {
+            XCTAssertTrue(ArchiveSaveFailureCopy.message(savingPaused: paused).contains("Nothing has been changed"))
+        }
+        XCTAssertTrue(ArchiveSaveFailureCopy.message(savingPaused: true).contains("Saving is paused"))
+        XCTAssertFalse(ArchiveSaveFailureCopy.message(savingPaused: false).contains("paused"))
+    }
 }

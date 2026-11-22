@@ -280,16 +280,33 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// own clocks — the caller's copy may predate an edit made while it was open.
     func appendMatch(_ record: MatchRecord) {
         queue.sync {
-            var updated = records
-            let prior = updated.first(where: { $0.id == record.id })
-            updated.removeAll { $0.id == record.id }
-            let merged = record
-                .mergingResumeEvents(prior?.resumeEvents ?? [])
-                .mergingTags(prior?.tags)
-                .mergingMatchTypeRevision(prior?.matchTypeRevision)
-            updated.append(forgotten.scrubbed(merged, now: Date()))
-            adoptOnQueue(records: updated, tombstones: tombstones)
+            adoptOnQueue(records: recordsAppendingOnQueue(record), tombstones: tombstones)
         }
+    }
+
+    /// The user's own save (manual entry, End at Current Score), all-or-nothing
+    /// like a tag edit: if the canonical files can't be written (storage
+    /// failed, or saving is paused by `archiveProblem`), the archive is rolled
+    /// back and `TagEditError.notPersisted` is thrown, so the caller neither
+    /// reports success nor sends the match to the Watch (TECHNICAL_DEBT #18).
+    /// `appendMatch` stays the background path, whose in-memory result
+    /// "Try Again" keeps.
+    func commitMatch(_ record: MatchRecord) throws {
+        try queue.sync {
+            try commitUserEditOnQueue(records: recordsAppendingOnQueue(record))
+        }
+    }
+
+    private func recordsAppendingOnQueue(_ record: MatchRecord) -> [MatchRecord] {
+        var updated = records
+        let prior = updated.first(where: { $0.id == record.id })
+        updated.removeAll { $0.id == record.id }
+        let merged = record
+            .mergingResumeEvents(prior?.resumeEvents ?? [])
+            .mergingTags(prior?.tags)
+            .mergingMatchTypeRevision(prior?.matchTypeRevision)
+        updated.append(forgotten.scrubbed(merged, now: Date()))
+        return updated
     }
 
     /// Pull a watch-only match into the durable archive ("Sync to iPhone"). A
@@ -326,6 +343,22 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// watch space without discarding the archive copy is a watch-side delete issued
     /// via `PhoneMatchSyncService.sendDeleteMatchOnWatch(_:)`, not a store operation.
     func removeMatch(id: UUID) { deletePermanently(id: id) }
+
+    /// The user's permanent delete, all-or-nothing: the record and its
+    /// tombstone are either both on disk or both rolled back, and a failure
+    /// throws `TagEditError.notPersisted`. The caller must then keep the
+    /// match's note and must not send the Watch-side delete, or the match
+    /// could be gone from the Watch while a relaunch still shows it here.
+    func commitPermanentDeletion(id: UUID) throws {
+        try queue.sync {
+            var updatedTombstones = tombstones
+            updatedTombstones.insert(id)
+            try commitUserEditOnQueue(
+                records: records.filter { $0.id != id },
+                tombstones: updatedTombstones
+            )
+        }
+    }
 
     // MARK: - Match tags (MATCH_TAGS_PLAN.md §4–§6)
 
@@ -590,12 +623,15 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// direction — but success is never reported for one that isn't durable.)
     private func commitUserEditOnQueue(
         records newRecords: [MatchRecord],
+        tombstones newTombstones: Set<UUID>? = nil,
         forgotten newForgotten: ForgottenPlayerLedger? = nil
     ) throws {
         let previousRecords = records
+        let previousTombstones = tombstones
         let previousForgotten = forgotten
-        guard adoptOnQueue(records: newRecords, tombstones: tombstones, forgotten: newForgotten) else {
+        guard adoptOnQueue(records: newRecords, tombstones: newTombstones ?? tombstones, forgotten: newForgotten) else {
             records = previousRecords
+            tombstones = previousTombstones
             forgotten = previousForgotten
             publishOnQueue()
             throw TagEditError.notPersisted
@@ -715,9 +751,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     }
 
     /// Reads the canonical files again ("Try Again"). Anything that arrived
-    /// while writes were suspended (Watch syncs, deletions) is kept on top of
-    /// what loads. Returns the problem that remains, nil when the archive is
-    /// back to normal and saving again.
+    /// while writes were suspended (Watch syncs) is kept on top of what loads.
+    /// Returns the problem that remains, nil only when the archive and what
+    /// was held are saved and backing up again. The user's own saves and
+    /// deletions are refused while suspended (`commitMatch`,
+    /// `commitPermanentDeletion`), so they are never held here.
     func retryArchiveLoad() async -> ArchiveLoadProblem? {
         await onQueue { self.retryArchiveLoadOnQueue() }
     }
@@ -872,7 +910,13 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             forgottenPlayers: forgotten
         )
         if canonicalSuspension == nil {
-            adoptOnQueue(records: combined, tombstones: tombstones)
+            // The files loaded, but saving them together with what arrived
+            // meanwhile failed (storage full, say). Stay paused rather than
+            // report recovery: an unsaved archive must not be backed up, and
+            // the next Try Again reloads the files and keeps what's held here.
+            if !adoptOnQueue(records: combined, tombstones: tombstones) {
+                canonicalSuspension = .unreadable
+            }
         } else {
             records = Self.sortedNewestFirst(combined)
             publishOnQueue()

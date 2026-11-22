@@ -51,6 +51,8 @@ struct MatchDetailView: View {
     /// handing out; deleted when that sheet closes (`releaseHeldExports`).
     @State private var exportGenerationsHeldByShare: Set<ExportStaging.Generation> = []
     @State private var showEndAtCurrentScoreConfirmation = false
+    /// Why End at Current Score didn't save; the report stays open.
+    @State private var endAtCurrentScoreFailure: String?
     @State private var showMatchInfoEditor = false
     @State private var showNotesEditor = false
     /// Share-menu choices for the TEXT and HTML reports (MATCH_TAGS_PLAN.md
@@ -919,6 +921,17 @@ struct MatchDetailView: View {
         .sheet(isPresented: $showAICoachSheet) {
             aiCoachSheet
         }
+        .alert(
+            ArchiveSaveFailureCopy.matchNotSavedTitle,
+            isPresented: Binding(
+                get: { endAtCurrentScoreFailure != nil },
+                set: { if !$0 { endAtCurrentScoreFailure = nil } }
+            )
+        ) {
+            Button("OK") {}
+        } message: {
+            Text(endAtCurrentScoreFailure ?? "")
+        }
         .confirmationDialog(
             "End at current score?",
             isPresented: $showEndAtCurrentScoreConfirmation,
@@ -1036,7 +1049,13 @@ struct MatchDetailView: View {
         let completed = latest.endingAtCurrentScore()
         let shouldUpdateWatch = syncService.onWatchIDs.contains(record.id)
             || syncService.activeMatchID == record.id
-        store.appendMatch(completed)
+        // The Watch is told only about a completion that is on disk here.
+        do {
+            try store.commitMatch(completed)
+        } catch {
+            endAtCurrentScoreFailure = ArchiveSaveFailureCopy.message(savingPaused: store.archiveProblem != nil)
+            return
+        }
         if shouldUpdateWatch {
             syncService.sendMatchToWatch(completed)
         }

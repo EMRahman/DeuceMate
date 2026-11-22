@@ -65,6 +65,19 @@ struct PhoneStatsStoreTests {
         func remove() {
             try? FileManager.default.removeItem(at: root)
         }
+
+        /// A non-empty folder where the Health sidecar goes. The sidecar is
+        /// optional, so the archive still loads, but every canonical write
+        /// fails (the sidecar is written before the history).
+        func blockCanonicalWrites() throws {
+            try? FileManager.default.removeItem(at: healthURL)
+            try FileManager.default.createDirectory(at: healthURL, withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: healthURL.appendingPathComponent("blocker"))
+        }
+
+        func unblockCanonicalWrites() throws {
+            try FileManager.default.removeItem(at: healthURL)
+        }
     }
 
     private func record(id: UUID = UUID(), health: Bool = true) -> MatchRecord {
@@ -629,6 +642,116 @@ struct PhoneStatsStoreTests {
         #expect(await MainActor.run { store.archiveProblem } == .undecodable)
         #expect(store.loadHistory().map(\.id) == [arrived.id])
         #expect(try Data(contentsOf: fixture.historyURL) == original)
+    }
+
+    @Test func tryAgainStaysPausedWhenWhatArrivedMeanwhileCannotBeSaved() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(at: fixture.historyURL, withIntermediateDirectories: true)
+        let store = fixture.makeStore()
+        #expect(store.archiveProblem == .unreadable)
+        let arrived = record()
+        store.appendMatch(arrived) // in memory only while suspended
+
+        // The archive becomes readable, but storage still refuses writes.
+        let saved = record()
+        try FileManager.default.removeItem(at: fixture.historyURL)
+        let savedBytes = try JSONEncoder().encode([saved.strippingHealthData()])
+        try savedBytes.write(to: fixture.historyURL)
+        try fixture.blockCanonicalWrites()
+
+        // Not reported as recovered: nothing it holds is on disk yet.
+        #expect(await store.retryArchiveLoad() == .unreadable)
+        #expect(await MainActor.run { store.archiveProblem } == .unreadable)
+        #expect(Set(store.loadHistory().map(\.id)) == [saved.id, arrived.id])
+        #expect(try Data(contentsOf: fixture.historyURL) == savedBytes)
+
+        // Once storage works, the next Try Again saves both.
+        try fixture.unblockCanonicalWrites()
+        #expect(await store.retryArchiveLoad() == nil)
+        let onDisk = try JSONDecoder().decode([MatchRecord].self, from: Data(contentsOf: fixture.historyURL))
+        #expect(Set(onDisk.map(\.id)) == [saved.id, arrived.id])
+    }
+
+    // MARK: User saves and deletes are all-or-nothing
+
+    @Test func commitMatchWhileSuspendedThrowsAndChangesNothing() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try archiveFromNewerBuild()
+        try original.write(to: fixture.historyURL)
+        let store = fixture.makeStore()
+        #expect(store.archiveProblem == .undecodable)
+
+        #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
+            try store.commitMatch(record())
+        }
+
+        // A manual entry the user was told failed is not shown as saved.
+        #expect(store.loadHistory().isEmpty)
+        #expect(try Data(contentsOf: fixture.historyURL) == original)
+    }
+
+    @Test func commitMatchThatCannotBeWrittenRollsBackAndSucceedsOnceWritable() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let store = fixture.makeStore()
+        let existing = record()
+        try store.commitMatch(existing)
+        try fixture.blockCanonicalWrites()
+
+        let manual = record()
+        #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
+            try store.commitMatch(manual)
+        }
+        #expect(store.loadHistory().map(\.id) == [existing.id])
+
+        try fixture.unblockCanonicalWrites()
+        #expect(fixture.makeStore().loadHistory().map(\.id) == [existing.id])
+        try store.commitMatch(manual)
+        #expect(Set(fixture.makeStore().loadHistory().map(\.id)) == [existing.id, manual.id])
+    }
+
+    @Test func commitPermanentDeletionThatCannotBeWrittenKeepsTheMatch() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let store = fixture.makeStore()
+        let match = record()
+        try store.commitMatch(match)
+        try fixture.blockCanonicalWrites()
+
+        #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
+            try store.commitPermanentDeletion(id: match.id)
+        }
+
+        // Still listed, and no tombstone in memory or on disk: the caller keeps
+        // the note and doesn't delete it on the Watch.
+        #expect(store.loadHistory().map(\.id) == [match.id])
+        #expect(try JSONDecoder().decode([UUID].self, from: Data(contentsOf: fixture.tombstoneURL)).isEmpty)
+        try fixture.unblockCanonicalWrites()
+        #expect(fixture.makeStore().loadHistory().map(\.id) == [match.id])
+
+        try store.commitPermanentDeletion(id: match.id)
+        #expect(fixture.makeStore().loadHistory().isEmpty)
+        #expect(try JSONDecoder().decode([UUID].self, from: Data(contentsOf: fixture.tombstoneURL)) == [match.id])
+    }
+
+    @Test func commitPermanentDeletionWhileSuspendedThrowsAndKeepsTheMatch() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let existing = record().strippingHealthData()
+        try encode([existing], to: fixture.historyURL)
+        let damaged = Data("[\"not-a-uuid\"]".utf8)
+        try damaged.write(to: fixture.tombstoneURL)
+        let store = fixture.makeStore()
+        #expect(store.archiveProblem == .undecodable)
+
+        #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
+            try store.commitPermanentDeletion(id: existing.id)
+        }
+
+        #expect(store.loadHistory().map(\.id) == [existing.id])
+        #expect(try Data(contentsOf: fixture.tombstoneURL) == damaged)
     }
 
     @Test func saveACopySharesThePreservedFilesAndLeavesThemInPlace() throws {

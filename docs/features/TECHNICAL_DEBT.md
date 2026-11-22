@@ -393,8 +393,9 @@ iPhone. Nothing is deleted. Copy lives in Core's `ArchiveRecovery.swift`.
 
 - **Couldn't be opened (`unreadable`, often temporary): Try Again.**
   `retryArchiveLoad()` reads the files again. Anything that arrived while writes
-  were suspended (Watch syncs, deletions) is kept on top of what loads. If the
-  read still fails, nothing changes.
+  were suspended (Watch syncs) is kept on top of what loads. If the read still
+  fails, nothing changes. If the files load but saving them with what was held
+  fails, the archive stays paused (`unreadable`) rather than reporting recovery.
 - **Couldn't be read (`undecodable`): Restore from iCloud, or Save a Copy.**
   Restore shows the backup's match count and newest date, then asks. It combines
   the backup with what this iPhone holds in memory (`ArchiveBackupPolicy.initialRestore`),
@@ -421,6 +422,19 @@ iPhone. Nothing is deleted. Copy lives in Core's `ArchiveRecovery.swift`.
   `BackupPushGuardTests`. `PhoneStatsStoreTests` runs every action against real
   files and a local folder standing in for iCloud. Disabling the copy-aside or
   the keep-what-arrived merge fails the matching store tests.
+
+**Follow-up: the user's own saves are all-or-nothing (22 November 2026).**
+Review of the stack found three user actions that still reported success for a
+change that existed only in memory while saving was paused, or after a failed
+write: manual entry, End at Current Score and Delete Permanently. A permanent
+delete was worse than lost: the Watch-side delete and the note removal went out
+even though a relaunch would show the match again. They now use
+`commitMatch` / `commitPermanentDeletion`, which roll back and throw
+`.notPersisted` like tag edits; the views keep the form or report open, send
+nothing to the Watch, keep the note, and say why (`ArchiveSaveFailureCopy`).
+The manual-entry button is disabled while `archiveProblem` is set. The delete
+failure is shown inside the confirmation popover, since an alert presented while
+that popover closes may never appear.
 
 **Not done, deliberately:**
 
