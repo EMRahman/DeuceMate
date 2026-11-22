@@ -217,6 +217,8 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     }
 
     func requestFullHistorySync() {
+        // Retry any bodies received before a transient phone disk-write failure.
+        reconcileTags(afterMerging: [])
         requestLiveState()
         transport.sendControl(MatchSyncPayloadBuilder.requestFullHistory(), queueOnFailure: true)
     }
@@ -998,19 +1000,18 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
                 logger.error("decode error for \(key, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
-        if didSync { markSynced() }
+        if didSync, store?.archiveAvailableForSync != false { markSynced() }
     }
 
     /// Merges watch record bodies, then applies §6.1 rule 1: any id whose
     /// archive tags or match-type revision supersede the watch copy's (nil on
-    /// the watch = oldest) is resent. This is what heals a watch that missed an
-    /// edit-time push or was upgraded from a build that ignored updates, and
-    /// what returns a forgotten-player scrub to a stale watch copy.
+    /// the watch = oldest) is resent. When previously failed deliveries commit
+    /// on retry, reconcile their committed tags and match-type revisions too.
     private func reconcileTags(afterMerging watchCopies: [MatchRecord]) {
-        guard let store else { return }
-        let archive = store.mergeIncoming(watchCopies)
-        send(MatchTags.pendingWatchUpdates(archive: archive, watchCopies: watchCopies, newlyHeld: []))
-        send(MatchTypeRevision.pendingWatchUpdates(archive: archive, watchCopies: watchCopies, newlyHeld: []))
+        guard let saved = store?.mergeIncoming(watchCopies),
+              !watchCopies.isEmpty || !saved.retriedIDs.isEmpty else { return }
+        send(MatchTags.pendingWatchUpdates(archive: saved.archive, watchCopies: watchCopies, newlyHeld: saved.retriedIDs))
+        send(MatchTypeRevision.pendingWatchUpdates(archive: saved.archive, watchCopies: watchCopies, newlyHeld: saved.retriedIDs))
     }
 
     /// UserDefaults key for the cached watch manifest. Phone-local persistence —
@@ -1067,6 +1068,7 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
     /// Apply `transform` to the current mirror, publish the result, and persist
     /// it. Must run on the main thread — it mutates the `@Published` mirror.
     private func updateMirror(_ transform: ([MatchRecord]) -> [MatchRecord]) {
+        guard store?.isArchiveBlocked != true else { return }
         var updated = transform(watchMirror)
         // A stale watch copy must not expose a forgotten player, even as a
         // display-only watch-only row (MATCH_TAGS_PLAN.md §3).
