@@ -160,6 +160,8 @@ struct PhoneStatsStoreTests {
         let cloudLedger = backup.appendingPathComponent("forgottenPlayers.json")
         let initial = PhoneStatsStore(storageConfiguration: config)
         initial.saveHistory([original, second])
+        let forgottenID = UUID()
+        try initial.forgetPlayer(forgottenID)
         try encode(true, to: fixture.canonical.appendingPathComponent("archiveInitialized.json"))
         initial.syncICloudBackup()
         _ = initial.loadHistory() // drain the serial queue, including the requested backup
@@ -175,6 +177,8 @@ struct PhoneStatsStoreTests {
             points[0]["outcome"] = "futureOutcome"
             json[0]["stats"] = points
             badBytes = try JSONSerialization.data(withJSONObject: json)
+        } else if filename == "forgottenPlayers.json" {
+            badBytes = Data(#"{"schemaVersion":1,"playerIDs":42}"#.utf8)
         } else {
             badBytes = Data("incomplete json".utf8)
         }
@@ -198,6 +202,7 @@ struct PhoneStatsStoreTests {
         let store = PhoneStatsStore(storageConfiguration: config)
         try goodBytes.write(to: damagedURL)
         #expect(store.retryArchiveLoad())
+        #expect(store.forgottenPlayerLedger().contains(forgottenID))
         #expect(Set(store.loadHistory().map(\.id)) == [original.id, second.id])
         #expect(store.deletePermanently(id: original.id))
         #expect(store.deletePermanently(id: second.id))
@@ -205,6 +210,56 @@ struct PhoneStatsStoreTests {
         #expect(store.loadHistory().isEmpty)
         #expect(try JSONDecoder().decode([MatchRecord].self, from: Data(contentsOf: cloudHistory)).isEmpty)
         #expect(try JSONDecoder().decode(Set<UUID>.self, from: Data(contentsOf: cloudDeletes)) == [original.id, second.id])
+    }
+
+    @Test(arguments: ["{}", #"{"playerIDs":null}"#, #"{"playerIDs":["00000000-0000-0000-0000-000000000001","bad-id"]}"#])
+    func presentLedgerRequiresCompleteIDs(json: String) throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let url = fixture.canonical.appendingPathComponent("forgottenPlayers.json")
+        try Data(json.utf8).write(to: url)
+        #expect(fixture.makeStore().isArchiveBlocked)
+    }
+
+    @Test func initialRestoreWaitsForAnIntactForgottenPlayerLedger() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let backup = fixture.root.appendingPathComponent("Backup", isDirectory: true)
+        try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
+        try encode([MatchRecord](), to: backup.appendingPathComponent("matchHistory.json"))
+        try encode([UUID](), to: backup.appendingPathComponent("deletedMatchIDs.json"))
+        let ledgerURL = backup.appendingPathComponent("forgottenPlayers.json")
+        let damaged = Data(#"{"playerIDs":["bad-id"]}"#.utf8)
+        try damaged.write(to: ledgerURL)
+        let initialized = fixture.canonical.appendingPathComponent("archiveInitialized.json")
+        let store = PhoneStatsStore(storageConfiguration: .init(
+            canonicalDirectoryURL: fixture.canonical,
+            legacyDocumentsDirectoryURL: fixture.legacyDocuments,
+            startsICloudSync: false,
+            backupContainer: { backup }
+        ))
+        store.syncICloudBackup()
+        _ = store.loadHistory() // wait for the restore pass
+        #expect(!FileManager.default.fileExists(atPath: initialized.path))
+        #expect(try Data(contentsOf: ledgerURL) == damaged)
+
+        let forgotten = ForgottenPlayerLedger(playerIDs: [UUID()])
+        try encode(forgotten, to: ledgerURL)
+        store.syncICloudBackup()
+        #expect(store.forgottenPlayerLedger() == forgotten)
+        #expect(FileManager.default.fileExists(atPath: initialized.path))
+    }
+
+    @Test func initializedArchivePredatingForgottenPlayerLedgerStillLoads() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let saved = record(health: false)
+        try encode([saved], to: fixture.historyURL)
+        try encode([UUID](), to: fixture.tombstoneURL)
+        try encode(true, to: fixture.canonical.appendingPathComponent("archiveInitialized.json"))
+        let store = fixture.makeStore()
+        #expect(!store.isArchiveBlocked)
+        #expect(store.loadHistory() == [saved])
     }
 
     @Test(arguments: ["matchHistory.json", "deletedMatchIDs.json"])

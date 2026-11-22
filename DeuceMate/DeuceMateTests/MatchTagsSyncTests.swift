@@ -134,8 +134,12 @@ struct MatchTagsSyncTests {
         defer { h.remove() }
         var stale = match()
         stale.matchType = .doubles
+        let forgotten = TaggedPlayer(name: "Former opponent")
+        stale.tags = MatchTags(opponents: [forgotten], competitionType: .friendly, updatedAt: stale.startTime)
         h.store.saveHistory([stale])
-        let savedTags = try h.store.updateTags(id: stale.id, tags: MatchTags(competitionType: .league, updatedAt: Date()))
+        let editTime = stale.startTime.addingTimeInterval(20)
+        try h.store.forgetPlayer(forgotten.id, now: stale.startTime.addingTimeInterval(10))
+        let savedTags = try h.store.updateTags(id: stale.id, tags: MatchTags(competitionType: .league, updatedAt: editTime), now: editTime)
         let converted = try h.store.convertMatchType(id: stale.id, to: .singles)
         let revision = try #require(converted.matchTypeRevision)
         stale.endTime = stale.startTime.addingTimeInterval(9_000) // requires a body write
@@ -155,7 +159,9 @@ struct MatchTagsSyncTests {
             return MatchTypeUpdate(matchID: id, revision: revision)
         }
         #expect(revisions == [MatchTypeUpdate(matchID: stale.id, revision: revision)])
-        #expect(h.relaunchedStore().loadHistory().first(where: { $0.id == stale.id })?.endTime == stale.endTime)
+        let saved = try #require(h.relaunchedStore().loadHistory().first(where: { $0.id == stale.id }))
+        #expect(saved.endTime == stale.endTime)
+        #expect(saved.tags == savedTags)
         h.session.reset()
         h.service.requestFullHistorySync()
         #expect(h.session.tagUpdates.isEmpty)

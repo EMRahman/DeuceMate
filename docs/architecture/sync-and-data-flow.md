@@ -60,7 +60,9 @@ successful retry requests the Watch’s full history again. Archive deletion,
 manual entry and End at Current Score issue their Watch-side changes only after
 the local commit succeeds. After a failed Watch delivery is saved on retry,
 the phone also sends the committed tags and match-type revisions for the
-retried IDs. Both a new delivery and Sync Now can trigger that retry.
+retried IDs. Pending Watch copies retain their tag revisions until the merge
+compares them with current phone tags and scrubs the winner. Both a new
+delivery and Sync Now can trigger that retry.
 
 **Live recovery (16 November 2026):** activation, reconnect, phone foreground,
 opening the live board and Sync Now request the existing Watch model's current
@@ -300,7 +302,8 @@ the phone answers with its own. Cached watch-mirror rows are scrubbed of forgott
 players before display. The forgotten-player ledger is persisted next to the
 tombstones (`forgottenPlayers.json`, ids only), written before the archive,
 re-applied on load, and backed up to iCloud with it; initial restore unions the
-backup's ledger.
+backup's ledger. A present local or iCloud ledger must contain a complete array
+of UUIDs. Older archives can omit the ledger file.
 
 **Tombstones:** when the user permanently deletes a match on the phone, its ID is
 remembered in a small "tombstones" list. Any future sync from the watch skips

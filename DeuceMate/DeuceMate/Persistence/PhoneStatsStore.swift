@@ -624,24 +624,24 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     // MARK: - Merge incoming records from WatchConnectivity
 
-    /// Retained bodies may already have been scrubbed of forgotten players.
-    /// Reconcile their IDs against the committed archive after a successful
-    /// retry, even when the latest delivery contains different matches.
+    /// Reconcile retried IDs against the committed archive even when the
+    /// latest Watch delivery contains different matches.
     @discardableResult
     func mergeIncoming(_ incoming: [MatchRecord]) -> (archive: [MatchRecord], retriedIDs: Set<UUID>)? {
         queue.sync {
             guard !canonicalWritesSuspended else { return nil }
             if incoming.isEmpty && pendingWatchRecords.isEmpty { return (records, []) }
+            // Resolve competing Watch deliveries by their original revisions.
+            // A scrub advances the tag clock, so apply it only after comparing
+            // the Watch and phone copies in the archive merge below.
             let copies = pendingWatchRecords.isEmpty ? incoming : MatchMergePolicy.merge(
-                incoming: incoming, into: pendingWatchRecords, tombstones: tombstones, forgottenPlayers: forgotten
+                incoming: incoming, into: pendingWatchRecords, tombstones: tombstones
             )
             let merged = MatchMergePolicy.merge(
                 incoming: copies, into: records, tombstones: tombstones, forgottenPlayers: forgotten
             )
             guard merged == records || adoptOnQueue(records: merged, tombstones: tombstones) else {
-                pendingWatchRecords = MatchMergePolicy.merge(
-                    incoming: copies, into: [], tombstones: tombstones, forgottenPlayers: forgotten
-                )
+                pendingWatchRecords = MatchMergePolicy.merge(incoming: copies, into: [], tombstones: tombstones)
                 return nil
             }
             let retriedIDs = Set(pendingWatchRecords.map(\.id))
@@ -750,7 +750,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             // Validate all three files before migration, publication or any
             // write. Unknown deletion intent makes even a readable history unsafe.
             let deleted = try Self.readArchiveFile([UUID].self, at: canonicalTombstoneURL)
-            let ledger = try Self.readArchiveFile(ForgottenPlayerLedger.self, at: canonicalForgottenPlayersURL)
+            let ledger = try Self.readArchiveFile(StoredForgottenPlayers.self, at: canonicalForgottenPlayersURL)?.ledger
             let history = try Self.readArchiveFile([MatchRecord].self, at: canonicalHistoryURL)
             // Both files precede the initialization marker, even for an empty
             // archive. The forgotten-player ledger was added later and is optional.
@@ -807,6 +807,19 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         isArchiveBlocked = !recovered
         if recovered && storageConfiguration.startsICloudSync { syncICloudBackup() }
         return recovered
+    }
+
+    /// A present archive or iCloud ledger must account for every ID. The
+    /// shared transfer decoder tolerates malformed fields in manual imports.
+    private struct StoredForgottenPlayers: Decodable {
+        let playerIDs: Set<UUID>
+        let schemaVersion: Int?
+
+        var ledger: ForgottenPlayerLedger {
+            var result = ForgottenPlayerLedger(playerIDs: playerIDs)
+            if let schemaVersion { result.schemaVersion = schemaVersion }
+            return result
+        }
     }
 
     private enum ArchiveReadError: LocalizedError {
@@ -1017,7 +1030,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
         let decodedRecords = decodeBackup([MatchRecord].self, from: historyState)
         let decodedTombstones = decodeBackup([UUID].self, from: tombstoneState)
-        let decodedLedger = decodeBackup(ForgottenPlayerLedger.self, from: ledgerState)
+        let decodedLedger = decodeBackup(StoredForgottenPlayers.self, from: ledgerState)
         guard decodedRecords.isUsable, decodedTombstones.isUsable, decodedLedger.isUsable else {
             phoneStoreLogger.error("Initial iCloud restore skipped because backup data is corrupt")
             finishRestoreIndicator()
@@ -1028,7 +1041,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         let backupTombstones = decodedTombstones.value ?? []
         // Missing (an older build's backup) is `nil`: it can never erase the
         // local ledger — `initialRestore` unions it.
-        let backupLedger = decodedLedger.value
+        let backupLedger = decodedLedger.value?.ledger
 
         if backupRecords.isEmpty {
             // Nothing to restore — reconcile silently and start pushing.
