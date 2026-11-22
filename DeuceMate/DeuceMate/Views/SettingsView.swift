@@ -928,6 +928,7 @@ struct SettingsView: View {
         var message = store.isArchiveBlocked
             ? "DeuceMate will keep a copy of the unreadable archive files on this iPhone, then replace the archive with \(preview.recordCount) imported matches. Imported health data will be preserved."
             : "This will replace \(store.history.count) current matches with \(preview.recordCount) imported matches. Imported health data will be preserved."
+        message += " " + ArchiveRecoveryCopy.replaceKeepsBackupCopyNote
         let plan = MatchNotesStore.shared.replacePlan(retainedMatchIDs: pendingImportRecordIDs)
         if plan.requiresConfirmation {
             let count = plan.discarded.count

@@ -149,6 +149,13 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private var withheldMatchIDs: Set<UUID> = []
     private var withheldBaseline: BackupManifest?
     private var isBackupWithheldOnQueue: Bool { !withheldMatchIDs.isEmpty }
+    /// The baseline a confirmed Replace import will record once a copy of the
+    /// current iCloud history is safely on this iPhone. Until then every push
+    /// is refused, so a Replace can never overwrite iCloud-only matches
+    /// (including ones this build can't decode) without a copy. In memory only:
+    /// after a relaunch the previous manifest (or the remote ids) protects the
+    /// backup again and the push is simply withheld.
+    private var pendingReplaceManifest: BackupManifest?
     /// Decoded backup data waiting for the user to confirm or decline a restore.
     /// Non-nil only between when the prompt is shown and when the user responds.
     private var pendingRestoreDecoded: (records: [MatchRecord], tombstones: [UUID], forgotten: ForgottenPlayerLedger?)?
@@ -715,12 +722,29 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 // Remote tombstones and forgotten players are still unioned
                 // when the push runs so a Replace recovery from damaged local
                 // deletion ledgers never erases remote deletion intent.
-                let identityKey = storageConfiguration.backupIdentityKey() ?? backupManifest?.identityKey
-                recordBackupManifestOnQueue(BackupManifest(
+                //
+                // The identity is the ACTIVE account's, `nil` when signed out:
+                // falling back to the old manifest's key would claim a push to
+                // an account that never received it. Before that push, the
+                // backup's current history is copied to Recovered/ (item: a
+                // Replace must not destroy iCloud-only matches with no copy).
+                let replaceManifest = BackupManifest(
                     recordIDs: Set(records.map(\.id)),
                     tombstones: tombstones,
-                    identityKey: identityKey
-                ))
+                    identityKey: storageConfiguration.backupIdentityKey()
+                )
+                if let container = storageConfiguration.backupContainerURL() {
+                    pendingReplaceManifest = replaceManifest
+                    // If the copy can't be made yet (still downloading, or a
+                    // write error) the manifest stays pending and every push
+                    // retries it first.
+                    _ = settlePendingReplaceOnQueue(
+                        historyURL: container.appendingPathComponent(Self.historyFilename)
+                    )
+                } else {
+                    pendingReplaceManifest = nil
+                    recordBackupManifestOnQueue(replaceManifest)
+                }
             }
         }
         return preview
@@ -740,6 +764,19 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         case backupUnavailable
         /// None of the withheld matches could be read from the backup.
         case nothingReadable
+        /// The withheld set changed after the user confirmed removing it;
+        /// nothing was removed and the confirmation should be shown again.
+        case withheldSetChanged
+        /// The matches were restored, but the backup couldn't be switched back
+        /// on (`archiveInitialized` couldn't be written).
+        case restoredButBackupNotResumed
+    }
+
+    /// The matches the current push is withholding from the backup, read when
+    /// the Remove from Backup confirmation opens so the confirmation and the
+    /// removal act on the same set.
+    func withheldBackupMatchIDs() -> Set<UUID> {
+        queue.sync { withheldMatchIDs }
     }
 
     /// Reads the canonical files again ("Try Again"). Returns the remaining
@@ -748,12 +785,34 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         await onQueue { self.retryArchiveLoadOnQueue() }
     }
 
+    private static var archiveCopyStagingRoot: URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("DeuceMate Archive Copies", isDirectory: true)
+    }
+
+    /// The share sheet's files are not deleted when it closes: AirDrop and Mail
+    /// can still be reading them. Earlier copies are swept the next time one
+    /// is made, once they're a day old (so two copies never delete each other).
+    private static func removeStaleArchiveCopies(in root: URL, now: Date = Date()) {
+        let fm = FileManager.default
+        guard let folders = try? fm.contentsOfDirectory(
+            at: root, includingPropertiesForKeys: [.creationDateKey]
+        ) else { return }
+        for folder in folders {
+            let created = (try? folder.resourceValues(forKeys: [.creationDateKey]))?.creationDate
+            if let created, now.timeIntervalSince(created) > 24 * 60 * 60 {
+                try? fm.removeItem(at: folder)
+            }
+        }
+    }
+
     /// Copies the preserved archive files ("Save a Copy") into a fresh
     /// temporary folder for the share sheet. Originals stay in place.
     func copyPreservedArchiveForSharing() throws -> [URL] {
         try queue.sync {
-            let folder = FileManager.default.temporaryDirectory
-                .appendingPathComponent("DeuceMate Archive Copy \(UUID().uuidString)", isDirectory: true)
+            let root = Self.archiveCopyStagingRoot
+            Self.removeStaleArchiveCopies(in: root)
+            let folder = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
             return try copyPreservedFilesOnQueue(to: folder)
         }
     }
@@ -805,7 +864,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             // remote backup via `BackupRecordID` and never drops matches that
             // required a newer build (`undecodableCount > 0`).
             self.clearBackupManifestOnQueue()
-            self.markArchiveInitializedOnQueue()
+            // The archive is restored and safe either way; without the marker
+            // backup stays paused, so retry once and then say so.
+            guard self.markArchiveInitializedOnQueue() || self.markArchiveInitializedOnQueue() else {
+                throw RecoveryError.restoredButBackupNotResumed
+            }
             return self.records.count
         }
     }
@@ -816,10 +879,14 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// Rejects stale-account recovery state if the iCloud identity changed.
     /// Returns how many came back and how many this build couldn't read (those
     /// stay withheld and protected in iCloud).
-    func bringBackWithheldMatches() async throws -> (restored: Int, stillMissing: Int) {
-        try await onQueueThrowing { () throws -> (restored: Int, stillMissing: Int) in
+    ///
+    /// Once any match is adopted this returns normally: `backupUpdated` is
+    /// `false` when the push that follows couldn't finish (the matches are on
+    /// this iPhone; the backup retries on its own). Errors mean nothing changed.
+    func bringBackWithheldMatches() async throws -> (restored: Int, stillMissing: Int, backupUpdated: Bool) {
+        try await onQueueThrowing { () throws -> (restored: Int, stillMissing: Int, backupUpdated: Bool) in
             let wanted = self.withheldMatchIDs
-            guard !wanted.isEmpty else { return (0, 0) }
+            guard !wanted.isEmpty else { return (0, 0, true) }
             let currentIdentityKey = self.storageConfiguration.backupIdentityKey()
             guard let baseline = self.withheldBaseline, baseline.matchesIdentity(currentIdentityKey) else {
                 self.setBackupWithheldOnQueue([], baseline: nil)
@@ -853,9 +920,13 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             let outcome = self.pushNowOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL)
             switch outcome {
             case .pushed, .withheld:
-                return (found.count, remaining)
+                return (found.count, remaining, true)
             case .deferred, .unreadableRemote, .failed:
-                throw RecoveryError.backupUnavailable
+                // The matches are already in the archive; a later push retries.
+                if self.storageConfiguration.startsICloudSync {
+                    self.scheduleICloudBackupSyncOnQueue(after: Self.backupPushDebounce, retriesRemaining: Self.backupRetryDelays.count)
+                }
+                return (found.count, remaining, false)
             }
         }
     }
@@ -866,9 +937,16 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// to this iPhone first, then only those confirmed ids stop being protected
     /// (`acceptingLoss`). Throws `RecoveryError.backupUnavailable` if the
     /// remote write fails, without falsely clearing the withheld state.
-    func removeWithheldMatchesFromBackup() async throws {
+    ///
+    /// `confirmed` is the set the user saw in the confirmation
+    /// (`withheldBackupMatchIDs()` when it opened). If the push has since
+    /// withheld anything beyond it, nothing is removed and
+    /// `RecoveryError.withheldSetChanged` asks for a new confirmation; ids that
+    /// were resolved in the meantime are simply skipped.
+    func removeWithheldMatchesFromBackup(confirmed: Set<UUID>) async throws {
         try await onQueueThrowing {
             let accepted = self.withheldMatchIDs
+            guard accepted.isSubset(of: confirmed) else { throw RecoveryError.withheldSetChanged }
             guard !accepted.isEmpty, let baseline = self.withheldBaseline else { return }
             let currentIdentityKey = self.storageConfiguration.backupIdentityKey()
             guard baseline.matchesIdentity(currentIdentityKey) else {
@@ -1767,8 +1845,13 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             return
         }
 
+        // Records are read one at a time: a match from a newer build must not
+        // make the whole backup look corrupt. Those matches aren't restored but
+        // stay protected in iCloud — the manifest is absent here, so the first
+        // push compares against the remote ids (`BackupRecordID`) and withholds
+        // anything this iPhone lacks. Unreadable files still fail closed.
         let decodedRecords = decodeBackup(
-            [MatchRecord].self,
+            LenientRecordList.self,
             from: historyState,
             expectedFormat: PersistedArchiveCodec.historyFormat
         )
@@ -1784,7 +1867,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             return
         }
 
-        let backupRecords = decodedRecords.value ?? []
+        let backupRecords = decodedRecords.value?.records ?? []
+        let newerFormatCount = decodedRecords.value?.undecodableCount ?? 0
         let backupTombstones = decodedTombstones.value ?? []
         // Missing (an older build's backup) is `nil`: it can never erase the
         // local ledger — `initialRestore` unions it.
@@ -1805,7 +1889,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         // Non-empty backup: show the restore prompt. Backup pushes stay paused
         // (marker absent) until the user responds so the old backup is preserved.
         pendingRestoreDecoded = (backupRecords, backupTombstones, backupLedger)
-        let preview = ArchiveBackupPolicy.BackupPreview.from(records: backupRecords)
+        let preview = ArchiveBackupPolicy.BackupPreview.from(
+            records: backupRecords, newerFormatCount: newerFormatCount
+        )
         DispatchQueue.main.async {
             self.pendingRestorePreview = preview
         }
@@ -1951,6 +2037,21 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         retriesRemaining: Int = 0,
         overrideBaseline: BackupManifest? = nil
     ) -> PushOutcome {
+        // A confirmed Replace may drop iCloud-only matches, but only after the
+        // backup's current history is safely copied to this iPhone.
+        switch settlePendingReplaceOnQueue(historyURL: historyURL) {
+        case .settled:
+            break
+        case .downloading:
+            if storageConfiguration.startsICloudSync && retriesRemaining > 0 {
+                let delay = Self.backupRetryDelays[Self.backupRetryDelays.count - retriesRemaining]
+                scheduleICloudBackupSyncOnQueue(after: delay, retriesRemaining: retriesRemaining - 1)
+            }
+            phoneStoreLogger.notice("iCloud backup still downloading; holding the Replace push until a copy is kept")
+            return .deferred
+        case .failed:
+            return .failed
+        }
         let currentIdentityKey = storageConfiguration.backupIdentityKey()
         let outgoing = backupSnapshotOnQueue()
         if overrideBaseline == nil,
@@ -2067,6 +2168,43 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             phoneStoreLogger.error("iCloud backup push failed: \(error.localizedDescription, privacy: .public)")
             return .failed
         }
+    }
+
+    private enum ReplaceSettlement {
+        case settled
+        case downloading
+        case failed
+    }
+
+    /// Completes a confirmed Replace's backup side: copies the remote history
+    /// file (raw bytes — it need not decode, so matches from a newer build are
+    /// kept too) to `MatchArchive/Recovered/`, then records the Replace
+    /// baseline. Returns `.settled` at once when none is pending. A pending
+    /// Replace from a different iCloud account is dropped instead: the push then
+    /// inspects that account's backup fresh, which is the cautious path.
+    private func settlePendingReplaceOnQueue(historyURL: URL) -> ReplaceSettlement {
+        guard let pending = pendingReplaceManifest else { return .settled }
+        guard pending.matchesIdentity(storageConfiguration.backupIdentityKey()) else {
+            pendingReplaceManifest = nil
+            return .settled
+        }
+        switch backupFileState(at: historyURL) {
+        case .missing:
+            break // nothing in the backup to keep a copy of
+        case .downloading:
+            return .downloading
+        case .ready(let data):
+            do {
+                let folder = try newRecoveredFolderOnQueue()
+                try data.write(to: folder.appendingPathComponent("iCloud-" + Self.historyFilename), options: .atomic)
+            } catch {
+                phoneStoreLogger.error("Couldn't keep a copy of the iCloud backup before Replace: \(error.localizedDescription, privacy: .public)")
+                return .failed
+            }
+        }
+        pendingReplaceManifest = nil
+        recordBackupManifestOnQueue(pending)
+        return .settled
     }
 
     private func inspectRemoteLedgerOnQueue(

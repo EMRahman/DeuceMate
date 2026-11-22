@@ -35,11 +35,21 @@ public enum ArchiveBackupPolicy {
     public struct BackupPreview: Equatable, Sendable {
         public let recordCount: Int
         public let newestMatchDate: Date?
+        /// Matches in the backup this build can't read (a newer format). They
+        /// aren't restored and stay in the backup (`BackupPushGuard`).
+        public let newerFormatCount: Int
 
-        public static func from(records: [MatchRecord]) -> BackupPreview {
+        public init(recordCount: Int, newestMatchDate: Date?, newerFormatCount: Int = 0) {
+            self.recordCount = recordCount
+            self.newestMatchDate = newestMatchDate
+            self.newerFormatCount = newerFormatCount
+        }
+
+        public static func from(records: [MatchRecord], newerFormatCount: Int = 0) -> BackupPreview {
             BackupPreview(
                 recordCount: records.count,
-                newestMatchDate: records.map { MatchChronology.date($0) }.max()
+                newestMatchDate: records.map { MatchChronology.date($0) }.max(),
+                newerFormatCount: newerFormatCount
             )
         }
     }

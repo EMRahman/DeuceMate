@@ -300,7 +300,8 @@ struct PastMatchesView: View {
                     guard let date = preview.newestMatchDate else { return "" }
                     return ", latest \(Self.dateFormatter.string(from: date))"
                 }()
-                Text("Found a backup with \(preview.recordCount) match\(preview.recordCount == 1 ? "" : "es")\(dateStr). Restore it to this iPhone?")
+                let newerNote = ArchiveRecoveryCopy.restorePromptNewerNote(count: preview.newerFormatCount).map { " \($0)" } ?? ""
+                Text("Found a backup with \(preview.recordCount) match\(preview.recordCount == 1 ? "" : "es")\(dateStr).\(newerNote) Restore it to this iPhone?")
             }
             .onChange(of: selected?.id) { _, id in
                 if let id { reviewPrompt.reportOpened(matchID: id, isActive: scenePhase == .active) }

@@ -117,6 +117,16 @@ public enum ArchiveRecoveryCopy {
     public static func restoredMessage(count: Int) -> String {
         "Restored \(BackupWithheldCopy.matches(count)) from your iCloud backup."
     }
+    /// Appended to the first-launch "iCloud Backup Found" prompt when part of
+    /// the backup is from a newer build; `nil` when every match is readable.
+    public static func restorePromptNewerNote(count: Int) -> String? {
+        guard count > 0 else { return nil }
+        return "\(BackupWithheldCopy.matches(count).capitalizedFirst) need\(count == 1 ? "s" : "") a newer version of DeuceMate and will stay in the backup."
+    }
+    public static let restoredBackupNotResumedMessage = "Your matches are restored, but DeuceMate couldn't switch iCloud backup back on yet. It will try again the next time DeuceMate opens."
+    /// Added to the Replace confirmation: Replace can drop matches that exist
+    /// only in the iCloud backup, so it says that a copy is kept first.
+    public static let replaceKeepsBackupCopyNote = "DeuceMate keeps a copy of the current iCloud backup on this iPhone first, since the backup will then match the imported archive."
     public static let failedTitle = "Couldn't Restore"
     public static let failedMessage = "DeuceMate couldn't restore your matches. Nothing has been changed. Try again in a moment."
     public static let saveCopyFailedTitle = "Couldn't Save a Copy"
@@ -174,6 +184,13 @@ public enum BackupWithheldCopy {
             text += " \(matches(stillMissing).capitalizedFirst) need\(stillMissing == 1 ? "s" : "") a newer version of DeuceMate and stay\(stillMissing == 1 ? "s" : "") in the backup."
         }
         return text
+    }
+    /// Matches were added back to this iPhone but the backup couldn't be
+    /// updated yet; DeuceMate retries on its own.
+    public static let broughtBackPendingTitle = "Matches Brought Back"
+    public static func broughtBackPendingMessage(count: Int, stillMissing: Int) -> String {
+        broughtBackMessage(count: count, stillMissing: stillMissing)
+            + " DeuceMate couldn't reach your iCloud backup just now and will update it when it can."
     }
     public static let removedTitle = "Backup Updated"
     public static let removedMessage = "The iCloud backup now matches this iPhone."
