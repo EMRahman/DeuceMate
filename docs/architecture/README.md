@@ -15,6 +15,7 @@ stay diffable and AI assistants can update them alongside code changes).
 | [sync-and-data-flow.md](sync-and-data-flow.md) | What exactly travels between the watch and the phone, and in which direction? |
 | [match-lifecycle.md](match-lifecycle.md) | What happens to one tennis match from first point to AI coaching export? |
 | [health-data-flow.md](health-data-flow.md) | Where does HealthKit data go, and where is it stripped, excluded, or gated? *(the App Store 5.1.3(ii) map)* |
+| [archive-safety.html](archive-safety.html) | What used to lose a saved archive or the iCloud backup, and what each check now does? *(visual snapshot of 22 November 2026, open locally in a browser)* |
 
 ---
 
