@@ -105,7 +105,7 @@ struct BackupWithheldNotice: View {
         Button(BackupWithheldCopy.bringBack) { recovery.bringBack(store) }
             .buttonStyle(.borderedProminent)
             .accessibilityIdentifier("backup-bring-back")
-        Button(BackupWithheldCopy.remove, role: .destructive) { recovery.confirmRemove(count: count) }
+        Button(BackupWithheldCopy.remove, role: .destructive) { recovery.confirmRemove(store) }
             .buttonStyle(.bordered)
             .accessibilityIdentifier("backup-remove")
     }

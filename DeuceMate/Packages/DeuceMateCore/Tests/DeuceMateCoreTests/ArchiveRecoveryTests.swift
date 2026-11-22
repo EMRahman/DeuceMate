@@ -74,6 +74,30 @@ final class ArchiveRecoveryTests: XCTestCase {
         XCTAssertFalse(BackupWithheldCopy.broughtBackMessage(count: 2, stillMissing: 0).contains("newer"))
     }
 
+    func test_restorePromptNamesMatchesThatStayInTheBackup() {
+        XCTAssertNil(ArchiveRecoveryCopy.restorePromptNewerNote(count: 0))
+        XCTAssertEqual(
+            ArchiveRecoveryCopy.restorePromptNewerNote(count: 1),
+            "1 match needs a newer version of DeuceMate and will stay in the backup."
+        )
+        XCTAssertTrue(ArchiveRecoveryCopy.restorePromptNewerNote(count: 3)?.hasPrefix("3 matches need a newer") == true)
+        let preview = ArchiveBackupPolicy.BackupPreview.from(records: [], newerFormatCount: 2)
+        XCTAssertEqual(preview.newerFormatCount, 2)
+        XCTAssertEqual(ArchiveBackupPolicy.BackupPreview.from(records: []).newerFormatCount, 0)
+    }
+
+    func test_broughtBackWhileBackupIsPendingDoesNotClaimNothingChanged() {
+        let message = BackupWithheldCopy.broughtBackPendingMessage(count: 2, stillMissing: 1)
+        XCTAssertTrue(message.hasPrefix("Brought back 2 matches"))
+        XCTAssertTrue(message.contains("will update it when it can"))
+        XCTAssertFalse(message.contains("Nothing has been changed"))
+        XCTAssertFalse(ArchiveRecoveryCopy.restoredBackupNotResumedMessage.contains("Nothing has been changed"))
+    }
+
+    func test_replaceConfirmationSaysACopyOfTheBackupIsKept() {
+        XCTAssertTrue(ArchiveRecoveryCopy.replaceKeepsBackupCopyNote.contains("keeps a copy of the current iCloud backup"))
+    }
+
     func test_everyOutcomeHasCopy() {
         let preview = ArchiveBackupPolicy.BackupPreview(recordCount: 1, newestMatchDate: Date())
         let outcomes: [ICloudArchiveRestore] = [

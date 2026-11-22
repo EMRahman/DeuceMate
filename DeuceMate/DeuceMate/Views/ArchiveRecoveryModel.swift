@@ -22,15 +22,16 @@ final class ArchiveRecoveryModel {
     struct SharedFiles: Identifiable {
         let id = UUID()
         let urls: [URL]
-        var temporaryFolder: URL? { urls.first?.deletingLastPathComponent() }
     }
 
     /// True while an action runs; the notices disable their buttons.
     private(set) var isWorking = false
     /// What Restore from iCloud found; drives its confirmation (or explanation) alert.
     var restoreOffer: ICloudArchiveRestore?
-    /// How many withheld matches Remove from Backup would let go; drives its confirmation.
-    var removeCount: Int?
+    /// The withheld matches Remove from Backup would let go, captured when its
+    /// confirmation opens so the removal acts on exactly the set the user saw.
+    var removeIDs: Set<UUID>?
+    var removeCount: Int? { removeIDs?.count }
     var outcome: Outcome?
     var sharedFiles: SharedFiles?
 
@@ -62,6 +63,12 @@ final class ArchiveRecoveryModel {
                     title: ArchiveRecoveryCopy.restoredTitle,
                     message: ArchiveRecoveryCopy.restoredMessage(count: count)
                 )
+            } catch PhoneStatsStore.RecoveryError.restoredButBackupNotResumed {
+                syncService.requestFullHistorySync()
+                self.outcome = Outcome(
+                    title: ArchiveRecoveryCopy.restoredTitle,
+                    message: ArchiveRecoveryCopy.restoredBackupNotResumedMessage
+                )
             } catch {
                 self.outcome = Outcome(title: ArchiveRecoveryCopy.failedTitle, message: ArchiveRecoveryCopy.failedMessage)
             }
@@ -79,11 +86,6 @@ final class ArchiveRecoveryModel {
         }
     }
 
-    func cleanupSharedCopy(_ folder: URL?) {
-        guard let folder else { return }
-        try? FileManager.default.removeItem(at: folder)
-    }
-
     // MARK: Backup push withheld
 
     func bringBack(_ store: PhoneStatsStore) {
@@ -92,7 +94,9 @@ final class ArchiveRecoveryModel {
                 let result = try await store.bringBackWithheldMatches()
                 self.outcome = Outcome(
                     title: BackupWithheldCopy.broughtBackTitle,
-                    message: BackupWithheldCopy.broughtBackMessage(count: result.restored, stillMissing: result.stillMissing)
+                    message: result.backupUpdated
+                        ? BackupWithheldCopy.broughtBackMessage(count: result.restored, stillMissing: result.stillMissing)
+                        : BackupWithheldCopy.broughtBackPendingMessage(count: result.restored, stillMissing: result.stillMissing)
                 )
             } catch PhoneStatsStore.RecoveryError.nothingReadable {
                 self.outcome = Outcome(title: BackupWithheldCopy.failedTitle, message: BackupWithheldCopy.noneReadableMessage)
@@ -102,15 +106,21 @@ final class ArchiveRecoveryModel {
         }
     }
 
-    func confirmRemove(count: Int) {
-        removeCount = count
+    /// Opens the Remove from Backup confirmation for the matches withheld right now.
+    func confirmRemove(_ store: PhoneStatsStore) {
+        let ids = store.withheldBackupMatchIDs()
+        if !ids.isEmpty { removeIDs = ids }
     }
 
-    func remove(_ store: PhoneStatsStore) {
+    func remove(_ store: PhoneStatsStore, confirmed: Set<UUID>) {
         run {
             do {
-                try await store.removeWithheldMatchesFromBackup()
+                try await store.removeWithheldMatchesFromBackup(confirmed: confirmed)
                 self.outcome = Outcome(title: BackupWithheldCopy.removedTitle, message: BackupWithheldCopy.removedMessage)
+            } catch PhoneStatsStore.RecoveryError.withheldSetChanged {
+                // More is withheld than the user agreed to remove: remove
+                // nothing and ask again about the current set.
+                self.confirmRemove(store)
             } catch {
                 self.outcome = Outcome(title: BackupWithheldCopy.failedTitle, message: BackupWithheldCopy.failedMessage)
             }
@@ -142,7 +152,6 @@ private struct ArchiveRecoveryPresentations: ViewModifier {
     @Bindable var model: ArchiveRecoveryModel
     let store: PhoneStatsStore
     let syncService: PhoneMatchSyncService
-    @State private var activeShareFolder: URL?
 
     func body(content: Content) -> some View {
         content
@@ -166,17 +175,17 @@ private struct ArchiveRecoveryPresentations: ViewModifier {
             }
             .alert(
                 BackupWithheldCopy.removeTitle(count: model.removeCount ?? 0),
-                isPresented: isPresented(\.removeCount),
-                presenting: model.removeCount
-            ) { _ in
+                isPresented: isPresented(\.removeIDs),
+                presenting: model.removeIDs
+            ) { ids in
                 Button(BackupWithheldCopy.removeConfirm, role: .destructive) {
                     DispatchQueue.main.async {
-                        model.remove(store)
+                        model.remove(store, confirmed: ids)
                     }
                 }
                 Button("Cancel", role: .cancel) {}
-            } message: { count in
-                Text(BackupWithheldCopy.removeMessage(count: count))
+            } message: { ids in
+                Text(BackupWithheldCopy.removeMessage(count: ids.count))
             }
             .alert(
                 model.outcome?.title ?? "",
@@ -187,12 +196,11 @@ private struct ArchiveRecoveryPresentations: ViewModifier {
             } message: { outcome in
                 Text(outcome.message)
             }
-            .sheet(item: $model.sharedFiles, onDismiss: {
-                model.cleanupSharedCopy(activeShareFolder)
-                activeShareFolder = nil
-            }) { files in
+            // The copied files are deliberately not deleted when the sheet
+            // closes: AirDrop or Mail may still be reading them. The store
+            // sweeps old copies the next time one is made.
+            .sheet(item: $model.sharedFiles) { files in
                 RecoveryShareSheet(activityItems: files.urls)
-                    .onAppear { activeShareFolder = files.temporaryFolder }
             }
     }
 
