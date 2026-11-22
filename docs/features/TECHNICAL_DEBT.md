@@ -62,6 +62,7 @@ when the item should constrain future changes.
 | [3](#3--replace-stringly-typed-settings-keys-with-typed-keys) | Settings | Replace stringly-typed settings keys with typed keys | Medium today; **high change risk** | Next engineering-risk cleanup after persistence containment | Large, splittable per setting category |
 | [20](#20--make-health-derived-field-classification-mechanically-exhaustive) | Health/Privacy | Make Health-derived field classification mechanically exhaustive | No current bug; **high privacy risk on expansion** | Before adding any Health-derived field or export surface | Medium design; small first guards |
 | [4a-write](#4a-write--surface-save-failures) | Persistence | Surface live-state and archive save failures | Medium impact; low likelihood | After, or alongside, read containment | Small–medium |
+| [29](#29--keep-watch-matches-the-iphone-hasnt-saved) | Persistence | Keep Watch matches the iPhone hasn't saved | High impact (matches lost for good); low likelihood — needs 25+ new matches while the iPhone archive is paused | Before relying on the Watch as the copy of record during a pause | Medium |
 | [26](#26--match-info-swipe-down-and-player-name-save-gaps) | Data loss | Match Info swipe-down and player-name save gaps | Low; swipe discard is accepted, a failed name save may show no error | Next Match Info change | Small |
 | [23](#23--validate-manual-match-scores-and-explain-invalid-input) | Correctness | Validate manual match scores and explain invalid input | Medium; inconsistent records can be resumed on Watch | Next manual-entry fix, after persistence containment | Small–medium |
 | [24](#24--add-accessible-watch-scoring-actions) | Accessibility | Add accessible Watch scoring actions | Core scoring has no named accessibility actions | Coordinate with walkthrough shared controls | Small–medium |
@@ -534,6 +535,50 @@ Show a small but visible warning on the live scoreboard for live-state failure,
 and on history/settings for archive failure. Clear it only after a successful
 write or a deliberate reset that the model defines as resolving the condition;
 do not clear it merely because the view disappeared.
+
+---
+
+### 29 — Keep Watch matches the iPhone hasn't saved
+
+**What:** The Watch keeps its newest `WatchHistory.cap` (25) matches.
+`StatsStore.appendMatch` trims to that cap on every save, whether or not the
+iPhone has saved the matches being dropped. Normally that's safe: the reliable
+`transferUserInfo` delivery means the iPhone has the match long before it rolls
+off the Watch.
+
+**The gap #18 opened:** while the iPhone archive is paused (`archiveProblem` set
+by an unreadable or undecodable canonical file), `PhoneStatsStore.mergeIncoming`
+refuses every Watch delivery and returns `nil`. The delivery is consumed, so the
+Watch copy becomes the only copy. Try Again and Restore from iCloud ask the
+Watch for its full history afterwards, which recovers everything still on the
+Watch. A match that rolled off before then is lost for good: the iPhone never
+saved it, and the Watch no longer has it.
+
+`pendingWatchRecords` doesn't cover this. It holds deliveries whose *write*
+failed on a healthy archive, it is never used while the archive is paused, and
+it lives in memory, so a relaunch empties it.
+
+**Application risk: high impact, low likelihood.** Losing matches needs the
+iPhone archive to stay paused across 25+ new matches, with the "Matches Couldn't
+Be Read" notice on screen the whole time. It is still unrecoverable, and the
+#18 notices tell the user the Watch "keeps recent matches", which is true only
+up to the cap.
+
+**Possible fix (Watch side):** trim only matches the iPhone has confirmed it
+holds, for example from an acknowledgement the iPhone sends after a durable
+merge. Bound the extra storage with a hard upper limit, and tell the user when
+the Watch is holding more than usual because the iPhone hasn't saved them. A
+phone-side alternative, saving refused deliveries to a separate backup-excluded
+holding file while paused, keeps the Watch unchanged but adds a second store to
+recover from.
+
+**Tests required:** a Watch store test that keeps an unacknowledged match past
+the cap and drops it once acknowledged; a phone test that a delivery refused
+while paused is recovered by the full-history sync after Try Again.
+
+**Key files:** `StatsStore.swift` (Watch), `WatchHistoryCap.swift`,
+`PhoneStatsStore.swift` (`mergeIncoming`), `PhoneMatchSyncService.swift`,
+`WatchMatchSyncService.swift`.
 
 ---
 
