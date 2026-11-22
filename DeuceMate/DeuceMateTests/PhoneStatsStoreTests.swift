@@ -834,4 +834,107 @@ struct PhoneStatsStoreTests {
         }
         #expect(await MainActor.run { store.isBackupWithheld } == true)
     }
+
+    @Test func restoreFromICloudPreservesReadableLocalDeletionLedgersWhenHistoryUndecodable() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let kept = record(health: false)
+        let deleted = record(health: false)
+        let forgottenPlayer = TaggedPlayer(name: "Alex")
+        let taggedKept = kept.mergingTags(MatchTags(opponents: [forgottenPlayer], updatedAt: Date(timeIntervalSince1970: 3_000)))
+
+        // Local history is undecodable, but local tombstones and forgotten-player ledger are intact.
+        try archiveFromNewerBuild().write(to: fixture.historyURL)
+        try encode([deleted.id], to: fixture.tombstoneURL)
+        try encode(ForgottenPlayerLedger(playerIDs: [forgottenPlayer.id]), to: fixture.ledgerURL)
+
+        // Older iCloud backup predates both the permanent delete and the forget.
+        try FileManager.default.createDirectory(at: fixture.backup, withIntermediateDirectories: true)
+        try encode([taggedKept, deleted], to: fixture.backupHistoryURL)
+        try encode([UUID](), to: fixture.backupTombstoneURL)
+
+        let store = try fixture.makeBackingUpStore(startsICloudSync: false)
+        #expect(store.archiveProblem == .undecodable)
+
+        let restoredCount = try await store.restoreArchiveFromICloud()
+        #expect(restoredCount == 1)
+        #expect(store.loadHistory().map(\.id) == [kept.id])
+        #expect(store.loadHistory().first?.tags?.opponents.isEmpty == true)
+        #expect(store.forgottenPlayerLedger().contains(forgottenPlayer.id))
+        let persistedTombstones = try JSONDecoder().decode([UUID].self, from: Data(contentsOf: fixture.tombstoneURL))
+        #expect(Set(persistedTombstones) == [deleted.id])
+    }
+
+    @Test func bringBackWithheldMatchesAdoptsRemoteDeletionLedgersAndRefusesCorruptLedgers() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let kept = record(health: false)
+        let forgottenPlayer = TaggedPlayer(name: "Sam")
+        let withheld = record(health: false).mergingTags(
+            MatchTags(opponents: [forgottenPlayer], updatedAt: Date(timeIntervalSince1970: 3_000))
+        )
+        try encode([kept], to: fixture.historyURL)
+        try encode([UUID](), to: fixture.tombstoneURL)
+        try encode(BackupManifest(recordIDs: [kept.id, withheld.id], tombstones: [], identityKey: "account-a"), to: fixture.manifestURL)
+        try FileManager.default.createDirectory(at: fixture.backup, withIntermediateDirectories: true)
+        try encode([kept, withheld], to: fixture.backupHistoryURL)
+        try encode([UUID](), to: fixture.backupTombstoneURL)
+
+        let store = try fixture.makeBackingUpStore(startsICloudSync: false)
+        #expect(await pushNow(store) == true)
+
+        // Corrupt remote ledger must refuse bring-back instead of bypassing deletion intent.
+        try Data(#"{"playerIDs":["bad-id"]}"#.utf8).write(to: fixture.backupLedgerURL)
+        await #expect(throws: PhoneStatsStore.RecoveryError.backupUnavailable) {
+            try await store.bringBackWithheldMatches()
+        }
+
+        // Valid remote ledger is unioned locally and scrubs the restored match.
+        try encode(ForgottenPlayerLedger(playerIDs: [forgottenPlayer.id]), to: fixture.backupLedgerURL)
+        let result = try await store.bringBackWithheldMatches()
+        #expect(result.restored == 1 && result.stillMissing == 0)
+        #expect(store.forgottenPlayerLedger().contains(forgottenPlayer.id))
+        let restoredMatch = try #require(store.loadHistory().first { $0.id == withheld.id })
+        #expect(restoredMatch.tags?.opponents.isEmpty == true)
+    }
+
+    @Test func removeFromBackupRejectsStaleAccountBaselineAfterAccountSwitch() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let accountA = fixture.root.appendingPathComponent("iCloudA", isDirectory: true)
+        let accountB = fixture.root.appendingPathComponent("iCloudB", isDirectory: true)
+        try FileManager.default.createDirectory(at: accountA, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: accountB, withIntermediateDirectories: true)
+
+        let kept = record(health: false), lostA = record(health: false), matchB = record(health: false)
+        try encode([kept], to: fixture.historyURL)
+        try encode([UUID](), to: fixture.tombstoneURL)
+        try encode(BackupManifest(recordIDs: [kept.id, lostA.id], tombstones: [], identityKey: "account-a"), to: fixture.manifestURL)
+        try encode([kept, lostA], to: accountA.appendingPathComponent("matchHistory.json"))
+        try encode([UUID](), to: accountA.appendingPathComponent("deletedMatchIDs.json"))
+
+        let accountBBytes = try JSONEncoder().encode([kept, matchB])
+        try accountBBytes.write(to: accountB.appendingPathComponent("matchHistory.json"))
+        try encode([UUID](), to: accountB.appendingPathComponent("deletedMatchIDs.json"))
+
+        var activeContainer = accountA
+        var activeIdentity = "account-a"
+        let store = try fixture.makeBackingUpStore(
+            container: { activeContainer },
+            identityKey: { activeIdentity },
+            startsICloudSync: false
+        )
+        #expect(await pushNow(store) == true)
+        #expect(await MainActor.run { store.withheldBackupMatchCount } == 1)
+
+        // User switches to Account B before tapping Remove from Backup: stale
+        // Account A baseline must be rejected and Account B left untouched.
+        activeContainer = accountB
+        activeIdentity = "account-b"
+        await #expect(throws: PhoneStatsStore.RecoveryError.backupUnavailable) {
+            try await store.removeWithheldMatchesFromBackup()
+        }
+        #expect(try Data(contentsOf: accountB.appendingPathComponent("matchHistory.json")) == accountBBytes)
+        #expect(await MainActor.run { store.isBackupWithheld } == false)
+    }
 }

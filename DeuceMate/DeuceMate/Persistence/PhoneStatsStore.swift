@@ -114,6 +114,13 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// launch and explicit recovery.
     private var canonicalSuspension: ArchiveLoadProblem?
     private var canonicalWritesSuspended: Bool { canonicalSuspension != nil }
+    /// Readable local tombstones and forgotten-player ledger retained privately
+    /// while the archive is suspended (e.g., `matchHistory.json` undecodable
+    /// while deletion ledgers loaded cleanly). Never published while suspended,
+    /// and unioned into explicit recovery so intact local deletion intent is
+    /// never erased by an older backup or Replace import.
+    private var suspendedLocalTombstones: Set<UUID> = []
+    private var suspendedLocalForgotten = ForgottenPlayerLedger()
     /// Watch bodies that arrived after a healthy load but failed to commit.
     /// Retained unscrubbed so retry compares their original revisions against
     /// the committed archive before scrubbing the winner.
@@ -682,9 +689,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             let snapshot = ManualMatchArchiveBackup.importSnapshot(
                 importing: archive.records,
                 into: records,
-                tombstones: tombstones,
+                tombstones: tombstones.union(suspendedLocalTombstones),
                 mode: mode,
-                currentForgottenPlayers: forgotten,
+                currentForgottenPlayers: forgotten.union(suspendedLocalForgotten),
                 importedForgottenPlayers: archive.forgottenPlayers
             )
             guard adoptOnQueue(
@@ -696,6 +703,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 throw TagEditError.notPersisted
             }
             if suspension != nil {
+                suspendedLocalTombstones = []
+                suspendedLocalForgotten = ForgottenPlayerLedger()
                 removeLegacyQuarantineFilesOnQueue()
                 publishArchiveProblemOnQueue()
             }
@@ -777,10 +786,10 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             }
             let snapshot = ArchiveBackupPolicy.initialRestore(
                 localRecords: self.records,
-                localTombstones: self.tombstones,
+                localTombstones: self.tombstones.union(self.suspendedLocalTombstones),
                 backupRecords: backup.records.records,
                 backupTombstones: backup.tombstones,
-                localForgottenPlayers: self.forgotten,
+                localForgottenPlayers: self.forgotten.union(self.suspendedLocalForgotten),
                 backupForgottenPlayers: backup.forgotten
             )
             let restored = HealthSidecarPolicy.merge(
@@ -801,36 +810,50 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         }
     }
 
-    /// "Bring Them Back": merges the withheld matches from the backup into the
-    /// archive and pushes immediately. Returns how many came back and how many
-    /// this build couldn't read (those stay withheld and protected in iCloud).
+    /// "Bring Them Back": reads and validates the full backup (history,
+    /// tombstones, and forgotten-player ledger), unions remote deletion intent,
+    /// merges the withheld matches into the archive, and pushes immediately.
+    /// Rejects stale-account recovery state if the iCloud identity changed.
+    /// Returns how many came back and how many this build couldn't read (those
+    /// stay withheld and protected in iCloud).
     func bringBackWithheldMatches() async throws -> (restored: Int, stillMissing: Int) {
         try await onQueueThrowing { () throws -> (restored: Int, stillMissing: Int) in
             let wanted = self.withheldMatchIDs
             guard !wanted.isEmpty else { return (0, 0) }
+            let currentIdentityKey = self.storageConfiguration.backupIdentityKey()
+            guard let baseline = self.withheldBaseline, baseline.matchesIdentity(currentIdentityKey) else {
+                self.setBackupWithheldOnQueue([], baseline: nil)
+                throw RecoveryError.backupUnavailable
+            }
+            guard case .loaded(let backup) = self.readFullBackupOnQueue() else {
+                throw RecoveryError.backupUnavailable
+            }
             guard let container = self.storageConfiguration.backupContainerURL() else {
                 throw RecoveryError.backupUnavailable
             }
             let historyURL = container.appendingPathComponent(Self.historyFilename)
             let tombstoneURL = container.appendingPathComponent(Self.tombstoneFilename)
-            guard case .loaded(let list) = self.decodeBackup(LenientRecordList.self, from: self.backupFileState(at: historyURL)) else {
-                throw RecoveryError.backupUnavailable
-            }
-            let found = list.records.filter { wanted.contains($0.id) }
+            let mergedTombstones = self.tombstones.union(backup.tombstones)
+            let mergedForgotten = self.forgotten.union(backup.forgotten)
+            let found = backup.records.records.filter { wanted.contains($0.id) && !mergedTombstones.contains($0.id) }
             guard !found.isEmpty else { throw RecoveryError.nothingReadable }
-            let merged = MatchMergePolicy.merge(
-                incoming: found,
-                into: self.records,
-                tombstones: self.tombstones,
-                forgottenPlayers: self.forgotten
+            let merged = mergedForgotten.scrubbed(
+                MatchMergePolicy.merge(
+                    incoming: found,
+                    into: self.records,
+                    tombstones: mergedTombstones,
+                    forgottenPlayers: mergedForgotten
+                ),
+                now: Date()
             )
-            guard self.adoptOnQueue(records: merged, tombstones: self.tombstones) else {
+            guard self.adoptOnQueue(records: merged, tombstones: mergedTombstones, forgotten: mergedForgotten) else {
                 throw RecoveryError.notPersisted
             }
+            let remaining = wanted.subtracting(mergedTombstones).subtracting(Set(found.map(\.id))).count
             let outcome = self.pushNowOnQueue(historyURL: historyURL, tombstoneURL: tombstoneURL)
             switch outcome {
             case .pushed, .withheld:
-                return (found.count, wanted.count - found.count)
+                return (found.count, remaining)
             case .deferred, .unreadableRemote, .failed:
                 throw RecoveryError.backupUnavailable
             }
@@ -838,14 +861,20 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     }
 
     /// "Remove from Backup": the user accepts that the withheld matches leave
-    /// the backup. The backup's record file is copied to this iPhone first,
-    /// then only those confirmed ids stop being protected (`acceptingLoss`).
-    /// Throws `RecoveryError.backupUnavailable` if the remote write fails,
-    /// without falsely clearing the withheld state.
+    /// the backup. Rejects stale-account recovery state if the iCloud account
+    /// changed since the push was withheld. The backup's record file is copied
+    /// to this iPhone first, then only those confirmed ids stop being protected
+    /// (`acceptingLoss`). Throws `RecoveryError.backupUnavailable` if the
+    /// remote write fails, without falsely clearing the withheld state.
     func removeWithheldMatchesFromBackup() async throws {
         try await onQueueThrowing {
             let accepted = self.withheldMatchIDs
             guard !accepted.isEmpty, let baseline = self.withheldBaseline else { return }
+            let currentIdentityKey = self.storageConfiguration.backupIdentityKey()
+            guard baseline.matchesIdentity(currentIdentityKey) else {
+                self.setBackupWithheldOnQueue([], baseline: nil)
+                throw RecoveryError.backupUnavailable
+            }
             guard let container = self.storageConfiguration.backupContainerURL() else {
                 throw RecoveryError.backupUnavailable
             }
@@ -900,6 +929,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         records = []
         tombstones = []
         forgotten = ForgottenPlayerLedger()
+        suspendedLocalTombstones = []
+        suspendedLocalForgotten = ForgottenPlayerLedger()
         loadCanonicalOnQueue()
         publishOnQueue()
         publishArchiveProblemOnQueue()
@@ -930,6 +961,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             canonicalSuspension = suspension
             throw RecoveryError.notPersisted
         }
+        suspendedLocalTombstones = []
+        suspendedLocalForgotten = ForgottenPlayerLedger()
         removeLegacyQuarantineFilesOnQueue()
         publishArchiveProblemOnQueue()
     }
@@ -1270,6 +1303,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             records = []
             tombstones = []
             forgotten = ForgottenPlayerLedger()
+            suspendedLocalTombstones = Set(loadedTombstones ?? [])
+            suspendedLocalForgotten = loadedLedger ?? ForgottenPlayerLedger()
             phoneStoreLogger.error("Canonical archive \(canonicalSuspension.rawValue, privacy: .public); files preserved, archive operations and iCloud backup suspended")
             return
         }
@@ -1288,10 +1323,14 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
                 records = []
                 tombstones = []
                 forgotten = ForgottenPlayerLedger()
+                suspendedLocalTombstones = Set(loadedTombstones ?? [])
+                suspendedLocalForgotten = loadedLedger ?? ForgottenPlayerLedger()
                 phoneStoreLogger.error("Legacy archive migration blocked (\(problem.rawValue, privacy: .public))")
                 return
             }
         }
+        suspendedLocalTombstones = []
+        suspendedLocalForgotten = ForgottenPlayerLedger()
         forgotten = loadedLedger ?? ForgottenPlayerLedger()
 
         // The Health sidecar is a reconstructable projection, not score-bearing
@@ -1789,6 +1828,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         if currentIdentityKey != lastPushedIdentityKey {
             lastPushedSnapshot = nil
             lastPushedIdentityKey = nil
+            if let wb = withheldBaseline, !wb.matchesIdentity(currentIdentityKey) {
+                setBackupWithheldOnQueue([], baseline: nil)
+            }
         }
 
         let ledgerURL = Self.backupLedgerURL(besides: historyURL)
@@ -1796,7 +1838,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         let tombstoneInspection = inspectRemoteTombstonesOnQueue(at: tombstoneURL)
 
         let baselineResult: BackupBaseline
-        if let overrideBaseline {
+        if let overrideBaseline, overrideBaseline.matchesIdentity(currentIdentityKey) {
             baselineResult = .ready(overrideBaseline)
         } else if let manifest = backupManifest, manifest.matchesIdentity(currentIdentityKey) {
             baselineResult = .ready(manifest)
