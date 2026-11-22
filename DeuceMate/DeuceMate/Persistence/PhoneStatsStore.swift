@@ -1186,16 +1186,21 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         forgotten: ForgottenPlayerLedger
     ) -> Bool {
         guard !canonicalWritesSuspended else { return false }
+        // What the deletion-intent files held before this attempt, so a write
+        // that fails after them can put them back (see the catch below).
+        let priorIntent = [canonicalForgottenPlayersURL, canonicalTombstoneURL].map(Self.priorContents)
+        var wroteIntent = false
         do {
             let split = HealthSidecarPolicy.split(records)
             try FileManager.default.createDirectory(
                 at: canonicalDirectoryURL, withIntermediateDirectories: true
             )
             // Deletion intent FIRST (`forgottenPlayers` and `deletedMatchIDs`):
-            // if a write fails or the process dies before `matchHistory.json`
-            // finishes, a relaunch never loses a deletion or resurrects a
-            // forgotten player — and `deletePermanently` can never drop a
-            // record from history without its tombstone already on disk.
+            // if the process dies before `matchHistory.json` finishes, a
+            // relaunch never loses a deletion or resurrects a forgotten
+            // player — and `deletePermanently` can never drop a record from
+            // history without its tombstone already on disk.
+            wroteIntent = true
             try Self.write(forgotten, to: canonicalForgottenPlayersURL)
             try Self.write(Array(tombstones), to: canonicalTombstoneURL)
             try Self.write(split.health, to: healthSidecarURL)
@@ -1215,7 +1220,52 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             return true
         } catch {
             phoneStoreLogger.error("Failed to write canonical archive: \(error.localizedDescription, privacy: .public)")
+            // A write that fails (rather than a crash) is reported to the
+            // caller as "nothing changed": the user is told the delete or
+            // forget didn't happen, the note is kept and the Watch isn't told.
+            // Deletion intent left on disk would make it happen anyway at the
+            // next launch, so put those files back as they were.
+            if wroteIntent { Self.restoreFiles(priorIntent) }
             return false
+        }
+    }
+
+    /// A file's contents before a write, so a failed write can put them back.
+    private enum PriorContents {
+        case missing
+        case bytes(Data)
+        /// Present but not readable as a file: left alone, never removed.
+        case unknown
+    }
+
+    private static func priorContents(of url: URL) -> (url: URL, prior: PriorContents) {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            return (url, .missing)
+        }
+        guard !isDirectory.boolValue, let data = try? Data(contentsOf: url) else { return (url, .unknown) }
+        return (url, .bytes(data))
+    }
+
+    /// Best-effort: rewrites each file's earlier bytes, or removes a file that
+    /// didn't exist before. A failure is logged; nothing more can be done.
+    private static func restoreFiles(_ files: [(url: URL, prior: PriorContents)]) {
+        for file in files {
+            do {
+                switch file.prior {
+                case .bytes(let bytes):
+                    try bytes.write(to: file.url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+                case .missing:
+                    var isDirectory: ObjCBool = false
+                    if FileManager.default.fileExists(atPath: file.url.path, isDirectory: &isDirectory), !isDirectory.boolValue {
+                        try FileManager.default.removeItem(at: file.url)
+                    }
+                case .unknown:
+                    break
+                }
+            } catch {
+                phoneStoreLogger.error("Failed to restore \(file.url.lastPathComponent, privacy: .public) after a failed write: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
