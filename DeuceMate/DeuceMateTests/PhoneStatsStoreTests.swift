@@ -67,6 +67,19 @@ struct PhoneStatsStoreTests {
             ))
         }
 
+        /// Makes every canonical write fail while reads still succeed: the
+        /// first file written (the forgotten-player ledger) becomes a
+        /// non-empty folder. Call only after the store has loaded.
+        func blockCanonicalWrites() throws {
+            try? FileManager.default.removeItem(at: ledgerURL)
+            try FileManager.default.createDirectory(at: ledgerURL, withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: ledgerURL.appendingPathComponent("blocker"))
+        }
+
+        func unblockCanonicalWrites() throws {
+            try FileManager.default.removeItem(at: ledgerURL)
+        }
+
         func remove() {
             try? FileManager.default.removeItem(at: root)
         }
@@ -1087,5 +1100,194 @@ struct PhoneStatsStoreTests {
         let restored = try await brokenStore.restoreArchiveFromICloud()
         #expect(restored == 2)
         #expect(Set(brokenStore.loadHistory().map(\.id)) == [local.id, remoteOnly.id])
+    }
+
+    // MARK: - Carried over from the stacked #18 PRs (#224–#227)
+
+    @Test func unreadableMainReportsUnreadableProblem() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(at: fixture.historyURL, withIntermediateDirectories: true)
+
+        #expect(fixture.makeStore().archiveProblem == .unreadable)
+    }
+
+    @Test func manualMergeWhileSuspendedFailsInsteadOfClaimingSuccess() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try archiveFromNewerBuild()
+        try original.write(to: fixture.historyURL)
+        let store = fixture.makeStore()
+        let archive = try ManualMatchArchiveBackup.encode(records: [record()])
+
+        // A Merge into an archive that couldn't be loaded would hide that the
+        // damaged matches aren't in it, so it stays refused.
+        #expect(throws: (any Error).self) {
+            try store.importManualArchive(data: archive, mode: .merge)
+        }
+        #expect(store.loadHistory().isEmpty)
+        #expect(try Data(contentsOf: fixture.historyURL) == original)
+    }
+
+    @Test func mergeImportPushesWithoutWithholding() async throws {
+        // Merge never drops matches, so the guard has nothing to withhold.
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let existing = record(), added = record()
+        try encode([existing.strippingHealthData()], to: fixture.historyURL)
+        try encode([UUID](), to: fixture.tombstoneURL)
+        let store = try fixture.makeBackingUpStore()
+        _ = await pushNow(store)
+
+        try store.importManualArchive(data: ManualMatchArchiveBackup.encode(records: [added]), mode: .merge)
+
+        #expect(await pushNow(store) == false)
+        #expect(try backupIDs(fixture) == [existing.id, added.id])
+    }
+
+    @Test func confirmedReplaceImportRecoversASuspendedArchiveAndKeepsACopy() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try archiveFromNewerBuild()
+        try original.write(to: fixture.historyURL)
+        let store = fixture.makeStore()
+        let replacement = record()
+
+        try store.importManualArchive(data: ManualMatchArchiveBackup.encode(records: [replacement]), mode: .replace)
+
+        #expect(await MainActor.run { store.archiveProblem } == nil)
+        #expect(store.loadHistory().map(\.id) == [replacement.id])
+        #expect(try JSONDecoder().decode([MatchRecord].self, from: Data(contentsOf: fixture.historyURL)).map(\.id) == [replacement.id])
+        let kept = try recoveredFiles(fixture).filter { $0.lastPathComponent == "matchHistory.json" }
+        #expect(kept.count == 1)
+        #expect(try kept.first.map { try Data(contentsOf: $0) } == original)
+    }
+
+    @Test func tryAgainThatStillFailsChangesNothing() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try archiveFromNewerBuild()
+        try original.write(to: fixture.historyURL)
+        let store = fixture.makeStore()
+        let arrived = record()
+        // Refused while paused: the Watch keeps its copy and resends later.
+        #expect(store.appendMatchDurably(arrived) == false)
+
+        #expect(await store.retryArchiveLoad() == .undecodable)
+        #expect(await MainActor.run { store.archiveProblem } == .undecodable)
+        #expect(store.loadHistory().isEmpty)
+        #expect(try Data(contentsOf: fixture.historyURL) == original)
+    }
+
+    @Test func restoreOfferExplainsAMissingBackupAndChangesNothing() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try archiveFromNewerBuild()
+        try original.write(to: fixture.historyURL)
+        let store = try fixture.makeBackingUpStore()
+
+        #expect(await store.iCloudRestoreOffer() == .noBackup)
+        await #expect(throws: PhoneStatsStore.RecoveryError.backupUnavailable) {
+            try await store.restoreArchiveFromICloud()
+        }
+        #expect(try Data(contentsOf: fixture.historyURL) == original)
+        #expect(try recoveredFiles(fixture).isEmpty)
+    }
+
+    @Test func savedMatchThatCannotBeWrittenChangesNothingAndSavesOnceWritable() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let store = fixture.makeStore()
+        let existing = record()
+        #expect(store.appendMatchDurably(existing))
+        try fixture.blockCanonicalWrites()
+
+        let manual = record()
+        #expect(store.appendMatchDurably(manual) == false)
+        #expect(store.loadHistory().map(\.id) == [existing.id])
+
+        try fixture.unblockCanonicalWrites()
+        #expect(fixture.makeStore().loadHistory().map(\.id) == [existing.id])
+        #expect(store.appendMatchDurably(manual))
+        #expect(Set(fixture.makeStore().loadHistory().map(\.id)) == [existing.id, manual.id])
+    }
+
+    @Test func permanentDeletionThatCannotBeWrittenKeepsTheMatch() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let store = fixture.makeStore()
+        let match = record()
+        #expect(store.appendMatchDurably(match))
+        try fixture.blockCanonicalWrites()
+
+        #expect(store.deletePermanently(id: match.id) == false)
+
+        // Still listed, and no tombstone in memory or on disk: the caller keeps
+        // the note and doesn't delete it on the Watch.
+        #expect(store.loadHistory().map(\.id) == [match.id])
+        #expect(try JSONDecoder().decode([UUID].self, from: Data(contentsOf: fixture.tombstoneURL)).isEmpty)
+        try fixture.unblockCanonicalWrites()
+        #expect(fixture.makeStore().loadHistory().map(\.id) == [match.id])
+
+        #expect(store.deletePermanently(id: match.id))
+        #expect(fixture.makeStore().loadHistory().isEmpty)
+        #expect(try JSONDecoder().decode([UUID].self, from: Data(contentsOf: fixture.tombstoneURL)) == [match.id])
+    }
+
+    @Test func saveAndDeleteWhilePausedAreRefusedAndChangeNothing() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try archiveFromNewerBuild()
+        try original.write(to: fixture.historyURL)
+        let store = fixture.makeStore()
+
+        #expect(store.appendMatchDurably(record()) == false)
+        #expect(store.deletePermanently(id: UUID()) == false)
+        #expect(store.loadHistory().isEmpty)
+        #expect(try Data(contentsOf: fixture.historyURL) == original)
+        #expect(FileManager.default.fileExists(atPath: fixture.tombstoneURL.path) == false)
+    }
+
+    // MARK: - A write that fails after the deletion intent (TECHNICAL_DEBT #18)
+
+    /// Lets the deletion-intent files be written, then fails the Health
+    /// sidecar write that follows them.
+    private func failWritesAfterDeletionIntent(_ fixture: Fixture) throws {
+        try? FileManager.default.removeItem(at: fixture.healthURL)
+        try FileManager.default.createDirectory(at: fixture.healthURL, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: fixture.healthURL.appendingPathComponent("blocker"))
+    }
+
+    @Test func deleteThatFailsAfterItsTombstoneIsWrittenLeavesNoTombstoneBehind() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let store = fixture.makeStore()
+        let match = record()
+        #expect(store.appendMatchDurably(match))
+        let tombstonesBefore = try Data(contentsOf: fixture.tombstoneURL)
+        try failWritesAfterDeletionIntent(fixture)
+
+        #expect(store.deletePermanently(id: match.id) == false)
+
+        // The caller says the match wasn't deleted, keeps its note and leaves
+        // the Watch alone, so a relaunch must still show it.
+        #expect(try Data(contentsOf: fixture.tombstoneURL) == tombstonesBefore)
+        try FileManager.default.removeItem(at: fixture.healthURL)
+        #expect(fixture.makeStore().loadHistory().map(\.id) == [match.id])
+    }
+
+    @Test func forgetThatFailsAfterTheLedgerIsWrittenLeavesTheLedgerAsItWas() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let store = fixture.makeStore()
+        #expect(store.appendMatchDurably(record()))
+        let ledgerBefore = try Data(contentsOf: fixture.ledgerURL)
+        try failWritesAfterDeletionIntent(fixture)
+
+        #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
+            _ = try store.forgetPlayer(UUID())
+        }
+
+        #expect(try Data(contentsOf: fixture.ledgerURL) == ledgerBefore)
     }
 }

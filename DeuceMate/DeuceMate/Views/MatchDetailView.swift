@@ -920,8 +920,10 @@ struct MatchDetailView: View {
         .sheet(isPresented: $showAICoachSheet) {
             aiCoachSheet
         }
-        .alert("Match could not be saved to this iPhone", isPresented: $showSaveFailure) {
+        .alert(ArchiveSaveFailureCopy.matchNotSavedTitle, isPresented: $showSaveFailure) {
             Button("OK", role: .cancel) {}
+        } message: {
+            Text(ArchiveSaveFailureCopy.message(savingPaused: store.isArchiveBlocked))
         }
         .confirmationDialog(
             "End at current score?",

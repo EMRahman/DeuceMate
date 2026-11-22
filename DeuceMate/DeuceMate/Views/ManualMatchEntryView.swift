@@ -114,8 +114,10 @@ struct ManualMatchEntryView: View {
             .onChange(of: currentGamesMe) { _, _ in resetTiebreakIfLeftSixAll() }
             .onChange(of: currentGamesOpp) { _, _ in resetTiebreakIfLeftSixAll() }
             .navigationTitle("Manual Entry")
-            .alert("Match could not be saved to this iPhone", isPresented: $showSaveFailure) {
+            .alert(ArchiveSaveFailureCopy.matchNotSavedTitle, isPresented: $showSaveFailure) {
                 Button("OK", role: .cancel) {}
+            } message: {
+                Text(ArchiveSaveFailureCopy.message(savingPaused: store.isArchiveBlocked))
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
