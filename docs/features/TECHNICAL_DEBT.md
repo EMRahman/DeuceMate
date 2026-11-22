@@ -54,9 +54,9 @@ when the item should constrain future changes.
 | # | Area | Item | Application risk | Work band / trigger | Effort |
 |---|------|------|------------------|---------------------|--------|
 | [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | Stages 1–3 landed (fail-closed iPhone reads, durable writes & Watch retry, identity-scoped `BackupPushGuard`, explicit recovery, all 6 enums pinned). Remaining: open enums (with #19) | Open enums before the next persisted-enum case | Small |
-| [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | **High** | **Now**, in the persistence-safety programme | Medium — PR #108 exists to re-read |
+| [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | Fail-closed `ScoreViewModel.loadState()` (with pre-decode version header) and Watch `MatchHistoryView` unreadable banner landed | Remaining: explicit Watch live-state abandon/reset recovery UX if desired | Small |
 | [27](#27--prevent-unrecorded-fitness-workouts-with-manager-tests-and-crash-recovery) | Health / Reliability | Prevent unrecorded Fitness workouts with manager tests and crash recovery | High impact when a workout is lost; remaining likelihood unverified | **Now**; physical-Watch save/sync checks before release | Medium, staged |
-| [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | **High when schemas diverge** | **Before any persisted-model, enum, or wire-shape change** | Medium |
+| [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | Step 1 landed (dual-format `PersistedArchiveCodec` readers, `ManualMatchArchiveBackup.supportedSchemaVersions` range + pre-decode header check, `.newerVersion` diagnosis, pre-decode `AppState` version check) | Step 2: switch writers to version-1 envelopes in a later release once step-1 readers are deployed | Small |
 | [2](#2--add-a-monotonic-record-revision-before-queued-checkpoints) | Sync | Order Watch archive checkpoints | Implemented for updated pairs | Legacy-to-legacy merges retain arrival order | — |
 | [28](#28--recover-current-live-state-and-confirm-courtside-phone-input) | Sync / UX | Recover current live state and confirm courtside phone input | Reconnect fix implemented; device timing unverified | Implemented in working branch; physical-device validation pending | Medium, staged |
 | [3](#3--replace-stringly-typed-settings-keys-with-typed-keys) | Settings | Replace stringly-typed settings keys with typed keys | Medium today; **high change risk** | Next engineering-risk cleanup after persistence containment | Large, splittable per setting category |
@@ -463,11 +463,19 @@ ignores unknown keys, pinned by `MatchRecordCodingTests`. It does **not** hold
 for **enum cases**, where both adding and removing break the reader. That is
 this repo's actual exposure, and it is why #18 exists as a separate item.
 
-**Key files:** `ScoreViewModel.swift` (`AppState.version`),
-`Persistence/StatsStoring.swift` (the unversioned archive codec),
+**Status — Step 1 landed (22 November 2026):**
+
+- **Dual-format versioned readers (`PersistedArchiveCodec`):** `StatsStoring.decode`, `MatchSyncMessage.decodeArray`, Watch `StatsStore._loadHistoryUnsafe`, and iPhone `PhoneStatsStore` (canonical reads, legacy migration, initial restore, remote tombstones, remote `BackupRecordID` baseline, and `LenientRecordList` recovery) all accept both legacy bare arrays (`[...]`) and versioned envelopes (`{"format":…,"schemaVersion":…,"items":…}` / `"records"`), validating `format` and `schemaVersion` BEFORE decoding elements. Writers intentionally keep emitting bare JSON arrays during step 1 so older deployed builds remain compatible.
+- **Explicit `.newerVersion` diagnosis:** `ArchiveLoadProblem.newerVersion` (outranking `.undecodable` and `.unreadable`) surfaces update guidance on iPhone (offering Save a Copy rather than backup overwrite); `StoredForgottenPlayers` also checks `schemaVersion` before decoding `playerIDs`.
+- **`ManualMatchArchiveBackup` range gate & pre-decode header check:** Replaced strict `== supportedSchemaVersion` with `supportedSchemaVersions = 1...supportedSchemaVersion` and pre-decode `ArchiveHeader` validation so future incompatible exports surface `.unsupportedSchemaVersion` with update guidance instead of a raw `DecodingError`.
+- **Pre-decode `AppState` version check (`ScoreViewModel.loadState()`):** Checks `AppStateVersionHeader.version` against `1...7` BEFORE decoding full `AppState`, surfacing an update-required `persistenceError` while keeping `stateWritesBlocked = true` and preserving the file untouched.
+- **Remaining (Step 2):** Once step-1 readers are deployed across Watch and iPhone installs, switch writers to emit version-1 envelopes before any future incompatible schema bump.
+
+**Key files:** `ScoreViewModel.swift` (`AppState.version`, `AppStateVersionHeader`),
+`Persistence/StatsStoring.swift` (`PersistedArchiveCodec`),
+`Persistence/ArchiveLoadProblem.swift`, `Views/ArchiveProblemNotice.swift`,
 `Sync/MatchSyncMessage.swift` (`decodeArray`), `Sync/SyncIncomingPayload.swift`,
-`Persistence/ManualMatchArchiveBackup.swift` (envelope and error copy worth
-reusing; its equality gate is not).
+`Persistence/ManualMatchArchiveBackup.swift`.
 
 ---
 
@@ -496,6 +504,8 @@ the user explicitly abandons/resets or a recovery succeeds. Pair it with #19's
 `version > supported` diagnosis so “newer format” is reported accurately rather
 than called corruption. User-facing copy must say only what the app can really
 do; retaining bytes is not the same as offering a recovery path.
+
+**Status — Fail-closed reads & Watch diagnostics landed (22 November 2026):** `ScoreViewModel.loadState()` already blocks writes (`stateWritesBlocked = true`, publishing `persistenceError` across Home, scoreboard, and stats views) on unreadable/corrupt state, and now validates `AppStateVersionHeader.version` against `1...7` BEFORE decoding `AppState` so future-version files preserve bytes and surface update guidance. Watch `MatchHistoryView` now reads via `loadHistoryOrNil()` and shows an explicit preserved-history warning instead of `"No past matches yet."` when history cannot be read.
 
 **Attempted and closed: PR #108.** It reported failures through a shared
 `PersistenceHealth` model in Core, moved the unreadable file aside before the

@@ -7,7 +7,14 @@ import Foundation
 /// HealthKit-derived heart rate, steps, distance, and calories.
 public enum ManualMatchArchiveBackup {
     public static let format = "deucemate.matchArchive"
+    /// Current schema version emitted by `encode(...)`.
+    /// IMPORTANT: Bump this constant ONLY when introducing a persisted model
+    /// or enum change that schema-1 readers cannot decode (TECHNICAL_DEBT #19).
     public static let supportedSchemaVersion = 1
+    /// Explicit set of schema versions this build knows how to decode/migrate.
+    /// Kept as a range rather than `== supportedSchemaVersion` so bumping the
+    /// current version in a future release never breaks existing v1 exports.
+    public static let supportedSchemaVersions: ClosedRange<Int> = 1...supportedSchemaVersion
 
     /// Upper bound on the raw bytes of an imported archive file. An imported file
     /// is the only genuinely externally-sourced input in the app (it may have been
@@ -115,6 +122,9 @@ public enum ManualMatchArchiveBackup {
             case .wrongFormat:
                 return "This file is not a DeuceMate match archive."
             case .unsupportedSchemaVersion(let version):
+                if version > supportedSchemaVersions.upperBound {
+                    return "This DeuceMate archive was created by a newer version of DeuceMate (version \(version)). Update DeuceMate to import it."
+                }
                 return "This DeuceMate archive version is not supported: \(version)."
             case .tooManyRecords(let count):
                 return "This archive contains too many matches to import: \(count)."
@@ -142,11 +152,22 @@ public enum ManualMatchArchiveBackup {
         return try makeEncoder().encode(archive)
     }
 
+    private struct ArchiveHeader: Decodable {
+        let format: String
+        let schemaVersion: Int
+    }
+
     public static func decode(_ data: Data) throws -> Archive {
         guard !data.isEmpty else { throw ArchiveError.emptyFile }
         // Reject an oversized blob before the decoder buffers it into memory.
         guard data.count <= maxArchiveBytes else { throw ArchiveError.fileTooLarge }
-        let archive = try makeDecoder().decode(Archive.self, from: data)
+        let decoder = makeDecoder()
+        // Validate format and schema version BEFORE decoding `records`, so an
+        // archive from a newer build with unfamiliar enum cases or changed
+        // fields reports `.unsupportedSchemaVersion` instead of a raw decode error.
+        let header = try decoder.decode(ArchiveHeader.self, from: data)
+        try validateHeader(format: header.format, schemaVersion: header.schemaVersion)
+        let archive = try decoder.decode(Archive.self, from: data)
         try validate(archive)
         return archive
     }
@@ -222,11 +243,15 @@ public enum ManualMatchArchiveBackup {
         }
     }
 
-    private static func validate(_ archive: Archive) throws {
-        guard archive.format == format else { throw ArchiveError.wrongFormat(archive.format) }
-        guard archive.schemaVersion == supportedSchemaVersion else {
-            throw ArchiveError.unsupportedSchemaVersion(archive.schemaVersion)
+    private static func validateHeader(format actualFormat: String, schemaVersion: Int) throws {
+        guard actualFormat == format else { throw ArchiveError.wrongFormat(actualFormat) }
+        guard supportedSchemaVersions.contains(schemaVersion) else {
+            throw ArchiveError.unsupportedSchemaVersion(schemaVersion)
         }
+    }
+
+    private static func validate(_ archive: Archive) throws {
+        try validateHeader(format: archive.format, schemaVersion: archive.schemaVersion)
         guard archive.records.count <= maxArchiveRecords else {
             throw ArchiveError.tooManyRecords(archive.records.count)
         }

@@ -116,6 +116,30 @@ struct StatsStoreTests {
         #expect(store.loadHistoryOrNil() == nil)
     }
 
+    @Test func version1EnvelopeLoadsAndFutureVersionRefusesOverwrite() throws {
+        let url = makeTempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let record = makeRecord()
+        let v1Envelope = try PersistedArchiveCodec.encodeEnvelope(
+            [record],
+            format: PersistedArchiveCodec.historyFormat
+        )
+        try v1Envelope.write(to: url)
+        let store = StatsStore(fileURL: url)
+
+        #expect(store.loadHistoryOrNil() == [record])
+
+        let v2Envelope = Data("""
+        {"format":"deucemate.matchHistory","schemaVersion":2,"items":[{"id":"not-a-uuid","outcome":"smash"}]}
+        """.utf8)
+        try v2Envelope.write(to: url)
+
+        #expect(store.loadHistoryOrNil() == nil)
+        #expect(!store.appendMatchDurably(makeRecord()))
+        store.removeMatch(id: record.id)
+        #expect(try Data(contentsOf: url) == v2Envelope)
+    }
+
     // MARK: - Valid data round-trips
 
     @Test func validHistoryRoundTrips() throws {

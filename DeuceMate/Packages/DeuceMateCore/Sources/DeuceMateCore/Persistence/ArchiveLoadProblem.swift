@@ -19,23 +19,37 @@ public enum ArchiveLoadProblem: String, CaseIterable, Sendable {
     /// The file exists but could not be read (an I/O or data-protection
     /// error). Often transient, so Try Again or the next launch may succeed.
     case unreadable
-    /// The file was read but could not be decoded — damaged, written by a
-    /// newer version of DeuceMate, an orphaned legacy `.corrupt` quarantine, or
-    /// an initialized archive missing required files. Deterministic: the bytes
-    /// are preserved in place so every launch reaches the same diagnosis until
-    /// resolved.
+    /// The file was read but could not be decoded — damaged, an orphaned
+    /// legacy `.corrupt` quarantine, or an initialized archive missing
+    /// required files. Deterministic: the bytes are preserved in place so
+    /// every launch reaches the same diagnosis until resolved.
     case undecodable
+    /// The file explicitly declares a schema version higher than this build
+    /// supports (TECHNICAL_DEBT #19). Bytes are preserved in place; the user
+    /// should update DeuceMate rather than overwrite them with an older backup.
+    case newerVersion
 
-    /// When two files fail differently, keep the more persistent diagnosis:
-    /// an undecodable file will not fix itself on relaunch.
+    private var severity: Int {
+        switch self {
+        case .unreadable:   return 0
+        case .undecodable:  return 1
+        case .newerVersion: return 2
+        }
+    }
+
+    /// When two files fail differently, keep the more persistent/specific
+    /// diagnosis: `.newerVersion` outranks `.undecodable`, which outranks
+    /// `.unreadable`.
     public func combined(with other: ArchiveLoadProblem?) -> ArchiveLoadProblem {
-        self == .undecodable || other == .undecodable ? .undecodable : self
+        guard let other else { return self }
+        return other.severity > severity ? other : self
     }
 
     public var title: String {
         switch self {
-        case .unreadable:  return "Matches Couldn't Be Opened"
-        case .undecodable: return "Matches Couldn't Be Read"
+        case .unreadable:   return "Matches Couldn't Be Opened"
+        case .undecodable:  return "Matches Couldn't Be Read"
+        case .newerVersion: return "Update DeuceMate to Read Matches"
         }
     }
 
@@ -46,6 +60,8 @@ public enum ArchiveLoadProblem: String, CaseIterable, Sendable {
             return "This iPhone couldn't open your saved matches. \(common) This is often temporary, so try again in a moment."
         case .undecodable:
             return "This version of DeuceMate couldn't read your saved matches. \(common) If an update to DeuceMate is available, install it."
+        case .newerVersion:
+            return "Your saved matches were written by a newer version of DeuceMate. \(common) Update DeuceMate to open them again."
         }
     }
 

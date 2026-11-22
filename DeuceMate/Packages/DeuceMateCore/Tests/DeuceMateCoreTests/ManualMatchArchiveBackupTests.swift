@@ -174,8 +174,40 @@ final class ManualMatchArchiveBackupTests: XCTestCase {
         let data = try JSONEncoder.iso8601ManualArchiveTestEncoder.encode(archive)
 
         XCTAssertThrowsError(try ManualMatchArchiveBackup.decode(data)) { error in
-            XCTAssertEqual(error as? ManualMatchArchiveBackup.ArchiveError, .unsupportedSchemaVersion(99))
+            let archiveError = error as? ManualMatchArchiveBackup.ArchiveError
+            XCTAssertEqual(archiveError, .unsupportedSchemaVersion(99))
+            XCTAssertTrue(archiveError?.errorDescription?.contains("Update DeuceMate") == true)
         }
+    }
+
+    func test_decode_rejectsNewerSchemaVersionBeforeDecodingIncompatibleRecords() {
+        // Future v2 export with an unknown enum value and reshaped records must
+        // report `.unsupportedSchemaVersion(2)`, never a raw `DecodingError`.
+        let futureJSON = """
+        {"format":"deucemate.matchArchive","schemaVersion":2,"exportedAt":0,"includesHealthData":true,
+         "records":[{"id":"not-a-uuid","stats":[{"outcome":"smash"}]}]}
+        """
+        XCTAssertThrowsError(try ManualMatchArchiveBackup.decode(Data(futureJSON.utf8))) { error in
+            let archiveError = error as? ManualMatchArchiveBackup.ArchiveError
+            XCTAssertEqual(archiveError, .unsupportedSchemaVersion(2))
+            XCTAssertTrue(archiveError?.errorDescription?.contains("newer version") == true)
+        }
+    }
+
+    func test_decode_rejectsSchemaVersionZeroWithoutClaimingNewerVersion() throws {
+        let archive = ManualMatchArchiveBackup.Archive(
+            schemaVersion: 0,
+            exportedAt: exportedAt,
+            records: []
+        )
+        let data = try JSONEncoder.iso8601ManualArchiveTestEncoder.encode(archive)
+
+        XCTAssertThrowsError(try ManualMatchArchiveBackup.decode(data)) { error in
+            let archiveError = error as? ManualMatchArchiveBackup.ArchiveError
+            XCTAssertEqual(archiveError, .unsupportedSchemaVersion(0))
+            XCTAssertFalse(archiveError?.errorDescription?.contains("newer version") == true)
+        }
+        XCTAssertTrue(ManualMatchArchiveBackup.supportedSchemaVersions.contains(ManualMatchArchiveBackup.supportedSchemaVersion))
     }
 
     func test_decode_rejectsEmptyFile() {

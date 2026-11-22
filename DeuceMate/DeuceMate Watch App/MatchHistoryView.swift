@@ -31,6 +31,7 @@ func styledScore(_ score: String, superSize: CGFloat) -> AttributedString {
 struct MatchHistoryView: View {
     @EnvironmentObject private var viewModel: ScoreViewModel
     @State private var records: [MatchRecord] = []
+    @State private var isHistoryUnreadable = false
     @State private var selected: MatchRecord?
 
     private static let dateFormatter: DateFormatter = {
@@ -41,7 +42,18 @@ struct MatchHistoryView: View {
 
     var body: some View {
         Group {
-            if records.isEmpty {
+            if records.isEmpty && isHistoryUnreadable {
+                VStack(spacing: 8) {
+                    Label("History Unavailable", systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.orange)
+                    Text("Past matches couldn't be read. They have been preserved untouched and won't be overwritten.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
+            } else if records.isEmpty {
                 VStack(spacing: 8) {
                     Text("No past matches yet.")
                         .font(.footnote)
@@ -61,8 +73,10 @@ struct MatchHistoryView: View {
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 StatsStore.shared.removeMatch(id: record.id)
-                                records = StatsStore.shared.loadHistory()
-                                WatchMatchSyncService.shared.sendManifest()
+                                reloadHistory()
+                                if !isHistoryUnreadable {
+                                    WatchMatchSyncService.shared.sendManifest()
+                                }
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
@@ -81,13 +95,13 @@ struct MatchHistoryView: View {
             }
         }
         .onAppear {
-            records = StatsStore.shared.loadHistory()
+            reloadHistory()
         }
         .onReceive(NotificationCenter.default.publisher(for: .watchMatchHistoryDidChange)) { _ in
-            records = StatsStore.shared.loadHistory()
+            reloadHistory()
         }
         .sheet(item: $selected, onDismiss: {
-            records = StatsStore.shared.loadHistory()
+            reloadHistory()
         }) { record in
             MatchStatsView(stats: record.stats,
                            setScores: record.setScores,
@@ -103,6 +117,16 @@ struct MatchHistoryView: View {
                            totalSteps: record.totalSteps,
                            totalCaloriesKcal: record.totalCaloriesKcal)
                 .environmentObject(viewModel)
+        }
+    }
+
+    private func reloadHistory() {
+        if let loaded = StatsStore.shared.loadHistoryOrNil() {
+            records = loaded
+            isHistoryUnreadable = false
+        } else {
+            records = []
+            isHistoryUnreadable = true
         }
     }
 

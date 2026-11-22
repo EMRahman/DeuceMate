@@ -2060,12 +2060,33 @@ class ScoreViewModel: ObservableObject {
             && !hasInProgressMatchData
     }
 
+    private static let maxSupportedAppStateVersion = 7
+
+    private struct AppStateVersionHeader: Decodable {
+        let version: Int
+    }
+
+    private enum LiveStateLoadError: Error {
+        case newerVersion(Int)
+        case unsupportedVersion(Int)
+    }
+
     func loadState() {
         stateRestorationSucceeded = false
         do {
             let data = try Data(contentsOf: stateFileURL)
+            // Validate the schema version BEFORE decoding the full AppState graph
+            // so a future version with new enum cases or changed fields always
+            // diagnoses as `.newerVersion` instead of a generic decode error
+            // (TECHNICAL_DEBT #19, #4a-read).
+            let header = try JSONDecoder().decode(AppStateVersionHeader.self, from: data)
+            if header.version > Self.maxSupportedAppStateVersion {
+                throw LiveStateLoadError.newerVersion(header.version)
+            }
+            guard (1...Self.maxSupportedAppStateVersion).contains(header.version) else {
+                throw LiveStateLoadError.unsupportedVersion(header.version)
+            }
             let state = try JSONDecoder().decode(AppState.self, from: data)
-            guard state.version <= 7 else { throw CocoaError(.coderReadCorrupt) }
             stateWritesBlocked = false
             persistenceError = nil
             stateRestorationSucceeded = true
@@ -2123,6 +2144,16 @@ class ScoreViewModel: ObservableObject {
                 }
             }
             dropStoredCopyOfLiveMatch()
+        } catch let error as LiveStateLoadError {
+            stateRestorationSucceeded = false
+            stateWritesBlocked = true
+            switch error {
+            case .newerVersion:
+                persistenceError = "Saved match requires a newer version of DeuceMate. Update the app to continue."
+            case .unsupportedVersion:
+                persistenceError = "Saved match could not be read. It has been preserved; scoring is unavailable."
+            }
+            return
         } catch {
             stateRestorationSucceeded = (error as? CocoaError)?.code == .fileReadNoSuchFile
             stateWritesBlocked = !stateRestorationSucceeded

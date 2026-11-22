@@ -50,6 +50,10 @@ struct ArchiveProblemNotice: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        case .newerVersion:
+            Button(ArchiveRecoveryCopy.saveCopy) { recovery.saveCopy(store) }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("archive-save-copy")
         }
     }
 
