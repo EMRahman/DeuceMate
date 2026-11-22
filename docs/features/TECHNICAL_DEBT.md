@@ -61,7 +61,7 @@ when the item should constrain future changes.
 | [28](#28--recover-current-live-state-and-confirm-courtside-phone-input) | Sync / UX | Recover current live state and confirm courtside phone input | Reconnect fix implemented; device timing unverified | Implemented in working branch; physical-device validation pending | Medium, staged |
 | [3](#3--replace-stringly-typed-settings-keys-with-typed-keys) | Settings | Replace stringly-typed settings keys with typed keys | Medium today; **high change risk** | Next engineering-risk cleanup after persistence containment | Large, splittable per setting category |
 | [20](#20--make-health-derived-field-classification-mechanically-exhaustive) | Health/Privacy | Make Health-derived field classification mechanically exhaustive | No current bug; **high privacy risk on expansion** | Before adding any Health-derived field or export surface | Medium design; small first guards |
-| [4a-write](#4a-write--surface-save-failures) | Persistence | Surface live-state and archive save failures | Medium impact; low likelihood | After, or alongside, read containment | Small–medium |
+| [4a-write](#4a-write--surface-save-failures) | Persistence | Surface live-state and archive save failures | Mostly addressed: Watch live-state and finalize failures are shown; iPhone saves are durable-first and explained (#228, #231). Remaining: Watch history delete/metadata write failures are only logged | Next Watch history change | Small |
 | [29](#29--keep-watch-matches-the-iphone-hasnt-saved) | Persistence | Keep Watch matches the iPhone hasn't saved | High impact (matches lost for good); low likelihood — needs 25+ new matches while the iPhone archive is paused | Before relying on the Watch as the copy of record during a pause | Medium |
 | [26](#26--match-info-swipe-down-and-player-name-save-gaps) | Data loss | Match Info swipe-down and player-name save gaps | Low; swipe discard is accepted, a failed name save may show no error | Next Match Info change | Small |
 | [23](#23--validate-manual-match-scores-and-explain-invalid-input) | Correctness | Validate manual match scores and explain invalid input | Medium; inconsistent records can be resumed on Watch | Next manual-entry fix, after persistence containment | Small–medium |
@@ -79,15 +79,15 @@ what happens when a persisted file cannot be decoded — and each fix constrains
 the others'. #4a's PR was closed unmerged for exactly this reason. Sequence the
 programme by safety rather than by cheapest patch:
 
-1. **Fail closed at the origin.** A readable-but-undecodable canonical history
+1. ✅ *(#228, #229)* **Fail closed at the origin.** A readable-but-undecodable canonical history
    or tombstone file must suspend canonical writes and iCloud pushes; an
    unreadable/undecodable live state must not be overwritten by the next point.
-2. **Land the cheap guards immediately, without calling the programme done.**
+2. ✅ *(#228)* **Land the cheap guards immediately, without calling the programme done.**
    Pin all persisted-enum raw values and add the missing corrupt-main-file tests.
-3. **Add version envelopes and refuse-to-overwrite-newer semantics** (#19),
+3. ◐ *(#229: step 1, readers only)* **Add version envelopes and refuse-to-overwrite-newer semantics** (#19),
    including an older-version policy for manual exports.
-4. **Add the tombstone-qualified backup floor** (#18) as defence in depth.
-5. **Offer explicit recovery.** Preserve the original bytes and make any lossy,
+4. ✅ *(#228)* **Add the tombstone-qualified backup floor** (#18) as defence in depth.
+5. ✅ *(#228, #231)* **Offer explicit recovery.** Preserve the original bytes and make any lossy,
    element-wise salvage a reported recovery operation, never the default read.
 
 ---
@@ -244,20 +244,30 @@ throws for a key that is present with an unrecognised value.
 decode `[MatchRecord]` in a single call (`StatsStore._loadHistoryUnsafe`,
 `PhoneStatsStore.readCanonicalFile`), so **one** point in **one** old match takes
 down **every** match in the file. A format played twice a year ago costs the
-whole archive. The cascade, worst first:
+whole archive. The cascade as it stood before #228 and #229, worst first, with
+what each step does now:
 
 1. **Phone archive quarantined.** `readCanonicalFile` moves `matchHistory.json`
    aside to `.corrupt` and the store starts from an empty list.
+   *Now (#228):* the file stays in place byte-for-byte, every write and backup
+   push pauses, and `ArchiveProblemNotice` explains it with recovery actions.
 2. **iCloud backup overwritten.** `pushBackupOnQueue` builds its snapshot
    straight from `records` with no emptiness floor, and `lastPushedSnapshot` is
    per-process — so the next push writes the now-empty archive over the backup.
    This is the only irreversible hop; everything else leaves a file on disk.
+   *Now (#228):* `BackupPushGuard` withholds any push that would drop a match
+   without a tombstone or a confirmed Replace import ("iCloud backup paused").
 3. **Watch archive invisible and silently read-only.** `loadHistoryOrNil()`
    returns `nil`; the refuse-to-overwrite guard correctly protects the file, but
    `appendMatch` then bails, so every subsequently finished match is dropped
    without a word.
+   *Now (#229):* the Watch's history screen says "History Unavailable", and
+   finishing a match fails visibly ("Match could not be saved") while the live
+   state is kept.
 4. **Live match reset.** `loadState()`'s catch resets in-memory state and the
    next `saveState()` overwrites `appState.json`.
+   *Now (4a-read, #229):* an unreadable, corrupt or newer-version live state
+   blocks writes and is left untouched.
 
 **The same break runs in both directions.** *Adding* a case is safe for a new app
 reading old data, but an **old** app reading data a newer one wrote hits the
@@ -352,14 +362,14 @@ covered: the §4 `decodeIfPresent` recipe, enforced in review and pinned by
 `MatchRecordCodingTests`. The opposite direction has no defence and, more
 importantly, **no way to detect that it is happening**.
 
-Current state of the four persisted formats:
+State of the four persisted formats before step 1, and after it (#229):
 
-| Format | Version field | Behaviour on data from a newer app |
-|---|---|---|
-| `appState.json` (watch live state) | `version: Int` — **present, required, and never read** (decoded at `ScoreViewModel.swift:528`, branched on nowhere) | none |
-| `matchHistory.json` (watch + phone canonical archive) | none — a bare `[MatchRecord]` array | none |
-| WatchConnectivity wire format | none | none |
-| Manual archive export/import | `schemaVersion`, rejected via `ArchiveError.unsupportedSchemaVersion` | detected and refused legibly — but see the equality-gate caveat below |
+| Format | Version field (before) | Behaviour on data from a newer app (before) | After step 1 (#229) |
+|---|---|---|---|
+| `appState.json` (watch live state) | `version: Int` — **present, required, and never read** (decoded at `ScoreViewModel.swift:528`, branched on nowhere) | none | Version checked **before** the full decode: a newer file is left untouched, writes are blocked and the Watch says an update is needed |
+| `matchHistory.json` (watch + phone canonical archive) | none — a bare `[MatchRecord]` array | none | Readers accept a bare array or a versioned envelope. Writers still emit bare arrays, so until step 2 a newer app's unknown enum case still reads as damaged (`undecodable`) — which also fails closed — rather than as `newerVersion` |
+| WatchConnectivity wire format | none | none | `decodeArray` accepts both shapes; same step-2 caveat |
+| Manual archive export/import | `schemaVersion`, rejected via `ArchiveError.unsupportedSchemaVersion` | detected and refused legibly — but see the equality-gate caveat below | Range gate (`supportedSchemaVersions`) and a header check before decoding records; a newer export asks the user to update |
 
 **Why this repo is exposed, specifically.** The generic version of this risk is
 about staggered updates across devices. Here the real path is closer to home:
@@ -425,7 +435,8 @@ the equality gate with an explicit set/range of versions for which a decoder or
 migration actually exists. Do not blindly accept every `<=` value — version 0
 or an otherwise unknown old shape is not safe merely because its number is
 smaller. Establish the version-1 branch *before* the first bump, not as part of
-it.
+it. *Done in #229:* `supportedSchemaVersions` is a range, checked before the
+records are decoded.
 
 **External guidance reviewed, and what applies here.** This is a recognised
 class of bug (decode failure → treat as empty → write the empty state back →
@@ -433,12 +444,13 @@ the empty file becomes the truth). Assessed against this codebase:
 
 *Applies:*
 
-- Decode-failure-then-write-empty is the phone's exact path today
+- Decode-failure-then-write-empty was the phone's exact path
   (`readCanonicalFile` → `.corrupt` → `loadedRecords = []` →
-  `pushBackupOnQueue` with no floor). Tracked in #18.
-- "Never silently replace on failure; move the original aside." Partially done:
-  the watch `StatsStore` read guard (#4b) and the phone's `.corrupt` quarantine
-  both do it; `appState.json` does not.
+  `pushBackupOnQueue` with no floor). Fixed in #18 (#228).
+- "Never silently replace on failure; move the original aside." Done, and
+  stronger than moving aside: the watch `StatsStore` read guard (#4b), the
+  phone's canonical files (#228) and `appState.json` (4a-read) all leave the
+  original in place and stop writing.
 - Version plus refuse-to-overwrite-newer. Missing everywhere. The manual archive
   has the version and detects a mismatch, but refuses symmetrically rather than
   only refusing *newer*, and it never writes back over the imported file, so it
@@ -536,6 +548,18 @@ Show a small but visible warning on the live scoreboard for live-state failure,
 and on history/settings for archive failure. Clear it only after a successful
 write or a deliberate reset that the model defines as resolving the condition;
 do not clear it merely because the view disappeared.
+
+**Status — mostly addressed (22 November 2026):** the description above predates
+these changes.
+- **Watch live state:** a failed `saveState()` now sets `persistenceError`
+  ("Latest score could not be saved…"), and a failed park/finalize says "Match
+  could not be saved. Try again before leaving." and keeps the live state.
+- **iPhone archive (#228, #231):** writes reach disk before memory changes.
+  Manual entry, End at Current Score and Delete Permanently explain a failure
+  (`ArchiveSaveFailureCopy`) and change nothing; a failed Watch delivery shows
+  `WatchSaveFailedNotice` and is retried.
+- **Remaining:** Watch history writes outside a match — swipe-to-delete and
+  incoming tag or match-type updates — still only log a failure.
 
 ---
 

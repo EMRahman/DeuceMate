@@ -62,7 +62,22 @@ requests the Watch's full history again. Archive deletion, manual entry, and End
 at Current Score issue their Watch-side changes (and private-note deletion) only
 after the local commit succeeds. After a transient Watch delivery write failure
 commits on retry, the phone also reconciles committed tags and match-type
-revisions for the retried IDs.
+revisions for the retried IDs. A failed local write puts the deletion-intent
+files back as they were, so a delete the user was told didn't happen can't
+happen at the next launch.
+
+While the archive is paused, the iPhone refuses Watch archive deliveries, so the
+Watch holds the only copy of new matches until a retry or restore asks for its
+full history. The Watch still trims to its 25-match cap meanwhile
+(TECHNICAL_DEBT #29).
+
+**iCloud push floor.** Every outbound backup push goes through Core's
+`BackupPushGuard`: a match may leave the backup only with a tombstone or a
+confirmed Replace import. Otherwise the history file is withheld ("iCloud backup
+paused") while tombstones and forgotten players are still pushed. The baseline
+is the iCloud-account-scoped `backupManifest.json`, or the backup's own match
+ids when that is missing. Bring Them Back and Remove from Backup resolve a
+withheld push.
 
 **Live recovery (16 November 2026):** activation, reconnect, phone foreground,
 opening the live board and Sync Now request the existing Watch model's current

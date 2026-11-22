@@ -280,7 +280,7 @@ expected values rewritten to make a failure pass — that requires explicit appr
 | `GamePlanTokenEstimatorTests.swift` | The token estimator pinned to reference tokenizer counts on table, prose and multilingual fixtures within the documented error, plus rounding labels. |
 | `ArchiveBackupPolicyTests.swift` | The one-way iCloud backup policy: outbound snapshots (health stripped), initial restore, tombstone propagation, stale in-progress backup protection, and health backfill from local checkpoints. |
 | `BackupPushGuardTests.swift` | The iCloud push floor: deleting the only match empties the backup, unexplained losses withhold records while keeping tombstones strictly additive, remote/baseline tombstones union without hiding a re-imported match on allowed pushes, identity-scoped manifests, Replace manifests, accepting loss of confirmed IDs, and `BackupRecordID` decoding from newer-format backups. |
-| `ArchiveLoadProblemTests.swift` | Archive-problem diagnosis precedence (`undecodable` outranks `unreadable`) and truthful copy. |
+| `ArchiveLoadProblemTests.swift` | Archive-problem diagnosis precedence (`newerVersion` > `undecodable` > `unreadable`) and truthful copy. |
 | `ArchiveRecoveryTests.swift` | Per-match `LenientRecordList` decoding (skipping newer-format matches without losing readable ones) and recovery wording. |
 | `HealthSidecarPolicyTests.swift` | Health sidecar split/merge identity, five-field stripping, empty projection omission, orphan handling, nil-only fill behavior, and backward-compatible decoding. |
 | `ManualMatchArchiveBackupTests.swift` | Manual archive file format, full health-data round trip, merge/replace import behavior, and invalid file rejection. |
