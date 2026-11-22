@@ -66,6 +66,37 @@ final class PointStatTests: XCTestCase {
                        ServingPointCategory.allCases.count)
     }
 
+    func test_pointOutcome_rawValuesArePersistedIdentifiers() throws {
+        // Persisted in every categorised point (TECHNICAL_DEBT #18): additive
+        // only. A new case must be appended here, never a rename or removal.
+        let persisted: [(PointOutcome, String)] = [
+            (.doubleFault, "doubleFault"),
+            (.winner, "winner"),
+            (.forcedError, "forcedError"),
+            (.unforcedError, "unforcedError"),
+            (.uncategorized, "uncategorized")
+        ]
+        XCTAssertEqual(PointOutcome.allCases.count, persisted.count)
+        for (outcome, raw) in persisted {
+            XCTAssertEqual(outcome.rawValue, raw)
+            XCTAssertEqual(try JSONDecoder().decode(PointOutcome.self, from: Data("\"\(raw)\"".utf8)), outcome)
+        }
+    }
+
+    func test_endingShot_rawValuesArePersistedIdentifiers() throws {
+        let persisted: [(EndingShot, String)] = [
+            (.serve, "serve"),
+            (.return, "return"),
+            (.servePlusOne, "servePlusOne"),
+            (.rally, "rally")
+        ]
+        XCTAssertEqual(EndingShot.allCases.count, persisted.count)
+        for (shot, raw) in persisted {
+            XCTAssertEqual(shot.rawValue, raw)
+            XCTAssertEqual(try JSONDecoder().decode(EndingShot.self, from: Data("\"\(raw)\"".utf8)), shot)
+        }
+    }
+
     func test_userSelectableOutcomes_excludeUncategorized() {
         XCTAssertFalse(PointOutcome.userSelectable.contains(.uncategorized))
         XCTAssertEqual(Set(PointOutcome.userSelectable),

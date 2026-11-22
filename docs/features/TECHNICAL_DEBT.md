@@ -53,7 +53,7 @@ when the item should constrain future changes.
 
 | # | Area | Item | Application risk | Work band / trigger | Effort |
 |---|------|------|------------------|---------------------|--------|
-| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact; low–medium likelihood** | **Now** | Medium, staged |
+| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | Stages 1–3 landed (fail-closed iPhone reads, durable writes & Watch retry, identity-scoped `BackupPushGuard`, explicit recovery, all 6 enums pinned). Remaining: open enums (with #19) | Open enums before the next persisted-enum case | Small |
 | [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | **High** | **Now**, in the persistence-safety programme | Medium — PR #108 exists to re-read |
 | [27](#27--prevent-unrecorded-fitness-workouts-with-manager-tests-and-crash-recovery) | Health / Reliability | Prevent unrecorded Fitness workouts with manager tests and crash recovery | High impact when a workout is lost; remaining likelihood unverified | **Now**; physical-Watch save/sync checks before release | Medium, staged |
 | [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | **High when schemas diverge** | **Before any persisted-model, enum, or wire-shape change** | Medium |
@@ -328,8 +328,17 @@ remedy is deleting the app — which takes the sandbox, and the `.corrupt` file,
 with it. `assertionFailure()` gives the same signal in Debug and compiles away in
 Release.
 
+**Status — Stages 1–3 implemented (22 November 2026):**
+
+- **Fail-closed reads & durable writes:** `PhoneStatsStore` leaves unreadable or undecodable `matchHistory.json`, `deletedMatchIDs.json`, and `forgottenPlayers.json` (decoded strictly via `StoredForgottenPlayers` with schema validation) in place byte-for-byte, also blocking on orphaned legacy `.corrupt` quarantines and initialized archives missing history/tombstones. Writes commit deletion intent (`forgottenPlayers.json` and `deletedMatchIDs.json`) before `matchHistory.json` and update memory only after disk commit succeeds; Manual Entry, End at Current Score, permanent delete, and manual import/export gate side effects on durability. Transient Watch write failures retain unscrubbed copies in `pendingWatchRecords` (`watchArchiveSaveFailed`) for retry and tag/match-type reconciliation. Only the reconstructable Health sidecar degrades independently.
+- **Pinned persisted enums:** All six persisted enums (`DoublesServer`, `MatchFormat`, `Player`, `MatchType`, `PointOutcome`, `EndingShot`) are pinned in Core tests.
+- **Hardened iCloud backup push floor (`BackupPushGuard`):** A match may leave iCloud only with a tombstone or a confirmed Replace import; otherwise history is withheld (`withheldBackupMatchCount`, `ICloudBackupCopy.paused`) while additive tombstones and forgotten players still push. `BackupManifest` is scoped to the active iCloud identity token (`identityKey`); account switches or missing manifests inspect the destination backup via `BackupRecordID`, fail closed on corrupt/non-array remote history, and always inspect/union (or preserve untouched) remote `forgottenPlayers.json` and `deletedMatchIDs.json`.
+- **Explicit recovery (`ArchiveProblemNotice`, `BackupWithheldNotice`, `WatchSaveFailedNotice`, `ArchiveRecoveryModel`):** Try Again, Restore from iCloud (`LenientRecordList` + local Health sidecar + clearing stale `backupManifest` so newer-format matches stay protected), Save a Copy (temp folder cleaned up on dismiss), confirmed Replace import (Merge stays refused while suspended), Bring Them Back, and Remove from Backup. Every replacement copies originals (including legacy `.corrupt`, never Health sidecar) to `MatchArchive/Recovered/<time>/` first and aborts if copying fails.
+- **Remaining:** open enums before adding the next persisted enum case (paired with #19).
+
 **Key files:** `ScoreTypes.swift`, `PointStat.swift`, `StatsStore.swift`,
-`PhoneStatsStore.swift` (`readCanonicalFile`, `pushBackupOnQueue`),
+`PhoneStatsStore.swift`, `ArchiveLoadProblem.swift`, `ArchiveRecovery.swift`,
+`BackupPushGuard.swift`, `ArchiveProblemNotice.swift`, `ArchiveRecoveryModel.swift`,
 `ScoreViewModel.swift` (`AppState`, `loadState`).
 
 ---

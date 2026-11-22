@@ -54,6 +54,16 @@ matches and a fresh Watch has none, it directs the user to open a match and choo
 are refreshed through `sessionWatchStateDidChange`, rather than remaining frozen
 at activation.
 
+A failed iPhone archive read preserves canonical files in place and pauses
+archive writes, exports, Watch archive merges, and iCloud backup. The Matches
+screen shows recovery actions (`ArchiveProblemNotice` / `ArchiveRecoveryModel`)
+and keeps the live scoreboard accessible. A successful retry or iCloud restore
+requests the Watch's full history again. Archive deletion, manual entry, and End
+at Current Score issue their Watch-side changes (and private-note deletion) only
+after the local commit succeeds. After a transient Watch delivery write failure
+commits on retry, the phone also reconciles committed tags and match-type
+revisions for the retried IDs.
+
 **Live recovery (16 November 2026):** activation, reconnect, phone foreground,
 opening the live board and Sync Now request the existing Watch model's current
 state through `liveRequest`/`liveReply`. A compact display-only snapshot carries
@@ -291,8 +301,11 @@ clock; if the phone's copy is newer — a stale echo or a forgotten-player scrub
 the phone answers with its own. Cached watch-mirror rows are scrubbed of forgotten
 players before display. The forgotten-player ledger is persisted next to the
 tombstones (`forgottenPlayers.json`, ids only), written before the archive,
-re-applied on load, and backed up to iCloud with it; initial restore unions the
-backup's ledger.
+re-applied on load, and backed up to iCloud with it; initial restore and
+outbound backup pushes union the backup's ledger (preserving uninspectable or
+unsupported-schema remote ledgers untouched). A present local or iCloud ledger
+must contain a complete UUID array and supported schema version; older archives
+can omit the file.
 
 **Tombstones:** when the user permanently deletes a match on the phone, its ID is
 remembered in a small "tombstones" list. Any future sync from the watch skips
