@@ -184,7 +184,11 @@ public extension MatchSyncMessage {
     }
 
     static func decodeArray(_ data: Data) throws -> [MatchRecord] {
-        try JSONDecoder().decode([MatchRecord].self, from: data)
+        try PersistedArchiveCodec.decode(
+            [MatchRecord].self,
+            from: data,
+            expectedFormat: PersistedArchiveCodec.historyFormat
+        )
     }
 }
 

@@ -428,11 +428,11 @@ struct PhoneStatsStoreTests {
         "not json {{{",
         "{}",
         #"{"playerIDs":null}"#,
+        #"{"schemaVersion":0,"playerIDs":[]}"#,
         #"{"schemaVersion":1,"playerIDs":42}"#,
-        #"{"schemaVersion":1,"playerIDs":["00000000-0000-0000-0000-000000000001","bad-id"]}"#,
-        #"{"schemaVersion":2,"playerIDs":[]}"#
+        #"{"schemaVersion":1,"playerIDs":["00000000-0000-0000-0000-000000000001","bad-id"]}"#
     ])
-    func malformedOrNewerForgottenPlayerLedgerSuspendsWrites(json: String) throws {
+    func malformedForgottenPlayerLedgerSuspendsWrites(json: String) throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let existing = record().strippingHealthData()
@@ -447,6 +447,26 @@ struct PhoneStatsStoreTests {
         #expect(!store.appendMatchDurably(record()))
         #expect(try Data(contentsOf: fixture.ledgerURL) == damaged)
         #expect(try JSONDecoder().decode([MatchRecord].self, from: Data(contentsOf: fixture.historyURL)) == [existing])
+    }
+
+    @Test(arguments: [
+        #"{"schemaVersion":2,"playerIDs":[]}"#,
+        #"{"schemaVersion":2,"playerIDs":[{"id":"reshaped-in-v2"}]}"#
+    ])
+    func newerForgottenPlayerLedgerDiagnosesNewerVersionAndPreservesBytes(json: String) throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let existing = record().strippingHealthData()
+        try encode([existing], to: fixture.historyURL)
+        try encode([UUID](), to: fixture.tombstoneURL)
+        let future = Data(json.utf8)
+        try future.write(to: fixture.ledgerURL)
+
+        let store = fixture.makeStore()
+        #expect(store.archiveProblem == .newerVersion)
+        #expect(store.loadHistory().isEmpty)
+        #expect(!store.appendMatchDurably(record()))
+        #expect(try Data(contentsOf: fixture.ledgerURL) == future)
     }
 
     @Test func initialRestoreWaitsForAnIntactForgottenPlayerLedger() throws {
@@ -979,5 +999,93 @@ struct PhoneStatsStoreTests {
         #expect(Set(store.loadHistory().map(\.id)) == [kept.id, withheld.id])
         let persistedTombstones = try JSONDecoder().decode([UUID].self, from: Data(contentsOf: fixture.tombstoneURL))
         #expect(Set(persistedTombstones) == [deletedRemotely.id])
+    }
+
+    // MARK: - Versioned archive readers (TECHNICAL_DEBT #19)
+
+    @Test func version1EnvelopesLoadCleanlyAndWritersStayBareArrayCompatible() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let saved = record(health: false)
+        let deletedID = UUID()
+        try PersistedArchiveCodec.encodeEnvelope([saved], format: PersistedArchiveCodec.historyFormat)
+            .write(to: fixture.historyURL)
+        try PersistedArchiveCodec.encodeEnvelope([deletedID], format: PersistedArchiveCodec.tombstonesFormat)
+            .write(to: fixture.tombstoneURL)
+
+        let store = fixture.makeStore()
+        #expect(store.archiveProblem == nil)
+        #expect(store.loadHistory() == [saved])
+        #expect(store.tombstoneIDs == [deletedID])
+
+        // Step-1 rollout: writers keep emitting bare JSON arrays for older builds.
+        let added = record(health: false)
+        #expect(store.appendMatchDurably(added))
+        #expect(try Data(contentsOf: fixture.historyURL).first == UInt8(ascii: "["))
+        #expect(try Data(contentsOf: fixture.tombstoneURL).first == UInt8(ascii: "["))
+    }
+
+    @Test func futureEnvelopeInHistoryOrTombstonesDiagnosesNewerVersionAndSuspendsWrites() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let futureHistory = Data("""
+        {"format":"deucemate.matchHistory","schemaVersion":2,"items":[{"id":"not-a-uuid","outcome":"smash"}]}
+        """.utf8)
+        try futureHistory.write(to: fixture.historyURL)
+        try encode([UUID](), to: fixture.tombstoneURL)
+
+        let historyStore = fixture.makeStore()
+        #expect(historyStore.archiveProblem == .newerVersion)
+        #expect(!historyStore.appendMatchDurably(record()))
+        #expect(try Data(contentsOf: fixture.historyURL) == futureHistory)
+
+        // Newer version outranks unreadable when both fail.
+        try FileManager.default.removeItem(at: fixture.tombstoneURL)
+        try FileManager.default.createDirectory(at: fixture.tombstoneURL, withIntermediateDirectories: true)
+        #expect(fixture.makeStore().archiveProblem == .newerVersion)
+
+        // Future tombstone envelope with healthy history also diagnoses `.newerVersion`.
+        let fixture2 = try Fixture()
+        defer { fixture2.remove() }
+        let existing = record(health: false)
+        let futureTombstones = Data(#"{"format":"deucemate.deletedMatchIDs","schemaVersion":2,"items":[{"bad":1}]}"#.utf8)
+        try encode([existing], to: fixture2.historyURL)
+        try futureTombstones.write(to: fixture2.tombstoneURL)
+
+        let tombstoneStore = fixture2.makeStore()
+        #expect(tombstoneStore.archiveProblem == .newerVersion)
+        #expect(tombstoneStore.loadHistory().isEmpty)
+        #expect(try Data(contentsOf: fixture2.tombstoneURL) == futureTombstones)
+    }
+
+    @Test func remoteVersion1EnvelopeSupportsBackupBaselineAndRestore() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let local = record(health: false), remoteOnly = record(health: false), deletedID = UUID()
+        try encode([local], to: fixture.historyURL)
+        try encode([UUID](), to: fixture.tombstoneURL)
+        try FileManager.default.createDirectory(at: fixture.backup, withIntermediateDirectories: true)
+        let remoteEnvelope = try PersistedArchiveCodec.encodeEnvelope(
+            [local, remoteOnly],
+            format: PersistedArchiveCodec.historyFormat
+        )
+        try remoteEnvelope.write(to: fixture.backupHistoryURL)
+        try PersistedArchiveCodec.encodeEnvelope(
+            [deletedID],
+            format: PersistedArchiveCodec.tombstonesFormat
+        ).write(to: fixture.backupTombstoneURL)
+
+        // Push without a manifest inspects the v1 remote envelope via BackupRecordID and withholds.
+        let store = try fixture.makeBackingUpStore(startsICloudSync: false)
+        #expect(await pushNow(store) == true)
+        #expect(try Data(contentsOf: fixture.backupHistoryURL) == remoteEnvelope)
+
+        // Restore from iCloud also decodes v1 remote envelopes cleanly.
+        try archiveFromNewerBuild().write(to: fixture.historyURL)
+        let brokenStore = try fixture.makeBackingUpStore(startsICloudSync: false)
+        #expect(brokenStore.archiveProblem == .undecodable)
+        let restored = try await brokenStore.restoreArchiveFromICloud()
+        #expect(restored == 2)
+        #expect(Set(brokenStore.loadHistory().map(\.id)) == [local.id, remoteOnly.id])
     }
 }

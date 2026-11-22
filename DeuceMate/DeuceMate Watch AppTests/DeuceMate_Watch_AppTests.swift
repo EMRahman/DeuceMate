@@ -1394,4 +1394,45 @@ struct DeuceMate_Watch_AppTests {
         #expect(vm.sets[0].gamesMe == 6 && vm.sets[0].gamesOpponent == 4, "S1 = 6-4")
         #expect(vm.sets[1].gamesMe == 3 && vm.sets[1].gamesOpponent == 6, "S2 = 3-6")
     }
+
+    @MainActor
+    @Test func futureAppStateVersionWithIncompatibleFieldsReportsNewerVersionAndPreservesFile() throws {
+        let url = stateFiles.next()
+        // Future v8 live state with an unknown enum case and reshaped fields:
+        // version header check must run BEFORE full AppState decoding.
+        let futureBytes = Data("""
+        {"version":8,"matchFormat":"futureSuperFormat","sets":"reshaped-in-v8"}
+        """.utf8)
+        try futureBytes.write(to: url)
+
+        let vm = ScoreViewModel(statsStore: StatsStore(fileURL: stateFiles.next()), stateFileURL: url)
+        vm.loadState()
+
+        #expect(!vm.stateRestorationSucceeded)
+        let error = try #require(vm.persistenceError)
+        #expect(error.contains("newer version"))
+        #expect(error.contains("Update"))
+
+        // Scoring/saving must remain blocked so the newer-version file is preserved.
+        vm.winPoint(player: .me)
+        #expect(try Data(contentsOf: url) == futureBytes)
+    }
+
+    @MainActor
+    @Test func unsupportedZeroAppStateVersionBlocksWritesAndPreservesFile() throws {
+        let url = stateFiles.next()
+        let zeroVersionBytes = Data("""
+        {"version":0,"sets":[]}
+        """.utf8)
+        try zeroVersionBytes.write(to: url)
+
+        let vm = ScoreViewModel(statsStore: StatsStore(fileURL: stateFiles.next()), stateFileURL: url)
+        vm.loadState()
+
+        #expect(!vm.stateRestorationSucceeded)
+        let error = try #require(vm.persistenceError)
+        #expect(!error.contains("newer version"))
+        vm.winPoint(player: .me)
+        #expect(try Data(contentsOf: url) == zeroVersionBytes)
+    }
 }

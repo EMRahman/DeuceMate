@@ -5,12 +5,17 @@ import XCTest
 
 final class ArchiveLoadProblemTests: XCTestCase {
 
-    func test_undecodableIsTheMorePersistentDiagnosis() {
+    func test_diagnosisPrecedenceNewerVersionOutranksUndecodableAndUnreadable() {
         XCTAssertEqual(ArchiveLoadProblem.unreadable.combined(with: nil), .unreadable)
         XCTAssertEqual(ArchiveLoadProblem.undecodable.combined(with: nil), .undecodable)
+        XCTAssertEqual(ArchiveLoadProblem.newerVersion.combined(with: nil), .newerVersion)
         XCTAssertEqual(ArchiveLoadProblem.unreadable.combined(with: .undecodable), .undecodable)
         XCTAssertEqual(ArchiveLoadProblem.undecodable.combined(with: .unreadable), .undecodable)
         XCTAssertEqual(ArchiveLoadProblem.unreadable.combined(with: .unreadable), .unreadable)
+        XCTAssertEqual(ArchiveLoadProblem.unreadable.combined(with: .newerVersion), .newerVersion)
+        XCTAssertEqual(ArchiveLoadProblem.newerVersion.combined(with: .unreadable), .newerVersion)
+        XCTAssertEqual(ArchiveLoadProblem.undecodable.combined(with: .newerVersion), .newerVersion)
+        XCTAssertEqual(ArchiveLoadProblem.newerVersion.combined(with: .undecodable), .newerVersion)
     }
 
     func test_copyStatesWhatTheAppDoesAndNeverClaimsLossOrRecovery() {
@@ -28,5 +33,8 @@ final class ArchiveLoadProblemTests: XCTestCase {
         XCTAssertTrue(ArchiveLoadProblem.unreadable.message.contains("try again"))
         XCTAssertFalse(ArchiveLoadProblem.undecodable.message.contains("try again"))
         XCTAssertTrue(ArchiveLoadProblem.undecodable.message.contains("update"))
+        XCTAssertFalse(ArchiveLoadProblem.newerVersion.message.contains("try again"))
+        XCTAssertTrue(ArchiveLoadProblem.newerVersion.message.contains("newer version"))
+        XCTAssertTrue(ArchiveLoadProblem.newerVersion.message.contains("Update DeuceMate"))
     }
 }

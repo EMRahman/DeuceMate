@@ -1061,8 +1061,16 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         if historyState.isDownloading || tombstoneState.isDownloading || ledgerState.isDownloading {
             return .unavailable(.downloading)
         }
-        let records = decodeBackup(LenientRecordList.self, from: historyState)
-        let tombstones = decodeBackup([UUID].self, from: tombstoneState)
+        let records = decodeBackup(
+            LenientRecordList.self,
+            from: historyState,
+            expectedFormat: PersistedArchiveCodec.historyFormat
+        )
+        let tombstones = decodeBackup(
+            [UUID].self,
+            from: tombstoneState,
+            expectedFormat: PersistedArchiveCodec.tombstonesFormat
+        )
         let ledger = decodeStrictBackupLedger(from: ledgerState)
         guard records.isUsable, tombstones.isUsable, ledger.isUsable else { return .unavailable(.unreadable) }
         guard let list = records.value else { return .unavailable(.noBackup) }
@@ -1217,17 +1225,37 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         canonicalSuspension = problem.combined(with: canonicalSuspension)
     }
 
-    /// Strict decoder for persisted/backed-up `forgottenPlayers.json`: a
-    /// present ledger must contain a complete UUID set and a supported schema
-    /// version. (`ForgottenPlayerLedger.init(from:)` intentionally tolerates
-    /// malformed fields for external manual imports.)
+    /// Strict decoder for persisted/backed-up `forgottenPlayers.json`: checks
+    /// `schemaVersion` BEFORE decoding `playerIDs` so a newer schema version
+    /// diagnoses as `.newerVersion` even if its body shape changed, and
+    /// requires a complete UUID set for supported versions.
+    /// (`ForgottenPlayerLedger.init(from:)` intentionally tolerates malformed
+    /// fields for external manual imports.)
     private struct StoredForgottenPlayers: Decodable {
         let playerIDs: Set<UUID>
         let schemaVersion: Int?
 
-        var isSupportedSchema: Bool {
-            let version = schemaVersion ?? 1
-            return (1...ForgottenPlayerLedger.currentSchemaVersion).contains(version)
+        private enum CodingKeys: String, CodingKey {
+            case playerIDs
+            case schemaVersion
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            let version = try c.decodeIfPresent(Int.self, forKey: .schemaVersion)
+            if let version {
+                if version > ForgottenPlayerLedger.currentSchemaVersion {
+                    throw PersistedArchiveCodec.CodecError.newerSchemaVersion(
+                        version: version,
+                        maxSupported: ForgottenPlayerLedger.currentSchemaVersion
+                    )
+                }
+                guard version >= 1 else {
+                    throw PersistedArchiveCodec.CodecError.unsupportedSchemaVersion(version)
+                }
+            }
+            schemaVersion = version
+            playerIDs = try c.decode(Set<UUID>.self, forKey: .playerIDs)
         }
 
         var ledger: ForgottenPlayerLedger {
@@ -1251,9 +1279,23 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         // Validate all three score-bearing files before migration, publication,
         // or any write. Unknown deletion intent makes even a readable history
         // unsafe to publish or mutate.
-        let tombstoneRead = Self.readCanonicalFile([UUID].self, at: canonicalTombstoneURL, whenUndecodable: .preserveInPlace)
-        let ledgerRead = Self.readCanonicalFile(StoredForgottenPlayers.self, at: canonicalForgottenPlayersURL, whenUndecodable: .preserveInPlace)
-        let historyRead = Self.readCanonicalFile([MatchRecord].self, at: canonicalHistoryURL, whenUndecodable: .preserveInPlace)
+        let tombstoneRead = Self.readCanonicalFile(
+            [UUID].self,
+            at: canonicalTombstoneURL,
+            expectedFormat: PersistedArchiveCodec.tombstonesFormat,
+            whenUndecodable: .preserveInPlace
+        )
+        let ledgerRead = Self.readCanonicalFile(
+            StoredForgottenPlayers.self,
+            at: canonicalForgottenPlayersURL,
+            whenUndecodable: .preserveInPlace
+        )
+        let historyRead = Self.readCanonicalFile(
+            [MatchRecord].self,
+            at: canonicalHistoryURL,
+            expectedFormat: PersistedArchiveCodec.historyFormat,
+            whenUndecodable: .preserveInPlace
+        )
 
         var loadedTombstones: [UUID]?
         switch tombstoneRead {
@@ -1261,20 +1303,21 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         case .missing: break
         case .unreadable: suspendCanonicalWrites(.unreadable)
         case .undecodable, .corrupt: suspendCanonicalWrites(.undecodable)
+        case .newerVersion: suspendCanonicalWrites(.newerVersion)
         }
 
         var loadedLedger: ForgottenPlayerLedger?
         switch ledgerRead {
-        case .loaded(let stored) where stored.isSupportedSchema:
+        case .loaded(let stored):
             loadedLedger = stored.ledger
-        case .loaded:
-            suspendCanonicalWrites(.undecodable)
         case .missing:
             break // pre-tags archive; optional when genuinely absent
         case .unreadable:
             suspendCanonicalWrites(.unreadable)
         case .undecodable, .corrupt:
             suspendCanonicalWrites(.undecodable)
+        case .newerVersion:
+            suspendCanonicalWrites(.newerVersion)
         }
 
         var loadedHistory: [MatchRecord]?
@@ -1283,6 +1326,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         case .missing: break
         case .unreadable: suspendCanonicalWrites(.unreadable)
         case .undecodable, .corrupt: suspendCanonicalWrites(.undecodable)
+        case .newerVersion: suspendCanonicalWrites(.newerVersion)
         }
 
         // Both history and tombstones precede `archiveInitialized.json`, even
@@ -1290,7 +1334,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         // archive is incomplete and must not look like a fresh install.
         if loadedHistory == nil || loadedTombstones == nil {
             switch Self.readCanonicalFile(Bool.self, at: canonicalInitializedURL, whenUndecodable: .preserveInPlace) {
-            case .loaded(true), .undecodable, .corrupt:
+            case .loaded(true), .undecodable, .corrupt, .newerVersion:
                 suspendCanonicalWrites(.undecodable)
             case .unreadable:
                 suspendCanonicalWrites(.unreadable)
@@ -1339,7 +1383,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         switch Self.readCanonicalFile([MatchHealthData].self, at: healthSidecarURL, whenUndecodable: .moveAside) {
         case .loaded(let loaded):
             health = loaded
-        case .missing, .corrupt, .undecodable, .unreadable:
+        case .missing, .corrupt, .undecodable, .unreadable, .newerVersion:
             health = []
         }
 
@@ -1387,6 +1431,9 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         /// Bytes were readable but not decodable (or an orphaned legacy
         /// `.corrupt` file exists), and files were left in place. Never `missing`.
         case undecodable
+        /// The file declared a schema version higher than this build supports.
+        /// Bytes are always left in place.
+        case newerVersion(Int)
         /// The file exists but could not be read (I/O / protection error).
         case unreadable
     }
@@ -1402,6 +1449,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private static func readCanonicalFile<T: Decodable>(
         _ type: T.Type,
         at url: URL,
+        expectedFormat: String? = nil,
         whenUndecodable handling: UndecodableHandling
     ) -> CanonicalRead<T> {
         let data: Data
@@ -1423,7 +1471,21 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             return .unreadable
         }
         do {
+            if let expectedFormat {
+                return .loaded(try PersistedArchiveCodec.decode(T.self, from: data, expectedFormat: expectedFormat))
+            }
             return .loaded(try JSONDecoder().decode(T.self, from: data))
+        } catch let error as PersistedArchiveCodec.CodecError {
+            if case .newerSchemaVersion(let version, _) = error {
+                phoneStoreLogger.error("File \(url.lastPathComponent, privacy: .public) uses newer schema version \(version, privacy: .public); preserving in place")
+                return .newerVersion(version)
+            }
+            phoneStoreLogger.error("Failed to decode \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            guard handling == .moveAside else { return .undecodable }
+            let aside = url.appendingPathExtension("corrupt")
+            try? FileManager.default.removeItem(at: aside)
+            try? FileManager.default.moveItem(at: url, to: aside)
+            return .corrupt
         } catch {
             phoneStoreLogger.error("Failed to decode \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
             guard handling == .moveAside else { return .undecodable }
@@ -1518,8 +1580,18 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         let documents = storageConfiguration.legacyDocumentsDirectoryURL
         let legacyHistory = documents.appendingPathComponent(Self.historyFilename)
         let legacyDeletes = documents.appendingPathComponent(Self.tombstoneFilename)
-        let historyRead = Self.readCanonicalFile([MatchRecord].self, at: legacyHistory, whenUndecodable: .preserveInPlace)
-        let deleteRead = Self.readCanonicalFile([UUID].self, at: legacyDeletes, whenUndecodable: .preserveInPlace)
+        let historyRead = Self.readCanonicalFile(
+            [MatchRecord].self,
+            at: legacyHistory,
+            expectedFormat: PersistedArchiveCodec.historyFormat,
+            whenUndecodable: .preserveInPlace
+        )
+        let deleteRead = Self.readCanonicalFile(
+            [UUID].self,
+            at: legacyDeletes,
+            expectedFormat: PersistedArchiveCodec.tombstonesFormat,
+            whenUndecodable: .preserveInPlace
+        )
 
         var problem: ArchiveLoadProblem?
         let history: [MatchRecord]?
@@ -1528,6 +1600,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         case .missing: history = nil
         case .unreadable: history = nil; problem = ArchiveLoadProblem.unreadable.combined(with: problem)
         case .undecodable, .corrupt: history = nil; problem = ArchiveLoadProblem.undecodable.combined(with: problem)
+        case .newerVersion: history = nil; problem = ArchiveLoadProblem.newerVersion.combined(with: problem)
         }
         let legacyIDs: [UUID]?
         switch deleteRead {
@@ -1535,6 +1608,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         case .missing: legacyIDs = nil
         case .unreadable: legacyIDs = nil; problem = ArchiveLoadProblem.unreadable.combined(with: problem)
         case .undecodable, .corrupt: legacyIDs = nil; problem = ArchiveLoadProblem.undecodable.combined(with: problem)
+        case .newerVersion: legacyIDs = nil; problem = ArchiveLoadProblem.newerVersion.combined(with: problem)
         }
         if let problem { return .failed(problem) }
 
@@ -1643,8 +1717,16 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             return
         }
 
-        let decodedRecords = decodeBackup([MatchRecord].self, from: historyState)
-        let decodedTombstones = decodeBackup([UUID].self, from: tombstoneState)
+        let decodedRecords = decodeBackup(
+            [MatchRecord].self,
+            from: historyState,
+            expectedFormat: PersistedArchiveCodec.historyFormat
+        )
+        let decodedTombstones = decodeBackup(
+            [UUID].self,
+            from: tombstoneState,
+            expectedFormat: PersistedArchiveCodec.tombstonesFormat
+        )
         let decodedLedger = decodeStrictBackupLedger(from: ledgerState)
         guard decodedRecords.isUsable, decodedTombstones.isUsable, decodedLedger.isUsable else {
             phoneStoreLogger.error("Initial iCloud restore skipped because backup data is corrupt")
@@ -1963,7 +2045,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         case .downloading:
             return .downloading
         case .ready(let data):
-            switch decodeBackup([UUID].self, from: .ready(data)) {
+            switch decodeBackup([UUID].self, from: .ready(data), expectedFormat: PersistedArchiveCodec.tombstonesFormat) {
             case .loaded(let existing):
                 return .ready(existing: Set(existing), isMissing: false)
             case .missing:
@@ -1979,8 +2061,8 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// manifest (first push after updating, after recovery, or after switching
     /// iCloud accounts). Records decode as ids only (`BackupRecordID`), so a
     /// backup with unknown enum cases is still protected; a corrupt or
-    /// non-array remote history fails closed (`.unreadableRemote`) rather than
-    /// masquerading as empty.
+    /// non-array/future-envelope remote history fails closed (`.unreadableRemote`)
+    /// rather than masquerading as empty.
     private func backupBaselineOnQueue(
         historyURL: URL,
         remoteTombstones: Set<UUID>?,
@@ -1998,7 +2080,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             }
             return .ready(nil)
         case .ready:
-            switch decodeBackup([BackupRecordID].self, from: historyState) {
+            switch decodeBackup([BackupRecordID].self, from: historyState, expectedFormat: PersistedArchiveCodec.historyFormat) {
             case .loaded(let ids):
                 return .ready(BackupManifest(
                     recordIDs: Set(ids.map(\.id)),
@@ -2068,9 +2150,16 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         }
     }
 
-    private func decodeBackup<T: Decodable>(_ type: T.Type, from state: BackupFileState) -> DecodedBackup<T> {
+    private func decodeBackup<T: Decodable>(
+        _ type: T.Type,
+        from state: BackupFileState,
+        expectedFormat: String? = nil
+    ) -> DecodedBackup<T> {
         guard case .ready(let data) = state else { return .missing }
         do {
+            if let expectedFormat {
+                return .loaded(try PersistedArchiveCodec.decode(T.self, from: data, expectedFormat: expectedFormat))
+            }
             return .loaded(try JSONDecoder().decode(T.self, from: data))
         } catch {
             phoneStoreLogger.error("iCloud backup decode failed: \(error.localizedDescription, privacy: .public)")
@@ -2082,10 +2171,6 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         guard case .ready(let data) = state else { return .missing }
         do {
             let stored = try JSONDecoder().decode(StoredForgottenPlayers.self, from: data)
-            guard stored.isSupportedSchema else {
-                phoneStoreLogger.error("iCloud backup ledger uses unsupported schema version")
-                return .corrupt
-            }
             return .loaded(stored.ledger)
         } catch {
             phoneStoreLogger.error("iCloud backup ledger decode failed: \(error.localizedDescription, privacy: .public)")
