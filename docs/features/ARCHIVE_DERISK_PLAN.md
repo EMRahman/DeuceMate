@@ -1,7 +1,7 @@
 <!--
 machine-readable summary (parse this block first)
 
-status: proposal. Design only, nothing implemented. Waiting for the owner's sign-off on §9.
+status: decisions signed off by the owner on 2026-11-23 (§9). Nothing implemented yet; PR A comes first.
 author: Claude, from the owner's direction after closing #240
 date: 2026-11-23
 fixes: "TECHNICAL_DEBT #18's one irreversible step: an iPhone archive that can't be decoded no longer overwrites the iCloud backup."
@@ -9,13 +9,14 @@ stance: "Rare and self-inflicted. Prevent it, destroy nothing, and write recover
 budget: "PR A ≤ 75 production lines; PR B ≤ 340 production lines (raised from 300 for the file list, §5.3). A finding that breaks the budget needs the owner's OK (§8)."
 parts: "1 prevent (golden-file test); 2 destroy nothing (keep every copy, pause iCloud); 3 export reminder (ARCHIVE_EXPORT_REMINDER_PLAN.md, unchanged); 4 Archive Diagnostics (a report for support or a coding agent)"
 defers: "ARCHIVE_SAFETY_PLAN.md (full redesign). Its status is deferred, as a reference only."
-decisions_open: [D2, D3, D4]
-decided: "D1: no Resume iCloud Backup button. Only a fixing build ends the pause, after it recovers the dated copies (§3.2). D5: Archive Diagnostics is always in Settings, with its details collapsed until the user opens them (§5.1)."
+decisions_open: []
+decided: "D1: no Resume iCloud Backup button. Only a fixing build ends the pause, after it recovers the dated copies (§3.2). D2: offer the report and, separately, the report with damaged files. D3: no hosted page for now. D4: PR A ships before PR B. D5: Archive Diagnostics is always in Settings, with its details collapsed until the user opens them (§5.1)."
+hotfix_rule: "Any fix for a decode failure must recover the dated copies into the archive and then delete them. Otherwise iCloud stays paused for good (§10)."
 -->
 
 # Plan: De-risk the undecodable archive (#18), proportionately
 
-**Status: proposal. Nothing here is implemented.**
+**Status: decisions signed off (2026-11-23). Nothing here is implemented yet.**
 
 **Read with:** [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md) #18 (the cascade) and
 [`ARCHIVE_EXPORT_REMINDER_PLAN.md`](ARCHIVE_EXPORT_REMINDER_PLAN.md) (part 3).
@@ -382,14 +383,14 @@ These exist because #228–#240 grew with every review.
 - Re-state the line count after each round. Breaking the budget needs the
   owner's OK.
 
-## 9. Decisions for the owner
+## 9. Decisions (signed off 2026-11-23)
 
-| # | Decision | Recommendation |
+| # | Decision | Outcome |
 |---|---|---|
 | D1 | Offer **Resume iCloud Backup**? | **Decided: No** (2026-11-23). Resuming would overwrite the good iCloud backup and need its own follow-ups (§3.2). The pause ends only when a fixing build recovers the copies |
-| D2 | Should Share Report and Damaged Files exist, or the report only? | Both. The report alone diagnoses the cause, and the files are needed to repair genuine damage |
-| D3 | Also publish the agent instructions as a web page? | Not now. Do it only if support starts receiving these reports |
-| D4 | Ship PR A before PR B? | Yes. PR A closes the irreversible step on its own, and PR B can follow |
+| D2 | Should Share Report and Damaged Files exist, or the report only? | **Decided: Both.** The report alone diagnoses the cause, and the files are needed to repair genuine damage |
+| D3 | Also publish the agent instructions as a web page? | **Decided: Not now.** Do it only if support starts receiving these reports |
+| D4 | Ship PR A before PR B? | **Decided: Yes.** PR A closes the irreversible step on its own, and PR B can follow |
 | D5 | Show Archive Diagnostics **always**, not only while a damaged copy exists? | **Decided: Yes** (2026-11-23), as a plain last row in Backup & Transfer with its details collapsed until the user opens them (§5.1). The file list then helps with any backup question, and the user can export the report from there |
 
 ## 10. Phases
@@ -400,7 +401,15 @@ These exist because #228–#240 grew with every review.
 | B | `[Core]` + `[iOS]` | Archive Diagnostics: report builder, file list (iPhone and iCloud), screen, Settings row, share | ≤ 340 | ~230 |
 
 Each PR also updates:
-- CLAUDE.md §1 and the `PhoneStatsStore` row;
+- CLAUDE.md §1 and the `PhoneStatsStore` row. PR A also adds the **hotfix
+  rule** to CLAUDE.md §4 ("Retire a case in a persisted enum") and §5:
+  > Any fix for a decode failure must recover the dated
+  > `.corrupt-<date>` copies into the archive and then delete them. Restoring
+  > the enum case alone isn't enough: while a dated copy exists, iCloud stays
+  > paused, so the user's matches stay stuck on the phone.
+
+  The fixing update must include a test that a dated copy is merged back and
+  removed, and that iCloud then resumes;
 - TECHNICAL_DEBT #18;
 - `docs/architecture/sync-and-data-flow.md`;
 - `docs/architecture/file-inventory.md` (PR B: the new view and Core file).

@@ -125,8 +125,9 @@ Data-flow invariants — **internalise these before touching sync or persistence
   file it can read but can't *decode* is moved aside to `.corrupt`, the archive
   starts empty, and that launch's iCloud push overwrites the backup. The next
   step is the small `docs/features/ARCHIVE_DERISK_PLAN.md` (prevent it, destroy
-  nothing, pause iCloud while a damaged copy exists, Archive Diagnostics); it
-  waits for owner sign-off, and `ARCHIVE_SAFETY_PLAN.md` is deferred. Don't
+  nothing, pause iCloud while a damaged copy exists, Archive Diagnostics). Its
+  decisions are signed off and its PR A is next; `ARCHIVE_SAFETY_PLAN.md` is
+  deferred. Don't
   patch this gap piecemeal or grow that plan's scope: #228–#234 and #240 did,
   never converged, and were reset or closed.
 - **Settings sync bidirectionally, last-write-wins.** Match data does not.

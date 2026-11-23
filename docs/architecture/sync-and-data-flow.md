@@ -60,8 +60,8 @@ doesn't know. When that happens, it moves the file aside to `.corrupt`, starts
 an empty archive, and that launch's iCloud push overwrites the backup. The
 next step is
 [`ARCHIVE_DERISK_PLAN.md`](../features/ARCHIVE_DERISK_PLAN.md): keep every
-damaged copy and pause iCloud while one exists. It is waiting for the owner's
-sign-off, and the full redesign
+damaged copy and pause iCloud while one exists. Its decisions are signed off
+and its PR A is next, and the full redesign
 ([`ARCHIVE_SAFETY_PLAN.md`](../features/ARCHIVE_SAFETY_PLAN.md)) is deferred. An earlier attempt (#228–#234) was reset, so this
 document describes the 1.4.0 behaviour.
 
