@@ -21,6 +21,7 @@ struct ArchiveExportOptionsSheet: View {
     /// iPhone empties a note you deleted here. Carry no text.
     var clearedCount: Int = 0
     private var hasEntries: Bool { !notes.isEmpty || clearedCount > 0 }
+    let isPreparing: Bool
     let onExport: (_ includeNotes: Bool) -> Void
     let onCancel: () -> Void
 
@@ -108,6 +109,7 @@ struct ArchiveExportOptionsSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Export") { onExport(includeNotes && hasEntries) }
                         .accessibilityIdentifier("archive-export-confirm")
+                        .disabled(isPreparing)
                 }
             }
         }

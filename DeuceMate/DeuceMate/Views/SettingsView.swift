@@ -131,7 +131,7 @@ struct SettingsView: View {
     @State private var syncRequestedAt: Date?
     @State private var showSyncDetails = false
     @State private var showArchiveExportDisclosure = false
-    @State private var pendingArchiveExportIncludesNotes: Bool?
+    @State private var isPreparingArchiveExport = false
     @State private var showArchiveExporter = false
     @State private var showArchiveImporter = false
     @State private var showArchiveImportOptions = false
@@ -177,40 +177,36 @@ struct SettingsView: View {
             syncStatus = .succeeded
             syncRequestedAt = nil
         }
-        .sheet(isPresented: $showArchiveExportDisclosure, onDismiss: preparePendingManualArchiveExport) {
+        .sheet(isPresented: $showArchiveExportDisclosure) {
             // The disclosure plus the separate, default-off private-notes
             // opt-in with an exact preview. Built when the sheet is up only.
             ArchiveExportOptionsSheet(
                 baseMessage: archiveExportDisclosureMessage,
                 notes: archiveExportNoteLines,
                 clearedCount: archiveExportNoteEntries.filter(\.isCleared).count,
-                onExport: { includeNotes in
-                    pendingArchiveExportIncludesNotes = includeNotes
-                    showArchiveExportDisclosure = false
-                },
+                isPreparing: isPreparingArchiveExport,
+                onExport: prepareManualArchiveExport,
                 onCancel: { showArchiveExportDisclosure = false }
             )
-        }
-        .fileExporter(
-            isPresented: $showArchiveExporter,
-            document: archiveExportDocument,
-            contentType: .json,
-            defaultFilename: archiveExportFilename
-        ) { result in
-            switch result {
-            case .success:
-                archiveTransferStatus = ArchiveTransferStatus(
-                    message: "Archive exported",
-                    isSuccess: true
-                )
-            case .failure(let error):
-                archiveTransferStatus = ArchiveTransferStatus(
-                    message: "Export failed: \(error.localizedDescription)",
-                    isSuccess: false
-                )
+            .fileExporter(
+                isPresented: $showArchiveExporter,
+                document: archiveExportDocument,
+                contentType: .json,
+                defaultFilename: archiveExportFilename
+            ) { result in
+                showArchiveExportDisclosure = false
+                switch result {
+                case .success:
+                    archiveTransferStatus = ArchiveTransferStatus(message: "Archive exported", isSuccess: true)
+                case .failure(let error):
+                    archiveTransferStatus = ArchiveTransferStatus(
+                        message: "Export failed: \(error.localizedDescription)",
+                        isSuccess: false
+                    )
+                }
             }
+            .fileDialogDefaultDirectory(archiveExportDirectory)
         }
-        .fileDialogDefaultDirectory(archiveExportDirectory)
         .fileImporter(
             isPresented: $showArchiveImporter,
             allowedContentTypes: [.json]
@@ -523,6 +519,7 @@ struct SettingsView: View {
                 } label: {
                     Label("Export Match Archive", systemImage: "square.and.arrow.up")
                 }
+                .disabled(isPreparingArchiveExport)
                 Button {
                     showArchiveImporter = true
                 } label: {
@@ -789,9 +786,8 @@ struct SettingsView: View {
         }
     }
 
-    private func preparePendingManualArchiveExport() {
-        guard let includeNotes = pendingArchiveExportIncludesNotes else { return }
-        pendingArchiveExportIncludesNotes = nil
+    private func prepareManualArchiveExport(includeNotes: Bool) {
+        isPreparingArchiveExport = true
         archiveTransferStatus = nil
         let store = store
         let filename = manualArchiveFilename
@@ -803,6 +799,8 @@ struct SettingsView: View {
                 let data = try store.exportManualArchiveData(notes: notes)
                 let directory = LocalArchiveExportDirectory.prepare()
                 DispatchQueue.main.async {
+                    isPreparingArchiveExport = false
+                    guard showArchiveExportDisclosure else { return }
                     archiveExportDocument = MatchArchiveDocument(data: data)
                     archiveExportDirectory = directory
                     archiveExportFilename = filename
@@ -810,6 +808,9 @@ struct SettingsView: View {
                 }
             } catch {
                 DispatchQueue.main.async {
+                    isPreparingArchiveExport = false
+                    guard showArchiveExportDisclosure else { return }
+                    showArchiveExportDisclosure = false
                     archiveTransferStatus = ArchiveTransferStatus(
                         message: "Export failed: \(error.localizedDescription)",
                         isSuccess: false
