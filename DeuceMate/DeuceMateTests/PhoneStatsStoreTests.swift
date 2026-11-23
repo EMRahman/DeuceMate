@@ -1893,4 +1893,222 @@ struct PhoneStatsStoreTests {
         #expect(try fixture.manifestURL
             .resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
     }
+
+    // MARK: - PR #236 review regression tests
+
+    @Test func bringBackProtectsUnrelatedRemoteMatchesAddedWhilePaused() async throws {
+        // Case 1: While paused for `lost`, remote tombstones `lost` and adds unrelated `remoteAdded`.
+        // Bring Them Back must adopt the tombstone WITHOUT erasing `remoteAdded` from iCloud.
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let (store, kept, lost, _) = try await withheldSetup(fixture)
+        let remoteAdded = record(health: false)
+        try encode([kept.strippingHealthData(), remoteAdded.strippingHealthData()], to: fixture.backupHistoryURL)
+        try encode([lost.id], to: fixture.backupTombstoneURL)
+
+        let result = try await store.bringBackWithheldMatches()
+        #expect(result.restored == 0 && result.stillMissing == 0 && result.backupUpdated == false)
+        #expect(try backupIDs(fixture) == [kept.id, remoteAdded.id])
+        #expect(store.withheldBackupMatchIDs() == [remoteAdded.id])
+        #expect(await MainActor.run { store.isBackupWithheld } == true)
+
+        // Case 2: While paused for `lost2`, remote keeps `lost2` and adds an undecodable newer-format match.
+        // Bring Them Back adopts `lost2` and keeps the newer-format match intact in iCloud.
+        let fixture2 = try Fixture()
+        defer { fixture2.remove() }
+        let (store2, kept2, lost2, _) = try await withheldSetup(fixture2)
+        let newerID = UUID()
+        let remoteWithNewer = Data("""
+        [\(String(decoding: try JSONEncoder().encode(kept2.strippingHealthData()), as: UTF8.self)),
+         \(String(decoding: try JSONEncoder().encode(lost2.strippingHealthData()), as: UTF8.self)),
+         {"id":"\(newerID.uuidString)","stats":[{"outcome":"smash"}]}]
+        """.utf8)
+        try remoteWithNewer.write(to: fixture2.backupHistoryURL)
+
+        let result2 = try await store2.bringBackWithheldMatches()
+        #expect(result2.restored == 1 && result2.stillMissing == 0)
+        #expect(Set(store2.loadHistory().map(\.id)) == [kept2.id, lost2.id])
+        #expect(try Data(contentsOf: fixture2.backupHistoryURL) == remoteWithNewer)
+        #expect(store2.withheldBackupMatchIDs() == [newerID])
+        #expect(await MainActor.run { store2.isBackupWithheld } == true)
+    }
+
+    @Test func replaceAfterFailedLegacyMigrationExcludesRecoveredLegacyHistoryAndAbortsIfExclusionFails() throws {
+        // Legacy Documents/matchHistory.json has inline HealthKit HR samples plus a newer-format record,
+        // causing legacy migration to fail closed.
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let withHealth = record(health: true)
+        let legacyBytes = Data("""
+        [\(String(decoding: try JSONEncoder().encode(withHealth), as: UTF8.self)),
+         {"id":"\(UUID().uuidString)","stats":[{"outcome":"smash"}]}]
+        """.utf8)
+        #expect(String(decoding: legacyBytes, as: UTF8.self).contains("heartRateBPM"))
+        let legacyHistory = fixture.legacyDocuments.appendingPathComponent("matchHistory.json")
+        try legacyBytes.write(to: legacyHistory)
+
+        let replacement = record(health: false)
+        let replacementData = try ManualMatchArchiveBackup.encode(records: [replacement])
+
+        // If excluding Recovered/ fails, Replace must abort before copying raw legacy Health data.
+        let failingStore = fixture.makeStore { url in
+            if url.path.contains("/Recovered") {
+                throw CocoaError(.fileWriteNoPermission)
+            }
+            var mutable = url
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try mutable.setResourceValues(values)
+        }
+        #expect(failingStore.archiveProblem == .undecodable)
+        #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
+            try failingStore.importManualArchive(data: replacementData, mode: .replace)
+        }
+        #expect(try recoveredFiles(fixture).isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: fixture.historyURL.path))
+
+        // With working exclusion, Replace succeeds and excludes Recovered/, the subfolder, and the copied file.
+        let store = fixture.makeStore()
+        #expect(store.archiveProblem == .undecodable)
+        try store.importManualArchive(data: replacementData, mode: .replace)
+
+        let recoveredRoot = fixture.canonical.appendingPathComponent("Recovered", isDirectory: true)
+        #expect(try recoveredRoot
+            .resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+        let copiedLegacy = try #require(
+            try recoveredFiles(fixture).first { $0.lastPathComponent == "matchHistory.json" }
+        )
+        #expect(try copiedLegacy.deletingLastPathComponent()
+            .resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+        #expect(try copiedLegacy
+            .resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+        #expect(try Data(contentsOf: copiedLegacy) == legacyBytes)
+    }
+
+    @Test func confirmedReplaceDuringTemporaryICloudOutageTakesPrecedenceOverInitialRestore() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let oldCloud = record(health: false), replacement = record(health: false)
+        try FileManager.default.createDirectory(at: fixture.backup, withIntermediateDirectories: true)
+        let backupBytes = try JSONEncoder().encode([oldCloud])
+        try backupBytes.write(to: fixture.backupHistoryURL)
+        try encode([UUID](), to: fixture.backupTombstoneURL)
+
+        var containerAvailable = true
+        let backup = fixture.backup
+        let store = PhoneStatsStore(storageConfiguration: .init(
+            canonicalDirectoryURL: fixture.canonical,
+            legacyDocumentsDirectoryURL: fixture.legacyDocuments,
+            startsICloudSync: false,
+            backupContainerURL: { containerAvailable ? backup : nil },
+            backupIdentityKey: { "account-a" }
+        ))
+
+        // Fresh install discovers the remote backup and opens the restore prompt.
+        store.syncICloudBackup()
+        _ = store.loadHistory()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await MainActor.run { store.pendingRestorePreview }?.recordCount == 1)
+
+        // Container drops out transiently while still signed in; user confirms Replace.
+        containerAvailable = false
+        try store.importManualArchive(
+            data: ManualMatchArchiveBackup.encode(records: [replacement]),
+            mode: .replace
+        )
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await MainActor.run { store.pendingRestorePreview } == nil)
+        #expect(try recoveredFiles(fixture).isEmpty)
+        #expect(try Data(contentsOf: fixture.backupHistoryURL) == backupBytes)
+
+        // Container returns: pending Replace must win over initial restore,
+        // preserve the remote copy in Recovered/, mark initialized, and update iCloud.
+        containerAvailable = true
+        store.syncICloudBackup()
+        _ = store.loadHistory()
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(await MainActor.run { store.pendingRestorePreview } == nil)
+        #expect(FileManager.default.fileExists(atPath: fixture.initializedURL.path))
+        let copy = try #require(
+            try recoveredFiles(fixture).first { $0.lastPathComponent == "iCloud-matchHistory.json" }
+        )
+        #expect(try Data(contentsOf: copy) == backupBytes)
+        #expect(try copy.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+        #expect(try backupIDs(fixture) == [replacement.id])
+    }
+
+    @Test func alreadyTombstonedNewerFormatMatchDoesNotBlockFirstLaunchBackup() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let deletedNewerID = UUID()
+        try FileManager.default.createDirectory(at: fixture.backup, withIntermediateDirectories: true)
+        try Data("""
+        [{"id":"\(deletedNewerID.uuidString)","stats":[{"outcome":"smash"}]}]
+        """.utf8).write(to: fixture.backupHistoryURL)
+        try encode([deletedNewerID], to: fixture.backupTombstoneURL)
+        let backup = fixture.backup
+
+        let freshStore = PhoneStatsStore(storageConfiguration: .init(
+            canonicalDirectoryURL: fixture.canonical,
+            legacyDocumentsDirectoryURL: fixture.legacyDocuments,
+            startsICloudSync: false,
+            backupContainerURL: { backup },
+            backupIdentityKey: { "account-a" }
+        ))
+
+        freshStore.syncICloudBackup()
+        _ = freshStore.loadHistory()
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(FileManager.default.fileExists(atPath: fixture.initializedURL.path))
+        #expect(await MainActor.run { freshStore.remoteBackupProblem } == nil)
+        #expect(await MainActor.run { freshStore.isBackupPaused } == false)
+        #expect(await MainActor.run { freshStore.pendingRestorePreview } == nil)
+        #expect(try backupIDs(fixture).isEmpty)
+
+        // A suspended archive inspecting the same backup should see `.noBackup`, not `.requiresNewerVersion`.
+        let fixture2 = try Fixture()
+        defer { fixture2.remove() }
+        try archiveFromNewerBuild().write(to: fixture2.historyURL)
+        try FileManager.default.createDirectory(at: fixture2.backup, withIntermediateDirectories: true)
+        try Data("""
+        [{"id":"\(deletedNewerID.uuidString)","stats":[{"outcome":"smash"}]}]
+        """.utf8).write(to: fixture2.backupHistoryURL)
+        try encode([deletedNewerID], to: fixture2.backupTombstoneURL)
+        let suspendedStore = try fixture2.makeBackingUpStore(startsICloudSync: false)
+        #expect(await suspendedStore.iCloudRestoreOffer() == .noBackup)
+    }
+
+    @Test func repairedRemoteBackupClearsRemoteProblemEvenWhenLocalReturnsToLastPushedSnapshot() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let base = record(health: false), temp = record(health: false)
+        try encode([base], to: fixture.historyURL)
+        try encode([UUID](), to: fixture.tombstoneURL)
+        let store = try fixture.makeBackingUpStore(startsICloudSync: false)
+
+        // 1. Initial successful push caches `lastPushedSnapshot` for `[base]`.
+        _ = await pushNow(store)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await MainActor.run { store.remoteBackupProblem } == nil)
+
+        // 2. Local archive changes and hits a corrupt remote ledger -> sets `remoteBackupProblem = .unreadable`.
+        #expect(store.appendMatchDurably(temp))
+        try Data("not json {{{".utf8).write(to: fixture.backupLedgerURL)
+        _ = await pushNow(store)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await MainActor.run { store.remoteBackupProblem } == .unreadable)
+        #expect(await MainActor.run { store.isBackupPaused } == true)
+
+        // 3. Remote ledger is repaired, and local archive returns to `[base]` (equal to `lastPushedSnapshot`).
+        try encode(ForgottenPlayerLedger(), to: fixture.backupLedgerURL)
+        store.saveHistory([base])
+
+        // 4. Retry must bypass the cached-snapshot shortcut, recheck remote, and clear the problem.
+        _ = await pushNow(store)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await MainActor.run { store.remoteBackupProblem } == nil)
+        #expect(await MainActor.run { store.isBackupPaused } == false)
+    }
 }

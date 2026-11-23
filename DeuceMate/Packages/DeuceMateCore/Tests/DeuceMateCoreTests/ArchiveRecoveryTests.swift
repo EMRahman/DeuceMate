@@ -31,7 +31,8 @@ final class ArchiveRecoveryTests: XCTestCase {
 
     func test_lenientList_skipsOnlyTheMatchFromANewerBuild() throws {
         let before = record(), after = record()
-        let newer = #"{"id":"\#(UUID().uuidString)","stats":[{"outcome":"smash"}]}"#
+        let newerID = UUID()
+        let newer = #"{"id":"\#(newerID.uuidString)","stats":[{"outcome":"smash"}]}"#
         let text = "[\(try json([before]).dropFirst().dropLast()),\(newer),\(try json([after]).dropFirst().dropLast())]"
         let data = Data(text.utf8)
         XCTAssertNil(try? JSONDecoder().decode([MatchRecord].self, from: data))
@@ -39,6 +40,36 @@ final class ArchiveRecoveryTests: XCTestCase {
         let list = try JSONDecoder().decode(LenientRecordList.self, from: data)
         XCTAssertEqual(list.records, [before, after])
         XCTAssertEqual(list.undecodableCount, 1)
+        XCTAssertEqual(list.undecodableRecordIDs, [newerID])
+        XCTAssertEqual(list.unidentifiedUndecodableCount, 0)
+        XCTAssertEqual(list.allKnownRecordIDs, [before.id, after.id, newerID])
+        XCTAssertFalse(list.hasUnidentifiedUndecodable)
+        XCTAssertEqual(list.undecodableCount(excluding: []), 1)
+        XCTAssertEqual(list.undecodableCount(excluding: [newerID]), 0)
+    }
+
+    func test_lenientList_tracksUnidentifiedElementsAndFiltersOnlyKnownTombstones() throws {
+        let readable = record()
+        let deletedNewerID = UUID()
+        let keptNewerID = UUID()
+        let text = """
+        [
+          \(try json([readable]).dropFirst().dropLast()),
+          {"id":"\(deletedNewerID.uuidString)","stats":[{"outcome":"smash"}]},
+          {"id":"\(keptNewerID.uuidString)","stats":[{"outcome":"smash"}]},
+          {"id":"not-a-uuid","stats":[]},
+          42
+        ]
+        """
+        let list = try JSONDecoder().decode(LenientRecordList.self, from: Data(text.utf8))
+        XCTAssertEqual(list.records, [readable])
+        XCTAssertEqual(list.undecodableCount, 4)
+        XCTAssertEqual(list.undecodableRecordIDs, [deletedNewerID, keptNewerID])
+        XCTAssertEqual(list.unidentifiedUndecodableCount, 2)
+        XCTAssertTrue(list.hasUnidentifiedUndecodable)
+        XCTAssertEqual(list.allKnownRecordIDs, [readable.id, deletedNewerID, keptNewerID])
+        XCTAssertEqual(list.undecodableCount(excluding: [deletedNewerID]), 3)
+        XCTAssertEqual(list.undecodableCount(excluding: [deletedNewerID, keptNewerID]), 2)
     }
 
     func test_lenientList_stillRejectsAFileThatIsNotAList() {

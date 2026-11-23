@@ -25,32 +25,84 @@ public struct LenientRecordList: Decodable, Sendable {
     public let records: [MatchRecord]
     /// Records that were present but couldn't be decoded by this build.
     public let undecodableCount: Int
+    /// Valid UUID `id` values extracted from records this build couldn't fully
+    /// decode (e.g. a newer-format match with an unknown enum case).
+    public let undecodableRecordIDs: Set<UUID>
+    /// Undecodable elements from which even a UUID `id` couldn't be read.
+    public let unidentifiedUndecodableCount: Int
 
-    public init(records: [MatchRecord], undecodableCount: Int) {
+    public init(
+        records: [MatchRecord],
+        undecodableCount: Int,
+        undecodableRecordIDs: Set<UUID> = []
+    ) {
         self.records = records
         self.undecodableCount = undecodableCount
+        self.undecodableRecordIDs = undecodableRecordIDs
+        self.unidentifiedUndecodableCount = max(0, undecodableCount - undecodableRecordIDs.count)
     }
 
     public init(from decoder: Decoder) throws {
         var container = try decoder.unkeyedContainer()
         var records: [MatchRecord] = []
         var skipped = 0
+        var skippedIDs: Set<UUID> = []
+        var unidentified = 0
         while !container.isAtEnd {
             if let record = try? container.decode(MatchRecord.self) {
                 records.append(record)
             } else {
                 // A failed decode doesn't advance the container; consume the
-                // element with a decode that always succeeds.
-                _ = try container.decode(SkippedElement.self)
+                // element with a decode that always succeeds while retaining
+                // its UUID `id` whenever present.
+                let skippedElement = try container.decode(SkippedElement.self)
                 skipped += 1
+                if let id = skippedElement.id {
+                    skippedIDs.insert(id)
+                } else {
+                    unidentified += 1
+                }
             }
         }
         self.records = records
         self.undecodableCount = skipped
+        self.undecodableRecordIDs = skippedIDs
+        self.unidentifiedUndecodableCount = unidentified
+    }
+
+    /// All record IDs known to be present in the list (fully decoded plus
+    /// undecodable elements whose UUID `id` was readable).
+    public var allKnownRecordIDs: Set<UUID> {
+        Set(records.map(\.id)).union(undecodableRecordIDs)
+    }
+
+    /// True when at least one undecodable element didn't carry a valid UUID `id`,
+    /// so `allKnownRecordIDs` cannot represent the whole list.
+    public var hasUnidentifiedUndecodable: Bool {
+        unidentifiedUndecodableCount > 0
+    }
+
+    /// Undecodable matches that are NOT already accounted for by `tombstones`.
+    /// Any undecodable element without a readable UUID is conservatively kept.
+    public func undecodableCount(excluding tombstones: Set<UUID>) -> Int {
+        undecodableRecordIDs.subtracting(tombstones).count + unidentifiedUndecodableCount
     }
 
     private struct SkippedElement: Decodable {
-        init(from decoder: Decoder) throws {}
+        let id: UUID?
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+        }
+
+        init(from decoder: Decoder) throws {
+            if let container = try? decoder.container(keyedBy: CodingKeys.self),
+               let id = try? container.decode(UUID.self, forKey: .id) {
+                self.id = id
+            } else {
+                self.id = nil
+            }
+        }
     }
 }
 
