@@ -138,6 +138,7 @@ struct SettingsView: View {
     @State private var showArchiveReplaceConfirmation = false
     @State private var archiveExportDocument = MatchArchiveDocument()
     @State private var archiveExportDirectory: URL?
+    @State private var archiveExportFilename: String?
     @State private var pendingImportData: Data?
     @State private var pendingImportPreview: ManualMatchArchiveBackup.ImportPreview?
     /// Ids of the matches in the selected archive file — what a Replace keeps.
@@ -194,7 +195,7 @@ struct SettingsView: View {
             isPresented: $showArchiveExporter,
             document: archiveExportDocument,
             contentType: .json,
-            defaultFilename: manualArchiveFilename
+            defaultFilename: archiveExportFilename
         ) { result in
             switch result {
             case .success:
@@ -754,8 +755,9 @@ struct SettingsView: View {
     }
 
     private var manualArchiveFilename: String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
         return "deucemate_archive_\(formatter.string(from: Date())).json"
     }
 
@@ -792,6 +794,7 @@ struct SettingsView: View {
         pendingArchiveExportIncludesNotes = nil
         archiveTransferStatus = nil
         let store = store
+        let filename = manualArchiveFilename
         // Resolved here (main actor) so the exact set the user reviewed is the
         // set written, even if a note changes while the file is prepared.
         let notes = includeNotes ? archiveExportNoteEntries : nil
@@ -802,6 +805,7 @@ struct SettingsView: View {
                 DispatchQueue.main.async {
                     archiveExportDocument = MatchArchiveDocument(data: data)
                     archiveExportDirectory = directory
+                    archiveExportFilename = filename
                     showArchiveExporter = true
                 }
             } catch {
