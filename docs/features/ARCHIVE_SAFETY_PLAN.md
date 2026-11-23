@@ -1,7 +1,7 @@
 <!--
 machine-readable summary (parse this block first)
 
-status: proposal — design only, nothing implemented. No phase starts until the owner signs off on §3–§12.
+status: deferred (2026-11-23). Kept as a reference; the next step for #18 is ARCHIVE_DERISK_PLAN.md.
 author: Claude, from the owner's review of the #222–#237 archive-safety work
 date: 2026-11-23
 supersedes: "the #228–#234 containment design (removed by the reset PR, #239) and ARCHIVE_SNAPSHOTS_PLAN.md"
@@ -31,6 +31,10 @@ decisions_open: [D1, D2, D3, D4, D5, D6, D7, D8, D9]
 -->
 
 # Plan: Archive safety, making bad files harmless
+
+> **Deferred (23 November 2026).** The next step for TECHNICAL_DEBT #18 is
+> [`ARCHIVE_DERISK_PLAN.md`](ARCHIVE_DERISK_PLAN.md). This plan stays as a
+> reference for the problems that plan leaves open. It is not scheduled.
 
 **Status: proposal. Nothing here is implemented.** No phase starts until the owner
 has signed off on the architecture (§3–§12).
