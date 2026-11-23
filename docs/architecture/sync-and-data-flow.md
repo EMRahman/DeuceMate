@@ -330,6 +330,9 @@ document picker and the confirmation dialogs, persisting through
 > stripped, excluded, or gated across the whole app, see
 > [health-data-flow.md](health-data-flow.md).
 
+The [deferred archive transfer idea](../features/ARCHIVE_TRANSFER_FEATURE_IDEA.md)
+records the iCloud Drive handoff and why the app-owned Files folder was parked.
+
 - **Export Match Archive** writes a versioned JSON document
   (`format: "deucemate.matchArchive"`, `schemaVersion: 1`) of the phone's
   records, newest-first. Unlike the iCloud backup snapshot — which strips the
