@@ -53,7 +53,7 @@ when the item should constrain future changes.
 
 | # | Area | Item | Application risk | Work band / trigger | Effort |
 |---|------|------|------------------|---------------------|--------|
-| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact, low–medium likelihood, open again.** The #228–#234 containment design was reset on 23 Nov 2026, so the iPhone has 1.4.0's behaviour: an undecodable file means an empty archive, and the iCloud backup gets overwritten. All 6 persisted enums stay pinned | **Next**, but only after the owner signs off on [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md). Any release before its phases (b) and (c) still has the gap | Medium, staged (plan phases a–d) |
+| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact, low–medium likelihood, open again.** The #228–#234 containment design was reset on 23 Nov 2026, so the iPhone has 1.4.0's behaviour: an undecodable file means an empty archive, and the iCloud backup gets overwritten. All 6 persisted enums stay pinned | **Next:** PR A of [`ARCHIVE_DERISK_PLAN.md`](ARCHIVE_DERISK_PLAN.md) (decisions signed off 23 Nov 2026): prevent it, destroy nothing (pause iCloud while a damaged copy exists), add Archive Diagnostics. [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) is deferred. Any release before its PR A still has the gap | Small (PR A ≤ 75 lines; PR B ≤ 340) |
 | [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | Fail-closed `ScoreViewModel.loadState()` (with pre-decode version header) and Watch `MatchHistoryView` unreadable banner landed | Remaining: explicit Watch live-state abandon/reset recovery UX if desired | Small |
 | [27](#27--prevent-unrecorded-fitness-workouts-with-manager-tests-and-crash-recovery) | Health / Reliability | Prevent unrecorded Fitness workouts with manager tests and crash recovery | High impact when a workout is lost; remaining likelihood unverified | **Now**; physical-Watch save/sync checks before release | Medium, staged |
 | [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | Step 1 readers landed in #229 and were kept by the reset: the Watch history, the Watch→iPhone sync, manual archives (`supportedSchemaVersions` range plus a check before decoding), and the pre-decode `AppState` version check. The iPhone archive's reads went back to 1.4.0 | Step 2 for the iPhone archive is part of [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) §5.1 and D9. Other writers stay on bare arrays until a format change needs envelopes | Small |
@@ -91,7 +91,8 @@ in, through fifteen PRs numbered from #222 to #237. The reset PR therefore put t
 back to 1.4.0. It kept #229's readers and Watch fixes and #228's enum pins. The
 replacement, [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md), makes bad files
 harmless instead of blocking them. It also lists the six rules its PRs are
-reviewed against. It is waiting for the owner's sign-off.
+reviewed against. It is now deferred in favour of the smaller
+[`ARCHIVE_DERISK_PLAN.md`](ARCHIVE_DERISK_PLAN.md).
 
 The original sequence is kept below as history. ↩︎ marks steps the reset
 removed.
@@ -368,7 +369,7 @@ remedy is deleting the app — which takes the sandbox, and the `.corrupt` file,
 with it. `assertionFailure()` gives the same signal in Debug and compiles away in
 Release.
 
-**Status: reset, with the redesign waiting for sign-off (23 November 2026).**
+**Status: reset; the de-risk plan's decisions are signed off and its PR A is next (23 November 2026).**
 
 - **What was built and removed.** #228, #231 and #234 implemented the
   sequence above:
@@ -389,9 +390,18 @@ Release.
   `MatchType`, `PointOutcome`, `EndingShot`) are pinned in Core tests. The
   Watch protections from #229 and 4a-read also stay.
 - **Current behaviour:** 1.4.0's, so the cascade above is live again on the
-  iPhone. Any release before plan phases (b) and (c) still has the gap.
-- **Next:** [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md), once the owner
-  signs off. Do not patch the gap piecemeal in the meantime.
+  iPhone. Any release before the de-risk plan's PR A still has the gap.
+- **#240 closed (23 November 2026).** A "basic" fail-closed plan with support
+  recovery grew with every review round, from 402 to 594 lines of plan and an
+  estimated 3,000–4,000 lines of code. The owner closed it unmerged.
+- **Next:** PR A of [`ARCHIVE_DERISK_PLAN.md`](ARCHIVE_DERISK_PLAN.md), whose
+  decisions the owner signed off on 23 November 2026. It treats the cause as rare and self-inflicted: a golden-file
+  test, dated damaged copies that are never deleted, iCloud paused while one
+  exists, and an Archive Diagnostics report for support or a coding agent.
+  Recovery code is written only if this ever happens, in the hotfix, which
+  must recover and then delete the dated copies or iCloud stays paused.
+  [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) is deferred as a
+  reference. Do not patch the gap piecemeal outside that plan.
 - **Still open from before:** open enums before adding the next persisted enum
   case (paired with #19). The plan's per-match reading (§5.2) covers the archive
   side of this.
