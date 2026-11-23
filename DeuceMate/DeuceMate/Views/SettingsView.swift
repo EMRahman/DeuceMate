@@ -131,11 +131,13 @@ struct SettingsView: View {
     @State private var syncRequestedAt: Date?
     @State private var showSyncDetails = false
     @State private var showArchiveExportDisclosure = false
+    @State private var pendingArchiveExportIncludesNotes: Bool?
     @State private var showArchiveExporter = false
     @State private var showArchiveImporter = false
     @State private var showArchiveImportOptions = false
     @State private var showArchiveReplaceConfirmation = false
     @State private var archiveExportDocument = MatchArchiveDocument()
+    @State private var archiveExportDirectory: URL?
     @State private var pendingImportData: Data?
     @State private var pendingImportPreview: ManualMatchArchiveBackup.ImportPreview?
     /// Ids of the matches in the selected archive file — what a Replace keeps.
@@ -174,7 +176,7 @@ struct SettingsView: View {
             syncStatus = .succeeded
             syncRequestedAt = nil
         }
-        .sheet(isPresented: $showArchiveExportDisclosure) {
+        .sheet(isPresented: $showArchiveExportDisclosure, onDismiss: preparePendingManualArchiveExport) {
             // The disclosure plus the separate, default-off private-notes
             // opt-in with an exact preview. Built when the sheet is up only.
             ArchiveExportOptionsSheet(
@@ -182,8 +184,8 @@ struct SettingsView: View {
                 notes: archiveExportNoteLines,
                 clearedCount: archiveExportNoteEntries.filter(\.isCleared).count,
                 onExport: { includeNotes in
+                    pendingArchiveExportIncludesNotes = includeNotes
                     showArchiveExportDisclosure = false
-                    prepareManualArchiveExport(includeNotes: includeNotes)
                 },
                 onCancel: { showArchiveExportDisclosure = false }
             )
@@ -207,6 +209,7 @@ struct SettingsView: View {
                 )
             }
         }
+        .fileDialogDefaultDirectory(archiveExportDirectory)
         .fileImporter(
             isPresented: $showArchiveImporter,
             allowedContentTypes: [.json]
@@ -762,7 +765,7 @@ struct SettingsView: View {
     private var archiveExportDisclosureMessage: String {
         let fields = HealthExportConsent.archiveFields(in: store.history)
         guard !fields.isEmpty else {
-            return "Export your full match archive as a JSON file. Choose where to save it in the Files app or an iCloud Drive folder."
+            return "Export your full match archive as a JSON file. You can choose where to save it in Files."
         }
         return HealthExportConsent.disclosure(fields: fields, destination: .archiveFile).message
     }
@@ -784,7 +787,9 @@ struct SettingsView: View {
         }
     }
 
-    private func prepareManualArchiveExport(includeNotes: Bool) {
+    private func preparePendingManualArchiveExport() {
+        guard let includeNotes = pendingArchiveExportIncludesNotes else { return }
+        pendingArchiveExportIncludesNotes = nil
         archiveTransferStatus = nil
         let store = store
         // Resolved here (main actor) so the exact set the user reviewed is the
@@ -793,8 +798,10 @@ struct SettingsView: View {
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let data = try store.exportManualArchiveData(notes: notes)
+                let directory = LocalArchiveExportDirectory.prepare()
                 DispatchQueue.main.async {
                     archiveExportDocument = MatchArchiveDocument(data: data)
+                    archiveExportDirectory = directory
                     showArchiveExporter = true
                 }
             } catch {

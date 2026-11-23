@@ -138,10 +138,11 @@ is backup-excluded; the only full-fidelity release is user-gated.
 |---|---|---|---|
 | Phone canonical `matchHistory.json` | 🔒 stripped | `HealthSidecarPolicy.split` inside `PhoneStatsStore.writeCanonicalOnQueue` | `HealthSidecarPolicyTests`, `PhoneStatsStoreTests` |
 | Phone Health sidecar `healthData.json` | 🚫 excluded | `PhoneStatsStore.excludeFromBackup` (verify-or-discard) | `PhoneStatsStoreTests` |
+| Phone Watch mirror `watchMirror.json` | 🚫 excluded | `PhoneMatchSyncService` stores the rebuildable mirror in Caches | `PhoneStatsStoreTests` |
 | iCloud ubiquity backup | 🔒 stripped again | `ArchiveBackupPolicy.backupSnapshot` inside `PhoneStatsStore.pushBackupOnQueue` | `ArchiveBackupPolicyTests` |
 | Watch `matchHistory.json` | 🚫 excluded | `StatsStore` → `BackupExcludedFileWriter` | `StatsStoreTests` |
 | Watch live `appState.json` | 🚫 excluded | `ScoreViewModel.saveState` → `BackupExcludedFileWriter` | *(none dedicated — see §6)* |
-| Manual archive export | ✋ gated | `HealthExportConsent` + `ManualMatchArchiveBackup` | `ManualMatchArchiveBackupTests`, `HealthExportConsentTests` |
+| Manual archive export | ✋ gated | `HealthExportConsent` + `ManualMatchArchiveBackup`. `LocalArchiveExportDirectory` marks the suggested local `Exports` folder for device backup exclusion. | `ManualMatchArchiveBackupTests`, `HealthExportConsentTests`, `LocalArchiveExportDirectoryTests` |
 | Text / HTML / AI-prompt share | ✋ gated | `HealthExportConsent` + `MatchExporter` / `WebExport` | `MatchExporterTests`, `MatchWebExportTests`, `HealthExportConsentTests` |
 | AI Coach hand-off | ✋ gated | `HealthExportConsent` (at sheet entry) + `AICoachLauncher` | `HealthExportConsentTests`, `DeuceMateUITests` |
 | Opponent Game Plan pack (copy / `.txt` share / AI app) | 🔒 stripped | `GamePlanEvidence.project` calls `strippingHealthData()` before any derivation; `GamePlanPackBuilder` only sees that projection, whose point rows carry no Health samples or timestamps. No consent alert is needed because nothing Health-derived can be present. Free-text notes are disclosed separately. | `GamePlanPackTests` (`test_healthFieldsNeverReachThePack`, `test_projectionCarriesNoHealthEvenInMemory`), `GamePlanBuildTests` |
@@ -213,7 +214,7 @@ The four gated surfaces:
 
 | Surface | Entry point | Recorder-only? |
 |---|---|---|
-| **Manual archive** (Settings → Backup & Transfer) | `SettingsView` `.alert` → `.fileExporter` → `ManualMatchArchiveBackup` | Raw records; carries HR/steps/distance/calories but never derived zones |
+| **Manual archive** (Settings → Backup & Transfer) | `ArchiveExportOptionsSheet` → `.fileExporter` → user confirms destination | Raw records with HR, steps, distance and calories. Derived zones stay in the app. |
 | **Text summary / full report** | `MatchDetailView.beginShare` → "Share health data?" `.alert` → `ShareSheet` | HR / zones / PulseCoach / movement are `focal == .me` only; step/calorie/distance totals appear for both perspectives when > 0; per-point HR/steps only via the raw-point table |
 | **Interactive HTML page** | `MatchDetailView.beginShare` (same gate; `.me` for My Perspective, `.opponent` + raw points for Opponent's Perspective) | HR/steps blocks built from the recorder summary only; the opponent's page keeps per-point HR/steps and totals (labelled "Opp") but drops zones and PulseCoach |
 | **AI Coach hand-off** | `MatchDetailView.beginAICoach` — gated **at sheet entry**, so every launch/copy/share inside `AICoachSheet` sits behind one affirmative step | Recorder HR; opponent prompt tells the AI the HR/steps belong to the recorder |

@@ -887,16 +887,16 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     // MARK: - Legacy migration (pre-canonical layout)
 
-    /// Earlier builds could leave a fallback archive in local Documents. Decode
-    /// and rewrite it through the new canonical writer — never move it as-is —
-    /// so upgraded users get the new until-first-unlock protection class instead
-    /// of inheriting the old complete-protection metadata.
+    /// Earlier builds could leave a fallback archive in local Documents. Move
+    /// those files into private storage before reading them. The canonical
+    /// writer applies until-first-unlock protection when importing their data.
     private func migrateLegacyDocumentsArchiveIfNeeded() {
         let fm = FileManager.default
-        guard !fm.fileExists(atPath: canonicalHistoryURL.path) else { return }
         let documents = storageConfiguration.legacyDocumentsDirectoryURL
-        let legacyHistory = documents.appendingPathComponent(Self.historyFilename)
-        let legacyTombstoneURL = documents.appendingPathComponent(Self.tombstoneFilename)
+        let privateDirectory = canonicalDirectoryURL.appendingPathComponent("LegacyDocuments", isDirectory: true)
+        let legacyHistory = relocateLegacyFile(Self.historyFilename, from: documents, to: privateDirectory)
+        let legacyTombstoneURL = relocateLegacyFile(Self.tombstoneFilename, from: documents, to: privateDirectory)
+        guard !fm.fileExists(atPath: canonicalHistoryURL.path) else { return }
         guard fm.fileExists(atPath: legacyHistory.path) || fm.fileExists(atPath: legacyTombstoneURL.path) else {
             return
         }
@@ -911,6 +911,26 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             phoneStoreLogger.notice("Migrated legacy Documents archive into the canonical store")
         } catch {
             phoneStoreLogger.error("Legacy archive migration failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Move old inputs out of Files even when the archive is already canonical
+    /// or the legacy bytes cannot be decoded. Preserve them for recovery.
+    private func relocateLegacyFile(_ filename: String, from documents: URL, to directory: URL) -> URL {
+        let fm = FileManager.default
+        let original = documents.appendingPathComponent(filename)
+        let privateCopy = directory.appendingPathComponent(filename)
+        if fm.fileExists(atPath: privateCopy.path) { return privateCopy }
+        guard fm.fileExists(atPath: original.path) else { return privateCopy }
+
+        do {
+            try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+            try storageConfiguration.backupExcluder(directory)
+            try fm.moveItem(at: original, to: privateCopy)
+            return privateCopy
+        } catch {
+            phoneStoreLogger.error("Failed to move legacy archive file into private storage: \(error.localizedDescription, privacy: .public)")
+            return original
         }
     }
 

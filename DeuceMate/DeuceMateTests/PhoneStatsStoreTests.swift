@@ -261,6 +261,42 @@ struct PhoneStatsStoreTests {
             .resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
     }
 
+    @Test func legacyDocumentsFilesArePreservedPrivatelyWhenCanonicalArchiveAlreadyExists() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = record(health: false)
+        try encode([original], to: fixture.historyURL)
+        let legacyHistory = fixture.legacyDocuments.appendingPathComponent("matchHistory.json")
+        let legacyTombstones = fixture.legacyDocuments.appendingPathComponent("deletedMatchIDs.json")
+        let damagedBytes = Data("damaged legacy history".utf8)
+        try damagedBytes.write(to: legacyHistory)
+        let deletedIDs = [UUID()]
+        try encode(deletedIDs, to: legacyTombstones)
+
+        let store = fixture.makeStore()
+
+        #expect(store.loadHistory() == [original])
+        let privateDirectory = fixture.canonical.appendingPathComponent("LegacyDocuments")
+        #expect(try privateDirectory.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+        #expect(try Data(contentsOf: privateDirectory.appendingPathComponent("matchHistory.json")) == damagedBytes)
+        let privateTombstones = privateDirectory.appendingPathComponent("deletedMatchIDs.json")
+        #expect(try JSONDecoder().decode([UUID].self, from: Data(contentsOf: privateTombstones)) == deletedIDs)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.legacyDocuments.path).isEmpty)
+    }
+
+    @Test func watchMirrorMovesOutOfSharedDocumentsAndReloadsFromCache() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let legacyMirror = fixture.legacyDocuments.appendingPathComponent("watchMirror.json")
+        let cache = fixture.root.appendingPathComponent("Caches/watchMirror.json")
+        let records = [record()]
+        try encode(records, to: legacyMirror)
+
+        #expect(PhoneMatchSyncService.loadCachedMirror(at: cache, migratingFrom: legacyMirror) == records)
+        #expect(!FileManager.default.fileExists(atPath: legacyMirror.path))
+        #expect(PhoneMatchSyncService.loadCachedMirror(at: cache, migratingFrom: legacyMirror) == records)
+    }
+
     @Test func appendMatchReplacesRecordWithSameID() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

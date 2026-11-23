@@ -337,6 +337,13 @@ document picker and the confirmation dialogs, persisting through
   5.1.3(ii) — a manual export is **full-fidelity**: it keeps heart rate, steps,
   distance, and calories. That is why the two codecs are deliberately kept
   separate (`ManualMatchArchiveBackup` vs `ArchiveBackupPolicy`).
+  The system picker suggests **On My iPhone → DeuceMate → Exports** after
+  DeuceMate creates the folder and marks it for exclusion from device backup.
+  iOS can open the parent DeuceMate folder, where Exports is listed.
+  The user confirms each save and can select another destination. Deleting
+  DeuceMate removes its local Files folder. File sharing makes the entire app
+  `Documents` directory visible, so the Watch mirror lives in Caches and old
+  Documents archive inputs move into private storage at launch.
 - **Import Match Archive** first decodes and validates the file (wrong format or
   an unsupported schema version is rejected with a clear error) and shows a
   preview — record count, whether health data is included, and the export date.

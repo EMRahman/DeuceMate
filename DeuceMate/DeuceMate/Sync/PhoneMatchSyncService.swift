@@ -1028,23 +1028,32 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
 
     // MARK: - Watch mirror persistence (device-local; never iCloud)
 
-    /// File holding the phone's mirror of the watch's records. Lives in the app's
-    /// Documents directory — NOT the iCloud container — because it reflects *this*
-    /// paired watch's current state, not user archive data. (PhoneStatsStore's
-    /// iCloud migration intentionally leaves it out for the same reason.) Full
-    /// records (with stats) are too large for UserDefaults, so it is a JSON file.
-    private static var mirrorFileURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("watchMirror.json")
-    }
+    /// The Watch can rebuild this cache. Caches keeps full records out of Files
+    /// and device backups.
+    private static let mirrorFileURL = URL.cachesDirectory.appendingPathComponent("watchMirror.json")
+    private static let legacyMirrorFileURL = URL.documentsDirectory.appendingPathComponent("watchMirror.json")
 
     /// Serial queue for mirror file I/O so writes never block the main thread.
     private static let mirrorIOQueue = DispatchQueue(
         label: "com.deucemate.phone.watchmirror", qos: .utility
     )
 
-    private static func loadCachedMirror() -> [MatchRecord] {
-        guard let data = try? Data(contentsOf: mirrorFileURL),
+    static func loadCachedMirror(
+        at cacheURL: URL = mirrorFileURL,
+        migratingFrom legacyURL: URL = legacyMirrorFileURL
+    ) -> [MatchRecord] {
+        let fm = FileManager.default
+        var url = cacheURL
+        if !fm.fileExists(atPath: cacheURL.path), fm.fileExists(atPath: legacyURL.path) {
+            do {
+                try fm.createDirectory(at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fm.moveItem(at: legacyURL, to: cacheURL)
+            } catch {
+                // Keep the old cache usable if the device can't move it yet.
+                url = legacyURL
+            }
+        }
+        guard let data = try? Data(contentsOf: url),
               let records = try? JSONDecoder().decode([MatchRecord].self, from: data)
         else { return [] }
         return records
@@ -1057,6 +1066,9 @@ final class PhoneMatchSyncService: NSObject, ObservableObject, WCSessionDelegate
             // which can fire while the device is locked — `.completeFileProtection`
             // would make the write fail then. `UntilFirstUserAuthentication` keeps
             // it writable after the first post-boot unlock.
+            try? FileManager.default.createDirectory(
+                at: mirrorFileURL.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
             try? data.write(
                 to: mirrorFileURL,
                 options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]

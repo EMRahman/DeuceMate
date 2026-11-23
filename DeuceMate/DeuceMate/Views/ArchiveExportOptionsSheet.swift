@@ -44,6 +44,10 @@ struct ArchiveExportOptionsSheet: View {
                 }
 
                 Section {
+                    Text("Save in On My iPhone → DeuceMate → Exports to keep a copy on this iPhone. Deleting DeuceMate also removes its folder, so save a copy elsewhere before deleting the app.")
+                }
+
+                Section {
                     if !hasEntries {
                         Text("You have no private notes on archived matches.")
                             .foregroundStyle(.secondary)

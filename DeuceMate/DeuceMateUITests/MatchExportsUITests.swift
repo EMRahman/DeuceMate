@@ -350,6 +350,36 @@ final class MatchExportsUITests: XCTestCase {
     // MARK: - Manual archive
 
     @MainActor
+    func testManualArchivePickerOffersLocalExportsFolder() {
+        launch()
+        app.navigationBars["Matches"].buttons["Settings"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        let export = app.buttons["Export Match Archive"]
+        for _ in 0..<8 where !(export.exists && export.isHittable) { app.swipeUp() }
+        export.tap()
+
+        let confirm = app.buttons["archive-export-confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+
+        let save = app.buttons["Save"].firstMatch
+        XCTAssertTrue(save.waitForExistence(timeout: 10), "The system picker opened")
+        // On iOS 27, the local file provider can resolve the suggested URL to
+        // DeuceMate's folder and present Exports as a child folder.
+        let child = app.cells["Exports, Folder"]
+        if child.exists {
+            XCTAssertTrue(app.buttons["On My iPhone"].exists)
+            child.tap()
+        }
+        let exportsTitle = app.buttons["Exports, Actions Menu"]
+        XCTAssertTrue(app.navigationBars["Exports"].exists || exportsTitle.waitForExistence(timeout: 5))
+        save.tap()
+        let replace = app.alerts.buttons["Replace"].firstMatch
+        if replace.waitForExistence(timeout: 2) { replace.tap() }
+        XCTAssertTrue(app.staticTexts["Archive exported"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testArchiveExportOffersNotesAsOptInWithPreview() throws {
         launch()
         _ = try seedTaggedPair(opponent: "Alex \(token)", note: note)
