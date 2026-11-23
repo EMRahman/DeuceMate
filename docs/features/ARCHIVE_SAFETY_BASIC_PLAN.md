@@ -81,8 +81,12 @@ blocking one.
 4. **B4. The user can always send support what is needed.** That means the
    diagnostic report and the archive files, after a preview of exactly what is
    included.
-5. **B5. Health data and private notes never go to support.** The Health
-   sidecar and the `MatchNotes/` store are never attached.
+5. **B5. Support never gets Health data or private notes without the user being
+   told.** The Health sidecar and the `MatchNotes/` store are never attached. A
+   damaged main file from before the Health sidecar existed may still hold
+   Health fields. It is attached only when the preview names that (S5), under
+   the consent-gated export rule in
+   [`health-data-flow.md`](../architecture/health-data-flow.md).
 
 ## 4. The change
 
@@ -104,13 +108,26 @@ Changes:
   JSON object (`{"schemaVersion": 1, "playerIDs": [...]}`), not an array or an
   envelope. `PersistedArchiveCodec.decode` treats every object as an envelope
   and requires a `format` header, so it would block every healthy archive. The
-  ledger keeps decoding with its own `ForgottenPlayerLedger` `Codable`, plus one
-  added check: a `schemaVersion` above `ForgottenPlayerLedger.currentSchemaVersion`
-  is `.newerVersion`. Invalid JSON, or JSON that isn't an object, is
-  `.undecodable`.
-  - *Accepted limit:* the ledger's decoder is deliberately lenient (`try?` per
-    field). A well-formed object with a damaged `playerIDs` value reads as an
-    empty ledger rather than failing. This plan doesn't change that.
+  ledger's own `init(from:)` is no good either: it uses `try?` per field, so a
+  newer `schemaVersion` or a damaged `playerIDs` silently reads as version 1 with
+  no players. That would quietly undo every Forget Player.
+
+  Add a **strict canonical decoder** in Core,
+  `ForgottenPlayerLedger.decodeCanonical(_ data: Data) throws`, used only for
+  the canonical `forgottenPlayers.json`:
+  - The data must be a JSON object, or it is `.undecodable`.
+  - An object with a `format` key is a future envelope. It goes through
+    `PersistedArchiveCodec.decode` (format `forgottenPlayers`), so a newer
+    version reads as `.newerVersion`.
+  - Otherwise it is the existing `{"schemaVersion", "playerIDs"}` shape:
+    - A missing `schemaVersion` means 1, as today. A value above
+      `currentSchemaVersion` is `.newerVersion`, and one below 1 is
+      `.undecodable`.
+    - `playerIDs` must be present and be an array of strings, each a valid UUID.
+      Anything else is `.undecodable`, never an empty ledger.
+
+  The lenient `init(from:)` is unchanged for the manual archive, the iCloud
+  backup and sync paths. Hardening those is out of scope.
 - **Classify the failure** into one `ArchiveOpenProblem` (pure, in Core):
 
   | Case | Cause | Result |
@@ -119,8 +136,8 @@ Changes:
   | `.unreadable` | Any other read error | *Blocked* |
   | `.undecodable` | Bytes read, decode failed (`DecodingError`, invalid JSON, `wrongFormat`, `emptyData`) | *Blocked* |
   | `.newerVersion` | `PersistedArchiveCodec.CodecError.newerSchemaVersion` / `unsupportedSchemaVersion` | *Blocked*, with Update wording |
-| `.missing` | `matchHistory.json` is absent but the archive is already initialized (`canonicalInitializedURL` exists) | *Blocked*. An initialized archive always has this file, because the marker is only written after a successful canonical write, so its absence is loss, not "empty". The deleted-ids and forgotten-players files may legitimately be absent (older builds) and keep 1.4.0's "missing means none" |
-| `.repairIncomplete` | A phase 2 `repair-in-progress` marker exists (§4.7) | *Blocked*. Roll back from `Damaged/` first, and never read the canonical files as an archive |
+  | `.missing` | `matchHistory.json` is absent but the archive is already initialized (`canonicalInitializedURL` exists) | *Blocked*. An initialized archive always has this file, because the marker is only written after a successful canonical write, so its absence is loss, not "empty". The deleted-ids and forgotten-players files may legitimately be absent (older builds) and keep 1.4.0's "missing means none" |
+  | `.repairIncomplete` | A phase 2 `repair-in-progress` marker exists (§4.7) | *Blocked*. Roll back from `Damaged/` first, and never read the canonical files as an archive |
 
 - **Any one of the three files failing blocks the whole archive.** This is a
   behaviour change for the deleted-ids and forgotten-players files, which today
@@ -162,6 +179,19 @@ The guard lives at the one funnel every mutation passes through:
   archive, so tag reconciliation finds nothing to send. Add one test that pins
   this.
 
+Paths that don't pass through `adoptOnQueue` get their own guard:
+- **`exportManualArchiveData`** throws when not `open`. Today it encodes the
+  current `records`, so a blocked store would hand Backup & Transfer an empty,
+  zero-match archive file that looks valid.
+- **`performRestoreOnQueue`** returns at the top when not `open`, before
+  replacing `records`. The confirmed-restore entry point that calls it does the
+  same.
+- **`migrateLegacyDocumentsArchiveIfNeeded`** (run in `init` before
+  `loadCanonicalOnQueue`) runs only when protected data is available **and** the
+  archive isn't initialized yet. Otherwise a legacy file could be written into
+  a `.missing` canonical path and bypass the block. It already never deletes the
+  legacy files unless the canonical write succeeds; keep that.
+
 While blocked, the store publishes an empty `history` and the UI never shows it,
 because the blocking screen covers the app.
 
@@ -180,6 +210,18 @@ because the blocking screen covers the app.
 - The files use `completeFileProtectionUntilFirstUserAuthentication`, so once the
   phone has been unlocked once, reads keep working while it is locked again. One
   retry after unlock is enough.
+- **Threading.** `UIApplication.shared.isProtectedDataAvailable` is main-actor
+  isolated, and `loadCanonicalOnQueue` runs on the store's queue inside a
+  `queue.sync` that `init` calls from main. Calling back to main from there would
+  deadlock. So the caller captures the flag on main **before** entering the
+  queue and passes it in. It comes through a `StorageConfiguration` closure
+  (`isProtectedDataAvailable: @MainActor () -> Bool`), which tests replace.
+  Notification and scene-phase retries capture it the same way. They arrive on
+  main.
+- **No missed unlock.** Register the `protectedDataDidBecomeAvailableNotification`
+  observer **before** the initial load. After the load, if the state is still
+  `loading` and the flag now reads `true`, retry once at once. An unlock that
+  happens between the read and the observer registration is then never missed.
 
 ### 4.5 The blocking screen
 
@@ -207,7 +249,11 @@ saved by a newer version of DeuceMate. Update the app to open it."
 Actions:
 1. **Try Again.** Re-runs the load (§4.4).
 2. **Send Report to Support.** See §4.6.
-3. **Check for Updates.** Opens the App Store product page.
+3. **Check for Updates.** Opens the App Store product page. Reuse Core's
+   `MatchWebViewModel.appStoreURL`, which `ReviewPromptPolicy.writeReviewURL`
+   already builds on. It is `internal` today, so expose it as `public`, or add
+   a public `ReviewPromptPolicy.appStoreURL` alias, rather than repeating the
+   literal.
 4. *(phase 2)* **Open a File from Support.** A secondary text button. See §4.7.
 
 No reinstall advice appears anywhere in the app. A reinstall deletes:
@@ -245,11 +291,21 @@ plain text, and the email body):
   their contents);
 - this launch's `PhoneStatsStore` log lines from `OSLogStore` (current process,
   the store's subsystem and category only; S4). The store logs error
-  descriptions, never note text.
+  descriptions, never note text. Collecting them is **best-effort**: capped at
+  the newest 500 lines and 64 KB. If `OSLogStore` throws, the report says "Logs
+  unavailable" and sending continues.
 
 **Attachments.** Copies of `matchHistory.json`, `deletedMatchIDs.json` and
 `forgottenPlayers.json`, staged in an `ExportStaging` generation directory, never
 shared from their live paths. Never the Health sidecar or `MatchNotes/` (B5).
+- Only files that exist and can be read are attached. For an absent file
+  (`.missing`) or an unreadable one (`.unreadable`), the report says so in its
+  per-file section, and Send Report still works with whatever remains, even with
+  no attachments at all.
+- The generation is ended (`ExportStaging.endGeneration`) when the Mail
+  composer or the share sheet is dismissed, whether the user sent or cancelled.
+  The existing `sweepInactive()` at launch catches anything left behind by a
+  crash.
 
 **Preview before sending.** One sheet lists the report text in full and the
 attached files with their sizes. Above them:
@@ -342,6 +398,16 @@ Support's way to give the user their matches back without a reinstall:
   says "DeuceMate couldn't finish restoring the file from support. Your
   original files are kept safely. Free up some space on your iPhone, then tap
   Try Again."
+- **Leaving `.repairIncomplete`.** When a rollback retry succeeds and its result
+  matches the manifest, the marker is deleted and the normal load runs again
+  from the top. That returns the archive to the original blocked problem (or
+  `open`, if an app update can now read it), as §10 tests.
+- **`Damaged/` is excluded from device backups.** Set
+  `isExcludedFromBackup = true` on `MatchArchive/Damaged/` and verify it before
+  each snapshot, with the same verify-then-write pattern as the notes store. A
+  damaged `matchHistory.json` from before the Health sidecar can hold Health
+  fields, and Guideline 5.1.3(ii) keeps those out of iCloud, including device
+  backups. It also stops damaged copies bloating backups.
 - Private notes are untouched. They live in their own store and are never part
   of the exchange.
 
@@ -400,6 +466,14 @@ Support's way to give the user their matches back without a reinstall:
   see exactly what is sent, and choose to send it.
 - **The app can't tell "newer version" from "damaged"** for bare-array files
   (§4.1) until TECHNICAL_DEBT #19's versioned writers ship.
+- **Phase 2's `Damaged/` snapshots are kept permanently and aren't cleaned.** A
+  later Delete Permanently or Forget Player doesn't rewrite them. They stay on
+  this iPhone only (excluded from backups), and support can ask for them. A
+  Settings row to delete them is out of scope (full plan D6).
+- **No new persisted enum case may ship under this plan** until the six
+  persisted enums are unknown-safe (TECHNICAL_DEBT #18 "Still open"). Without
+  the full plan's match-by-match reading, an older iPhone that meets a new case
+  blocks the whole archive.
 
 ## 7. What this plan doesn't fix (deferred to `ARCHIVE_SAFETY_PLAN.md`)
 
@@ -449,7 +523,16 @@ The same PRs also update (CLAUDE.md §6):
   `newerSchemaVersion` envelope and an unknown enum value in a bare array
   (`.undecodable`).
 - `ArchiveSupportReport` contains the coding path, sizes and hashes, and never
-  contains note text or Health values, even when given them.
+  contains note text or Health values, even when given them. It handles absent,
+  unreadable and log-unavailable inputs, and stays within the log cap.
+- `ForgottenPlayerLedger.decodeCanonical`:
+  - accepts the shape `writeCanonicalOnQueue` writes today;
+  - accepts a missing `schemaVersion` (version 1);
+  - gives `.newerVersion` for a higher `schemaVersion`, and for a newer
+    envelope;
+  - throws, never returning an empty ledger, for a non-array `playerIDs`, a
+    missing `playerIDs`, a non-string element or an invalid UUID string.
+- Core's App Store URL is public, and `writeReviewURL` is still built from it.
 
 **iPhone** (`PhoneStatsStoreTests`, real files in a temporary directory):
 - An undecodable file for each of the three canonical files gives `blocked`. The
@@ -457,6 +540,15 @@ The same PRs also update (CLAUDE.md §6):
   written to the fake ubiquity container.
 - While blocked, `mergeIncoming`, `appendMatch`, `syncToPhone`, `removeMatch` and
   imports change nothing and publish nothing. `updateTags` throws `notPersisted`.
+  `exportManualArchiveData` throws, and `performRestoreOnQueue` changes nothing.
+- Legacy Documents migration doesn't run while protected data is unavailable,
+  or on an initialized archive with a missing `matchHistory.json`.
+- With the injected protected-data flag `false`, a read failure gives `loading`,
+  never `blocked`. Flipping it to `true` and posting the notification opens the
+  archive. A flag that becomes `true` during the initial load triggers the
+  immediate retry.
+- Send Report stages only the files that exist and can be read, and the
+  generation directory is gone after dismissal.
 - A read error, then a retry after the fault is removed, gives `open` with the
   disk contents and requests a Watch resend.
 - A Health sidecar that can't be decoded still opens the archive (row 10).
@@ -483,6 +575,10 @@ The same PRs also update (CLAUDE.md §6):
     `blocked(.repairIncomplete)`, retries the rollback, and only then reports
     the original problem.
   - The Health sidecar is byte-identical after a repair.
+  - `Damaged/` has `isExcludedFromBackup` set before the first snapshot file is
+    written. A failure to set it stops the repair, with nothing changed.
+  - After a successful rollback retry, the marker is gone and the load returns
+    the original problem.
   - Deleted ids: readable local tombstones survive a repair whose file omits
     `deletedMatchIDs`. The file's `deletedMatchIDs` are unioned in. A record
     with a tombstoned id is dropped. After the Watch resends a tombstoned match,

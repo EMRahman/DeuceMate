@@ -397,8 +397,11 @@ Release.
   the owner signs off. The full [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md)
   is deferred. Do not patch the gap piecemeal in the meantime.
 - **Still open from before:** open enums before adding the next persisted enum
-  case (paired with #19). The plan's per-match reading (§5.2) covers the archive
-  side of this.
+  case (paired with #19). The per-match reading that would cover the archive side
+  (§5.2) belongs to the *deferred* full plan, `ARCHIVE_SAFETY_PLAN.md`. Under
+  [`ARCHIVE_SAFETY_BASIC_PLAN.md`](ARCHIVE_SAFETY_BASIC_PLAN.md) an older iPhone
+  that meets a new case blocks its whole archive. So **no new persisted enum case
+  ships until the six persisted enums are unknown-safe.**
 
 **Key files:** `ScoreTypes.swift`, `PointStat.swift`, `StatsStore.swift`,
 `PhoneStatsStore.swift`, `ArchiveBackupPolicy.swift`, `ScoreViewModel.swift`
