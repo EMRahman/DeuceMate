@@ -272,11 +272,15 @@ Support's way to give the user their matches back without a reinstall:
   the existing `BackupPreview` (match count and newest date) with a confirmation.
 - On confirm, on the store queue. The originals stay at their canonical paths
   until the repaired archive is fully written, and are only ever *copied*:
-  1. **Copy** the three blocked files into `MatchArchive/Damaged/<ISO-date>/`
-     and verify each copy (size and SHA-256 match the original). They are never
-     deleted automatically, and support can ask for them again. If any copy
-     fails or doesn't verify, stop: nothing has changed.
-  2. Write a `repair-in-progress` marker naming that `Damaged/` folder. If the
+  1. **Snapshot** the three canonical paths into `MatchArchive/Damaged/<ISO-date>/`.
+     The snapshot has a `manifest.json` that records each path as either
+     **present** (with its size and SHA-256) or **absent**. Every present file
+     is copied and verified against the manifest. An absent file is legitimate:
+     `matchHistory.json` in the `.missing` case, or a deleted-ids or
+     forgotten-players file an older build never wrote. Snapshots are never
+     deleted automatically, and support can ask for them again. If a copy, its
+     verification or the manifest write fails, stop: nothing has changed.
+  2. Write a `repair-in-progress` marker naming that snapshot folder. If the
      marker can't be written, stop: nothing has changed.
   3. Build the repaired archive in memory: the file's records, deleted ids and
      forgotten players. The ledger is unioned with the local one if that file
@@ -289,8 +293,10 @@ Support's way to give the user their matches back without a reinstall:
   6. Only after step 5 succeeds: set `open`, publish, ask the Watch to resend,
      and push to iCloud. This push replaces the iCloud backup with the repaired
      archive, which the user confirmed.
-- **If any of steps 4–5 fails**, roll back: write the verified `Damaged/`
-  copies back to the canonical paths, then delete the marker. The archive stays
+- **If any of steps 4–5 fails**, roll back to the manifest. Write each
+  **present** file back from its verified copy. **Remove** any file now at an
+  **absent** path, because it was created by the failed repair. Check the result
+  against the manifest, then delete the marker. The archive stays
   `blocked` with its original problem, and the screen says "Couldn't save.
   Nothing has been changed."
 - **If the rollback fails too** (for example, the disk is still full), the
@@ -338,7 +344,7 @@ Support's way to give the user their matches back without a reinstall:
 | 11 | A 1.4.0 `.corrupt` file already exists | Left alone. Support can ask for it |
 | 12 | Fresh install, no local files | Unchanged 1.4.0 first-launch restore offer |
 | 13 | `matchHistory.json` missing on an initialized archive | Blocked (`.missing`). Never opened as empty, so iCloud is never overwritten |
-| 14 | Saving the support file fails, for example with a full disk (phase 2) | The canonical files are rolled back from the verified `Damaged/` copies; still blocked with the original problem; iCloud untouched |
+| 14 | Saving the support file fails, for example with a full disk (phase 2) | The canonical paths are rolled back to the snapshot manifest (present files restored, absent paths removed); still blocked with the original problem; iCloud untouched |
 | 15 | The rollback fails too, or the app is killed mid-repair (phase 2) | The marker keeps it `blocked(.repairIncomplete)`; every load retries the rollback first, and nothing opens or pushes until it succeeds |
 
 ## 6. Accepted costs
@@ -422,6 +428,10 @@ The same PRs also update (CLAUDE.md §6):
 - Phase 2:
   - A valid support file copies the old files to `Damaged/` (verified), writes
     the canonical files, opens, and pushes.
+  - Repair works when files are absent: `.missing` (no `matchHistory.json`),
+    and no deleted-ids or forgotten-players file. The manifest records them as
+    absent. A rollback after a write failure removes whatever the failed repair
+    created at those paths, leaving them absent again.
   - An invalid file, or a failed copy or marker write, changes nothing.
   - A write failure at each of the three canonical files (injected through the
     store's storage configuration) rolls back to byte-identical originals,
