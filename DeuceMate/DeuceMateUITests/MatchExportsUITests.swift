@@ -376,7 +376,10 @@ final class MatchExportsUITests: XCTestCase {
         save.tap()
         let replace = app.alerts.buttons["Replace"].firstMatch
         if replace.waitForExistence(timeout: 2) { replace.tap() }
-        XCTAssertTrue(app.staticTexts["Archive exported"].waitForExistence(timeout: 5))
+        XCTAssertTrue(save.waitForNonExistence(timeout: 5))
+        let status = app.staticTexts["Archive exported"]
+        for _ in 0..<3 where !status.exists { app.swipeUp() }
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
     }
 
     @MainActor
