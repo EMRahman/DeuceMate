@@ -67,7 +67,7 @@ when the item should constrain future changes.
 | [23](#23--validate-manual-match-scores-and-explain-invalid-input) | Correctness | Validate manual match scores and explain invalid input | Medium; inconsistent records can be resumed on Watch | Next manual-entry fix, after persistence containment | Small–medium |
 | [24](#24--add-accessible-watch-scoring-actions) | Accessibility | Add accessible Watch scoring actions | Core scoring has no named accessibility actions | Coordinate with walkthrough shared controls | Small–medium |
 | [25](#25--make-interactive-html-export-failures-recoverable) | Export / UX | Make interactive HTML export failures recoverable | Low; failed export disappears with no explanation | Independent usability fix | Small |
-| [30](#30--stop-rewriting-and-re-uploading-the-whole-archive-on-every-point) | Persistence / iCloud | Stop rewriting and re-uploading the whole iPhone archive on every point | Low today, with no reported issue. Cost grows with archive size: every live checkpoint rewrites the whole archive and pushes it to iCloud. Estimated ~1 GB a week written locally after a year at 3 matches a week, unmeasured | Review before archives get large, or with the next sync or persistence change. Independent of #18 | Small (throttle the push); small–medium (also coalesce local writes) |
+| [30](#30--stop-rewriting-and-re-uploading-the-whole-archive-on-every-point) | Persistence / iCloud | Stop rewriting and re-uploading the whole iPhone archive on every point | Low today, with no reported issue. Cost grows with archive size: every live checkpoint rewrites the whole archive and pushes it to iCloud. Estimated ~1 GB a week written locally after a year at 3 matches a week. Per-match size confirmed on a real 53-match archive (1.3 MB) | Review before archives get large, or with the next sync or persistence change. Independent of #18 | Small (throttle the push); small–medium (also coalesce local writes) |
 | [11](#11--de-duplicate-appthemeswift-into-core) | Duplication | De-duplicate `AppTheme.swift` (still byte-identical) | Medium change risk | Before the next theme edit | Small |
 | [12](#12--extract-the-point-categorisation-flow-state-machine-into-core) | Duplication | Extract point-categorisation flow state machine into Core | Medium change risk | Before the next outcome / ending-shot change | Medium |
 | [21](#21--record-an-executable-local-verification-gate) | Verification | Record an executable local verification gate | Medium regression/process risk | Establish now; require for scoring, persistence, and sync PRs | Small |
@@ -706,6 +706,14 @@ and sends the completed one reliably.
 **Estimated cost** (*not measured*: ~24 KB per match and ~86 points per match,
 from the 47-match test archive in `ARCHIVE_SAFETY_PLAN.md` §11, at 3 matches a
 week). Each match costs about 86 rewrites, up to twice that with point tracking.
+
+*Real-archive check (owner's iPhone, 23 November 2026):* 53 matches use 1.3 MB of
+iCloud storage (Settings › iCloud). That is about 25 KB per match for the
+Health-stripped backup, which confirms the per-match size above. At that size
+each point rewrites about 1.3 MB: about 110 MB per match locally, or about 330 MB
+a week at 3 matches a week. Storage itself isn't the concern. iCloud keeps only
+the current version, so space grows by about 25 KB per match. The concern is how
+often the file is rewritten.
 
 | Playing for | Matches | Archive | Written per match | Per week |
 |---|---|---|---|---|
