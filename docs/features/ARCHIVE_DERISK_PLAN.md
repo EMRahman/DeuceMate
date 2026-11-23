@@ -9,8 +9,8 @@ stance: "Rare and self-inflicted. Prevent it, destroy nothing, and write recover
 budget: "PR A ≤ 75 production lines; PR B ≤ 340 production lines (raised from 300 for the file list, §5.3). A finding that breaks the budget needs the owner's OK (§8)."
 parts: "1 prevent (golden-file test); 2 destroy nothing (keep every copy, pause iCloud); 3 export reminder (ARCHIVE_EXPORT_REMINDER_PLAN.md, unchanged); 4 Archive Diagnostics (a report for support or a coding agent)"
 defers: "ARCHIVE_SAFETY_PLAN.md (full redesign). Its status is deferred, as a reference only."
-decisions_open: [D2, D3, D4, D5]
-decided: "D1: no Resume iCloud Backup button. Only a fixing build ends the pause, after it recovers the dated copies (§3.2)."
+decisions_open: [D2, D3, D4]
+decided: "D1: no Resume iCloud Backup button. Only a fixing build ends the pause, after it recovers the dated copies (§3.2). D5: Archive Diagnostics is always in Settings, with its details collapsed until the user opens them (§5.1)."
 -->
 
 # Plan: De-risk the undecodable archive (#18), proportionately
@@ -165,13 +165,28 @@ state of both without a Mac.
 
 ### 5.1 Where it appears
 
-- Tapping the paused iCloud indicator (§3.3).
-- **Settings › Backup & Transfer › Archive Diagnostics.** The row appears only
-  while at least one damaged copy exists, dated or legacy (D5).
+- **Settings › Backup & Transfer › Archive Diagnostics, always** (D5). It's the
+  last row in that section: a plain navigation row with no badge or count, so
+  it stays out of the way unless someone looks for it. While a damaged copy
+  exists, the row also shows a small orange "Needs attention" detail.
+- Tapping the paused iCloud indicator (§3.3) opens the same screen.
+
+**Collapsed by default.** The screen opens on a short status and the share
+actions. Everything detailed (the damaged copies and the two file groups) sits
+in collapsed sections that the user expands only if they want to look. The
+report always contains every detail, whether or not a section was expanded.
 
 ### 5.2 What the screen shows
 
-The text depends on which copies exist. With a **dated** copy (iCloud paused):
+The status at the top depends on which copies exist. With **no damaged copy**,
+which is almost every user:
+
+> **No problems found**
+>
+> Your match archive opened normally. If support asks for diagnostics, share
+> the report below.
+
+With a **dated** copy (iCloud paused):
 
 > **Some match data couldn't be opened**
 >
@@ -192,19 +207,26 @@ launch that kept the copy probably replaced the backup. So the screen says so:
 > time and may have been replaced, so this copy may be the only one of those
 > matches. Keep it, and share the report below with DeuceMate support.
 
-Below the text, a **Files** section in two groups (the same rows as §5.3's
-file list):
-- **On this iPhone:** every file in `MatchArchive/`, with its size and
+Below the status, one line for the iCloud backup state (on, off, paused or
+unavailable), then three **collapsed** sections, each a standard disclosure
+row showing only its title and a count until expanded:
+- **Damaged copies** (only while one exists): original file name, the date it
+  was moved aside, and its size.
+- **Files on this iPhone:** every file in `MatchArchive/`, with its size and
   modified date. Damaged copies are marked. Any archive file an older build
   left in `Documents/` is listed too.
-- **In iCloud:** every file in the backup, with its size, modified date and
-  upload status. Or one line saying iCloud is unavailable.
+- **Files in iCloud:** every file in the backup, with its size, modified date
+  and upload status. Or one line saying iCloud is unavailable.
 
-Then the actions:
+These are the same rows as §5.3's file list. Expanding a section doesn't
+change any file.
+
+Then the actions, always visible:
 1. **Share Report.** Opens the share sheet with
    `DeuceMate-archive-report-<date>.md`. It contains no match data (§5.3), so
    it is safe to send anywhere.
-2. **Share Report and Damaged Files.** The same report plus the damaged copies
+2. **Share Report and Damaged Files** (only while a damaged copy exists). The
+   same report plus the damaged copies
    of `matchHistory.json`, `deletedMatchIDs.json` and `forgottenPlayers.json`,
    after this disclosure:
    > These files contain your scores, player names and playing style notes.
@@ -228,7 +250,9 @@ Mail composer and no new framework.
 `ArchiveDiagnosticsReport` is a pure Core builder that produces Markdown:
 readable by a person, and parseable by a coding agent without a hosted page.
 
-1. **What happened**, in two sentences, plus the support address.
+1. **What happened**, in two sentences, plus the support address. With no
+   damaged copy it says "No damaged copies", and sections 4 and 6 are left
+   out.
 2. **Environment:** app version and build, iOS version, the report date. No
    device identifiers.
 3. **Files** (what the screen's Files section shows, as two Markdown tables):
@@ -289,20 +313,24 @@ readable by a person, and parseable by a coding agent without a hosted page.
 **Privacy:** the report never contains a match, a name or a note. A decoding
 error names a field and a value, never a player. The builder's tests pin this.
 
-**Size:** about 315 production lines:
+**Size:** about 330 production lines:
 - Core about 145: the report builder with its fixed text and the Files tables,
   the coding-path formatter, and `CaseIterable`;
 - store about 65: list local and iCloud files with their resource values;
   hash and decode result for damaged copies; stage copies;
-- views about 105: the screen with its two wordings and Files section, the
-  Settings row, and the indicator tap.
+- views about 120: the screen with its three wordings and collapsed sections,
+  the always-present Settings row with its "Needs attention" detail, and the
+  indicator tap.
 
 About 200 test lines:
 - the report holds the coding path, hash and enum list, and never holds a name
   or note even when the damaged file does;
 - the readable-now wording;
 - staging and cleanup;
-- a legacy-only phone shows the row and the legacy wording, and isn't paused;
+- a phone with no damaged copy gets the "No problems found" wording and a
+  report without the damaged-copy and repair sections;
+- a legacy-only phone gets the legacy wording and the "Needs attention"
+  detail, and isn't paused;
 - the Files tables: every local entry listed, a `Documents/` leftover listed,
   iCloud upload states and "unknown" values formatted, iCloud unavailable;
 - the Health sidecar copy is reported but never attached.
@@ -362,7 +390,7 @@ These exist because #228–#240 grew with every review.
 | D2 | Should Share Report and Damaged Files exist, or the report only? | Both. The report alone diagnoses the cause, and the files are needed to repair genuine damage |
 | D3 | Also publish the agent instructions as a web page? | Not now. Do it only if support starts receiving these reports |
 | D4 | Ship PR A before PR B? | Yes. PR A closes the irreversible step on its own, and PR B can follow |
-| D5 | Show Archive Diagnostics **always**, not only while a damaged copy exists? The Files list would then help with any backup question, such as a restore that found nothing | Not now. Only while a damaged copy exists keeps Settings unchanged for almost everyone. Showing it always costs about 10 lines: a third, "everything is fine" wording |
+| D5 | Show Archive Diagnostics **always**, not only while a damaged copy exists? | **Decided: Yes** (2026-11-23), as a plain last row in Backup & Transfer with its details collapsed until the user opens them (§5.1). The file list then helps with any backup question, and the user can export the report from there |
 
 ## 10. Phases
 
