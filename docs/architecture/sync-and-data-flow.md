@@ -54,30 +54,14 @@ matches and a fresh Watch has none, it directs the user to open a match and choo
 are refreshed through `sessionWatchStateDidChange`, rather than remaining frozen
 at activation.
 
-A failed iPhone archive read preserves canonical files in place and pauses
-archive writes, exports, Watch archive merges, and iCloud backup. The Matches
-screen shows recovery actions (`ArchiveProblemNotice` / `ArchiveRecoveryModel`)
-and keeps the live scoreboard accessible. A successful retry or iCloud restore
-requests the Watch's full history again. Archive deletion, manual entry, and End
-at Current Score issue their Watch-side changes (and private-note deletion) only
-after the local commit succeeds. After a transient Watch delivery write failure
-commits on retry, the phone also reconciles committed tags and match-type
-revisions for the retried IDs. A failed local write puts the deletion-intent
-files back as they were, so a delete the user was told didn't happen can't
-happen at the next launch.
-
-While the archive is paused, the iPhone refuses Watch archive deliveries, so the
-Watch holds the only copy of new matches until a retry or restore asks for its
-full history. The Watch still trims to its 25-match cap meanwhile
-(TECHNICAL_DEBT #29).
-
-**iCloud push floor.** Every outbound backup push goes through Core's
-`BackupPushGuard`: a match may leave the backup only with a tombstone or a
-confirmed Replace import. Otherwise the history file is withheld ("iCloud backup
-paused") while tombstones and forgotten players are still pushed. The baseline
-is the iCloud-account-scoped `backupManifest.json`, or the backup's own match
-ids when that is missing. Bring Them Back and Remove from Backup resolve a
-withheld push.
+**Known gap (TECHNICAL_DEBT #18).** Sometimes the iPhone can read its archive
+file but can't decode it, for example when one match holds a value this version
+doesn't know. When that happens, it moves the file aside to `.corrupt`, starts
+an empty archive, and that launch's iCloud push overwrites the backup. The
+redesign is
+[`ARCHIVE_SAFETY_PLAN.md`](../features/ARCHIVE_SAFETY_PLAN.md), which is waiting
+for the owner's sign-off. An earlier attempt (#228–#234) was reset, so this
+document describes the 1.4.0 behaviour.
 
 **Live recovery (16 November 2026):** activation, reconnect, phone foreground,
 opening the live board and Sync Now request the existing Watch model's current
@@ -316,11 +300,8 @@ clock; if the phone's copy is newer — a stale echo or a forgotten-player scrub
 the phone answers with its own. Cached watch-mirror rows are scrubbed of forgotten
 players before display. The forgotten-player ledger is persisted next to the
 tombstones (`forgottenPlayers.json`, ids only), written before the archive,
-re-applied on load, and backed up to iCloud with it; initial restore and
-outbound backup pushes union the backup's ledger (preserving uninspectable or
-unsupported-schema remote ledgers untouched). A present local or iCloud ledger
-must contain a complete UUID array and supported schema version; older archives
-can omit the file.
+re-applied on load, and backed up to iCloud with it; initial restore unions the
+backup's ledger.
 
 **Tombstones:** when the user permanently deletes a match on the phone, its ID is
 remembered in a small "tombstones" list. Any future sync from the watch skips

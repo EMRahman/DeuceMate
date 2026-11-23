@@ -53,16 +53,16 @@ when the item should constrain future changes.
 
 | # | Area | Item | Application risk | Work band / trigger | Effort |
 |---|------|------|------------------|---------------------|--------|
-| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | Stages 1–3 landed (fail-closed iPhone reads, durable writes & Watch retry, identity-scoped `BackupPushGuard`, explicit recovery, all 6 enums pinned). Remaining: open enums (with #19) | Open enums before the next persisted-enum case | Small |
+| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact, low–medium likelihood, open again.** The #228–#234 containment design was reset on 23 Nov 2026, so the iPhone has 1.4.0's behaviour: an undecodable file means an empty archive, and the iCloud backup gets overwritten. All 6 persisted enums stay pinned | **Next**, but only after the owner signs off on [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md). Any release before its phases (b) and (c) still has the gap | Medium, staged (plan phases a–d) |
 | [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | Fail-closed `ScoreViewModel.loadState()` (with pre-decode version header) and Watch `MatchHistoryView` unreadable banner landed | Remaining: explicit Watch live-state abandon/reset recovery UX if desired | Small |
 | [27](#27--prevent-unrecorded-fitness-workouts-with-manager-tests-and-crash-recovery) | Health / Reliability | Prevent unrecorded Fitness workouts with manager tests and crash recovery | High impact when a workout is lost; remaining likelihood unverified | **Now**; physical-Watch save/sync checks before release | Medium, staged |
-| [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | Step 1 landed (dual-format `PersistedArchiveCodec` readers, `ManualMatchArchiveBackup.supportedSchemaVersions` range + pre-decode header check, `.newerVersion` diagnosis, pre-decode `AppState` version check) | Step 2: switch writers to version-1 envelopes in a later release once step-1 readers are deployed | Small |
+| [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | Step 1 readers landed in #229 and were kept by the reset: the Watch history, the Watch→iPhone sync, manual archives (`supportedSchemaVersions` range plus a check before decoding), and the pre-decode `AppState` version check. The iPhone archive's reads went back to 1.4.0 | Step 2 for the iPhone archive is part of [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) §5.1 and D9. Other writers stay on bare arrays until a format change needs envelopes | Small |
 | [2](#2--add-a-monotonic-record-revision-before-queued-checkpoints) | Sync | Order Watch archive checkpoints | Implemented for updated pairs | Legacy-to-legacy merges retain arrival order | — |
 | [28](#28--recover-current-live-state-and-confirm-courtside-phone-input) | Sync / UX | Recover current live state and confirm courtside phone input | Reconnect fix implemented; device timing unverified | Implemented in working branch; physical-device validation pending | Medium, staged |
 | [3](#3--replace-stringly-typed-settings-keys-with-typed-keys) | Settings | Replace stringly-typed settings keys with typed keys | Medium today; **high change risk** | Next engineering-risk cleanup after persistence containment | Large, splittable per setting category |
 | [20](#20--make-health-derived-field-classification-mechanically-exhaustive) | Health/Privacy | Make Health-derived field classification mechanically exhaustive | No current bug; **high privacy risk on expansion** | Before adding any Health-derived field or export surface | Medium design; small first guards |
-| [4a-write](#4a-write--surface-save-failures) | Persistence | Surface live-state and archive save failures | Mostly addressed: Watch live-state and finalize failures are shown; iPhone saves are durable-first and explained (#228, #231). Remaining: Watch history delete/metadata write failures are only logged | Next Watch history change | Small |
-| [29](#29--keep-watch-matches-the-iphone-hasnt-saved) | Persistence | Keep Watch matches the iPhone hasn't saved | High impact (matches lost for good); low likelihood — needs 25+ new matches while the iPhone archive is paused | Before relying on the Watch as the copy of record during a pause | Medium |
+| [4a-write](#4a-write--surface-save-failures) | Persistence | Surface live-state and archive save failures | Watch: live-state and finalize failures are shown; history delete and metadata write failures are only logged. iPhone: back to 1.4.0 after the reset. Match-detail edits are all-or-nothing, but other saves still publish when the write fails | iPhone: [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) §5.3. Watch: the next Watch history change | Small |
+| [29](#29--keep-watch-matches-the-iphone-hasnt-saved) | Persistence | Keep Watch matches the iPhone hasn't saved | Mostly gone: it came from #228's pause, which the reset removed. A negligible version remains in 1.4.0's behaviour (an archive that couldn't be read at launch, in an app that stays running through 25+ new matches) | Closed by [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) rule 3, §5.5 (retry on unlock) and D9 | Medium |
 | [26](#26--match-info-swipe-down-and-player-name-save-gaps) | Data loss | Match Info swipe-down and player-name save gaps | Low; swipe discard is accepted, a failed name save may show no error | Next Match Info change | Small |
 | [23](#23--validate-manual-match-scores-and-explain-invalid-input) | Correctness | Validate manual match scores and explain invalid input | Medium; inconsistent records can be resumed on Watch | Next manual-entry fix, after persistence containment | Small–medium |
 | [24](#24--add-accessible-watch-scoring-actions) | Accessibility | Add accessible Watch scoring actions | Core scoring has no named accessibility actions | Coordinate with walkthrough shared controls | Small–medium |
@@ -74,21 +74,41 @@ when the item should constrain future changes.
 | [6](#6--phonestatsstore-concurrency-model) | Concurrency | `PhoneStatsStore` actor / `@MainActor` migration | Low today | Before Swift 6 strict concurrency or new background mutation paths | Medium |
 | [13](#13--split-pastmatchesview) | Architecture | Split `PastMatchesView` (745 lines, still the fastest-growing file) | None today | Opportunistically on the next substantial edit | Small |
 
-**Read 18, 19 and 4a together.** They are one persistence-safety programme —
-what happens when a persisted file cannot be decoded — and each fix constrains
-the others'. #4a's PR was closed unmerged for exactly this reason. Sequence the
-programme by safety rather than by cheapest patch:
+**Read 18, 19 and 4a together, with [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md).**
+They are one persistence-safety programme: what happens when a persisted file
+cannot be decoded. Each fix constrains the others, and #4a's PR was closed
+unmerged for exactly this reason.
 
-1. ✅ *(#228, #229)* **Fail closed at the origin.** A readable-but-undecodable canonical history
+**Reset (23 November 2026).** #228, #231 and #234 built a containment design
+around the iPhone archive:
+- a pause on all writes after a bad read;
+- an iCloud push guard;
+- six recovery actions.
+
+Review never converged. Each fix added states that the next review found holes
+in, through fifteen PRs numbered from #222 to #237. The reset PR therefore put the iPhone archive code
+back to 1.4.0. It kept #229's readers and Watch fixes and #228's enum pins. The
+replacement, [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md), makes bad files
+harmless instead of blocking them. It also lists the six rules its PRs are
+reviewed against. It is waiting for the owner's sign-off.
+
+The original sequence is kept below as history. ↩︎ marks steps the reset
+removed.
+
+1. ↩︎ *(#228; Watch part kept from #229)* **Fail closed at the origin.** A readable-but-undecodable canonical history
    or tombstone file must suspend canonical writes and iCloud pushes; an
    unreadable/undecodable live state must not be overwritten by the next point.
-2. ✅ *(#228)* **Land the cheap guards immediately, without calling the programme done.**
+   *Plan instead:* keep unreadable matches unchanged (§5.2) and fall back to the
+   newest good copy (§5.5); the Watch live-state guard stays.
+2. ✅ *(#228, kept)* **Land the cheap guards immediately, without calling the programme done.**
    Pin all persisted-enum raw values and add the missing corrupt-main-file tests.
-3. ◐ *(#229: step 1, readers only)* **Add version envelopes and refuse-to-overwrite-newer semantics** (#19),
+3. ◐ *(#229: step 1, readers only; kept)* **Add version envelopes and refuse-to-overwrite-newer semantics** (#19),
    including an older-version policy for manual exports.
-4. ✅ *(#228)* **Add the tombstone-qualified backup floor** (#18) as defence in depth.
-5. ✅ *(#228, #231)* **Offer explicit recovery.** Preserve the original bytes and make any lossy,
+4. ↩︎ *(#228)* **Add the tombstone-qualified backup floor** (#18) as defence in depth.
+   *Plan instead:* dated iCloud copies that an upload can never overwrite (§5.6).
+5. ↩︎ *(#228, #231)* **Offer explicit recovery.** Preserve the original bytes and make any lossy,
    element-wise salvage a reported recovery operation, never the default read.
+   *Plan instead:* restore points and Restore an Earlier Version (§5.4, §5.7).
 
 ---
 
@@ -244,19 +264,20 @@ throws for a key that is present with an unrecognised value.
 decode `[MatchRecord]` in a single call (`StatsStore._loadHistoryUnsafe`,
 `PhoneStatsStore.readCanonicalFile`), so **one** point in **one** old match takes
 down **every** match in the file. A format played twice a year ago costs the
-whole archive. The cascade as it stood before #228 and #229, worst first, with
-what each step does now:
+whole archive. The cascade, worst first, as it stands in 1.4.0. The iPhone has
+been back on that behaviour since the reset:
 
 1. **Phone archive quarantined.** `readCanonicalFile` moves `matchHistory.json`
    aside to `.corrupt` and the store starts from an empty list.
-   *Now (#228):* the file stays in place byte-for-byte, every write and backup
-   push pauses, and `ArchiveProblemNotice` explains it with recovery actions.
+   *#228 (reset):* kept the file in place and paused every write. *Plan:*
+   keep unreadable matches unchanged and fall back to the newest good copy
+   ([`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) §5.2, §5.5).
 2. **iCloud backup overwritten.** `pushBackupOnQueue` builds its snapshot
    straight from `records` with no emptiness floor, and `lastPushedSnapshot` is
    per-process — so the next push writes the now-empty archive over the backup.
    This is the only irreversible hop; everything else leaves a file on disk.
-   *Now (#228):* `BackupPushGuard` withholds any push that would drop a match
-   without a tombstone or a confirmed Replace import ("iCloud backup paused").
+   *#228 (reset):* an upload guard withheld such pushes. *Plan:* dated iCloud
+   copies, so an upload can't overwrite an earlier day (§5.6).
 3. **Watch archive invisible and silently read-only.** `loadHistoryOrNil()`
    returns `nil`; the refuse-to-overwrite guard correctly protects the file, but
    `appendMatch` then bails, so every subsequently finished match is dropped
@@ -286,7 +307,14 @@ schema divergence are uncommon, but the failure amplifier spans the whole
 archive and the iCloud overwrite is irreversible. This is the first runtime
 risk to contain.
 
-**Safest implementation sequence:**
+**Safest implementation sequence** (superseded):
+
+> **Superseded by [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md). Kept as
+> history.** #228 followed this sequence and was reset. In particular, don't
+> implement the "floor the backup push" bullet: dated iCloud copies replace it.
+> The analysis of enum risk and of lossy element-wise decoding still holds. The
+> plan answers the second by keeping unreadable matches as raw JSON rather than
+> skipping them.
 
 - **Fail closed on score-bearing canonical data first.** A readable file that
   cannot be decoded is not an empty archive. A decode failure in either the
@@ -339,20 +367,37 @@ remedy is deleting the app — which takes the sandbox, and the `.corrupt` file,
 with it. `assertionFailure()` gives the same signal in Debug and compiles away in
 Release.
 
-**Status — Stages 1–3 implemented (22 November 2026):**
+**Status: reset, with the redesign waiting for sign-off (23 November 2026).**
 
-- **Fail-closed reads & durable writes:** `PhoneStatsStore` leaves unreadable or undecodable `matchHistory.json`, `deletedMatchIDs.json`, and `forgottenPlayers.json` (decoded strictly via `StoredForgottenPlayers` with schema validation) in place byte-for-byte, also blocking on orphaned legacy `.corrupt` quarantines and initialized archives missing history/tombstones. Writes commit deletion intent (`forgottenPlayers.json` and `deletedMatchIDs.json`) before `matchHistory.json` and update memory only after disk commit succeeds; Manual Entry, End at Current Score, permanent delete, and manual import/export gate side effects on durability. Transient Watch write failures retain unscrubbed copies in `pendingWatchRecords` (`watchArchiveSaveFailed`) for retry and tag/match-type reconciliation. Only the reconstructable Health sidecar degrades independently.
-- **Pinned persisted enums:** All six persisted enums (`DoublesServer`, `MatchFormat`, `Player`, `MatchType`, `PointOutcome`, `EndingShot`) are pinned in Core tests.
-- **Hardened iCloud backup push floor (`BackupPushGuard`):** A match may leave iCloud only with a tombstone or a confirmed Replace import; otherwise history is withheld (`withheldBackupMatchCount`, `ICloudBackupCopy.paused`) while additive tombstones and forgotten players still push. `BackupManifest` is scoped to the active iCloud identity token (`identityKey`); account switches or missing manifests inspect the destination backup via `BackupRecordID`, fail closed on corrupt/non-array remote history, and always inspect/union (or preserve untouched) remote `forgottenPlayers.json` and `deletedMatchIDs.json`.
-- **Explicit recovery (`ArchiveProblemNotice`, `BackupWithheldNotice`, `WatchSaveFailedNotice`, `ArchiveRecoveryModel`):** Try Again, Restore from iCloud (`LenientRecordList` + local Health sidecar + clearing stale `backupManifest` so newer-format matches stay protected), Save a Copy (temp files kept after the share sheet closes and swept when a day old at the next copy), confirmed Replace import (Merge stays refused while suspended; keeps a raw copy of the iCloud history in `Recovered/` before the push that can drop iCloud-only matches), Bring Them Back, and Remove from Backup (acts only on the set the user confirmed). Every replacement copies originals (including legacy `.corrupt`, never Health sidecar) to `MatchArchive/Recovered/<time>/` first and aborts if copying fails.
-- **Follow-up (recovery review, 22 November 2026):** a confirmed Replace now keeps a copy of the iCloud backup's history (raw bytes, so newer-format matches are kept too) in `Recovered/` before the push that may drop iCloud-only matches, and holds that push until the copy exists; the Replace confirmation says so. The first-launch restore reads the backup leniently, so one newer-format match no longer silently skips the restore (the prompt says how many stay in the backup). Remove from Backup acts only on the set shown in its confirmation. Bring Them Back no longer says "Nothing has been changed" after it adopted matches but couldn't push. Save a Copy keeps its files after the share sheet closes. Restore from iCloud reports a failed `archiveInitialized` write, and a Replace while signed out no longer records the previous account's identity. Point-in-time snapshots for failures this guard can't anticipate are proposed in [`ARCHIVE_SNAPSHOTS_PLAN.md`](ARCHIVE_SNAPSHOTS_PLAN.md).
-- **Remaining:** open enums before adding the next persisted enum case (paired with #19).
-- **Follow-up (22 November 2026):** a write that *fails* after the deletion-intent files (for example, the Health sidecar or history write) now puts `forgottenPlayers.json` and `deletedMatchIDs.json` back as they were. Before, a failed Delete Permanently reported "not deleted", kept the note and left the Watch alone, yet its tombstone stayed on disk, so the match vanished at the next launch. A crash mid-write still completes the deletion, as intended. Failed saves and deletes now say why (`ArchiveSaveFailureCopy`: "Nothing has been changed", naming the pause only while the archive is blocked), and the delete failure is shown inside the confirmation popover. The behaviour tests from the stacked #224–#227 PRs that #228 hadn't carried over were ported and pass.
+- **What was built and removed.** #228, #231 and #234 implemented the
+  sequence above:
+  - fail-closed reads that paused every write, export, Watch merge and iCloud
+    push;
+  - writes saved to disk before the screen updated, with rollback of the
+    deletion-intent files;
+  - an identity-scoped `BackupPushGuard` with a withheld state;
+  - six recovery actions (Try Again, Restore from iCloud, Save a Copy,
+    confirmed Replace, Bring Them Back, Remove from Backup) and four notices.
+
+  Review never converged. #236 was the third round of fixes in two days, and
+  most of its findings were in the recovery machinery itself. The pause also
+  opened a new loss path (#29). The reset PR put the iPhone archive code back
+  to 1.4.0, and #236 and #237 were closed. The PRs and git history keep the
+  full design.
+- **Kept:** all six persisted enums (`DoublesServer`, `MatchFormat`, `Player`,
+  `MatchType`, `PointOutcome`, `EndingShot`) are pinned in Core tests. The
+  Watch protections from #229 and 4a-read also stay.
+- **Current behaviour:** 1.4.0's, so the cascade above is live again on the
+  iPhone. Any release before plan phases (b) and (c) still has the gap.
+- **Next:** [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md), once the owner
+  signs off. Do not patch the gap piecemeal in the meantime.
+- **Still open from before:** open enums before adding the next persisted enum
+  case (paired with #19). The plan's per-match reading (§5.2) covers the archive
+  side of this.
 
 **Key files:** `ScoreTypes.swift`, `PointStat.swift`, `StatsStore.swift`,
-`PhoneStatsStore.swift`, `ArchiveLoadProblem.swift`, `ArchiveRecovery.swift`,
-`BackupPushGuard.swift`, `ArchiveProblemNotice.swift`, `ArchiveRecoveryModel.swift`,
-`ScoreViewModel.swift` (`AppState`, `loadState`).
+`PhoneStatsStore.swift`, `ArchiveBackupPolicy.swift`, `ScoreViewModel.swift`
+(`AppState`, `loadState`).
 
 ---
 
@@ -368,7 +413,7 @@ State of the four persisted formats before step 1, and after it (#229):
 | Format | Version field (before) | Behaviour on data from a newer app (before) | After step 1 (#229) |
 |---|---|---|---|
 | `appState.json` (watch live state) | `version: Int` — **present, required, and never read** (decoded at `ScoreViewModel.swift:528`, branched on nowhere) | none | Version checked **before** the full decode: a newer file is left untouched, writes are blocked and the Watch says an update is needed |
-| `matchHistory.json` (watch + phone canonical archive) | none — a bare `[MatchRecord]` array | none | Readers accept a bare array or a versioned envelope. Writers still emit bare arrays, so until step 2 a newer app's unknown enum case still reads as damaged (`undecodable`) — which also fails closed — rather than as `newerVersion` |
+| `matchHistory.json` (watch + phone canonical archive) | none — a bare `[MatchRecord]` array | none | Watch: readers accept a bare array or a versioned envelope, while writers still emit bare arrays. iPhone: back to 1.4.0's plain decode after the reset, so a newer app's unknown enum case reads as damaged (the #18 gap). [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) §5.1–§5.2 replaces it with a versioned file read one match at a time |
 | WatchConnectivity wire format | none | none | `decodeArray` accepts both shapes; same step-2 caveat |
 | Manual archive export/import | `schemaVersion`, rejected via `ArchiveError.unsupportedSchemaVersion` | detected and refused legibly — but see the equality-gate caveat below | Range gate (`supportedSchemaVersions`) and a header check before decoding records; a newer export asks the user to update |
 
@@ -447,11 +492,14 @@ the empty file becomes the truth). Assessed against this codebase:
 
 - Decode-failure-then-write-empty was the phone's exact path
   (`readCanonicalFile` → `.corrupt` → `loadedRecords = []` →
-  `pushBackupOnQueue` with no floor). Fixed in #18 (#228).
+  `pushBackupOnQueue` with no floor). #228 fixed it, and the reset reopened it.
+  [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) is the replacement fix.
 - "Never silently replace on failure; move the original aside." Done, and
-  stronger than moving aside: the watch `StatsStore` read guard (#4b), the
-  phone's canonical files (#228) and `appState.json` (4a-read) all leave the
-  original in place and stop writing.
+  stronger than moving aside on the Watch: the watch `StatsStore` read guard
+  (#4b) and `appState.json` (4a-read) leave the original in place and stop
+  writing. The iPhone moves an undecodable file aside but then treats the
+  archive as empty (the #18 gap). The plan keeps every moved file and falls
+  back to the newest good copy (§5.5).
 - Version plus refuse-to-overwrite-newer. Missing everywhere. The manual archive
   has the version and detects a mismatch, but refuses symmetrically rather than
   only refusing *newer*, and it never writes back over the imported file, so it
@@ -480,15 +528,14 @@ this repo's actual exposure, and it is why #18 exists as a separate item.
 
 **Status — Step 1 landed (22 November 2026):**
 
-- **Dual-format versioned readers (`PersistedArchiveCodec`):** `StatsStoring.decode`, `MatchSyncMessage.decodeArray`, Watch `StatsStore._loadHistoryUnsafe`, and iPhone `PhoneStatsStore` (canonical reads, legacy migration, initial restore, remote tombstones, remote `BackupRecordID` baseline, and `LenientRecordList` recovery) all accept both legacy bare arrays (`[...]`) and versioned envelopes (`{"format":…,"schemaVersion":…,"items":…}` / `"records"`), validating `format` and `schemaVersion` BEFORE decoding elements. Writers intentionally keep emitting bare JSON arrays during step 1 so older deployed builds remain compatible.
-- **Explicit `.newerVersion` diagnosis:** `ArchiveLoadProblem.newerVersion` (outranking `.undecodable` and `.unreadable`) surfaces update guidance on iPhone (offering Save a Copy rather than backup overwrite); `StoredForgottenPlayers` also checks `schemaVersion` before decoding `playerIDs`.
+- **Dual-format versioned readers (`PersistedArchiveCodec`):** `StatsStoring.decode`, `MatchSyncMessage.decodeArray` and the Watch's `StatsStore._loadHistoryUnsafe` accept both legacy bare arrays (`[...]`) and versioned envelopes (`{"format":…,"schemaVersion":…,"items":…}` / `"records"`). They validate `format` and `schemaVersion` BEFORE decoding elements. Writers keep emitting bare JSON arrays during step 1, so older deployed builds remain compatible. *The iPhone store's own reads went back to 1.4.0 with the reset. Plan phase (a) brings them back as part of the new archive file.*
+- **Explicit `.newerVersion` diagnosis on the iPhone:** removed by the reset, along with `ArchiveLoadProblem` and `StoredForgottenPlayers`. Under the plan's §5.1 policy a newer envelope can't occur except after a developer downgrade, and §5.5 treats it as damaged (moved aside and kept).
 - **`ManualMatchArchiveBackup` range gate & pre-decode header check:** Replaced strict `== supportedSchemaVersion` with `supportedSchemaVersions = 1...supportedSchemaVersion` and pre-decode `ArchiveHeader` validation so future incompatible exports surface `.unsupportedSchemaVersion` with update guidance instead of a raw `DecodingError`.
 - **Pre-decode `AppState` version check (`ScoreViewModel.loadState()`):** Checks `AppStateVersionHeader.version` against `1...7` BEFORE decoding full `AppState`, surfacing an update-required `persistenceError` while keeping `stateWritesBlocked = true` and preserving the file untouched.
-- **Remaining (Step 2):** Once step-1 readers are deployed across Watch and iPhone installs, switch writers to emit version-1 envelopes before any future incompatible schema bump.
+- **Remaining (Step 2):** the iPhone archive moves to a versioned file in [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) §5.1, and per-match sync reading is its D9. The Watch history and sync writers switch to envelopes only when a format change needs them, after the step-1 readers are deployed.
 
 **Key files:** `ScoreViewModel.swift` (`AppState.version`, `AppStateVersionHeader`),
 `Persistence/StatsStoring.swift` (`PersistedArchiveCodec`),
-`Persistence/ArchiveLoadProblem.swift`, `Views/ArchiveProblemNotice.swift`,
 `Sync/MatchSyncMessage.swift` (`decodeArray`), `Sync/SyncIncomingPayload.swift`,
 `Persistence/ManualMatchArchiveBackup.swift`.
 
@@ -555,10 +602,12 @@ these changes.
 - **Watch live state:** a failed `saveState()` now sets `persistenceError`
   ("Latest score could not be saved…"), and a failed park/finalize says "Match
   could not be saved. Try again before leaving." and keeps the live state.
-- **iPhone archive (#228, #231):** writes reach disk before memory changes.
-  Manual entry, End at Current Score and Delete Permanently explain a failure
-  (`ArchiveSaveFailureCopy`) and change nothing; a failed Watch delivery shows
-  `WatchSaveFailedNotice` and is retried.
+- **iPhone archive:** #228 and #231 made writes reach disk before the screen
+  changed, and explained failures. The reset removed that, so the 1.4.0
+  behaviour is back. Match-detail edits (`commitUserEditOnQueue`) are
+  all-or-nothing, but other saves still publish when the write fails.
+  [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) §5.3 makes every save
+  disk-first.
 - **Remaining:** Watch history writes outside a match — swipe-to-delete and
   incoming tag or match-type updates — still only log a failure.
 
@@ -572,7 +621,15 @@ iPhone has saved the matches being dropped. Normally that's safe: the reliable
 `transferUserInfo` delivery means the iPhone has the match long before it rolls
 off the Watch.
 
-**The gap #18 opened:** while the iPhone archive is paused (`archiveProblem` set
+**Status (23 November 2026): mostly gone with the reset.** The gap below came
+from #228's pause, which the reset removed. In 1.4.0's behaviour, a delivery to
+an archive that couldn't be *read* at launch is still lost from the iPhone
+while that run lasts. The Watch resends it at the next launch, so a match is
+lost only if the same run outlives 25 new matches.
+[`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) rule 3, §5.5 (retry on
+unlock) and D9 close what remains. The original analysis follows.
+
+**The gap #18 opened (under #228):** while the iPhone archive was paused (`archiveProblem` set
 by an unreadable or undecodable canonical file), `PhoneStatsStore.mergeIncoming`
 refuses every Watch delivery and returns `nil`. The delivery is consumed, so the
 Watch copy becomes the only copy. Try Again and Restore from iCloud ask the
