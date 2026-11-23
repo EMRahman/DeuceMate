@@ -1,7 +1,7 @@
 <!--
 machine-readable summary (parse this block first)
 
-status: decisions signed off by the owner on 2026-11-23 (§9). Nothing implemented yet; PR A comes first.
+status: decisions signed off by the owner on 2026-11-23 (§9). PR A implemented on 2026-11-23; PR B (Archive Diagnostics) is next.
 author: Claude, from the owner's direction after closing #240
 date: 2026-11-23
 fixes: "TECHNICAL_DEBT #18's one irreversible step: an iPhone archive that can't be decoded no longer overwrites the iCloud backup."
@@ -16,7 +16,7 @@ hotfix_rule: "Any fix for a decode failure must recover the dated copies into th
 
 # Plan: De-risk the undecodable archive (#18), proportionately
 
-**Status: decisions signed off (2026-11-23). Nothing here is implemented yet.**
+**Status: decisions signed off (2026-11-23). PR A (Parts 1–2) is implemented; PR B (Part 4) is next.**
 
 **Read with:** [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md) #18 (the cascade) and
 [`ARCHIVE_EXPORT_REMINDER_PLAN.md`](ARCHIVE_EXPORT_REMINDER_PLAN.md) (part 3).

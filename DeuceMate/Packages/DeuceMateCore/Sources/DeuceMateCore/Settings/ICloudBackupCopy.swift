@@ -35,6 +35,11 @@ public enum ICloudBackupCopy: CaseIterable, Sendable {
     /// until both backup files report `.ubiquitousItemIsUploaded == true`, and
     /// also when nothing has ever been pushed (nil receipt → don't claim backed up).
     case pendingUpload
+    /// A canonical archive file couldn't be decoded and was kept as a dated
+    /// damaged copy, so iCloud push and restore are paused and the iCloud copy
+    /// stays as it was (ARCHIVE_DERISK_PLAN.md §3.2–§3.3). Only an app update
+    /// that recovers the copy ends it.
+    case pausedDamagedArchive
 
     /// Short status label (not a full sentence) for the indicator strip.
     public var text: String {
@@ -45,6 +50,7 @@ public enum ICloudBackupCopy: CaseIterable, Sendable {
         case .restoring:      return "Restoring from iCloud…"
         case .pendingRestore: return "iCloud backup found — restore pending"
         case .pendingUpload:  return "Waiting to upload to iCloud"
+        case .pausedDamagedArchive: return "iCloud backup paused — your iCloud copy is unchanged"
         }
     }
 
@@ -57,6 +63,7 @@ public enum ICloudBackupCopy: CaseIterable, Sendable {
         case .restoring:      return "arrow.triangle.2.circlepath.icloud"
         case .pendingRestore: return "icloud.and.arrow.down"
         case .pendingUpload:  return "arrow.clockwise.icloud"
+        case .pausedDamagedArchive: return "exclamationmark.icloud"
         }
     }
 
@@ -66,19 +73,22 @@ public enum ICloudBackupCopy: CaseIterable, Sendable {
     ///
     /// Resolution order (higher entries win):
     /// 1. Toggle off → `.notBackedUp`
-    /// 2. iCloud unavailable → `.unavailable`
-    /// 3. Restore in flight → `.restoring`
-    /// 4. Restore prompt pending user decision → `.pendingRestore`
-    /// 5. Files not yet confirmed uploaded (`nil` = never pushed, `false` = uploading) → `.pendingUpload`
-    /// 6. Otherwise → `.backedUp`
+    /// 2. Paused for a damaged archive copy → `.pausedDamagedArchive`
+    /// 3. iCloud unavailable → `.unavailable`
+    /// 4. Restore in flight → `.restoring`
+    /// 5. Restore prompt pending user decision → `.pendingRestore`
+    /// 6. Files not yet confirmed uploaded (`nil` = never pushed, `false` = uploading) → `.pendingUpload`
+    /// 7. Otherwise → `.backedUp`
     public static func current(
         isEnabled: Bool,
+        isPausedForDamagedArchive: Bool = false,
         isAvailable: Bool,
         isRestoring: Bool = false,
         hasPendingRestore: Bool = false,
         isUploaded: Bool? = nil
     ) -> ICloudBackupCopy {
         guard isEnabled else { return .notBackedUp }
+        if isPausedForDamagedArchive { return .pausedDamagedArchive }
         guard isAvailable else { return .unavailable }
         if isRestoring { return .restoring }
         if hasPendingRestore { return .pendingRestore }

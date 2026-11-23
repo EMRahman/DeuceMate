@@ -31,12 +31,13 @@ public enum ArchiveExportReminderPolicy {
     }
 
     /// Whether the current iCloud backup state protects scores, points, stats
-    /// and match details. Only `.notBackedUp` and `.unavailable` leave the
-    /// whole archive unprotected; pending/restoring/uploaded states all have
-    /// iCloud enabled and available.
+    /// and match details. `.notBackedUp`, `.unavailable` and
+    /// `.pausedDamagedArchive` (new matches stay off iCloud until a fixing
+    /// build) leave the whole archive unprotected; pending/restoring/uploaded
+    /// states all have iCloud enabled and available.
     public static func backupProtectsNonHealthData(for status: ICloudBackupCopy) -> Bool {
         switch status {
-        case .notBackedUp, .unavailable:
+        case .notBackedUp, .unavailable, .pausedDamagedArchive:
             return false
         case .backedUp, .pendingUpload, .restoring, .pendingRestore:
             return true

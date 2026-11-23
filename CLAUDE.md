@@ -126,15 +126,18 @@ Data-flow invariants — **internalise these before touching sync or persistence
   manifest/full-history pushes bail rather than overwriting or broadcasting the
   emptiness. The phone `PhoneStatsStore` meets it only for a file it can't
   *read* (an I/O error, or the phone still locked after a restart): writes and
-  iCloud pushes stop for that run. ⚠️ **Known gap (TECHNICAL_DEBT #18):** a
-  file it can read but can't *decode* is moved aside to `.corrupt`, the archive
-  starts empty, and that launch's iCloud push overwrites the backup. The next
-  step is the small `docs/features/ARCHIVE_DERISK_PLAN.md` (prevent it, destroy
-  nothing, pause iCloud while a damaged copy exists, Archive Diagnostics). Its
-  decisions are signed off and its PR A is next; `ARCHIVE_SAFETY_PLAN.md` is
-  deferred. Don't
-  patch this gap piecemeal or grow that plan's scope: #228–#234 and #240 did,
-  never converged, and were reset or closed.
+  iCloud pushes stop for that run. A file it can read but can't *decode*
+  (TECHNICAL_DEBT #18) is kept as a dated, backup-excluded copy
+  (`<file>.corrupt-<yyyyMMdd'T'HHmmss>`, UTC, never deleted) and the archive
+  starts empty, so new matches still save. While a dated copy of the history,
+  tombstones or ledger exists, iCloud push **and** restore are paused on every
+  launch, so the backup stays as it was, and the Matches screen says "iCloud
+  backup paused — your iCloud copy is unchanged". Only a fixing build ends the
+  pause (the hotfix rule in §4). That is PR A of
+  `docs/features/ARCHIVE_DERISK_PLAN.md`; its PR B (Archive Diagnostics) is
+  next, and `ARCHIVE_SAFETY_PLAN.md` is deferred. Don't patch this piecemeal or
+  grow that plan's scope: #228–#234 and #240 did, never converged, and were
+  reset or closed.
 - **Settings sync bidirectionally, last-write-wins.** Match data does not.
 - **Persisted match JSON must stay backward-compatible forever** (see §4).
 
@@ -190,7 +193,7 @@ anything portable; no `.pbxproj` change needed — the package globs its sources
 | `Settings/MatchTrackingStatus.swift` | The pre-match "what will this match record?" rule: point tracking (format-aware — `—` when `MatchFormat.config.disablesPointTracking`), Health access, and Pulse Coach resolved to `.on`/`.partial`/`.off` plus label, SF Symbol, and fix-it copy. `HealthAccess` is the portable mirror of the HealthKit permission (the watch maps `HKHealthStore` onto it — Core stays HealthKit-free). `collapsingPulseWhenHealthOff(_:)` drops the redundant Pulse chip when Health is off (the strip's rule; Settings always shows all three). Drives the watch start-screen tracking strip and its settings summary. |
 | `Settings/ReviewPromptPolicy.swift` | When the iPhone may request an App Store rating, judged as a match report closes: a recently completed match with categorized points, 20s of foreground attention (`ReviewAttentionTimer`), 3+ completed matches, a win or 6+ matches, once per app version and 120+ days apart. Pure and StoreKit-free. Takes no opinion-of-the-app input on purpose: choosing a good moment is fine, routing people by sentiment is not. Also owns `writeReviewURL` for the Settings row, because `requestReview` must not be called from a button. |
 | `Settings/ArchiveExportReminderPolicy.swift` | Pure policy and copy (`ArchiveExportReminderCopy`) for reminding the iPhone user every 5 countable matches to export a full-fidelity manual match archive (`docs/features/ARCHIVE_EXPORT_REMINDER_PLAN.md`). Counts completed matches after `baseline` that carry raw Health data (`HealthExportConsent.hasRawHealthData`, incl. stored `0`) or private notes — or every completed match when iCloud backup is off/unavailable (`ICloudBackupCopy`). Pins the threshold (`5`) and the three phone-local keys (`archiveExportReminderEnabled`, `archiveExportReminderBaseline`, `archiveLastExportDate`). |
-| `Settings/ICloudBackupCopy.swift` | The global "backed up to iCloud?" indicator (label + SF Symbol + resolution rule) shown on the iPhone archive. Six cases: `backedUp`, `notBackedUp`, `unavailable`, `restoring`, `pendingRestore` (backup found, user prompt open), `pendingUpload` (pushed but daemon not yet confirmed upload). `current(isEnabled:isAvailable:isRestoring:hasPendingRestore:isUploaded:)`. |
+| `Settings/ICloudBackupCopy.swift` | The global "backed up to iCloud?" indicator (label + SF Symbol + resolution rule) shown on the iPhone archive. Seven cases: `backedUp`, `notBackedUp`, `unavailable`, `restoring`, `pendingRestore` (backup found, user prompt open), `pendingUpload` (pushed but daemon not yet confirmed upload), `pausedDamagedArchive` (a dated damaged copy pauses iCloud; outranks everything but toggle off). `current(isEnabled:isPausedForDamagedArchive:isAvailable:isRestoring:hasPendingRestore:isUploaded:)`. |
 | `Walkthrough/WalkthroughSession.swift`, `WalkthroughFixtures.swift` | Isolated nine-situation animated guide, deterministic singles fixtures, automatic scoring/category/stats beats and Previous/Next navigation. Calls the existing scoring reducer; never constructs a `MatchRecord` or reaches persistence, transport, settings or sensors. Advanced chapters remain deferred. |
 | `Walkthrough/ScoreInputAction.swift`, `ScoringChangeoverCopy.swift` | Shared watch drag mapping (20-point scoring/undo threshold; >40 and >2:1 bias for stats) and unchanged changeover reason copy. Live callers retain their modal, match-complete and tracking guards. |
 | `Persistence/StatsStoring.swift` | Persistence protocol + dual-format `PersistedArchiveCodec` (TECHNICAL_DEBT #19 step 1): readers accept both legacy bare arrays (`[...]`) and versioned envelopes (`{"format":…,"schemaVersion":…,"items":…}`), checking `format` and `schemaVersion` before element decode so newer schemas fail closed cleanly; writers keep emitting bare arrays until versioned readers are deployed. |
@@ -247,7 +250,7 @@ All need `import DeuceMateCore` (see §0).
 | `Views/Backup/` (`ArchiveExportFlow`, `ArchiveExportReminderCoordinator`, `ArchiveExportReminderCard`) | ~270 | Shared manual archive export flow (`ArchiveExportFlow`, presenting `ArchiveExportOptionsSheet` → off-main `PhoneStatsStore.exportManualArchiveData` → `fileExporter` with default directory unset so iOS remembers the user's last folder, recording success in one place), the `UserDefaults`-backed `ArchiveExportReminderCoordinator` (export/snooze/disable/toggle/import transitions around Core's `ArchiveExportReminderPolicy`), and the inline `ArchiveExportReminderCard` shown above Trends on `PastMatchesView` when due. |
 | `Views/PulseCoach/PulseCoachSection.swift`, `Views/Coaching/RecCoachSection.swift`, `AICoachLauncher.swift`, `AICoachSheet.swift` | | HR coaching panel, recreational coaching insights, and routing a generated coaching prompt to third-party AI apps. |
 | `Sync/PhoneMatchSyncService.swift` | ~1100 | Phone side of `WatchConnectivity`; live score and category commands go through `sendLiveCommand`, never queued or retried (a failed send is ambiguous and could double-score), and anything undelivered increments `liveCommandFailureCount` for the scoreboard's message; only read-only refreshes retry automatically, on Core's bounded `LiveRefreshRetry` backoff with a per-second `liveRetryCountdown` the scoreboard shows ("Trying again in 3…"), and a refresh reply that arrives after its timeout (or before a session is established) updates the board without confirming readiness; `applicationContext` and new-session pushes also update `liveState` (while keeping input locked until confirmed) so reconnects with a dimmed Watch still show the current score, and the Watch pushes both live state and the full live record on activation/reachability/full-history sync; a Watch manifest (including empty) acknowledges Sync Now, live install state refreshes through `sessionWatchStateDidChange` (also triggering sync on newly reachable transitions), and explicit record pushes made during activation are flushed once the session activates. Match tags: `pushTagUpdates(forMatchIDs:)` sends `matchTagsUpdate` only for `onWatchIDs`; §6.1 reconciliation runs after every `.history`/`.singleMatch` merge (`reconcileTags`) and on manifest arrival for `newlyHeldIDs` only (diff against the previous manifest — a manifest rides on every checkpoint); incoming `.matchTagsUpdate` is merged and answered when the phone's copy is newer; the watch mirror is scrubbed of forgotten players in `updateMirror`. |
-| `Persistence/PhoneStatsStore.swift`, `Persistence/MatchNotesStore.swift`, `Audio/LiveAnnouncementService.swift`, `HealthKitHRFetcher.swift` | | Health-stripped archive plus backup-excluded sidecar, manual export/import, TTS announcements, HR backfill. `PhoneStatsStore` also owns tag edits (`updateTags` stamps a draft on its queue; `applyIncomingTags`; rename/merge/`forgetPlayer`), carries stored tags forward in `appendMatch`/`saveHistory`, and persists + backs up the forgotten-player ledger (`forgottenPlayers.json`, written BEFORE the archive and re-applied on load) which every inbound path unions and scrubs. Its read-failure handling is the 1.4.0 behaviour: an unreadable file stops writes and iCloud pushes for that run, and an undecodable one is the known #18 gap (§1; next step in `docs/features/ARCHIVE_DERISK_PLAN.md`). Match-detail edits are all-or-nothing (`commitUserEditOnQueue`); other saves still publish when the write fails (TECHNICAL_DEBT #4a). Its `forgottenPlayers` is a main-queue mirror — read `forgottenPlayerLedger()` for a queue-consistent value. `MatchNotesStore` is the iPhone-only private-notes sidecar in its own `Application Support/MatchNotes/` directory: directory exclusion verified before every write, file exclusion reapplied after every atomic write, an unreadable/corrupt/newer file suspends ALL writes (never treat as empty), note text never logged, never on `MatchRecord`. Permanent match deletion (`PastMatchesView`) also removes the note. |
+| `Persistence/PhoneStatsStore.swift`, `Persistence/MatchNotesStore.swift`, `Audio/LiveAnnouncementService.swift`, `HealthKitHRFetcher.swift` | | Health-stripped archive plus backup-excluded sidecar, manual export/import, TTS announcements, HR backfill. `PhoneStatsStore` also owns tag edits (`updateTags` stamps a draft on its queue; `applyIncomingTags`; rename/merge/`forgetPlayer`), carries stored tags forward in `appendMatch`/`saveHistory`, and persists + backs up the forgotten-player ledger (`forgottenPlayers.json`, written BEFORE the archive and re-applied on load) which every inbound path unions and scrubs. An unreadable file stops writes and iCloud pushes for that run; an undecodable one is kept as a dated damaged copy, and `isPausedForDamagedArchive` (a file check on `MatchArchive/`, so it holds across launches) pauses iCloud push and restore (§1, `docs/features/ARCHIVE_DERISK_PLAN.md` §3). The iCloud container comes from `StorageConfiguration.iCloudContainerURL`, so tests can watch a backup pass. Match-detail edits are all-or-nothing (`commitUserEditOnQueue`); other saves still publish when the write fails (TECHNICAL_DEBT #4a). Its `forgottenPlayers` is a main-queue mirror — read `forgottenPlayerLedger()` for a queue-consistent value. `MatchNotesStore` is the iPhone-only private-notes sidecar in its own `Application Support/MatchNotes/` directory: directory exclusion verified before every write, file exclusion reapplied after every atomic write, an unreadable/corrupt/newer file suspends ALL writes (never treat as empty), note text never logged, never on `MatchRecord`. Permanent match deletion (`PastMatchesView`) also removes the note. |
 
 **Browser replicas (`docs/website/try.html`).** `docs/website/assets/watch-demo.js` (live match, a JS port of `ScoringEngine`), `watch-demo-app.js` (home / setup / settings / guide / warm-up shell), `watch-demo-history.js` (Past Matches) and `watch-demo-guide.js` (animated guide) mirror the watch views; sensors (heart rate, kcal, steps, compass) are invented. `try.html` also supports URL query presets (`?fast4`, `?shortset`, or `?perpetual` / `?tiebreak` shorthands — defaulting to Doubles — or `?format=fast4|shortSets|perpetualSuperTiebreak&type=doubles|singles&scene=start|deuce|tiebreak|decider`) to launch straight into a live match with one-tap scenario jumpers, and `docs/website/fast4.html` (`/DeuceMate/fast4`), `docs/website/shortset.html` (`/DeuceMate/shortset`), `docs/website/perpetual.html` (`/DeuceMate/perpetual`), and `docs/website/tiebreak.html` (`/DeuceMate/tiebreak`) open the unlisted `doubles-tournaments-formats.html` and keep their format-specific Open Graph metadata. The tournament page mounts the Watch scoreboard markup from `try.html` with the same scorer and seeded point sequences (`assets/club-scenarios.js`). Its Undo stops at the chosen starting score. The tournament page and shortcuts use `noindex`, and both public landing pages omit links to them. A change to `HomeView`, `ContentView`, `MatchHistoryView`, `MatchStatsView`, the Walkthrough, `SettingsCopy` or `MatchTrackingStatus` should be mirrored there — see `docs/features/INTERACTIVE_DEMO_PARITY_PLAN.md` (Phase 7).
 
@@ -492,6 +495,8 @@ Persisted JSON must decode old data forever. Update **all** of:
    do not hand-write them unless one already exists.
 5. Add/extend a test in `MatchRecordCodingTests.swift` (round-trip + decode of
    old JSON without the new key).
+6. Append a new match that uses the field to `ArchiveGoldenFileTests`' fixture.
+   It is append-only: never regenerate it from the encoder or edit existing JSON.
 
 ### Retire a case in a persisted enum  ⚠️ never delete — the schema is additive-only
 `MatchFormat`, `MatchType`, `Player`, `DoublesServer`, `PointOutcome` and
@@ -505,12 +510,23 @@ value.
 
 The blast radius is the whole file, not the one record: both archives decode
 `[MatchRecord]` in a single `decode` call, so one point in one old match fails the
-decode of every match. On the phone that moves `matchHistory.json` aside to
-`.corrupt` and shows an empty archive, and that launch's iCloud push then
-overwrites the backup. This is the known gap in TECHNICAL_DEBT #18; the next
-step is `docs/features/ARCHIVE_DERISK_PLAN.md`. On the watch `loadHistoryOrNil()`
-returns `nil`, which refuses to overwrite and retains live state when
-park/finalize fails.
+decode of every match. On the phone that keeps `matchHistory.json` as a dated
+`.corrupt-<date>` copy, shows an empty archive and pauses iCloud so the backup
+survives (TECHNICAL_DEBT #18, `docs/features/ARCHIVE_DERISK_PLAN.md`). On the
+watch `loadHistoryOrNil()` returns `nil`, which refuses to overwrite and retains
+live state when park/finalize fails. `ArchiveGoldenFileTests` (Core) decodes a
+frozen archive that uses every case, so a deletion or rename fails in Xcode
+first — run it.
+
+**Hotfix rule.** If a decode failure ever ships:
+
+> Any fix for a decode failure must recover the dated
+> `.corrupt-<date>` copies into the archive and then delete them. Restoring
+> the enum case alone isn't enough: while a dated copy exists, iCloud stays
+> paused, so the user's matches stay stuck on the phone.
+
+The fixing update must include a test that a dated copy is merged back and
+removed, and that iCloud then resumes.
 
 **To retire a case, keep it decodable and hide it:**
 1. Leave the `case` and its raw value in place, permanently. Mark it
@@ -527,7 +543,8 @@ park/finalize fails.
    re-render an old match's score in the wrong shape).
 4. Pin the raw values in a test so a future deletion fails in Xcode rather than
    on a user's wrist. `ScoreTypesTests.test_doublesServer_rawValuesArePersistedIdentifiers`
-   is the model to copy.
+   is the model to copy. `ArchiveGoldenFileTests` is the backstop: its fixture
+   is **append-only** — never regenerate it or edit its JSON.
 
 If a case genuinely must stop decoding, that is a schema migration: bump the
 version, write the migration, and say so in the PR. See
@@ -540,6 +557,8 @@ version, write the migration, and say so in the PR. See
    `MatchFormatConfig` flag over `if format == .x` scattered in views).
 3. Grep for exhaustive `switch` on `MatchFormat` and update labels/UI.
 4. Add a `SimulatedGameStatsTests`-style test exercising the new rules.
+5. Append a match in the new format to `ArchiveGoldenFileTests`' fixture
+   (append-only) and add the case to its expected format set.
 
 Adding a case is safe; **removing one is not** — see the retire recipe above.
 
@@ -569,6 +588,8 @@ compiler does not connect** (see §5). To add one, keep them consistent:
 2. Derive it in `MatchStatsSummary.swift`.
 3. Surface it in `PointCategorySheet` (watch) and the stats/graph/export views.
 4. Add a `MatchStatsSummaryTests` case.
+5. Append a match using the new case to `ArchiveGoldenFileTests`' fixture
+   (append-only). Its `allCases` check fails until you do.
 
 ---
 
@@ -595,7 +616,12 @@ compiler does not connect** (see §5). To add one, keep them consistent:
   **additive-only** — retire a case by hiding it from the UI, never by removing
   it. See §4 "Retire a case in a persisted enum" and
   `docs/features/TECHNICAL_DEBT.md` #18. (`CompetitionType` is the exception by
-  design: it is stored as a raw string and is not `Codable`.)
+  design: it is stored as a raw string and is not `Codable`.) If one ever
+  ships anyway, the hotfix rule applies:
+  > Any fix for a decode failure must recover the dated
+  > `.corrupt-<date>` copies into the archive and then delete them. Restoring
+  > the enum case alone isn't enough: while a dated copy exists, iCloud stays
+  > paused, so the user's matches stay stuck on the phone.
 - **Rebuilding a `MatchRecord` field-by-field drops its `tags` (and `matchTypeRevision`).** The watch's
   `ScoreViewModel` constructs every live checkpoint/completion with the
   memberwise init, which has no tags or `matchTypeRevision`. That is safe on the *phone* (merges keep

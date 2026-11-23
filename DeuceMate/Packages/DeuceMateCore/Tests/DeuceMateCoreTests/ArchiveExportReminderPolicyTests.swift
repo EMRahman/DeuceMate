@@ -291,6 +291,7 @@ final class ArchiveExportReminderPolicyTests: XCTestCase {
         XCTAssertTrue(ArchiveExportReminderPolicy.backupProtectsNonHealthData(for: .pendingRestore))
         XCTAssertFalse(ArchiveExportReminderPolicy.backupProtectsNonHealthData(for: .notBackedUp))
         XCTAssertFalse(ArchiveExportReminderPolicy.backupProtectsNonHealthData(for: .unavailable))
+        XCTAssertFalse(ArchiveExportReminderPolicy.backupProtectsNonHealthData(for: .pausedDamagedArchive))
     }
 
     // MARK: - Copy invariants (§1, §2.1, §4, §6)

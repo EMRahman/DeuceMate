@@ -18,7 +18,8 @@
 // Tombstones are backed up alongside records, so a fresh-install restore does
 // not resurrect deleted matches. A read failure is never treated as an empty
 // archive: writes derived from a failed read are suppressed so they can't
-// clobber data.
+// clobber data. A file that reads but won't decode is kept as a dated damaged
+// copy, and iCloud stays paused while one exists (ARCHIVE_DERISK_PLAN.md §3).
 //
 // Match tags (opponent / partner names, competition type — MATCH_TAGS_PLAN.md)
 // ride on `MatchRecord` and therefore live in the canonical archive and its
@@ -72,6 +73,12 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// so UI surfaces like the export reminder know the archive did not open
     /// cleanly.
     @Published private(set) var isCanonicalArchiveUnreadable: Bool = false
+    /// True while a dated damaged copy of a backed-up canonical file sits in
+    /// the archive folder, so iCloud push and restore are paused and the iCloud
+    /// copy stays as it was (ARCHIVE_DERISK_PLAN.md §3.2). Copies are made only
+    /// while loading at launch, and only a fixing build removes them, so this is
+    /// read once in `init`.
+    @Published private(set) var isPausedForDamagedArchive = false
     /// Whether the user's iCloud account/container is currently usable. When
     /// false the archive still works in full (it is device-local); backup
     /// pushes and initial restore pause until iCloud returns.
@@ -127,17 +134,23 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         let legacyDocumentsDirectoryURL: URL
         let startsICloudSync: Bool
         let backupExcluder: (URL) throws -> Void
+        /// The iCloud container, nil while signed out. Injectable so tests can
+        /// see what a backup pass writes.
+        let iCloudContainerURL: () -> URL?
 
         init(
             canonicalDirectoryURL: URL,
             legacyDocumentsDirectoryURL: URL,
             startsICloudSync: Bool,
-            backupExcluder: ((URL) throws -> Void)? = nil
+            backupExcluder: ((URL) throws -> Void)? = nil,
+            iCloudContainerURL: (() -> URL?)? = nil
         ) {
             self.canonicalDirectoryURL = canonicalDirectoryURL
             self.legacyDocumentsDirectoryURL = legacyDocumentsDirectoryURL
             self.startsICloudSync = startsICloudSync
             self.backupExcluder = backupExcluder ?? { try PhoneStatsStore.excludeFromBackup($0) }
+            self.iCloudContainerURL = iCloudContainerURL
+                ?? { FileManager.default.url(forUbiquityContainerIdentifier: nil) }
         }
 
         static var production: StorageConfiguration {
@@ -179,15 +192,16 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     init(storageConfiguration: StorageConfiguration) {
         self.storageConfiguration = storageConfiguration
-        let initial = queue.sync { () -> ([MatchRecord], Set<UUID>, Bool, ForgottenPlayerLedger, Bool) in
+        let initial = queue.sync { () -> ([MatchRecord], Set<UUID>, Bool, ForgottenPlayerLedger, Bool, Bool) in
             migrateLegacyDocumentsArchiveIfNeeded()
             loadCanonicalOnQueue()
-            return (records, tombstones, shouldAttemptInitialRestoreOnQueue, forgotten, canonicalWritesSuspended)
+            return (records, tombstones, shouldAttemptInitialRestoreOnQueue, forgotten, canonicalWritesSuspended, hasDamagedArchiveCopyOnQueue)
         }
         history = initial.0
         tombstoneIDs = initial.1
         forgottenPlayers = initial.3
         isCanonicalArchiveUnreadable = initial.4
+        isPausedForDamagedArchive = initial.5
         // Fresh local archive setup with iCloud signed in: show "Restoring from
         // iCloud…" until the first restore attempt settles, so an initially
         // short list reads as in-progress rather than data loss.
@@ -730,15 +744,15 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     }
 
     private func loadCanonicalOnQueue() {
-        switch Self.readCanonicalFile([UUID].self, at: canonicalTombstoneURL) {
+        switch readCanonicalFile([UUID].self, at: canonicalTombstoneURL) {
         case .loaded(let ids):
             tombstones = Set(ids)
         case .missing, .corrupt:
-            break // corrupt file was moved aside; initial restore may refill what it can
+            break // a damaged file was kept as a dated copy, which pauses iCloud (§3.2)
         case .unreadable:
             canonicalWritesSuspended = true
         }
-        switch Self.readCanonicalFile(ForgottenPlayerLedger.self, at: canonicalForgottenPlayersURL) {
+        switch readCanonicalFile(ForgottenPlayerLedger.self, at: canonicalForgottenPlayersURL) {
         case .loaded(let ledger):
             forgotten = ledger
         case .missing, .corrupt:
@@ -747,11 +761,11 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             canonicalWritesSuspended = true
         }
         let loadedRecords: [MatchRecord]
-        switch Self.readCanonicalFile([MatchRecord].self, at: canonicalHistoryURL) {
+        switch readCanonicalFile([MatchRecord].self, at: canonicalHistoryURL) {
         case .loaded(let loaded):
             loadedRecords = loaded
         case .missing, .corrupt:
-            loadedRecords = [] // corrupt file was moved aside; initial restore may refill what it can
+            loadedRecords = [] // kept as a dated copy; iCloud stays paused until a fixing build recovers it
         case .unreadable:
             canonicalWritesSuspended = true
             loadedRecords = []
@@ -767,7 +781,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             }
         }
         let health: [MatchHealthData]
-        switch Self.readCanonicalFile([MatchHealthData].self, at: healthSidecarURL) {
+        switch readCanonicalFile([MatchHealthData].self, at: healthSidecarURL) {
         case .loaded(let loaded):
             health = loaded
         case .missing, .corrupt, .unreadable:
@@ -803,15 +817,20 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     private enum CanonicalRead<T> {
         case loaded(T)
         case missing
-        /// Bytes were readable but not decodable. The file was moved aside (kept
-        /// for recovery) so the store can start clean without destroying it.
+        /// Bytes were readable but not decodable. The file was moved to a dated
+        /// damaged copy (kept for a fixing build to recover) so the store can
+        /// start clean without destroying it.
         case corrupt
         /// The file exists but could not be read (I/O / protection error). Must
         /// never be conflated with `missing` — see `canonicalWritesSuspended`.
         case unreadable
     }
 
-    private static func readCanonicalFile<T: Decodable>(_ type: T.Type, at url: URL) -> CanonicalRead<T> {
+    /// A damaged copy is `<file>.corrupt-<yyyyMMdd'T'HHmmss>` (UTC). 1.4.0's
+    /// undated `<file>.corrupt` deliberately doesn't match this infix.
+    private static let damagedCopyInfix = ".corrupt-"
+
+    private func readCanonicalFile<T: Decodable>(_ type: T.Type, at url: URL) -> CanonicalRead<T> {
         guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
         let data: Data
         do {
@@ -824,11 +843,40 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
             return .loaded(try JSONDecoder().decode(T.self, from: data))
         } catch {
             phoneStoreLogger.error("Failed to decode \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            let aside = url.appendingPathExtension("corrupt")
-            try? FileManager.default.removeItem(at: aside)
-            try? FileManager.default.moveItem(at: url, to: aside)
+            // Keep every damaged copy under its own dated name, never replacing
+            // an earlier one (ARCHIVE_DERISK_PLAN.md §3.1).
+            let stamp = ISO8601DateFormatter.string(
+                from: Date(), timeZone: TimeZone(identifier: "UTC") ?? .current,
+                formatOptions: [.withYear, .withMonth, .withDay, .withTime]
+            )
+            let aside = url.deletingLastPathComponent()
+                .appendingPathComponent(url.lastPathComponent + Self.damagedCopyInfix + stamp)
+            do {
+                try FileManager.default.moveItem(at: url, to: aside)
+            } catch {
+                // No copy kept: fail closed so this run can't overwrite the original.
+                phoneStoreLogger.error("Failed to keep damaged \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                return .unreadable
+            }
+            // A pre-sidecar main file or a damaged sidecar can hold Health data,
+            // which must stay out of device backups (Guideline 5.1.3(ii)).
+            do {
+                try storageConfiguration.backupExcluder(aside)
+            } catch {
+                phoneStoreLogger.error("Failed to exclude damaged copy from backup: \(error.localizedDescription, privacy: .public)")
+            }
             return .corrupt
         }
+    }
+
+    /// Whether a dated damaged copy of a file iCloud backs up (history,
+    /// tombstones, ledger) exists. Health sidecar copies and undated 1.4.0
+    /// copies don't count: neither may pause iCloud (§3.2).
+    private var hasDamagedArchiveCopyOnQueue: Bool {
+        let prefixes = [Self.historyFilename, Self.tombstoneFilename, Self.forgottenPlayersFilename]
+            .map { $0 + Self.damagedCopyInfix }
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: canonicalDirectoryURL.path)) ?? []
+        return names.contains { name in prefixes.contains { name.hasPrefix($0) } }
     }
 
     private static func write<T: Encodable>(_ value: T, to url: URL) throws {
@@ -954,14 +1002,17 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     }
 
     private func syncICloudBackupOnQueue(retriesRemaining: Int) {
-        guard !canonicalWritesSuspended else {
+        // A dated damaged copy freezes the iCloud copy as it was: no push and no
+        // initial restore. A file check, so it holds on every launch until a
+        // fixing build recovers and removes the copy (ARCHIVE_DERISK_PLAN.md §3.2).
+        guard !canonicalWritesSuspended, !hasDamagedArchiveCopyOnQueue else {
             finishRestoreIndicator()
             return
         }
         // May block briefly while the daemon sets the container up — we are on
         // the store's utility queue, never the main thread. nil = signed out /
         // iCloud Drive off; the archive keeps working locally.
-        guard let container = FileManager.default.url(forUbiquityContainerIdentifier: nil) else {
+        guard let container = storageConfiguration.iCloudContainerURL() else {
             // Container absent (signed out or iCloud Drive off). Leave the marker absent
             // so the NSUbiquityIdentityDidChange notification triggers a reconcile before
             // the first push when iCloud becomes available.
@@ -1088,7 +1139,7 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
         queue.async { [weak self] in
             guard let self, let decoded = pendingRestoreDecoded else { return }
             pendingRestoreDecoded = nil
-            guard let container = FileManager.default.url(forUbiquityContainerIdentifier: nil) else {
+            guard let container = storageConfiguration.iCloudContainerURL() else {
                 return
             }
             let historyURL = container.appendingPathComponent(Self.historyFilename)

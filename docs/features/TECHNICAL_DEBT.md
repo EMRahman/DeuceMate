@@ -53,7 +53,7 @@ when the item should constrain future changes.
 
 | # | Area | Item | Application risk | Work band / trigger | Effort |
 |---|------|------|------------------|---------------------|--------|
-| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact, low–medium likelihood, open again.** The #228–#234 containment design was reset on 23 Nov 2026, so the iPhone has 1.4.0's behaviour: an undecodable file means an empty archive, and the iCloud backup gets overwritten. All 6 persisted enums stay pinned | **Next:** PR A of [`ARCHIVE_DERISK_PLAN.md`](ARCHIVE_DERISK_PLAN.md) (decisions signed off 23 Nov 2026): prevent it, destroy nothing (pause iCloud while a damaged copy exists), add Archive Diagnostics. [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) is deferred. Any release before its PR A still has the gap | Small (PR A ≤ 75 lines; PR B ≤ 340) |
+| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact, low–medium likelihood; the irreversible step is closed by PR A.** An undecodable iPhone file is kept as a dated copy and the archive starts empty, but iCloud is paused while the copy exists, so the backup survives. All 6 persisted enums are pinned, and `ArchiveGoldenFileTests` decodes a frozen archive using every case | **Next:** PR B of [`ARCHIVE_DERISK_PLAN.md`](ARCHIVE_DERISK_PLAN.md) (Archive Diagnostics). [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) is deferred. Any release before PR A still has the overwrite | Small (PR B ≤ 340 lines) |
 | [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | Fail-closed `ScoreViewModel.loadState()` (with pre-decode version header) and Watch `MatchHistoryView` unreadable banner landed | Remaining: explicit Watch live-state abandon/reset recovery UX if desired | Small |
 | [27](#27--prevent-unrecorded-fitness-workouts-with-manager-tests-and-crash-recovery) | Health / Reliability | Prevent unrecorded Fitness workouts with manager tests and crash recovery | High impact when a workout is lost; remaining likelihood unverified | **Now**; physical-Watch save/sync checks before release | Medium, staged |
 | [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | Step 1 readers landed in #229 and were kept by the reset: the Watch history, the Watch→iPhone sync, manual archives (`supportedSchemaVersions` range plus a check before decoding), and the pre-decode `AppState` version check. The iPhone archive's reads went back to 1.4.0 | Step 2 for the iPhone archive is part of [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) §5.1 and D9. Other writers stay on bare arrays until a format change needs envelopes | Small |
@@ -271,15 +271,16 @@ been back on that behaviour since the reset:
 
 1. **Phone archive quarantined.** `readCanonicalFile` moves `matchHistory.json`
    aside to `.corrupt` and the store starts from an empty list.
-   *#228 (reset):* kept the file in place and paused every write. *Plan:*
-   keep unreadable matches unchanged and fall back to the newest good copy
-   ([`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) §5.2, §5.5).
+   *#228 (reset):* kept the file in place and paused every write. *Now (de-risk
+   PR A):* the file is kept as a dated `.corrupt-<date>` copy that is never
+   deleted, and new matches still save to the empty archive.
 2. **iCloud backup overwritten.** `pushBackupOnQueue` builds its snapshot
    straight from `records` with no emptiness floor, and `lastPushedSnapshot` is
    per-process — so the next push writes the now-empty archive over the backup.
    This is the only irreversible hop; everything else leaves a file on disk.
-   *#228 (reset):* an upload guard withheld such pushes. *Plan:* dated iCloud
-   copies, so an upload can't overwrite an earlier day (§5.6).
+   *#228 (reset):* an upload guard withheld such pushes. *Now (de-risk PR A):*
+   while a dated copy of the history, tombstones or ledger exists, iCloud push
+   and restore are paused on every launch, and the Matches screen says so.
 3. **Watch archive invisible and silently read-only.** `loadHistoryOrNil()`
    returns `nil`; the refuse-to-overwrite guard correctly protects the file, but
    `appendMatch` then bails, so every subsequently finished match is dropped
@@ -369,7 +370,7 @@ remedy is deleting the app — which takes the sandbox, and the `.corrupt` file,
 with it. `assertionFailure()` gives the same signal in Debug and compiles away in
 Release.
 
-**Status: reset; the de-risk plan's decisions are signed off and its PR A is next (23 November 2026).**
+**Status: de-risk PR A implemented (23 November 2026); PR B (Archive Diagnostics) is next.**
 
 - **What was built and removed.** #228, #231 and #234 implemented the
   sequence above:
@@ -389,13 +390,23 @@ Release.
 - **Kept:** all six persisted enums (`DoublesServer`, `MatchFormat`, `Player`,
   `MatchType`, `PointOutcome`, `EndingShot`) are pinned in Core tests. The
   Watch protections from #229 and 4a-read also stay.
-- **Current behaviour:** 1.4.0's, so the cascade above is live again on the
-  iPhone. Any release before the de-risk plan's PR A still has the gap.
+- **Current behaviour (de-risk PR A):** an undecodable file is kept as a dated,
+  backup-excluded copy and never deleted; the archive starts empty, so new
+  matches still save; iCloud push and restore stay paused while a dated copy of
+  the history, tombstones or ledger exists, and the Matches screen says "iCloud
+  backup paused — your iCloud copy is unchanged". Undated 1.4.0 `.corrupt`
+  files and a damaged Health sidecar don't pause. `ArchiveGoldenFileTests`
+  (append-only) catches a deleted or renamed case in Xcode. Any release before
+  PR A still has the overwrite.
+- **Hotfix rule:** any fix for a decode failure must recover the dated copies
+  into the archive and then delete them, or iCloud stays paused for good. It
+  must include a test that a copy is merged back and removed and that iCloud
+  then resumes (CLAUDE.md §4).
 - **#240 closed (23 November 2026).** A "basic" fail-closed plan with support
   recovery grew with every review round, from 402 to 594 lines of plan and an
   estimated 3,000–4,000 lines of code. The owner closed it unmerged.
-- **Next:** PR A of [`ARCHIVE_DERISK_PLAN.md`](ARCHIVE_DERISK_PLAN.md), whose
-  decisions the owner signed off on 23 November 2026. It treats the cause as rare and self-inflicted: a golden-file
+- **Next:** PR B of [`ARCHIVE_DERISK_PLAN.md`](ARCHIVE_DERISK_PLAN.md), whose
+  decisions the owner signed off on 23 November 2026. The plan treats the cause as rare and self-inflicted: a golden-file
   test, dated damaged copies that are never deleted, iCloud paused while one
   exists, and an Archive Diagnostics report for support or a coding agent.
   Recovery code is written only if this ever happens, in the hotfix, which

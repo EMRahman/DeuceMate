@@ -176,6 +176,7 @@ struct MatchDetailView: View {
         )
         let iCloudStatus = ICloudBackupCopy.current(
             isEnabled: true,
+            isPausedForDamagedArchive: store.isPausedForDamagedArchive,
             isAvailable: store.isICloudAvailable,
             isRestoring: store.isRestoringFromICloud,
             hasPendingRestore: store.pendingRestorePreview != nil,
@@ -222,7 +223,7 @@ struct MatchDetailView: View {
             }
             Label(iCloudStatus.text, systemImage: iCloudStatus.systemImage)
                 .foregroundStyle(
-                    iCloudStatus == .unavailable ? AnyShapeStyle(.orange) :
+                    iCloudStatus == .unavailable || iCloudStatus == .pausedDamagedArchive ? AnyShapeStyle(.orange) :
                     iCloudStatus == .pendingRestore ? AnyShapeStyle(.blue) :
                     AnyShapeStyle(.secondary)
                 )
