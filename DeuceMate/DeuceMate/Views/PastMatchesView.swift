@@ -76,6 +76,7 @@ struct PastMatchesView: View {
     @State private var showArchiveExport = false
     @State private var archiveExportStatus: ArchiveTransferStatus?
     @State private var deferExportReminderUntilNextAppear = false
+    @State private var showArchiveDiagnostics = false
     @State private var pendingDelete: PendingDelete?
     @State private var matchRowFrameCache = MatchRowFrameCache()
     // Retain the origin through dismissal; clearing the pending item must not
@@ -298,6 +299,16 @@ struct PastMatchesView: View {
                     .environmentObject(store)
                     .environmentObject(syncService)
             }
+            .sheet(isPresented: $showArchiveDiagnostics) {
+                NavigationStack {
+                    ArchiveDiagnosticsView()
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { showArchiveDiagnostics = false }
+                            }
+                        }
+                }
+            }
             .sheet(isPresented: $showICloudGuide) {
                 iCloudGuideSheet
                     .presentationDetents([.medium])
@@ -397,28 +408,27 @@ struct PastMatchesView: View {
 
     // MARK: - iCloud status
 
-    /// Inline iCloud backup status: a Label when backed up (orange when paused
-    /// for a damaged archive copy), a tappable Button (opening Settings) when
-    /// off or unavailable. Font and padding are left to
+    /// Inline iCloud backup status: a Label when backed up, a tappable Button
+    /// when off or unavailable (opening the iCloud guide) or paused for a
+    /// damaged archive copy (opening Archive Diagnostics). Font and padding are left to
     /// the call site so this can appear in both section footers and empty states.
     @ViewBuilder
     private var iCloudStatusLabel: some View {
-        let status = ICloudBackupCopy.current(
-            isEnabled: true,
-            isPausedForDamagedArchive: store.isPausedForDamagedArchive,
-            isAvailable: store.isICloudAvailable,
-            isRestoring: store.isRestoringFromICloud,
-            hasPendingRestore: store.pendingRestorePreview != nil,
-            isUploaded: store.isBackupUploaded
-        )
+        let status = store.iCloudBackupStatus
         switch status {
         case .backedUp, .restoring, .pendingUpload:
             Label(status.text, systemImage: status.systemImage)
                 .foregroundStyle(.secondary)
         case .pausedDamagedArchive:
-            // A plain label for now; Archive Diagnostics makes it a button (PR B).
-            Label(status.text, systemImage: status.systemImage)
+            Button { showArchiveDiagnostics = true } label: {
+                HStack(spacing: 4) {
+                    Label(status.text, systemImage: status.systemImage)
+                    Image(systemName: "chevron.right").font(.caption2)
+                }
                 .foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens Archive Diagnostics")
         case .pendingRestore:
             Button { showRestorePrompt = true } label: {
                 HStack(spacing: 4) {
@@ -752,14 +762,7 @@ struct PastMatchesView: View {
         else {
             return .hidden
         }
-        let icloudStatus = ICloudBackupCopy.current(
-            isEnabled: true,
-            isPausedForDamagedArchive: store.isPausedForDamagedArchive,
-            isAvailable: store.isICloudAvailable,
-            isRestoring: store.isRestoringFromICloud,
-            hasPendingRestore: store.pendingRestorePreview != nil,
-            isUploaded: store.isBackupUploaded
-        )
+        let icloudStatus = store.iCloudBackupStatus
         let matchIDsWithNotes = Set(notesStore.notes.values.filter { !$0.isCleared }.map(\.matchID))
         return reminderCoordinator.reminder(
             for: store.history,
@@ -782,6 +785,7 @@ struct PastMatchesView: View {
             guard selected == nil, pendingDelete == nil, scenePhase == .active,
                   !showSettings, !scoreboard.isPresented, !showManualEntry,
                   !showICloudGuide, !showRestorePrompt, !showArchiveExport,
+                  !showArchiveDiagnostics,
                   reviewPrompt.shouldRequestReviewOnClose(history: store.history, now: closedAt)
             else {
                 deferExportReminderUntilNextAppear = false

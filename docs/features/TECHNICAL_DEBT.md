@@ -53,7 +53,7 @@ when the item should constrain future changes.
 
 | # | Area | Item | Application risk | Work band / trigger | Effort |
 |---|------|------|------------------|---------------------|--------|
-| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact, low–medium likelihood; the irreversible step is closed by PR A.** An undecodable iPhone file is kept as a dated copy and the archive starts empty, but iCloud is paused while the copy exists, so the backup survives. All 6 persisted enums are pinned, and `ArchiveGoldenFileTests` decodes a frozen archive using every case | **Next:** PR B of [`ARCHIVE_DERISK_PLAN.md`](ARCHIVE_DERISK_PLAN.md) (Archive Diagnostics). [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) is deferred. Any release before PR A still has the overwrite | Small (PR B ≤ 340 lines) |
+| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact, low–medium likelihood; the irreversible step is closed by PR A.** An undecodable iPhone file is kept as a dated copy and the archive starts empty, but iCloud is paused while the copy exists, so the backup survives. All 6 persisted enums are pinned, and `ArchiveGoldenFileTests` decodes a frozen archive using every case | **Done:** both PRs of [`ARCHIVE_DERISK_PLAN.md`](ARCHIVE_DERISK_PLAN.md) (iCloud pause, Archive Diagnostics). Recovery code is written only if a decode failure ever ships, under the hotfix rule. [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) is deferred. Any release before PR A still has the overwrite | — |
 | [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | Fail-closed `ScoreViewModel.loadState()` (with pre-decode version header) and Watch `MatchHistoryView` unreadable banner landed | Remaining: explicit Watch live-state abandon/reset recovery UX if desired | Small |
 | [27](#27--prevent-unrecorded-fitness-workouts-with-manager-tests-and-crash-recovery) | Health / Reliability | Prevent unrecorded Fitness workouts with manager tests and crash recovery | High impact when a workout is lost; remaining likelihood unverified | **Now**; physical-Watch save/sync checks before release | Medium, staged |
 | [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | Step 1 readers landed in #229 and were kept by the reset: the Watch history, the Watch→iPhone sync, manual archives (`supportedSchemaVersions` range plus a check before decoding), and the pre-decode `AppState` version check. The iPhone archive's reads went back to 1.4.0 | Step 2 for the iPhone archive is part of [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) §5.1 and D9. Other writers stay on bare arrays until a format change needs envelopes | Small |
@@ -370,7 +370,7 @@ remedy is deleting the app — which takes the sandbox, and the `.corrupt` file,
 with it. `assertionFailure()` gives the same signal in Debug and compiles away in
 Release.
 
-**Status: de-risk PR A implemented (23 November 2026); PR B (Archive Diagnostics) is next.**
+**Status: de-risk PRs A and B implemented (23 November 2026).**
 
 - **What was built and removed.** #228, #231 and #234 implemented the
   sequence above:
@@ -405,8 +405,13 @@ Release.
 - **#240 closed (23 November 2026).** A "basic" fail-closed plan with support
   recovery grew with every review round, from 402 to 594 lines of plan and an
   estimated 3,000–4,000 lines of code. The owner closed it unmerged.
-- **Next:** PR B of [`ARCHIVE_DERISK_PLAN.md`](ARCHIVE_DERISK_PLAN.md), whose
-  decisions the owner signed off on 23 November 2026. The plan treats the cause as rare and self-inflicted: a golden-file
+- **Archive Diagnostics (de-risk PR B):** Settings › Backup & Transfer ›
+  Archive Diagnostics, also opened from the paused iCloud line, lists the
+  archive files on the iPhone and in iCloud and shares a Markdown report
+  (decoding error with its coding path, SHA-256, accepted values, agent repair
+  instructions), plus the damaged files after a disclosure.
+- **Next:** nothing scheduled. [`ARCHIVE_DERISK_PLAN.md`](ARCHIVE_DERISK_PLAN.md),
+  whose decisions the owner signed off on 23 November 2026, is complete. It treats the cause as rare and self-inflicted: a golden-file
   test, dated damaged copies that are never deleted, iCloud paused while one
   exists, and an Archive Diagnostics report for support or a coding agent.
   Recovery code is written only if this ever happens, in the hotfix, which

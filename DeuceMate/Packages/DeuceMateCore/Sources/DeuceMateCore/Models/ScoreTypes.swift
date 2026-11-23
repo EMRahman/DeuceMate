@@ -3,12 +3,12 @@
 import Foundation
 
 /// The two sides of a match from the user's perspective.
-public enum Player: String, Codable, Sendable {
+public enum Player: String, Codable, CaseIterable, Sendable {
     case me, opponent
 }
 
 /// Whether the match is singles or doubles.
-public enum MatchType: String, Codable, Sendable {
+public enum MatchType: String, Codable, CaseIterable, Sendable {
     case singles, doubles
 }
 
@@ -22,7 +22,7 @@ public enum MatchType: String, Codable, Sendable {
 /// - `.shortSets`: single short set ("Short Sets"), first to 4 games by 2 (up to 5–3); 7-pt tiebreak at 4–4; deciding point at deuce (receiver chooses side).
 /// - `.fast4`: single FAST4 set, first to 4 games; 5-pt tiebreak at 3–3 (sudden death at 4–4); deciding point at deuce (receiver chooses side).
 /// - `.perpetualPoints`: simple running point counter with tiebreak-style server rotation; no games/sets, no auto-completion, no post-point categorisation.
-public enum MatchFormat: String, Codable, Sendable {
+public enum MatchFormat: String, Codable, CaseIterable, Sendable {
     case standard, bestOf3FullFinalSet, superTiebreak, perpetualSuperTiebreak, quick4Games, shortSets, fast4, perpetualPoints
 
     /// Formats offered for starting or planning a new match, in picker order.
