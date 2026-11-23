@@ -101,15 +101,36 @@ final class ArchiveRecoveryTests: XCTestCase {
     func test_everyOutcomeHasCopy() {
         let preview = ArchiveBackupPolicy.BackupPreview(recordCount: 1, newestMatchDate: Date())
         let outcomes: [ICloudArchiveRestore] = [
-            .available(preview, newerFormatCount: 0), .noBackup, .iCloudUnavailable, .downloading, .unreadable,
+            .available(preview, newerFormatCount: 0),
+            .noBackup,
+            .iCloudUnavailable,
+            .downloading,
+            .requiresNewerVersion(count: nil),
+            .requiresNewerVersion(count: 2),
+            .unreadable,
         ]
         for outcome in outcomes {
             XCTAssertFalse(outcome.title.isEmpty)
             XCTAssertFalse(outcome.message.isEmpty)
         }
+        XCTAssertTrue(ICloudArchiveRestore.requiresNewerVersion(count: nil).message.contains("newer version"))
+        XCTAssertTrue(ICloudArchiveRestore.requiresNewerVersion(count: nil).message.contains("Nothing has been changed"))
+        XCTAssertTrue(ICloudArchiveRestore.requiresNewerVersion(count: 2).message.contains("2 matches"))
+        XCTAssertTrue(ICloudArchiveRestore.requiresNewerVersion(count: 1).message.contains("1 match in your iCloud backup needs"))
         XCTAssertTrue(ICloudArchiveRestore.unreadable.message.contains("Nothing has been changed"))
         XCTAssertTrue(BackupWithheldCopy.failedMessage.contains("Nothing has been changed"))
         XCTAssertTrue(ArchiveRecoveryCopy.stillUnavailableMessage.contains("Nothing has been changed"))
+    }
+
+    func test_remoteBackupProblemHasTruthfulCopy() {
+        for problem in RemoteBackupProblem.allCases {
+            XCTAssertFalse(problem.title.isEmpty)
+            XCTAssertFalse(problem.message.isEmpty)
+            XCTAssertFalse(problem.systemImage.isEmpty)
+            XCTAssertTrue(problem.message.contains("untouched"))
+            XCTAssertTrue(problem.message.contains("paused"))
+        }
+        XCTAssertTrue(RemoteBackupProblem.newerVersion.message.contains("newer version"))
     }
 
     func testSaveFailureCopySaysNothingChangedAndNamesThePauseOnlyWhenPaused() {

@@ -62,17 +62,22 @@ public enum ICloudArchiveRestore: Equatable, Sendable {
     case noBackup
     case iCloudUnavailable
     case downloading
+    /// The backup exists, but either a remote file declared a newer schema
+    /// version (`count == nil`) or every match in it requires a newer build
+    /// (`count == N > 0`). Updating DeuceMate is required to restore it.
+    case requiresNewerVersion(count: Int?)
     /// The backup exists but its records, deletions, or forgotten players can't
     /// be read, so restoring could bring back something the user deleted.
     case unreadable
 
     public var title: String {
         switch self {
-        case .available:         return "Restore from iCloud Backup?"
-        case .noBackup:          return "No iCloud Backup Found"
-        case .iCloudUnavailable: return "iCloud Isn't Available"
-        case .downloading:       return "iCloud Backup Is Downloading"
-        case .unreadable:        return "iCloud Backup Couldn't Be Read"
+        case .available:            return "Restore from iCloud Backup?"
+        case .noBackup:             return "No iCloud Backup Found"
+        case .iCloudUnavailable:    return "iCloud Isn't Available"
+        case .downloading:          return "iCloud Backup Is Downloading"
+        case .requiresNewerVersion: return "Update DeuceMate to Restore"
+        case .unreadable:           return "iCloud Backup Couldn't Be Read"
         }
     }
 
@@ -97,10 +102,41 @@ public enum ICloudArchiveRestore: Equatable, Sendable {
             return "Sign in to iCloud and turn on iCloud Drive for DeuceMate, then try again."
         case .downloading:
             return "The backup is still downloading from iCloud. Try again in a moment."
+        case .requiresNewerVersion(let count):
+            if let count, count > 0 {
+                return "\(BackupWithheldCopy.matches(count).capitalizedFirst) in your iCloud backup need\(count == 1 ? "s" : "") a newer version of DeuceMate. Update DeuceMate to restore. Nothing has been changed."
+            }
+            return "Your iCloud backup was written by a newer version of DeuceMate. Update DeuceMate to restore. Nothing has been changed."
         case .unreadable:
             return "This version of DeuceMate couldn't read the backup either. Nothing has been changed."
         }
     }
+}
+
+/// Why outbound iCloud backup pushes are paused due to the remote backup files
+/// themselves (corrupt or newer-schema remote history/tombstones/ledger, or a
+/// fresh-install backup whose every match requires a newer build).
+public enum RemoteBackupProblem: String, CaseIterable, Equatable, Sendable {
+    case newerVersion
+    case unreadable
+
+    public var title: String {
+        switch self {
+        case .newerVersion: return "iCloud Backup Needs an Update"
+        case .unreadable:   return "iCloud Backup Paused"
+        }
+    }
+
+    public var message: String {
+        switch self {
+        case .newerVersion:
+            return "Your iCloud backup was written by a newer version of DeuceMate. DeuceMate has left it untouched and paused automatic backups until you update DeuceMate. Your matches on this iPhone are unaffected."
+        case .unreadable:
+            return "DeuceMate couldn't read the existing iCloud backup files cleanly, so it has left them untouched and paused automatic backups. Your matches on this iPhone are unaffected."
+        }
+    }
+
+    public var systemImage: String { "exclamationmark.icloud" }
 }
 
 /// Buttons, alerts and results for recovering an archive that couldn't be loaded.

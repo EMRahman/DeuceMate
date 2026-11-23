@@ -111,6 +111,28 @@ struct BackupWithheldNotice: View {
     }
 }
 
+/// Shown when outbound iCloud backup pushes (or a fresh-install restore) paused
+/// because the remote backup files themselves are unreadable or from a newer
+/// version of DeuceMate.
+struct RemoteBackupProblemNotice: View {
+    let problem: RemoteBackupProblem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(problem.title, systemImage: problem.systemImage)
+                .font(.headline)
+                .foregroundStyle(.orange)
+            Text(problem.message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("remote-backup-problem-notice")
+        .padding(.vertical, 4)
+    }
+}
+
 /// Shown when a Watch delivery arrived on a healthy archive but failed to write
 /// to disk. Retrying via Sync Now attempts to commit the retained Watch copies
 /// and reconcile tags/match-type revisions.

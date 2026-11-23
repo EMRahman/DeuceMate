@@ -36,9 +36,12 @@ public struct ForgottenPlayerLedger: Codable, Equatable, Sendable {
     }
 
     /// Sorted id strings, so the persisted/backed-up bytes are deterministic.
+    /// Always encodes `Self.currentSchemaVersion` because this build only emits
+    /// this schema's fields — an imported ledger from a newer build must never
+    /// cause this build to write a version its own strict reader rejects.
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(schemaVersion, forKey: .schemaVersion)
+        try c.encode(Self.currentSchemaVersion, forKey: .schemaVersion)
         try c.encode(playerIDs.map(\.uuidString).sorted(), forKey: .playerIDs)
     }
 
@@ -55,11 +58,13 @@ public struct ForgottenPlayerLedger: Codable, Equatable, Sendable {
 
     /// Union with another ledger. `nil` (an old backup/archive without a
     /// ledger) leaves this one unchanged — it can never erase deletion intent.
+    /// Clamps `schemaVersion` to `1...currentSchemaVersion` so an external
+    /// import with a future version cannot self-poison canonical storage.
     public func union(_ other: ForgottenPlayerLedger?) -> ForgottenPlayerLedger {
         guard let other else { return self }
         var copy = self
         copy.playerIDs.formUnion(other.playerIDs)
-        copy.schemaVersion = max(schemaVersion, other.schemaVersion)
+        copy.schemaVersion = max(1, min(max(schemaVersion, other.schemaVersion), Self.currentSchemaVersion))
         return copy
     }
 

@@ -40,6 +40,20 @@ final class ForgottenPlayerLedgerTests: XCTestCase {
         XCTAssertEqual(ledger.union(ForgottenPlayerLedger(playerIDs: [jo.id])).playerIDs, [alex.id, jo.id])
     }
 
+    func test_unionAndEncode_neverPropagateNewerSchemaVersion() throws {
+        let futureData = Data(#"{"schemaVersion":2,"playerIDs":["\#(alex.id.uuidString)"]}"#.utf8)
+        let decoded = try JSONDecoder().decode(ForgottenPlayerLedger.self, from: futureData)
+        XCTAssertEqual(decoded.playerIDs, [alex.id])
+
+        let unioned = ForgottenPlayerLedger(playerIDs: [jo.id]).union(decoded)
+        XCTAssertEqual(unioned.schemaVersion, ForgottenPlayerLedger.currentSchemaVersion)
+        XCTAssertEqual(unioned.playerIDs, [alex.id, jo.id])
+
+        let reencoded = try JSONEncoder().encode(decoded)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: reencoded) as? [String: Any])
+        XCTAssertEqual(object["schemaVersion"] as? Int, ForgottenPlayerLedger.currentSchemaVersion)
+    }
+
     // MARK: - Scrubbing
 
     func test_scrubbed_removesForgottenPlayerFromEveryRole_withNewerRevision() {

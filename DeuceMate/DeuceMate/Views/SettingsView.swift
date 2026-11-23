@@ -219,7 +219,9 @@ struct SettingsView: View {
             titleVisibility: .visible,
             presenting: pendingImportPreview
         ) { _ in
-            Button("Merge") { runManualArchiveImport(mode: .merge) }
+            if !store.isArchiveBlocked {
+                Button("Merge") { runManualArchiveImport(mode: .merge) }
+            }
             Button("Replace Archive", role: .destructive) {
                 DispatchQueue.main.async {
                     showArchiveReplaceConfirmation = true
@@ -529,7 +531,12 @@ struct SettingsView: View {
                 } label: {
                     Label("Import Match Archive", systemImage: "square.and.arrow.down")
                 }
-                if store.isArchiveBlocked {
+                .disabled(store.archiveProblem == .newerVersion)
+                if store.archiveProblem == .newerVersion {
+                    Text("Your saved archive was written by a newer version of DeuceMate. Export and import are paused until you update DeuceMate.")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                } else if store.isArchiveBlocked {
                     Text("Your saved archive couldn't be loaded. Export is paused; you can still import a backup file and choose Replace to recover.")
                         .font(.footnote)
                         .foregroundStyle(.orange)

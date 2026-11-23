@@ -92,14 +92,25 @@ final class ArchiveRecoveryModel {
         run {
             do {
                 let result = try await store.bringBackWithheldMatches()
-                self.outcome = Outcome(
-                    title: BackupWithheldCopy.broughtBackTitle,
-                    message: result.backupUpdated
-                        ? BackupWithheldCopy.broughtBackMessage(count: result.restored, stillMissing: result.stillMissing)
-                        : BackupWithheldCopy.broughtBackPendingMessage(count: result.restored, stillMissing: result.stillMissing)
-                )
+                if result.restored == 0 && result.stillMissing == 0 {
+                    self.outcome = result.backupUpdated
+                        ? Outcome(title: BackupWithheldCopy.removedTitle, message: BackupWithheldCopy.removedMessage)
+                        : Outcome(title: BackupWithheldCopy.failedTitle, message: BackupWithheldCopy.failedMessage)
+                } else {
+                    self.outcome = Outcome(
+                        title: BackupWithheldCopy.broughtBackTitle,
+                        message: result.backupUpdated
+                            ? BackupWithheldCopy.broughtBackMessage(count: result.restored, stillMissing: result.stillMissing)
+                            : BackupWithheldCopy.broughtBackPendingMessage(count: result.restored, stillMissing: result.stillMissing)
+                    )
+                }
             } catch PhoneStatsStore.RecoveryError.nothingReadable {
                 self.outcome = Outcome(title: BackupWithheldCopy.failedTitle, message: BackupWithheldCopy.noneReadableMessage)
+            } catch PhoneStatsStore.RecoveryError.notPersisted {
+                self.outcome = Outcome(
+                    title: ArchiveSaveFailureCopy.matchNotSavedTitle,
+                    message: ArchiveSaveFailureCopy.message(savingPaused: store.isArchiveBlocked)
+                )
             } catch {
                 self.outcome = Outcome(title: BackupWithheldCopy.failedTitle, message: BackupWithheldCopy.failedMessage)
             }

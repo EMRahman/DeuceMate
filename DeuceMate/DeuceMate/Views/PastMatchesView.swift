@@ -133,19 +133,26 @@ struct PastMatchesView: View {
                     .filter { $0.id != activeID }
                     .sorted(by: MatchChronology.newestFirst)
 
-            // An archive that couldn't be loaded, a withheld backup push, or a
+            // An archive that couldn't be loaded, a paused iCloud backup, or a
             // failed Watch save is explained first (TECHNICAL_DEBT #18).
             if let problem = store.archiveProblem {
                 Section {
                     ArchiveProblemNotice(problem: problem, recovery: recovery, store: store, syncService: syncService)
                 }
-            } else if store.isBackupWithheld {
-                Section {
-                    BackupWithheldNotice(count: store.withheldBackupMatchCount, recovery: recovery, store: store)
+            } else {
+                if let remoteProblem = store.remoteBackupProblem {
+                    Section {
+                        RemoteBackupProblemNotice(problem: remoteProblem)
+                    }
+                } else if store.isBackupWithheld {
+                    Section {
+                        BackupWithheldNotice(count: store.withheldBackupMatchCount, recovery: recovery, store: store)
+                    }
                 }
-            } else if store.watchArchiveSaveFailed {
-                Section {
-                    WatchSaveFailedNotice(syncService: syncService)
+                if store.watchArchiveSaveFailed {
+                    Section {
+                        WatchSaveFailedNotice(syncService: syncService)
+                    }
                 }
             }
 
@@ -327,17 +334,17 @@ struct PastMatchesView: View {
                     .font(.footnote)
             }
             .padding(.horizontal, 24)
-        } else if store.isBackupWithheld {
-            // Nor when the backup still holds matches this iPhone lost.
+        } else if store.remoteBackupProblem != nil || store.isBackupWithheld || store.watchArchiveSaveFailed {
+            // Nor when iCloud backup is paused or Watch deliveries failed to save.
             VStack(alignment: .leading, spacing: 16) {
-                BackupWithheldNotice(count: store.withheldBackupMatchCount, recovery: recovery, store: store)
-                iCloudStatusLabel
-                    .font(.footnote)
-            }
-            .padding(.horizontal, 24)
-        } else if store.watchArchiveSaveFailed {
-            VStack(alignment: .leading, spacing: 16) {
-                WatchSaveFailedNotice(syncService: syncService)
+                if let remoteProblem = store.remoteBackupProblem {
+                    RemoteBackupProblemNotice(problem: remoteProblem)
+                } else if store.isBackupWithheld {
+                    BackupWithheldNotice(count: store.withheldBackupMatchCount, recovery: recovery, store: store)
+                }
+                if store.watchArchiveSaveFailed {
+                    WatchSaveFailedNotice(syncService: syncService)
+                }
                 iCloudStatusLabel
                     .font(.footnote)
             }
@@ -401,7 +408,7 @@ struct PastMatchesView: View {
             isRestoring: store.isRestoringFromICloud,
             hasPendingRestore: store.pendingRestorePreview != nil,
             isUploaded: store.isBackupUploaded,
-            isBackupPaused: store.isArchiveBlocked || store.isBackupWithheld
+            isBackupPaused: store.isBackupPaused
         )
         switch status {
         case .backedUp, .restoring, .pendingUpload:

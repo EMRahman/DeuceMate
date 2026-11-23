@@ -181,7 +181,7 @@ struct MatchDetailView: View {
             isRestoring: store.isRestoringFromICloud,
             hasPendingRestore: store.pendingRestorePreview != nil,
             isUploaded: store.isBackupUploaded,
-            isBackupPaused: store.isArchiveBlocked || store.isBackupWithheld
+            isBackupPaused: store.isBackupPaused
         )
         VStack(alignment: .leading, spacing: 4) {
             if syncService.isPaired {
