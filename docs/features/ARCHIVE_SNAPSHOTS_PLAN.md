@@ -1,7 +1,7 @@
 <!--
 machine-readable summary (parse this block first)
 
-status: proposal — plan only, nothing implemented
+status: superseded — never implemented; replaced by ARCHIVE_SAFETY_PLAN.md (2026-11-23). Do not implement this plan.
 author: Claude, from the owner's review of #228–#231 recovery flows
 date: 2026-11-22
 feature: "Keep a few point-in-time snapshots of the iPhone match archive so the user can go back to an earlier version after a failure the push guard cannot anticipate (valid-but-wrong data, a bad merge, a wrong Replace)."
@@ -24,6 +24,13 @@ decisions: []
 -->
 
 # Plan: Archive Snapshots — go back to an earlier version of the archive
+
+> **Superseded (23 November 2026). Do not implement this plan.** It proposed
+> snapshots as one more layer on top of the #228 push guard. That design was
+> removed by the reset PR (#239), and
+> [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) replaces both. That plan
+> carries over this one's retention rules and its privacy analysis (§4). The
+> rest is kept as history.
 
 Read alongside [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md) #18 (fail-closed archive,
 push floor, recovery) and [`ICLOUD_BACKUP_HARDENING_PLAN.md`](ICLOUD_BACKUP_HARDENING_PLAN.md).
