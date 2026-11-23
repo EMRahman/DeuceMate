@@ -182,9 +182,9 @@ public enum RemoteBackupProblem: String, CaseIterable, Equatable, Sendable {
     public var message: String {
         switch self {
         case .newerVersion:
-            return "Your iCloud backup was written by a newer version of DeuceMate. DeuceMate has left it untouched and paused automatic backups until you update DeuceMate. Your matches on this iPhone are unaffected."
+            return "Your iCloud backup was written by a newer version of DeuceMate. DeuceMate has left your backed-up matches untouched and paused automatic match backups until you update DeuceMate. Your matches on this iPhone are unaffected."
         case .unreadable:
-            return "DeuceMate couldn't read the existing iCloud backup files cleanly, so it has left them untouched and paused automatic backups. Your matches on this iPhone are unaffected."
+            return "DeuceMate couldn't read the existing iCloud backup files cleanly, so it has left your backed-up matches untouched and paused automatic match backups. Your matches on this iPhone are unaffected."
         }
     }
 
@@ -236,6 +236,17 @@ public enum ArchiveSaveFailureCopy {
     }
 }
 
+/// Outcome of the follow-up iCloud push after "Bring Them Back".
+public enum BringBackBackupStatus: Equatable, Sendable {
+    /// Follow-up push succeeded; the iCloud backup now matches this iPhone.
+    case updated
+    /// Follow-up push stayed withheld because matches remain in iCloud that
+    /// aren't on this iPhone (e.g. newer-format matches or newly added remote matches).
+    case stillWithheld(count: Int)
+    /// Follow-up push couldn't finish yet; DeuceMate will retry on its own.
+    case pendingRetry
+}
+
 /// The notice, buttons and results when a backup push was withheld because
 /// matches left this iPhone with no deletion or Replace to explain it.
 public enum BackupWithheldCopy {
@@ -280,11 +291,52 @@ public enum BackupWithheldCopy {
         broughtBackMessage(count: count, stillMissing: stillMissing)
             + " DeuceMate couldn't reach your iCloud backup just now and will update it when it can."
     }
+    public static let pendingBackupUpdateTitle = "Backup Still Updating"
+    public static let pendingBackupUpdateMessage = "DeuceMate updated your archive on this iPhone, but couldn't reach your iCloud backup just now and will try again when it can."
+    public static let alreadyResolvedTitle = "Backup Up to Date"
+    public static let alreadyResolvedMessage = "Those matches are no longer missing from this iPhone. Nothing was removed from your iCloud backup."
     public static let removedTitle = "Backup Updated"
     public static let removedMessage = "The iCloud backup now matches this iPhone."
     public static let failedTitle = "Couldn't Update the Backup"
     public static let failedMessage = "DeuceMate couldn't reach your iCloud backup. Nothing has been changed. Try again in a moment."
     public static let noneReadableMessage = "This version of DeuceMate couldn't read those matches in the backup. Nothing has been changed. If an update to DeuceMate is available, install it."
+
+    /// Truthful alert copy for every outcome of `bringBackWithheldMatches()`,
+    /// never claiming "Nothing has been changed" after local state mutated and
+    /// never claiming the backup matches this iPhone while matches remain withheld.
+    public static func bringBackOutcome(
+        restored: Int,
+        stillMissing: Int,
+        backupStatus: BringBackBackupStatus,
+        changedLocally: Bool
+    ) -> (title: String, message: String) {
+        if restored > 0 {
+            switch backupStatus {
+            case .updated:
+                return (broughtBackTitle, broughtBackMessage(count: restored, stillMissing: stillMissing))
+            case .stillWithheld(let withheldCount):
+                var text = broughtBackMessage(count: restored, stillMissing: stillMissing)
+                let otherWithheld = max(0, withheldCount - stillMissing)
+                if otherWithheld > 0 {
+                    text += " \(matches(otherWithheld).capitalizedFirst) in your iCloud backup still need\(otherWithheld == 1 ? "s" : "") your review."
+                }
+                return (broughtBackTitle, text)
+            case .pendingRetry:
+                return (broughtBackPendingTitle, broughtBackPendingMessage(count: restored, stillMissing: stillMissing))
+            }
+        }
+        switch backupStatus {
+        case .updated:
+            return (removedTitle, removedMessage)
+        case .stillWithheld(let withheldCount):
+            return (title, message(count: max(1, withheldCount)))
+        case .pendingRetry:
+            if changedLocally {
+                return (pendingBackupUpdateTitle, pendingBackupUpdateMessage)
+            }
+            return (failedTitle, failedMessage)
+        }
+    }
 }
 
 private extension String {

@@ -987,31 +987,66 @@ struct PhoneStatsStoreTests {
         #expect(persisted.map(\.id) == [kept.id])
     }
 
-    @Test func bringBackWithheldMatchesFiltersExistingLocalRecordsMatchingRemoteTombstones() async throws {
+    @Test func bringBackWithheldMatchesPreservesLiveLocalRecordsOverRemoteOnlyTombstones() async throws {
+        // Case 1 (`!found.isEmpty`): a match re-imported locally whose ID is still in
+        // remote tombstones must NOT be deleted when bringing back another withheld match.
         let fixture = try Fixture()
         defer { fixture.remove() }
         let kept = record(health: false)
-        let deletedRemotely = record(health: false)
+        let reimported = record(health: false)
         let withheld = record(health: false)
+        let remotelyDeletedWithheld = record(health: false)
 
-        try encode([kept, deletedRemotely], to: fixture.historyURL)
+        try encode([kept, reimported], to: fixture.historyURL)
         try encode([UUID](), to: fixture.tombstoneURL)
         try encode(
-            BackupManifest(recordIDs: [kept.id, deletedRemotely.id, withheld.id], tombstones: [], identityKey: "account-a"),
+            BackupManifest(
+                recordIDs: [kept.id, reimported.id, withheld.id, remotelyDeletedWithheld.id],
+                tombstones: [],
+                identityKey: "account-a"
+            ),
             to: fixture.manifestURL
         )
         try FileManager.default.createDirectory(at: fixture.backup, withIntermediateDirectories: true)
-        try encode([kept, withheld], to: fixture.backupHistoryURL)
-        try encode([deletedRemotely.id], to: fixture.backupTombstoneURL)
+        try encode([kept, withheld, remotelyDeletedWithheld], to: fixture.backupHistoryURL)
+        try encode([reimported.id, remotelyDeletedWithheld.id], to: fixture.backupTombstoneURL)
 
         let store = try fixture.makeBackingUpStore(startsICloudSync: false)
         #expect(await pushNow(store) == true)
 
         let result = try await store.bringBackWithheldMatches()
-        #expect(result.restored == 1 && result.stillMissing == 0)
-        #expect(Set(store.loadHistory().map(\.id)) == [kept.id, withheld.id])
+        #expect(result.restored == 1 && result.stillMissing == 0 && result.backupStatus == .updated)
+        #expect(Set(store.loadHistory().map(\.id)) == [kept.id, reimported.id, withheld.id])
         let persistedTombstones = try JSONDecoder().decode([UUID].self, from: Data(contentsOf: fixture.tombstoneURL))
-        #expect(Set(persistedTombstones) == [deletedRemotely.id])
+        #expect(Set(persistedTombstones) == [remotelyDeletedWithheld.id])
+        #expect(try backupIDs(fixture) == [kept.id, reimported.id, withheld.id])
+
+        // Case 2 (`found.isEmpty`): when the only withheld match was tombstoned remotely,
+        // a live locally re-imported match whose ID is also in remote tombstones stays alive.
+        let fixture2 = try Fixture()
+        defer { fixture2.remove() }
+        let kept2 = record(health: false), reimported2 = record(health: false), lost2 = record(health: false)
+        try encode([kept2, reimported2], to: fixture2.historyURL)
+        try encode([UUID](), to: fixture2.tombstoneURL)
+        try encode(
+            BackupManifest(recordIDs: [kept2.id, reimported2.id, lost2.id], tombstones: [], identityKey: "account-a"),
+            to: fixture2.manifestURL
+        )
+        try FileManager.default.createDirectory(at: fixture2.backup, withIntermediateDirectories: true)
+        try encode([kept2, lost2], to: fixture2.backupHistoryURL)
+        try encode([reimported2.id], to: fixture2.backupTombstoneURL)
+
+        let store2 = try fixture2.makeBackingUpStore(startsICloudSync: false)
+        #expect(await pushNow(store2) == true)
+        try encode([reimported2.id, lost2.id], to: fixture2.backupTombstoneURL)
+        try encode([kept2], to: fixture2.backupHistoryURL)
+
+        let result2 = try await store2.bringBackWithheldMatches()
+        #expect(result2.restored == 0 && result2.stillMissing == 0 && result2.backupStatus == .updated)
+        #expect(Set(store2.loadHistory().map(\.id)) == [kept2.id, reimported2.id])
+        let persisted2 = try JSONDecoder().decode([UUID].self, from: Data(contentsOf: fixture2.tombstoneURL))
+        #expect(Set(persisted2) == [lost2.id])
+        #expect(try backupIDs(fixture2) == [kept2.id, reimported2.id])
     }
 
     // MARK: - Versioned archive readers (TECHNICAL_DEBT #19)
@@ -1908,6 +1943,8 @@ struct PhoneStatsStoreTests {
 
         let result = try await store.bringBackWithheldMatches()
         #expect(result.restored == 0 && result.stillMissing == 0 && result.backupUpdated == false)
+        #expect(result.backupStatus == .stillWithheld(count: 1))
+        #expect(result.changedLocally == true)
         #expect(try backupIDs(fixture) == [kept.id, remoteAdded.id])
         #expect(store.withheldBackupMatchIDs() == [remoteAdded.id])
         #expect(await MainActor.run { store.isBackupWithheld } == true)
@@ -2111,4 +2148,162 @@ struct PhoneStatsStoreTests {
         #expect(await MainActor.run { store.remoteBackupProblem } == nil)
         #expect(await MainActor.run { store.isBackupPaused } == false)
     }
+
+    @Test func bringBackFoundEmptyPushFailureReportsChangedLocallyInsteadOfNothingChanged() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let (store, _, lost, _) = try await withheldSetup(fixture)
+        // Remote tombstones `lost`, then backup directory becomes read-only so follow-up push fails.
+        try encode([lost.id], to: fixture.backupTombstoneURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: fixture.backup.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fixture.backup.path) }
+
+        let result = try await store.bringBackWithheldMatches()
+        #expect(result.restored == 0 && result.stillMissing == 0)
+        #expect(result.backupStatus == .pendingRetry)
+        #expect(result.changedLocally == true)
+        let copy = BackupWithheldCopy.bringBackOutcome(
+            restored: result.restored,
+            stillMissing: result.stillMissing,
+            backupStatus: result.backupStatus,
+            changedLocally: result.changedLocally
+        )
+        #expect(!copy.message.contains("Nothing has been changed"))
+    }
+
+    @Test func identityKeyIsStableForArchivableTokensAndNilForNonArchivableTokens() {
+        let tokenA1 = NSString(string: "icloud-token-a")
+        let tokenA2 = NSString(string: "icloud-token-a")
+        let key1 = PhoneStatsStore.identityKey(for: tokenA1)
+        let key2 = PhoneStatsStore.identityKey(for: tokenA2)
+        #expect(key1 != nil)
+        #expect(key1 == key2)
+        #expect(PhoneStatsStore.identityKey(for: nil) == nil)
+
+        // Must return `nil` rather than `String(describing:)` containing a pointer address.
+        let keyForBadToken = PhoneStatsStore.identityKey(for: UnarchivableIdentityToken())
+        #expect(keyForBadToken == nil)
+    }
+
+    @Test func removeFromBackupRespectsRemoteTombstonesAndReportsAlreadyResolved() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let kept = record(health: false), lost = record(health: false), remotelyDeleted = record(health: false)
+        try encode([kept], to: fixture.historyURL)
+        try encode([UUID](), to: fixture.tombstoneURL)
+        // Baseline lists both `lost` and `remotelyDeleted`, while remote tombstones already contain `remotelyDeleted`.
+        try encode(
+            BackupManifest(recordIDs: [kept.id, lost.id, remotelyDeleted.id], tombstones: [], identityKey: "account-a"),
+            to: fixture.manifestURL
+        )
+        try FileManager.default.createDirectory(at: fixture.backup, withIntermediateDirectories: true)
+        try encode([kept, lost], to: fixture.backupHistoryURL)
+        try encode([remotelyDeleted.id], to: fixture.backupTombstoneURL)
+
+        let store = try fixture.makeBackingUpStore(startsICloudSync: false)
+        #expect(await pushNow(store) == true)
+        let confirmed = store.withheldBackupMatchIDs()
+        #expect(confirmed == [lost.id])
+
+        // Remove must honor `remotelyDeleted` in remote tombstones rather than looping `.withheldSetChanged`.
+        try await store.removeWithheldMatchesFromBackup(confirmed: confirmed)
+        #expect(await MainActor.run { store.isBackupWithheld } == false)
+        #expect(try backupIDs(fixture) == [kept.id])
+
+        // Calling Remove again once nothing is withheld throws `.alreadyResolved`, not `.backupUnavailable`.
+        await #expect(throws: PhoneStatsStore.RecoveryError.alreadyResolved) {
+            try await store.removeWithheldMatchesFromBackup(confirmed: confirmed)
+        }
+    }
+
+    @Test func signOutClearsRemoteBackupProblemWhileTransientOutagePreservesState() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(at: fixture.backup, withIntermediateDirectories: true)
+        try Data(#"{"format":"deucemate.matchHistory","schemaVersion":2,"items":[]}"#.utf8)
+            .write(to: fixture.backupHistoryURL)
+        try encode([UUID](), to: fixture.backupTombstoneURL)
+
+        var containerAvailable = true
+        var signedIn = true
+        let backup = fixture.backup
+        let store = PhoneStatsStore(storageConfiguration: .init(
+            canonicalDirectoryURL: fixture.canonical,
+            legacyDocumentsDirectoryURL: fixture.legacyDocuments,
+            startsICloudSync: false,
+            backupContainerURL: { containerAvailable ? backup : nil },
+            backupIdentityKey: { signedIn ? "account-a" : nil }
+        ))
+
+        store.syncICloudBackup()
+        _ = store.loadHistory()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await MainActor.run { store.remoteBackupProblem } == .newerVersion)
+
+        // Transient container hiccup while still signed in keeps the notice.
+        containerAvailable = false
+        store.syncICloudBackup()
+        _ = store.loadHistory()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await MainActor.run { store.remoteBackupProblem } == .newerVersion)
+
+        // Signing out clears the stale remote problem so the footer can show "iCloud unavailable".
+        signedIn = false
+        store.syncICloudBackup()
+        _ = store.loadHistory()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await MainActor.run { store.remoteBackupProblem } == nil)
+        #expect(await MainActor.run { store.isBackupPaused } == false)
+    }
+
+    @Test func localSavesDoNotRedecodeNewerVersionBackupUntilExplicitSync() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(at: fixture.backup, withIntermediateDirectories: true)
+        let newerID = UUID()
+        try Data("""
+        [{"id":"\(newerID.uuidString)","stats":[{"outcome":"smash"}]}]
+        """.utf8).write(to: fixture.backupHistoryURL)
+        try encode([UUID](), to: fixture.backupTombstoneURL)
+
+        let backup = fixture.backup
+        let store = PhoneStatsStore(storageConfiguration: .init(
+            canonicalDirectoryURL: fixture.canonical,
+            legacyDocumentsDirectoryURL: fixture.legacyDocuments,
+            startsICloudSync: true,
+            backupContainerURL: { backup },
+            backupIdentityKey: { "account-a" }
+        ))
+        // Initial sync discovers `.newerVersion`.
+        store.syncICloudBackup()
+        _ = store.loadHistory()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await MainActor.run { store.remoteBackupProblem } == .newerVersion)
+
+        // Replace remote backup with readable history, then perform a local save:
+        // the debounced local-save sync must skip re-reading remote while `.newerVersion` is cached.
+        let readable = record(health: false)
+        try encode([readable], to: fixture.backupHistoryURL)
+        #expect(store.appendMatchDurably(record(health: false)))
+        try await Task.sleep(for: .milliseconds(2_300))
+        #expect(await MainActor.run { store.remoteBackupProblem } == .newerVersion)
+        #expect(await MainActor.run { store.pendingRestorePreview } == nil)
+
+        // Explicit `syncICloudBackup()` (e.g. foreground / app update) re-inspects remote and discovers the readable backup.
+        store.syncICloudBackup()
+        _ = store.loadHistory()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await MainActor.run { store.remoteBackupProblem } == nil)
+        #expect(await MainActor.run { store.pendingRestorePreview }?.recordCount == 1)
+    }
+}
+
+@objc(DeuceMateTestUnarchivableIdentityToken)
+private final class UnarchivableIdentityToken: NSObject, NSCoding, NSCopying {
+    override init() { super.init() }
+    required init?(coder: NSCoder) { nil }
+    func encode(with coder: NSCoder) {
+        coder.failWithError(CocoaError(.coderInvalidValue))
+    }
+    func copy(with zone: NSZone? = nil) -> Any { UnarchivableIdentityToken() }
 }

@@ -158,10 +158,45 @@ final class ArchiveRecoveryTests: XCTestCase {
             XCTAssertFalse(problem.title.isEmpty)
             XCTAssertFalse(problem.message.isEmpty)
             XCTAssertFalse(problem.systemImage.isEmpty)
-            XCTAssertTrue(problem.message.contains("untouched"))
+            XCTAssertTrue(problem.message.contains("backed-up matches untouched"))
             XCTAssertTrue(problem.message.contains("paused"))
         }
         XCTAssertTrue(RemoteBackupProblem.newerVersion.message.contains("newer version"))
+    }
+
+    func test_bringBackOutcome_isTruthfulForEveryCombination() {
+        let updatedZero = BackupWithheldCopy.bringBackOutcome(
+            restored: 0, stillMissing: 0, backupStatus: .updated, changedLocally: true
+        )
+        XCTAssertEqual(updatedZero.title, BackupWithheldCopy.removedTitle)
+        XCTAssertEqual(updatedZero.message, BackupWithheldCopy.removedMessage)
+
+        let withheldZero = BackupWithheldCopy.bringBackOutcome(
+            restored: 0, stillMissing: 0, backupStatus: .stillWithheld(count: 2), changedLocally: true
+        )
+        XCTAssertEqual(withheldZero.title, BackupWithheldCopy.title)
+        XCTAssertTrue(withheldZero.message.contains("2 matches"))
+        XCTAssertFalse(withheldZero.message.contains("matches this iPhone"))
+        XCTAssertFalse(withheldZero.message.contains("Nothing has been changed"))
+
+        let pendingAfterLocalChange = BackupWithheldCopy.bringBackOutcome(
+            restored: 0, stillMissing: 0, backupStatus: .pendingRetry, changedLocally: true
+        )
+        XCTAssertEqual(pendingAfterLocalChange.title, BackupWithheldCopy.pendingBackupUpdateTitle)
+        XCTAssertFalse(pendingAfterLocalChange.message.contains("Nothing has been changed"))
+
+        let pendingNoLocalChange = BackupWithheldCopy.bringBackOutcome(
+            restored: 0, stillMissing: 0, backupStatus: .pendingRetry, changedLocally: false
+        )
+        XCTAssertEqual(pendingNoLocalChange.title, BackupWithheldCopy.failedTitle)
+        XCTAssertTrue(pendingNoLocalChange.message.contains("Nothing has been changed"))
+
+        let restoredWithExtraWithheld = BackupWithheldCopy.bringBackOutcome(
+            restored: 1, stillMissing: 0, backupStatus: .stillWithheld(count: 1), changedLocally: true
+        )
+        XCTAssertEqual(restoredWithExtraWithheld.title, BackupWithheldCopy.broughtBackTitle)
+        XCTAssertTrue(restoredWithExtraWithheld.message.contains("Brought back 1 match"))
+        XCTAssertTrue(restoredWithExtraWithheld.message.contains("1 match in your iCloud backup still needs your review"))
     }
 
     func testSaveFailureCopySaysNothingChangedAndNamesThePauseOnlyWhenPaused() {

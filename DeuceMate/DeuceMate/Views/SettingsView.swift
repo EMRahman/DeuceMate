@@ -951,7 +951,9 @@ struct SettingsView: View {
         let notesText = preview.noteCount > 0
             ? " It also includes \(preview.noteCount) private \(preview.noteCount == 1 ? "note" : "notes"), restored only to this iPhone's private notes (a newer note already here is kept)."
             : ""
-        let choices = "Merge keeps your current matches and adds these, preferring the more complete copy of any duplicate. Replace swaps your iPhone archive for this file — matches still on your watch can sync back."
+        let choices = store.isArchiveBlocked
+            ? "Replace swaps your iPhone archive for this file — matches still on your watch can sync back."
+            : "Merge keeps your current matches and adds these, preferring the more complete copy of any duplicate. Replace swaps your iPhone archive for this file — matches still on your watch can sync back."
         return "\(preview.recordCount) matches found. \(choices) \(healthText)\(notesText)"
     }
 

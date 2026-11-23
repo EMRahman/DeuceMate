@@ -92,18 +92,13 @@ final class ArchiveRecoveryModel {
         run {
             do {
                 let result = try await store.bringBackWithheldMatches()
-                if result.restored == 0 && result.stillMissing == 0 {
-                    self.outcome = result.backupUpdated
-                        ? Outcome(title: BackupWithheldCopy.removedTitle, message: BackupWithheldCopy.removedMessage)
-                        : Outcome(title: BackupWithheldCopy.failedTitle, message: BackupWithheldCopy.failedMessage)
-                } else {
-                    self.outcome = Outcome(
-                        title: BackupWithheldCopy.broughtBackTitle,
-                        message: result.backupUpdated
-                            ? BackupWithheldCopy.broughtBackMessage(count: result.restored, stillMissing: result.stillMissing)
-                            : BackupWithheldCopy.broughtBackPendingMessage(count: result.restored, stillMissing: result.stillMissing)
-                    )
-                }
+                let copy = BackupWithheldCopy.bringBackOutcome(
+                    restored: result.restored,
+                    stillMissing: result.stillMissing,
+                    backupStatus: result.backupStatus,
+                    changedLocally: result.changedLocally
+                )
+                self.outcome = Outcome(title: copy.title, message: copy.message)
             } catch PhoneStatsStore.RecoveryError.nothingReadable {
                 self.outcome = Outcome(title: BackupWithheldCopy.failedTitle, message: BackupWithheldCopy.noneReadableMessage)
             } catch PhoneStatsStore.RecoveryError.notPersisted {
@@ -132,6 +127,11 @@ final class ArchiveRecoveryModel {
                 // More is withheld than the user agreed to remove: remove
                 // nothing and ask again about the current set.
                 self.confirmRemove(store)
+            } catch PhoneStatsStore.RecoveryError.alreadyResolved {
+                self.outcome = Outcome(
+                    title: BackupWithheldCopy.alreadyResolvedTitle,
+                    message: BackupWithheldCopy.alreadyResolvedMessage
+                )
             } catch {
                 self.outcome = Outcome(title: BackupWithheldCopy.failedTitle, message: BackupWithheldCopy.failedMessage)
             }
