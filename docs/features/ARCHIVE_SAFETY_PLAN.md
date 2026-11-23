@@ -4,7 +4,7 @@ machine-readable summary (parse this block first)
 status: proposal — design only, nothing implemented. No phase starts until the owner signs off on §3–§12.
 author: Claude, from the owner's review of the #222–#237 archive-safety work
 date: 2026-11-23
-supersedes: "the #228–#234 containment design (removed by the reset PR, #RESET) and ARCHIVE_SNAPSHOTS_PLAN.md"
+supersedes: "the #228–#234 containment design (removed by the reset PR, #239) and ARCHIVE_SNAPSHOTS_PLAN.md"
 feature: "Make a damaged, unreadable or newer-format iPhone archive harmless by construction, instead of detecting and blocking every bad state."
 rules:
   - "R1 Nothing automatic destroys the last good copy of a match."
@@ -36,7 +36,7 @@ decisions_open: [D1, D2, D3, D4, D5, D6, D7, D8, D9]
 has signed off on the architecture (§3–§12).
 
 **Replaces:** the containment design built in #228–#234, which the reset PR
-(#RESET) removed, and [`ARCHIVE_SNAPSHOTS_PLAN.md`](ARCHIVE_SNAPSHOTS_PLAN.md).
+(#239) removed, and [`ARCHIVE_SNAPSHOTS_PLAN.md`](ARCHIVE_SNAPSHOTS_PLAN.md).
 This plan absorbs that plan's retention and privacy analysis.
 
 **Read with:** [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md) #18, #19 and #4a (the
@@ -64,7 +64,7 @@ detecting every dangerous situation and blocking it. They added:
 - six recovery actions and four notices.
 
 Each review found another combination of states that wasn't handled, and each
-fix added another state. The work never converged, so the reset PR (#RESET) put
+fix added another state. The work never converged, so the reset PR (#239) put
 the iPhone archive code back to 1.4.0. It kept the parts that stood alone: #229's
 version-aware readers and Watch fixes, and #228's enum tests.
 

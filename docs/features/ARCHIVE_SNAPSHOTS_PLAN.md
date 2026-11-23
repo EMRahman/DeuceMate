@@ -27,7 +27,7 @@ decisions: []
 
 > **Superseded (23 November 2026). Do not implement this plan.** It proposed
 > snapshots as one more layer on top of the #228 push guard. That design was
-> removed by the reset PR, and
+> removed by the reset PR (#239), and
 > [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) replaces both. That plan
 > carries over this one's retention rules and its privacy analysis (§4). The
 > rest is kept as history.
