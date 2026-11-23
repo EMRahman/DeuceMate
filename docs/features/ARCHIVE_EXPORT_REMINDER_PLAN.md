@@ -1,23 +1,23 @@
 <!--
 machine-readable summary (parse this block first)
 
-status: proposal — design only, nothing implemented. No phase starts until the owner signs off on §9.
+status: implemented — Phases 1–4 implemented (Core policy + tests, iOS shared export flow + coordinator + card + Settings controls + unit/UI tests, browser demo parity + QA).
 author: Claude, from an owner request
 date: 2026-11-23
-feature: "Remind the iPhone user, roughly every 10 matches, to export a full-fidelity match archive file, because it is the only copy that carries Health data and (optionally) private notes to a new iPhone. Never remind again once they choose Don't Remind Me Again."
+feature: "Remind the iPhone user, roughly every 5 matches, to export a full-fidelity match archive file, because it is the only copy that carries Health data and (optionally) private notes to a new iPhone. Never remind again once they choose Don't Remind Me Again."
 surfaces: "[Core] pure policy + tests; [iOS] Matches-screen card, Settings toggle and last-export line, shared export flow; browser demo parity. No Watch change, no sync key."
 rules:
   - "The reminder only opens the existing export flow. It never exports by itself, never pre-enables private notes, and never changes what the file contains."
   - "Only a successful file export (or a Later tap) resets the count. A cancelled export does not."
   - "Don't Remind Me Again is permanent until the user turns the Settings toggle back on."
   - "No modal, no alert, no local notification: one non-blocking card on the Matches screen."
-new_keys: "phone-local only: archiveExportReminderEnabled, archiveExportReminderBaseline, archiveLastExportDate (add to CLAUDE.md §0 exceptions)"
-decisions_open: [E1, E2, E3, E4, E5, E6]
+new_keys: "phone-local only: archiveExportReminderEnabled, archiveExportReminderBaseline, archiveLastExportDate (added to CLAUDE.md §0 exceptions)"
+decisions_open: []
 -->
 
 # Plan: Remind the user to export a full-fidelity match archive
 
-**Status: proposal. Nothing here is implemented.**
+**Status: implemented (Phases 1–4).**
 
 **Read with:** [`ICLOUD_BACKUP_HARDENING_PLAN.md`](ICLOUD_BACKUP_HARDENING_PLAN.md)
 (why the iCloud copy has no Health data), [`MATCH_TAGS_PLAN.md`](MATCH_TAGS_PLAN.md)
@@ -67,7 +67,7 @@ card as its first section, above Trends:
 
 > **Keep a full copy of your matches**
 >
-> You've recorded 10 matches since your last export. Your iCloud backup keeps
+> You've recorded 5 matches since your last export. Your iCloud backup keeps
 > scores and stats, but not heart rate, steps, distance, calories or private
 > notes. An archive file keeps everything. Import it if you move to a new
 > iPhone.
@@ -76,7 +76,7 @@ card as its first section, above Trends:
 >
 > [Don't Remind Me Again]
 
-- The count is real ("10", "14"). It names only the categories this archive
+- The count is real ("5", "8"). It names only the categories this archive
   actually holds: if no match has Health data, the Health clause is dropped;
   if there are no private notes, "or private notes" is dropped (§3.2 decides
   which matches count at all).
@@ -93,7 +93,7 @@ card as its first section, above Trends:
 | Button | What happens | Counter |
 |---|---|---|
 | **Export Archive** | Opens the **existing** `ArchiveExportOptionsSheet` → `fileExporter` flow, unchanged (§5.2). | Reset only if the file export reports success. Cancel at either step leaves the card showing. |
-| **Later** | Hides the card. | Reset: the next card needs another 10 matches. |
+| **Later** | Hides the card. | Reset: the next card needs another 5 matches. |
 | **Don't Remind Me Again** | Hides the card for good. No confirmation dialog: the Settings toggle (§2.3) is the undo, and the button's accessibility hint says so. | Reminders off. |
 
 ### 2.3 Settings › Backup & Transfer
@@ -129,13 +129,13 @@ The card shows when **all** of these hold:
    state, and there is no pending iCloud restore prompt). Never nudge someone
    to export an archive the app isn't sure it has fully loaded: exporting a
    partial archive would hand them a false sense of safety.
-3. At least **10** *countable* matches (§3.2) have a completion date
+3. At least **5** *countable* matches (§3.2) have a completion date
    (`endTime`) later than the **baseline** (§3.3).
 
 That's all. No time-based rule, no app-version gating, no attention timer. A
-player who records 10 matches in one weekend tournament sees it after the
-weekend; one who plays monthly sees it once or twice a year. Both are right:
-the risk is proportional to unprotected matches, not to time.
+player who records 5 matches in one weekend tournament sees it after the
+weekend; one who plays monthly sees it a couple of times a year. Both are
+right: the risk is proportional to unprotected matches, not to time.
 
 ### 3.2 Which matches count
 
@@ -168,7 +168,7 @@ One stored date, `archiveExportReminderBaseline`. It moves forward on:
 | A successful archive export (card or Settings) | now |
 | **Later** | now |
 | A successful archive **import** (Merge or Replace) | `max(baseline, archive.exportedAt)` — the matches in that file are already in a file the user holds, so restoring onto a new phone doesn't trigger an instant reminder |
-| Turning reminders back on in Settings | unchanged (if 10+ are already unexported, the card shows straight away — which is what someone turning it on wants) |
+| Turning reminders back on in Settings | unchanged (if 5+ are already unexported, the card shows straight away — which is what someone turning it on wants) |
 
 No baseline yet (`nil`) means "never exported": every countable match counts.
 An existing player who updates with 40 Health-tracked matches therefore sees the
@@ -185,14 +185,14 @@ losing the reminder for good:
 
 - A match completed on the Watch before an export but synced to the iPhone
   after it isn't in the file and isn't counted. It is counted only if it has
-  company: the next 10 bring the card back, and that export includes it.
+  company: the next 5 bring the card back, and that export includes it.
 - A note or Health backfill added to an *older* match after an export isn't
   counted.
 - A clock change can shift a match either side of the baseline.
 
 > **E2 (owner):** accept these, or track the exact match IDs in the last export
 > (a small Application Support file, unioned on import)? *Recommendation:
-> accept.* "Every 10 matches or so" is the brief; an ID ledger is a new
+> accept.* "Every 5 matches or so" is the brief; an ID ledger is a new
 > persisted file with its own failure modes, for an off-by-one in a nudge.
 
 ---
@@ -226,7 +226,7 @@ losing the reminder for good:
 
 Mirrors `ReviewPromptPolicy`: the app supplies facts, Core decides.
 
-- Constants: `threshold = 10`, and the three phone-local key strings (pinned in
+- Constants: `threshold = 5`, and the three phone-local key strings (pinned in
   tests, like `ExportInclusionDefaults`).
 - `countableMatchCount(records:matchIDsWithNotes:backupProtectsNonHealthData:since:) -> Int`
 - `state(...) -> Reminder` where `Reminder` is `.hidden` or
@@ -255,6 +255,14 @@ On `.exported` it calls the coordinator's `recordExport(now:)`. Both
 `SettingsView` and `PastMatchesView` attach it. This is a pure move of existing
 code plus one callback; the sheet itself is unchanged.
 
+`fileExporter` deliberately leaves `fileDialogDefaultDirectory` unset. On iOS,
+sandboxed apps cannot target the user-visible **Downloads** folder in Files
+(`FileManager.default.urls(for: .downloadsDirectory, ...)` points inside the
+app's own private sandbox container, not `On My iPhone › Downloads` or
+`iCloud Drive › Downloads`, and files inside the app's sandbox would be deleted
+with the app). Leaving the directory unset lets iOS's system Files picker
+remember and reopen the last folder the user chose automatically.
+
 `ArchiveExportReminderCoordinator` (`Views/Backup/`, like
 `ReviewPromptCoordinator`) owns the three `UserDefaults` keys with an injectable
 `UserDefaults`, and exposes `reminder(for:notes:icloud:)`, `recordExport`,
@@ -279,7 +287,7 @@ in the same PR, so the synced-settings grep check stays explainable.
 The reminder state deliberately is **not** in the match archive or the iCloud
 backup. After a new-phone restore from iCloud, the baseline is absent, so a
 player who restored from iCloud (and so lost Health data and notes) is told
-about the archive file as soon as they have 10 new at-risk matches — or, if the
+about the archive file as soon as they have 5 new at-risk matches — or, if the
 restore brought Health-free matches only, not until there is something worth
 protecting.
 
@@ -305,7 +313,7 @@ No change. The Watch keeps 25 matches and is not where archives are exported.
 mirror the card, the toggle and the last-export line, reading the same copy.
 The demo's archive file is already a separate format, and its "export" stays a
 local download. Its threshold may be lowered by a Demo control so a visitor can
-see the card without recording 10 matches.
+see the card without recording 5 matches.
 
 ---
 
@@ -315,21 +323,21 @@ This table is also the test list (§7).
 
 | # | Situation | Result |
 |---|---|---|
-| 1 | Fresh install, 9 at-risk matches | No card |
-| 2 | 10th at-risk match completes | Card shows, "10 matches" |
-| 3 | Export Archive → file saved | Card gone; Settings shows today's date; next card after 10 more |
+| 1 | Fresh install, 4 at-risk matches | No card |
+| 2 | 5th at-risk match completes | Card shows, "5 matches" |
+| 3 | Export Archive → file saved | Card gone; Settings shows today's date; next card after 5 more |
 | 4 | Export Archive → Cancel on the sheet, or Cancel in Files | Card stays; nothing recorded |
 | 5 | Export fails (disk full, write error) | Card stays; existing red "Export failed" status |
-| 6 | Later | Card gone until 10 more; "Last exported" unchanged |
+| 6 | Later | Card gone until 5 more; "Last exported" unchanged |
 | 7 | Don't Remind Me Again | Card never shows; toggle off in Settings; Settings export still records "Last exported" |
-| 8 | Toggle turned back on with 15 unexported | Card shows at once with "15" |
+| 8 | Toggle turned back on with 8 unexported | Card shows at once with "8" |
 | 9 | Export from Settings while the card is showing | Card gone |
 | 10 | Matches without Health data or notes, iCloud backup working | Not counted (E1) |
 | 11 | Same, iCloud backup off or unavailable | Counted; copy says nothing else backs them up |
 | 12 | In-progress checkpoints | Never counted |
-| 13 | User deletes matches and drops below 10 | Card hides (derived state, nothing stored) |
+| 13 | User deletes matches and drops below 5 | Card hides (derived state, nothing stored) |
 | 14 | New phone: Import a manual archive | Baseline = file's `exportedAt`; no instant card |
-| 15 | New phone: restored from iCloud | Baseline absent; card after 10 at-risk matches |
+| 15 | New phone: restored from iCloud | Baseline absent; card after 5 at-risk matches |
 | 16 | Archive unreadable this launch, or restore prompt pending | No card |
 | 17 | Live match in progress | Card hidden until it ends |
 | 18 | Review prompt requested on this report close | Card waits for the next appearance |
@@ -341,7 +349,7 @@ This table is also the test list (§7).
 ## 7. Tests
 
 - **Core** (`ArchiveExportReminderPolicyTests`): every row of §6 Core can
-  express — threshold at 9/10/11, at-risk vs plain matches, iCloud off,
+  express — threshold at 4/5/6, at-risk vs plain matches, iCloud off,
   in-progress excluded, a stored Health `0` counts, nil vs set baseline,
   `baselineAfterImport` never moving backwards, copy variants per
   `MissingCategory`, and the copy never containing "lost forever"-style
@@ -349,7 +357,7 @@ This table is also the test list (§7).
 - **iPhone unit** (`ArchiveExportReminderCoordinatorTests`, injected
   `UserDefaults`): export/snooze/disable/import transitions; Later never moves
   `archiveLastExportDate`; cancel/failure record nothing.
-- **iPhone UI**: seed 10 Health-tracked matches through the existing importer
+- **iPhone UI**: seed 5 Health-tracked matches through the existing importer
   (as the demo-parity fixtures do), check the card appears, Later hides it,
   Don't Remind Me Again turns the Settings toggle off, and Export Archive
   presents the same sheet with Include private notes off.
@@ -374,21 +382,21 @@ This table is also the test list (§7).
 |---|---|---|
 | E1 | Count only matches with Health data or notes (plus everything when iCloud is off) | Yes (§3.2) |
 | E2 | Date baseline rather than an exact ledger of exported match IDs | Yes (§3.4) |
-| E3 | Threshold 10, the same after Later | Yes; revisit with real usage |
+| E3 | Threshold 5, the same after Later | Updated to 5 per owner; revisit with real usage |
 | E4 | Inline card on the Matches screen, not an alert or notification | Yes (§2.1, §4) |
 | E5 | Settings gets a Remind Me to Export toggle and a Last exported line | Yes (§2.3) — the toggle is the only undo for Don't Remind Me Again |
 | E6 | Don't Remind Me Again without a confirmation dialog | Yes; the toggle makes it reversible |
 
 ---
 
-## 10. Phases (not started)
+## 10. Phases (complete)
 
-| Phase | Surface | What |
-|---|---|---|
-| 1 | `[Core]` | `ArchiveExportReminderPolicy` + copy + tests. No app change. |
-| 2 | `[iOS]` | Extract `ArchiveExportFlow` from `SettingsView` with no behaviour change (export still works identically from Settings). |
-| 3 | `[iOS]` | Coordinator, card, Settings toggle and last-export line, import baseline; CLAUDE.md §0 key exceptions; file inventory entries for the new source files. |
-| 4 | `[Web]` | Browser demo parity (§5.6). |
+| Phase | Surface | Status | What |
+|---|---|---|---|
+| 1 | `[Core]` | Done | `ArchiveExportReminderPolicy` + copy + tests (`SettingsCopy.archiveExportReminder`, `HealthExportConsent.hasRawHealthData`). |
+| 2 | `[iOS]` | Done | Extracted `ArchiveExportFlow` from `SettingsView` with no behaviour change. |
+| 3 | `[iOS]` | Done | `ArchiveExportReminderCoordinator`, `ArchiveExportReminderCard`, Settings toggle and last-export line, import baseline, unit + UI tests; `CLAUDE.md` §0 key exceptions; `docs/architecture/file-inventory.md` entries. |
+| 4 | `[Web]` | Done | Browser demo parity (`phone-demo.js`, `phone-demo-settings.js`, `phone-demo.css`, `scripts/iphone-demo-qa.cjs`). |
 
 `APP_STORE_METADATA.md` needs no new review note: the feature adds no data
 flow, only a pointer to an existing one.

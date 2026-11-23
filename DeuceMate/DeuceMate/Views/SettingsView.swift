@@ -68,31 +68,6 @@ private struct ThemeSkinCard: View {
     }
 }
 
-// MARK: - Manual archive file document
-
-private struct MatchArchiveDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.json] }
-
-    var data: Data
-
-    init(data: Data = Data()) {
-        self.data = data
-    }
-
-    init(configuration: ReadConfiguration) throws {
-        data = configuration.file.regularFileContents ?? Data()
-    }
-
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: data)
-    }
-}
-
-private struct ArchiveTransferStatus: Equatable {
-    let message: String
-    let isSuccess: Bool
-}
-
 // MARK: - Settings view
 
 struct SettingsView: View {
@@ -100,6 +75,7 @@ struct SettingsView: View {
     @EnvironmentObject private var announcementService: LiveAnnouncementService
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store: PhoneStatsStore = .shared
+    @ObservedObject private var reminderCoordinator: ArchiveExportReminderCoordinator = .shared
 
     // Shared settings
     @AppStorage("selectedTheme") private var themeRawValue: String = AppTheme.default.rawValue
@@ -131,11 +107,9 @@ struct SettingsView: View {
     @State private var syncRequestedAt: Date?
     @State private var showSyncDetails = false
     @State private var showArchiveExportDisclosure = false
-    @State private var showArchiveExporter = false
     @State private var showArchiveImporter = false
     @State private var showArchiveImportOptions = false
     @State private var showArchiveReplaceConfirmation = false
-    @State private var archiveExportDocument = MatchArchiveDocument()
     @State private var pendingImportData: Data?
     @State private var pendingImportPreview: ManualMatchArchiveBackup.ImportPreview?
     /// Ids of the matches in the selected archive file — what a Replace keeps.
@@ -174,37 +148,24 @@ struct SettingsView: View {
             syncStatus = .succeeded
             syncRequestedAt = nil
         }
-        .sheet(isPresented: $showArchiveExportDisclosure) {
-            // The disclosure plus the separate, default-off private-notes
-            // opt-in with an exact preview. Built when the sheet is up only.
-            ArchiveExportOptionsSheet(
-                baseMessage: archiveExportDisclosureMessage,
-                notes: archiveExportNoteLines,
-                clearedCount: archiveExportNoteEntries.filter(\.isCleared).count,
-                onExport: { includeNotes in
-                    showArchiveExportDisclosure = false
-                    prepareManualArchiveExport(includeNotes: includeNotes)
-                },
-                onCancel: { showArchiveExportDisclosure = false }
-            )
-        }
-        .fileExporter(
-            isPresented: $showArchiveExporter,
-            document: archiveExportDocument,
-            contentType: .json,
-            defaultFilename: manualArchiveFilename
-        ) { result in
-            switch result {
-            case .success:
+        .archiveExportFlow(
+            isPresented: $showArchiveExportDisclosure,
+            store: store,
+            reminderCoordinator: reminderCoordinator
+        ) { outcome in
+            switch outcome {
+            case .exported:
                 archiveTransferStatus = ArchiveTransferStatus(
                     message: "Archive exported",
                     isSuccess: true
                 )
-            case .failure(let error):
+            case .failed(let message):
                 archiveTransferStatus = ArchiveTransferStatus(
-                    message: "Export failed: \(error.localizedDescription)",
+                    message: "Export failed: \(message)",
                     isSuccess: false
                 )
+            case .cancelled:
+                break
             }
         }
         .fileImporter(
@@ -515,6 +476,7 @@ struct SettingsView: View {
 
             Section {
                 Button {
+                    archiveTransferStatus = nil
                     showArchiveExportDisclosure = true
                 } label: {
                     Label("Export Match Archive", systemImage: "square.and.arrow.up")
@@ -524,6 +486,17 @@ struct SettingsView: View {
                 } label: {
                     Label("Import Match Archive", systemImage: "square.and.arrow.down")
                 }
+                Text(lastExportedText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("archive-last-exported")
+                Toggle(isOn: Binding(
+                    get: { reminderCoordinator.isEnabled },
+                    set: { reminderCoordinator.setEnabled($0) }
+                )) {
+                    settingLabel(ArchiveExportReminderCopy.settingsToggleTitle, .archiveExportReminder)
+                }
+                .accessibilityIdentifier("archive-export-reminder-toggle")
                 if let archiveTransferStatus {
                     Text(archiveTransferStatus.message)
                         .font(.footnote)
@@ -750,62 +723,9 @@ struct SettingsView: View {
         "\(count) \(count == 1 ? "match" : "matches")"
     }
 
-    private var manualArchiveFilename: String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
-        return "deucemate_archive_\(formatter.string(from: Date())).json"
-    }
-
-    /// The archive-export alert body. When any archived match carries HealthKit
-    /// data, use Core's single disclosure source (naming exactly the raw fields
-    /// present, `.archiveFile` recipient); otherwise a health-free export note.
-    private var archiveExportDisclosureMessage: String {
-        let fields = HealthExportConsent.archiveFields(in: store.history)
-        guard !fields.isEmpty else {
-            return "Export your full match archive as a JSON file. Choose where to save it in the Files app or an iCloud Drive folder."
-        }
-        return HealthExportConsent.disclosure(fields: fields, destination: .archiveFile).message
-    }
-
-    /// Every note entry (including explicit clears) on a match in the archive -
-    /// exactly what "Include private notes" would write.
-    private var archiveExportNoteEntries: [MatchNote] {
-        ManualMatchArchiveBackup.exportableNotes(MatchNotesStore.shared.allNotes(), for: store.history)
-    }
-
-    /// The non-empty entries, newest match first, for the exact-text preview.
-    private var archiveExportNoteLines: [ArchiveExportOptionsSheet.NoteLine] {
-        let notes = Dictionary(
-            archiveExportNoteEntries.filter { !$0.isCleared }.map { ($0.matchID, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
-        return store.history.compactMap { record in
-            notes[record.id].map { ArchiveExportOptionsSheet.NoteLine(note: $0, matchDate: MatchChronology.date(record)) }
-        }
-    }
-
-    private func prepareManualArchiveExport(includeNotes: Bool) {
-        archiveTransferStatus = nil
-        let store = store
-        // Resolved here (main actor) so the exact set the user reviewed is the
-        // set written, even if a note changes while the file is prepared.
-        let notes = includeNotes ? archiveExportNoteEntries : nil
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                let data = try store.exportManualArchiveData(notes: notes)
-                DispatchQueue.main.async {
-                    archiveExportDocument = MatchArchiveDocument(data: data)
-                    showArchiveExporter = true
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    archiveTransferStatus = ArchiveTransferStatus(
-                        message: "Export failed: \(error.localizedDescription)",
-                        isSuccess: false
-                    )
-                }
-            }
-        }
+    private var lastExportedText: String {
+        let formatted = reminderCoordinator.lastExportDate?.formatted(date: .abbreviated, time: .omitted)
+        return ArchiveExportReminderCopy.lastExportedText(formattedDate: formatted)
     }
 
     private func handleManualArchiveImportSelection(_ result: Result<URL, Error>) {
@@ -888,6 +808,7 @@ struct SettingsView: View {
                     }
                 }
                 DispatchQueue.main.async {
+                    reminderCoordinator.recordImport(exportedAt: preview.exportedAt)
                     archiveTransferStatus = ArchiveTransferStatus(
                         message: "Archive \(verb): \(preview.recordCount) matches imported.\(notesWarning)",
                         isSuccess: notesWarning.isEmpty

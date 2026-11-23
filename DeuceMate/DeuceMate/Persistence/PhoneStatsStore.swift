@@ -66,6 +66,12 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
     /// `false` = pushed to the local replica, daemon upload in progress;
     /// `true` = both files confirmed uploaded.
     @Published private(set) var isBackupUploaded: Bool? = nil
+    /// True when a canonical archive file existed at launch but could not be
+    /// read (I/O or data-protection error), leaving the store running in-memory
+    /// with disk writes suspended. Read-only mirror of `canonicalWritesSuspended`
+    /// so UI surfaces like the export reminder know the archive did not open
+    /// cleanly.
+    @Published private(set) var isCanonicalArchiveUnreadable: Bool = false
     /// Whether the user's iCloud account/container is currently usable. When
     /// false the archive still works in full (it is device-local); backup
     /// pushes and initial restore pause until iCloud returns.
@@ -173,14 +179,15 @@ final class PhoneStatsStore: ObservableObject, StatsStoring {
 
     init(storageConfiguration: StorageConfiguration) {
         self.storageConfiguration = storageConfiguration
-        let initial = queue.sync { () -> ([MatchRecord], Set<UUID>, Bool, ForgottenPlayerLedger) in
+        let initial = queue.sync { () -> ([MatchRecord], Set<UUID>, Bool, ForgottenPlayerLedger, Bool) in
             migrateLegacyDocumentsArchiveIfNeeded()
             loadCanonicalOnQueue()
-            return (records, tombstones, shouldAttemptInitialRestoreOnQueue, forgotten)
+            return (records, tombstones, shouldAttemptInitialRestoreOnQueue, forgotten, canonicalWritesSuspended)
         }
         history = initial.0
         tombstoneIDs = initial.1
         forgottenPlayers = initial.3
+        isCanonicalArchiveUnreadable = initial.4
         // Fresh local archive setup with iCloud signed in: show "Restoring from
         // iCloud…" until the first restore attempt settles, so an initially
         // short list reads as in-progress rather than data loss.

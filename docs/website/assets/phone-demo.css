@@ -358,6 +358,21 @@ html:has(.companion-demo) { scroll-padding-top:82px; }
 /* Grouped-list rows for Settings > About and Manual Entry (LabeledContent / Link / Button). */
 .phone-settings .phone-list-row { display:flex; align-items:center; gap:12px; width:100%; min-height:46px; margin:0; padding:10px 0; border:0; border-bottom:1px solid var(--native-separator,#ffffff15); border-radius:0; background:transparent; color:inherit; font:17px -apple-system,BlinkMacSystemFont,sans-serif; text-align:left; text-decoration:none; box-sizing:border-box; }
 .phone-settings .phone-list-row:last-child { border-bottom:0; }
+
+/* Periodic full-fidelity archive export reminder card on the Matches screen. */
+.phone-frame .phone-export-reminder { display:flex; flex-direction:column; gap:10px; }
+.phone-frame .phone-export-reminder-head { display:flex; align-items:center; gap:8px; margin:0; font-size:15px; font-weight:600; }
+.phone-frame .phone-export-reminder-head .phone-icon { width:18px; height:18px; flex-shrink:0; color:var(--phone-me); }
+.phone-frame .phone-export-reminder-body { margin:0; font-size:13px; color:#aaaab1; line-height:1.45; }
+.phone-frame .phone-export-reminder-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.phone-frame .phone-export-reminder-actions .phone-button { margin:0; min-height:36px; padding:7px 14px; font-size:14px; font-weight:500; }
+.phone-frame .phone-export-reminder-never { align-self:flex-start; margin:0; padding:2px 0; min-height:28px; background:transparent; color:#aaaab1; font-size:12px; text-align:left; }
+.phone-frame .phone-archive-last-exported { padding:8px 0; border-bottom:1px solid var(--native-separator,#ffffff15); margin:0; }
+@media(prefers-color-scheme:light) {
+  .phone-frame:not([data-screen=live]) .phone-export-reminder-body,
+  .phone-frame:not([data-screen=live]) .phone-export-reminder-never { color:var(--native-secondary); }
+  .phone-frame:not([data-screen=live]) .phone-export-reminder-actions .phone-button:not(.phone-primary) { background:#eeeef0; color:#007aff; }
+}
 .phone-settings .phone-list-row > span:first-child:not(.phone-list-icon) { flex:1; }
 .phone-settings .phone-list-link { cursor:pointer; color:var(--native-tint,#0a84ff); }
 .phone-settings .phone-list-icon { display:grid; place-items:center; width:24px; flex:0 0 24px; }
