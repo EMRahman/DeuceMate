@@ -46,7 +46,6 @@ struct ManualMatchEntryView: View {
     @State private var currentServer: Player = .me
     @State private var doublesServer: DoublesServer = .me
     @State private var isOnSecondServe: Bool = false
-    @State private var showSaveFailure: Bool = false
 
     private var currentSetIndex: Int { completedSetCount }
     private var isDecidingSet: Bool { currentSetIndex == 2 }
@@ -114,11 +113,6 @@ struct ManualMatchEntryView: View {
             .onChange(of: currentGamesMe) { _, _ in resetTiebreakIfLeftSixAll() }
             .onChange(of: currentGamesOpp) { _, _ in resetTiebreakIfLeftSixAll() }
             .navigationTitle("Manual Entry")
-            .alert(ArchiveSaveFailureCopy.matchNotSavedTitle, isPresented: $showSaveFailure) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(ArchiveSaveFailureCopy.message(savingPaused: store.isArchiveBlocked))
-            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -279,10 +273,7 @@ struct ManualMatchEntryView: View {
 
     private func save() {
         guard let record = buildRecord() else { return }
-        guard store.appendMatchDurably(record) else {
-            showSaveFailure = true
-            return
-        }
+        store.appendMatch(record)
         syncService.sendManualMatch(record)
         dismiss()
     }

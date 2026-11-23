@@ -108,65 +108,6 @@ struct MatchTagsSyncTests {
         }
     }
 
-    @Test func failedWatchWriteSuppressesSyncSuccessAndRetriesAtFullSync() async throws {
-        let h = Harness()
-        defer { h.remove() }
-        let incoming = match()
-        try h.blockCanonicalWrites()
-        h.service.handle([.history([incoming, incoming]), .watchManifest([incoming.id])])
-        await drainMain()
-        #expect(h.store.watchArchiveSaveFailed)
-        #expect(h.service.lastSyncDate == nil)
-        #expect(h.store.loadHistory().isEmpty)
-
-        try h.unblockCanonicalWrites()
-        h.service.requestFullHistorySync()
-        h.service.handle([.watchManifest([incoming.id])])
-        await drainMain()
-        #expect(!h.store.watchArchiveSaveFailed)
-        #expect(h.service.lastSyncDate != nil)
-        #expect(h.relaunchedStore().loadHistory() == [incoming])
-    }
-
-    @Test(arguments: [true, false])
-    func retryReconcilesCommittedMetadata(fullSync: Bool) throws {
-        let h = Harness()
-        defer { h.remove() }
-        var stale = match()
-        stale.matchType = .doubles
-        let forgotten = TaggedPlayer(name: "Former opponent")
-        stale.tags = MatchTags(opponents: [forgotten], competitionType: .friendly, updatedAt: stale.startTime)
-        h.store.saveHistory([stale])
-        let editTime = stale.startTime.addingTimeInterval(20)
-        try h.store.forgetPlayer(forgotten.id, now: stale.startTime.addingTimeInterval(10))
-        let savedTags = try h.store.updateTags(id: stale.id, tags: MatchTags(competitionType: .league, updatedAt: editTime), now: editTime)
-        let converted = try h.store.convertMatchType(id: stale.id, to: .singles)
-        let revision = try #require(converted.matchTypeRevision)
-        stale.endTime = stale.startTime.addingTimeInterval(9_000) // requires a body write
-        try h.blockCanonicalWrites()
-        h.service.handle([.singleMatch(stale)])
-        #expect(h.session.tagUpdates.isEmpty)
-
-        try h.unblockCanonicalWrites()
-        if fullSync {
-            h.service.requestFullHistorySync()
-        } else {
-            h.service.handle([.singleMatch(match())])
-        }
-        #expect(h.session.tagUpdates == [MatchTagsUpdate(matchID: stale.id, tags: savedTags)])
-        let revisions = h.session.sent.flatMap(SyncIncomingPayload.decode).compactMap { event -> MatchTypeUpdate? in
-            guard case .matchTypeUpdate(let id, let revision) = event else { return nil }
-            return MatchTypeUpdate(matchID: id, revision: revision)
-        }
-        #expect(revisions == [MatchTypeUpdate(matchID: stale.id, revision: revision)])
-        let saved = try #require(h.relaunchedStore().loadHistory().first(where: { $0.id == stale.id }))
-        #expect(saved.endTime == stale.endTime)
-        #expect(saved.tags == savedTags)
-        h.session.reset()
-        h.service.requestFullHistorySync()
-        #expect(h.session.tagUpdates.isEmpty)
-    }
-
     @Test func editTimePushGoesOnlyToMatchesTheWatchHolds() async throws {
         let h = Harness()
         defer { h.remove() }

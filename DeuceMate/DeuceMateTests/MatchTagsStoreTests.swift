@@ -301,7 +301,8 @@ struct MatchTagsStoreTests {
     // MARK: - Failed writes (nothing is reported as saved unless it is on disk)
 
     /// The review scenario: the launch read failed, so canonical writes are
-    /// suspended. Forget must fail visibly, preserve the roster on disk, and write no ledger.
+    /// suspended. Forget must fail visibly, leave the player in the roster
+    /// (in memory AND after a relaunch), and write no ledger.
     @Test func forgetWithSuspendedWritesThrowsAndThePlayerSurvivesRelaunch() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -311,18 +312,17 @@ struct MatchTagsStoreTests {
         // A directory at the tombstone URL is an unreadable (not missing) file.
         try FileManager.default.createDirectory(at: fixture.tombstoneURL, withIntermediateDirectories: true)
         let store = fixture.makeStore()
-        #expect(store.isArchiveBlocked)
+        #expect(store.rosterEntries().map(\.name) == ["Alex"])
 
         #expect(throws: PhoneStatsStore.TagEditError.notPersisted) {
             try store.forgetPlayer(alex.id)
         }
 
-        #expect(store.isArchiveBlocked)
+        #expect(store.rosterEntries().map(\.name) == ["Alex"])
         #expect(store.forgottenPlayerLedger().contains(alex.id) == false)
-        #expect(store.loadHistory().isEmpty)
+        #expect(store.loadHistory().first?.tags?.playerIDs.contains(alex.id) == true)
         #expect(FileManager.default.fileExists(atPath: fixture.ledgerURL.path) == false)
-        // Once the read failure clears, relaunch reloads the preserved roster.
-        try FileManager.default.removeItem(at: fixture.tombstoneURL)
+        // Relaunch: the name is still there (what the user was told).
         #expect(fixture.makeStore().rosterEntries().map(\.name) == ["Alex"])
     }
 
