@@ -9,7 +9,8 @@ stance: "Rare and self-inflicted. Prevent it, destroy nothing, and write recover
 budget: "PR A ≤ 75 production lines; PR B ≤ 300 production lines. A finding that breaks the budget needs the owner's OK (§8)."
 parts: "1 prevent (golden-file test); 2 destroy nothing (keep every copy, pause iCloud); 3 export reminder (ARCHIVE_EXPORT_REMINDER_PLAN.md, unchanged); 4 Archive Diagnostics (a report for support or a coding agent)"
 defers: "ARCHIVE_SAFETY_PLAN.md (full redesign). Its status is deferred, as a reference only."
-decisions_open: [D1, D2, D3, D4]
+decisions_open: [D2, D3, D4]
+decided: "D1: no Resume iCloud Backup button. Only a fixing build ends the pause, after it recovers the dated copies (§3.2)."
 -->
 
 # Plan: De-risk the undecodable archive (#18), proportionately
@@ -115,6 +116,16 @@ In `readCanonicalFile`:
 - While paused, deletions and forgets don't reach iCloud either. That's
   intended: the iCloud copy is frozen as it was.
 
+**How the pause ends.** Only when the dated copies are gone, and only a fixing
+build removes them, after it has recovered their contents (§6). There is no
+button to end it (D1, decided No). A Resume button would push the reduced
+archive over the good backup, which is the one irreversible step this part
+exists to prevent. It would also need its own follow-ups: somewhere to keep the
+moved copies, code in the hotfix to recover from there, and a way to clean them
+up. A hotfix that doesn't handle the copies leaves iCloud paused, which is the
+safe way to fail. Until then, new matches still save on the iPhone, the Watch
+keeps its last 25, and manual export (Part 3) still works.
+
 ### 3.3 Tell the user
 
 Add one case to Core's `ICloudBackupCopy`:
@@ -154,8 +165,7 @@ act on. It is the "application debugging stats" the owner asked for.
 
 - Tapping the paused iCloud indicator (§3.3).
 - **Settings › Backup & Transfer › Archive Diagnostics.** The row appears only
-  while at least one damaged copy exists: dated, legacy, or moved to `Kept/`
-  by Resume (so the user can still share it later).
+  while at least one damaged copy exists, dated or legacy.
 
 ### 5.2 What the screen shows
 
@@ -163,6 +173,7 @@ act on. It is the "application debugging stats" the owner asked for.
 >
 > DeuceMate kept a copy of the file it couldn't read. Nothing has been deleted.
 > Your iCloud backup is paused, so it still holds your matches as they were.
+> It resumes by itself once an app update recovers the copy.
 >
 > This usually means an app update is needed. Check the App Store. If there
 > isn't one, share the report below with DeuceMate support, or give it to a
@@ -179,13 +190,8 @@ moved aside, and its size. Then the actions:
    > Files from older versions may also contain heart rate, steps, distance and
    > calories. Private match notes are never included. Only share them with
    > DeuceMate support or a tool you trust. Never post them publicly.
-3. **Resume iCloud Backup** (D1). It confirms first:
-   > This replaces your iCloud backup with the matches on this iPhone now. Your
-   > damaged copy stays on this iPhone.
 
-   On confirm, it moves the dated copies into `MatchArchive/Kept/`
-   (backup-excluded, never scanned for the pause) and runs a normal iCloud
-   sync.
+There is no Resume iCloud Backup action (D1, §3.2).
 
 Sharing uses the existing share-sheet pattern (`GamePlanShareSheet`) and an
 `ExportStaging` generation, ended when the sheet closes. The user can pick
@@ -241,19 +247,18 @@ readable by a person, and parseable by a coding agent without a hosted page.
 **Privacy:** the report never contains a match, a name or a note. A decoding
 error names a field and a value, never a player. The builder's tests pin this.
 
-**Size:** about 280 production lines:
+**Size:** about 255 production lines:
 - Core about 125: the report builder with its fixed text, the coding-path
   formatter, and `CaseIterable`;
-- store about 50: list copies with size, date, hash and decode result; stage
-  copies; Resume;
-- views about 105: the screen, the Settings row, and the indicator tap.
+- store about 35: list copies with size, date, hash and decode result; stage
+  copies;
+- views about 95: the screen, the Settings row, and the indicator tap.
 
 About 200 test lines:
 - the report holds the coding path, hash and enum list, and never holds a name
   or note even when the damaged file does;
 - the readable-now wording;
 - staging and cleanup;
-- Resume moves the dated copies and pushes;
 - a legacy-only phone shows the row but isn't paused.
 
 ## 6. Example: `quick4Games` deleted by mistake
@@ -269,9 +274,10 @@ About 200 test lines:
    "quick4Games"`, and the enum list shows the value is missing. Support, or an
    agent following the instructions, sees an app bug.
 4. A hotfix restores the case under CLAUDE.md §4's retire recipe. Recovery is
-   decided **then**, with the exact failure known. For example, the hotfix can
-   merge the dated copy back in, or the user can reinstall and restore from the
-   untouched iCloud copy. That code is written only if this ever happens.
+   decided **then**, with the exact failure known. For example, the hotfix
+   merges the dated copy back into the archive and then deletes it, which ends
+   the pause, and the next push brings iCloud up to date. That code is written
+   only if this ever happens.
 
 ## 7. Not doing (non-goals)
 
@@ -279,6 +285,7 @@ About 200 test lines:
   machinery.
 - Reading a damaged copy back into the archive automatically, a "Restore from
   iCloud" action, or any repair inside the app.
+- Any way to end the iCloud pause inside the app, such as a Resume button (D1).
 - A file explorer for damaged files.
 - A hosted recovery page. The report carries the agent instructions itself
   (D3).
@@ -304,7 +311,7 @@ These exist because #228–#240 grew with every review.
 
 | # | Decision | Recommendation |
 |---|---|---|
-| D1 | Offer **Resume iCloud Backup**? Without it, backups stay paused until a hotfix removes the copies | Yes. Otherwise the user has no way out except waiting for us |
+| D1 | Offer **Resume iCloud Backup**? | **Decided: No** (2026-11-23). Resuming would overwrite the good iCloud backup and need its own follow-ups (§3.2). The pause ends only when a fixing build recovers the copies |
 | D2 | Should Share Report and Damaged Files exist, or the report only? | Both. The report alone diagnoses the cause, and the files are needed to repair genuine damage |
 | D3 | Also publish the agent instructions as a web page? | Not now. Do it only if support starts receiving these reports |
 | D4 | Ship PR A before PR B? | Yes. PR A closes the irreversible step on its own, and PR B can follow |
@@ -314,7 +321,7 @@ These exist because #228–#240 grew with every review.
 | PR | Surface | What | Production | Tests |
 |---|---|---|---|---|
 | A | `[Core]` + `[iOS]` | Golden-file test, dated copies, iCloud pause, `.pausedDamagedArchive` indicator | ≤ 75 | ~230 |
-| B | `[Core]` + `[iOS]` | Archive Diagnostics: report builder, screen, Settings row, share, Resume | ≤ 300 | ~200 |
+| B | `[Core]` + `[iOS]` | Archive Diagnostics: report builder, screen, Settings row, share | ≤ 300 | ~190 |
 
 Each PR also updates:
 - CLAUDE.md §1 and the `PhoneStatsStore` row;
