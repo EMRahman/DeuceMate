@@ -107,6 +107,8 @@ Changes:
   | `.unreadable` | Any other read error | *Blocked* |
   | `.undecodable` | Bytes read, decode failed (`DecodingError`, invalid JSON, `wrongFormat`, `emptyData`) | *Blocked* |
   | `.newerVersion` | `PersistedArchiveCodec.CodecError.newerSchemaVersion` / `unsupportedSchemaVersion` | *Blocked*, with Update wording |
+| `.missing` | `matchHistory.json` is absent but the archive is already initialized (`canonicalInitializedURL` exists) | *Blocked*. An initialized archive always has this file, because the marker is only written after a successful canonical write, so its absence is loss, not "empty". The deleted-ids and forgotten-players files may legitimately be absent (older builds) and keep 1.4.0's "missing means none" |
+| `.repairIncomplete` | A phase 2 `repair-in-progress` marker exists (§4.7) | *Blocked*. Roll back from `Damaged/` first, and never read the canonical files as an archive |
 
 - **Any one of the three files failing blocks the whole archive.** This is a
   behaviour change for the deleted-ids and forgotten-players files, which today
@@ -268,18 +270,37 @@ Support's way to give the user their matches back without a reinstall:
 - The blocking screen's **Open a File from Support** opens a file picker and
   validates the file fully (format, schema version, every record). It then shows
   the existing `BackupPreview` (match count and newest date) with a confirmation.
-- On confirm, on the store queue:
-  1. Move the three blocked files into `MatchArchive/Damaged/<ISO-date>/`. They
-     are never deleted automatically, and support can ask for them again.
-  2. Adopt the file's records, deleted ids and forgotten players. The ledger is
-     unioned with the local one if that file was readable.
-  3. Merge Health back from the existing sidecar (`HealthSidecarPolicy.merge`).
-  4. Write, then mark the archive initialized.
-  5. Only after a successful write: set `open`, publish, ask the Watch to resend,
+- On confirm, on the store queue. The originals stay at their canonical paths
+  until the repaired archive is fully written, and are only ever *copied*:
+  1. **Copy** the three blocked files into `MatchArchive/Damaged/<ISO-date>/`
+     and verify each copy (size and SHA-256 match the original). They are never
+     deleted automatically, and support can ask for them again. If any copy
+     fails or doesn't verify, stop: nothing has changed.
+  2. Write a `repair-in-progress` marker naming that `Damaged/` folder. If the
+     marker can't be written, stop: nothing has changed.
+  3. Build the repaired archive in memory: the file's records, deleted ids and
+     forgotten players. The ledger is unioned with the local one if that file
+     was readable. Health is merged back from the existing sidecar
+     (`HealthSidecarPolicy.merge`) in memory only.
+  4. Replace the three canonical files, each with an atomic write of its
+     Health-stripped content. The Health sidecar is **not** rewritten: it is
+     keyed by match id and still applies to the repaired records.
+  5. Mark the archive initialized, then delete the marker.
+  6. Only after step 5 succeeds: set `open`, publish, ask the Watch to resend,
      and push to iCloud. This push replaces the iCloud backup with the repaired
      archive, which the user confirmed.
-- If the write fails, nothing changes and the screen says "Couldn't save. Nothing
-  has been changed."
+- **If any of steps 4–5 fails**, roll back: write the verified `Damaged/`
+  copies back to the canonical paths, then delete the marker. The archive stays
+  `blocked` with its original problem, and the screen says "Couldn't save.
+  Nothing has been changed."
+- **If the rollback fails too** (for example, the disk is still full), the
+  marker stays. While the marker exists, every load — Try Again, the next
+  launch, a retry on unlock — stays `blocked(.repairIncomplete)` and first tries
+  the rollback again. It never reads the canonical files as an archive, so a
+  partly replaced set can never open, and it never pushes to iCloud. The screen
+  says "DeuceMate couldn't finish restoring the file from support. Your
+  original files are kept safely. Free up some space on your iPhone, then tap
+  Try Again."
 - Private notes are untouched. They live in their own store and are never part
   of the exchange.
 
@@ -312,10 +333,13 @@ Support's way to give the user their matches back without a reinstall:
 | 6 | Any other read error | Blocked; retried automatically on unlock or foreground, and on Try Again |
 | 7 | Watch delivers a match while blocked | The store refuses it; the Watch keeps it and resends after the archive opens |
 | 8 | User updates to a build that can read the file | The archive opens normally at launch; nothing was lost |
-| 9 | Support sends a repaired file (phase 2) | The bad files move to `Damaged/`, the repaired archive is written, then shown, synced and backed up |
+| 9 | Support sends a repaired file (phase 2) | The bad files are copied to `Damaged/` and verified, the repaired archive replaces them, then it is shown, synced and backed up |
 | 10 | Health sidecar undecodable | 1.4.0 behaviour: moved aside, archive opens, Health detail empty |
 | 11 | A 1.4.0 `.corrupt` file already exists | Left alone. Support can ask for it |
 | 12 | Fresh install, no local files | Unchanged 1.4.0 first-launch restore offer |
+| 13 | `matchHistory.json` missing on an initialized archive | Blocked (`.missing`). Never opened as empty, so iCloud is never overwritten |
+| 14 | Saving the support file fails, for example with a full disk (phase 2) | The canonical files are rolled back from the verified `Damaged/` copies; still blocked with the original problem; iCloud untouched |
+| 15 | The rollback fails too, or the app is killed mid-repair (phase 2) | The marker keeps it `blocked(.repairIncomplete)`; every load retries the rollback first, and nothing opens or pushes until it succeeds |
 
 ## 6. Accepted costs
 
@@ -361,7 +385,7 @@ Support's way to give the user their matches back without a reinstall:
 | Phase | Surface | What | Rough size |
 |---|---|---|---|
 | 1 | `[Core]` + `[iOS]` | `ArchiveOpenProblem` classification and `ArchiveSupportReport` builder (Core). `PhoneStatsStore`: no move-aside, codec decode, `archiveState`, guard at the top of `adoptOnQueue`, retry on unlock and foreground, resend request on success. Blocking view, report preview, mail and share sending. Support runbook | ~150 store + ~120 Core + ~200 UI, plus tests |
-| 2 | `[iOS]` | Open a File from Support (§4.7), `Damaged/` folder | ~150 plus tests |
+| 2 | `[iOS]` | Open a File from Support (§4.7): verified `Damaged/` copies, the `repair-in-progress` marker and rollback | ~200 plus tests |
 
 The same PRs also update (CLAUDE.md §6):
 - **CLAUDE.md §1** read-failure paragraph and the `PhoneStatsStore` row. The
@@ -393,8 +417,19 @@ The same PRs also update (CLAUDE.md §6):
 - A Health sidecar that can't be decoded still opens the archive (row 10).
 - The report's attachments are staged copies of exactly the three files, never
   the sidecar or the notes store.
-- Phase 2: a valid support file moves the old files to `Damaged/`, opens, and
-  pushes. An invalid file, or a failed write, changes nothing.
+- A missing `matchHistory.json` with the initialized marker present gives
+  `blocked(.missing)`, and nothing is pushed.
+- Phase 2:
+  - A valid support file copies the old files to `Damaged/` (verified), writes
+    the canonical files, opens, and pushes.
+  - An invalid file, or a failed copy or marker write, changes nothing.
+  - A write failure at each of the three canonical files (injected through the
+    store's storage configuration) rolls back to byte-identical originals,
+    stays blocked, and pushes nothing.
+  - A failed rollback leaves the marker. The next load stays
+    `blocked(.repairIncomplete)`, retries the rollback, and only then reports
+    the original problem.
+  - The Health sidecar is byte-identical after a repair.
 
 **On a device, by hand:**
 - *Loading* after a restart with the Watch waking the app.
