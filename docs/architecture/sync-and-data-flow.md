@@ -63,21 +63,33 @@ at Current Score issue their Watch-side changes (and private-note deletion) only
 after the local commit succeeds. After a transient Watch delivery write failure
 commits on retry, the phone also reconciles committed tags and match-type
 revisions for the retried IDs. A failed local write puts the deletion-intent
-files back as they were, so a delete the user was told didn't happen can't
-happen at the next launch.
+files (and any overwritten Health sidecar, with backup exclusion reapplied)
+back as they were, so a delete the user was told didn't happen can't happen at
+the next launch or drop Health measurements.
 
 While the archive is paused, the iPhone refuses Watch archive deliveries, so the
 Watch holds the only copy of new matches until a retry or restore asks for its
 full history. The Watch still trims to its 25-match cap meanwhile
 (TECHNICAL_DEBT #29).
 
-**iCloud push floor.** Every outbound backup push goes through Core's
+**iCloud push floor & recovery.** Every outbound backup push goes through Core's
 `BackupPushGuard`: a match may leave the backup only with a tombstone or a
 confirmed Replace import. Otherwise the history file is withheld ("iCloud backup
 paused") while tombstones and forgotten players are still pushed. The baseline
-is the iCloud-account-scoped `backupManifest.json`, or the backup's own match
-ids when that is missing. Bring Them Back and Remove from Backup resolve a
-withheld push.
+is the iCloud-account-scoped, device-backup-excluded `backupManifest.json`, or
+the backup's own match ids (`BackupRecordID`) when that is missing or belongs
+to another account. When the remote backup files themselves are unreadable or
+declare a newer schema version, pushes pause visibly (`RemoteBackupProblemNotice`)
+instead of claiming `"Backed up to iCloud"`. First-launch restore reads the
+backup leniently (`LenientRecordList`), excludes tombstoned matches from its
+preview, names any newer-format matches that stay in iCloud, and defers without
+marking initialized if *every* match requires a newer build. Bring Them Back
+(preserving local Health sidecar values and reconciling remotely tombstoned ids)
+and Remove from Backup (acting only on the confirmed id set after copying raw
+iCloud history to `MatchArchive/Recovered/`) resolve a withheld push. Before a
+confirmed Replace pushes over iCloud, DeuceMate copies the current iCloud
+`matchHistory.json` raw bytes into `MatchArchive/Recovered/` and holds the push
+until that copy exists (`pendingReplaceManifest`).
 
 **Live recovery (16 November 2026):** activation, reconnect, phone foreground,
 opening the live board and Sync Now request the existing Watch model's current
@@ -384,22 +396,30 @@ document picker and the confirmation dialogs, persisting through
   resulting record is scrubbed of forgotten players. In Merge mode, tags merge
   by their own clock (§5), so an older export cannot drop newer tags. Export
   writes the phone's ledger into the file.
-- **Private notes are never in the file.** They live in the iPhone-only,
-  backup-excluded `MatchNotesStore` sidecar. Merge leaves every note alone; a
-  confirmed Replace keeps notes only for matches in the file, and the Replace
-  confirmation states how many notes on other matches will be deleted
-  (`MatchNotesPolicy.replacePlan`). Permanently deleting a match also deletes its
-  note.
+- **Private notes are omitted by default.** They live in the iPhone-only,
+  backup-excluded `MatchNotesStore` sidecar and are only written to a manual
+  archive file after an explicit per-export opt-in (`ArchiveExportOptionsSheet`).
+  Merge leaves every existing note alone (and merges any opted-in file notes by
+  revision order); a confirmed Replace keeps notes only for matches in the file,
+  and the Replace confirmation states how many notes on other matches will be
+  deleted (`MatchNotesPolicy.replacePlan`). Permanently deleting a match also
+  deletes its note.
 
 This flow only ever writes the **phone** archive (via the same `adoptOnQueue`
 funnel as any other mutation): it does **not** push to the watch, and the watch
-stays the source of truth for live matches (§1). Because it goes through the
-normal funnel, full records remain in memory while `HealthSidecarPolicy` writes
-a health-stripped `matchHistory.json` and a backup-excluded Health sidecar. The
-stripped result is subsequently pushed to the iCloud backup on the usual
-debounced schedule — so a Replace also overwrites the previous iCloud backup
-once it lands. A full-fidelity manual import can repopulate missing sidecar data
-after an automatic restore.
+stays the source of truth for live matches (§1). Replace is refused while the
+local archive is blocked with `.newerVersion` (updating DeuceMate is the fix),
+and Merge stays refused while any canonical suspension is active. Because
+imports go through the normal funnel, full records remain in memory while
+`HealthSidecarPolicy` writes a health-stripped `matchHistory.json` and a
+backup-excluded Health sidecar. For a confirmed Replace, DeuceMate copies the
+current iCloud `matchHistory.json` (raw bytes) to `MatchArchive/Recovered/`
+first and holds the push until that copy exists (`pendingReplaceManifest`),
+clearing any pending first-launch restore prompt and marking the archive
+initialized when iCloud is available — so the backup then matches the imported
+archive without risking unrecoverable loss of iCloud-only matches. A
+full-fidelity manual import can repopulate missing sidecar data after an
+automatic restore.
 
 
 ## Animated guide has no sync route

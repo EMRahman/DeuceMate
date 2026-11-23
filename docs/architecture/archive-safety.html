@@ -170,16 +170,18 @@ figcaption { font-size: 0.88rem; color: var(--muted); max-width: 80ch; }
 <div class="wrap">
 
 <header class="top">
-  <span class="eyebrow">DeuceMate · persistence safety · 22 November 2026</span>
+  <span class="eyebrow">DeuceMate · persistence safety · 23 November 2026</span>
   <h1>DeuceMate Archive Safety</h1>
   <p class="lede">What used to go wrong with a saved match archive, and what each recent change does about it. The iPhone archive is the copy of record; iCloud is a one-way backup; the Watch keeps only its newest 25 matches. Every scenario below is about one rule: <strong>a file that can't be read is never treated as an empty archive.</strong></p>
-  <p class="snapshot">Snapshot of 22 November 2026, after #228–#231 merged. It is not kept up to date: for current behaviour see <code>CLAUDE.md</code>, <code>docs/features/TECHNICAL_DEBT.md</code> (#18, #19, #4a, #29) and <code>sync-and-data-flow.md</code>.</p>
+  <p class="snapshot">Snapshot of 23 November 2026, covering #228–#236. It is not kept continuously up to date: for current behaviour see <code>CLAUDE.md</code>, <code>docs/features/TECHNICAL_DEBT.md</code> (#18, #19, #4a, #29) and <code>sync-and-data-flow.md</code>.</p>
   <div class="prs" aria-label="Changes covered">
     <span class="pr"><b>#228</b> fail closed, push floor, recovery</span>
     <span class="pr"><b>#229</b> versioned readers, Watch warnings</span>
     <span class="pr"><b>#230</b> tracks the Watch cap gap</span>
     <span class="pr"><b>#231</b> failed delete fix, failure wording</span>
-    <span class="pr open"><b>#232</b> docs refresh (open)</span>
+    <span class="pr"><b>#232</b> docs refresh</span>
+    <span class="pr"><b>#234</b> Replace backup copy, lenient first restore</span>
+    <span class="pr open"><b>#236</b> recovery &amp; remote edge-case fixes</span>
   </div>
 </header>
 
@@ -431,7 +433,7 @@ figcaption { font-size: 0.88rem; color: var(--muted); max-width: 80ch; }
 
       <rect class="box-bad" x="10" y="128" width="470" height="160" rx="10"/>
       <text class="tlab t-bad" x="30" y="154">Before #231</text>
-      <text class="t" x="30" y="182">Popover: "Match could not be deleted"</text>
+      <text class="t" x="30" y="182">Alert: "Match could not be deleted on this iPhone"</text>
       <text class="t" x="30" y="206">Note kept, Watch not told</text>
       <text class="t" x="30" y="230">The tombstone from step 2 stays on disk</text>
       <text class="t t-bad" x="30" y="254" style="font-weight:600">Next launch replays it: the match disappears</text>
@@ -441,12 +443,12 @@ figcaption { font-size: 0.88rem; color: var(--muted); max-width: 80ch; }
       <text class="tlab t-good" x="520" y="154">Now</text>
       <text class="t" x="520" y="182">Popover: "Match Not Deleted · Nothing has been changed."</text>
       <text class="t" x="520" y="206">Note kept, Watch not told</text>
-      <text class="t" x="520" y="230">Files 1 and 2 put back to their earlier bytes</text>
-      <text class="t t-good" x="520" y="254" style="font-weight:600">Next launch: the match is still there</text>
+      <text class="t" x="520" y="230">Files 1, 2 (and any rewritten 3) put back to earlier bytes</text>
+      <text class="t t-good" x="520" y="254" style="font-weight:600">Next launch: the match and its Health sidecar stay intact</text>
       <text class="ts" x="520" y="276">A crash mid-write still completes the delete, on purpose</text>
     </svg>
     </div>
-    <figcaption>The same shape applied to Forget Player, whose ledger is file 1. A file that couldn't be read before the write is left alone rather than deleted; this was found by an existing test while building the fix.</figcaption>
+    <figcaption>The same shape applied to Forget Player, whose ledger is file 1. #236 also restores <code>healthData.json</code> (and reapplies its backup-exclusion flag) if file 4 fails after file 3 was written. A file that couldn't be read before the write is left alone rather than deleted.</figcaption>
   </figure>
   <p class="pinned">Pinned by <code>deleteThatFailsAfterItsTombstoneIsWrittenLeavesNoTombstoneBehind</code> <code>forgetThatFailsAfterTheLedgerIsWrittenLeavesTheLedgerAsItWas</code> · removing the fix makes both fail</p>
 </section>
@@ -516,24 +518,31 @@ figcaption { font-size: 0.88rem; color: var(--muted); max-width: 80ch; }
       <div class="ttl">Matches Couldn't Be Read <span class="tag">undecodable</span></div>
       <p class="when">Damaged, or written by an app that adds a value this build lacks. Retrying won't help.</p>
       <ul class="acts">
-        <li><span class="btn">Restore from iCloud</span><span>Reads the backup one match at a time, keeps the local Health data, and says how many matches stay behind for a newer app.</span></li>
-        <li><span class="btn">Save a Copy</span><span>Shares the kept files and leaves them in place.</span></li>
-        <li><span class="btn">Replace import</span><span>Settings › Backup &amp; Transfer. Merge stays refused while paused.</span></li>
+        <li><span class="btn">Restore from iCloud</span><span>Reads the backup one match at a time, excludes tombstoned matches from the preview, keeps local Health data, and says when matches require a newer app (first-launch restore is lenient too, deferring without marking initialized if every match requires a newer build).</span></li>
+        <li><span class="btn">Save a Copy</span><span>Shares the kept files (including blocked legacy <code>Documents/</code> files) and leaves them in place; staged copies stay available after the share sheet closes and are swept after 24 h.</span></li>
+        <li><span class="btn">Replace import</span><span>Settings › Backup &amp; Transfer. Merge stays hidden/refused while paused; before pushing over iCloud, DeuceMate copies the current iCloud history raw bytes to <code>Recovered/</code> first.</span></li>
       </ul>
     </div>
     <div class="notice">
       <div class="ttl">Update DeuceMate to Read Matches <span class="tag">newerVersion</span></div>
       <p class="when">A file states a version newer than this app supports.</p>
       <ul class="acts">
-        <li><span class="btn">Save a Copy</span><span>The only action offered. Updating the app is the fix.</span></li>
+        <li><span class="btn">Save a Copy</span><span>The only action offered (Settings also disables Import/Replace while <code>newerVersion</code> is active). Updating the app is the fix.</span></li>
       </ul>
     </div>
     <div class="notice">
       <div class="ttl">iCloud Backup Paused <span class="tag">push withheld</span></div>
       <p class="when">The backup holds matches this iPhone lost, with no deletion recorded.</p>
       <ul class="acts">
-        <li><span class="btn">Bring Them Back</span><span>Adds those matches back to the iPhone from the backup.</span></li>
-        <li><span class="btn">Remove from Backup</span><span>Copies the backup aside, then lets only those matches go. No tombstone, so the Watch can still send them back.</span></li>
+        <li><span class="btn">Bring Them Back</span><span>Adds those matches back to the iPhone from the backup (preserving local Health sidecar data, reconciling remote deletions, and reporting adoption even if the follow-up push retries later).</span></li>
+        <li><span class="btn">Remove from Backup</span><span>Copies the backup aside, then lets only the confirmed matches go (never mutating the manifest on failure). No tombstone, so the Watch can still send them back.</span></li>
+      </ul>
+    </div>
+    <div class="notice">
+      <div class="ttl">iCloud Backup Needs an Update / Paused <span class="tag">remote problem</span></div>
+      <p class="when">The remote iCloud backup files themselves could not be read cleanly, or were written by a newer version of DeuceMate.</p>
+      <ul class="acts">
+        <li><span class="btn">Automatic pause</span><span>Remote files stay untouched, automatic pushes pause visibly instead of claiming "Backed up to iCloud", and matches on this iPhone keep working locally until DeuceMate is updated or iCloud recovers.</span></li>
       </ul>
     </div>
   </div>
@@ -584,7 +593,9 @@ figcaption { font-size: 0.88rem; color: var(--muted); max-width: 80ch; }
     <li><span class="n">#229</span><span>#19 step 1 and #4a: scenarios 7 and 8. <span class="st merged">merged</span></span></li>
     <li><span class="n">#230</span><span>Records the Watch cap gap as TECHNICAL_DEBT #29. <span class="st merged">merged</span></span></li>
     <li><span class="n">#231</span><span>Fixes scenario 5, adds the failure wording, ports the stack's tests. <span class="st merged">merged</span></span></li>
-    <li><span class="n">#232</span><span>Updates TECHNICAL_DEBT, the sync doc and the inventory to match the code. <span class="st openpr">open</span></span></li>
+    <li><span class="n">#232</span><span>Updates TECHNICAL_DEBT, the sync doc and the inventory to match the code. <span class="st merged">merged</span></span></li>
+    <li><span class="n">#234</span><span>Recovery review fixes: Replace keeps an iCloud raw copy, lenient first restore, confirmed-set Remove, honest outcomes, plus <code>ARCHIVE_SNAPSHOTS_PLAN.md</code>. <span class="st merged">merged</span></span></li>
+    <li><span class="n">#236</span><span>Closes recovery &amp; remote edge cases: clamps imported ledger version, handles all-newer backups, surfaces remote backup problems visibly, fixes Replace/Remove/Bring-Back/confirmRestore/rollback seams, excludes <code>backupManifest.json</code> from device backups. <span class="st openpr">open</span></span></li>
   </ol>
 </section>
 

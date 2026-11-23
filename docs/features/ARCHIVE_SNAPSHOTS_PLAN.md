@@ -158,10 +158,11 @@ Application Support/MatchArchive/Snapshots/
     matchHistory.json    health-stripped, versioned envelope
 ```
 
-- Same backup-exclusion rule as the canonical store: directory exclusion
-  verified before every write, file exclusion reapplied after (as
-  `MatchNotesStore` does). A snapshot must not ride into an iOS device backup
-  that the canonical archive is excluded from.
+- Same backup-exclusion rule as `MatchNotesStore` and `healthData.json`:
+  directory exclusion verified before every write, file exclusion reapplied
+  after. Unlike the health-stripped canonical archive (which rides in iOS
+  device backups), snapshots stay device-local so multiple generations do not
+  bloat device backups or resurrect stale state on restore.
 - Written atomically to a temporary name inside `Snapshots/`, then renamed, so a
   crash leaves an incomplete directory (ignored and swept) and never a
   half-snapshot that looks complete.
@@ -215,7 +216,8 @@ newest weekly. Decide on the measurement, not on "archives are small".
   non-`.cancel` safe choice (iOS 26+ hides cancel-role buttons in popover
   dialogs, per CLAUDE.md).
 - Failure after adoption reports what changed (the lesson of "Nothing has been
-  changed" being wrong in Bring Them Back, fixed alongside this plan).
+  changed" being wrong in Bring Them Back — fixed in #234 — and in Remove from
+  Backup's `.withheld` branch — fixed in #236).
 
 ## 7. Fail-closed interplay
 

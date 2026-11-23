@@ -137,7 +137,8 @@ is backup-excluded; the only full-fidelity release is user-gated.
 | Sink | Protection | Enforced by | Guarded by test |
 |---|---|---|---|
 | Phone canonical `matchHistory.json` | 🔒 stripped | `HealthSidecarPolicy.split` inside `PhoneStatsStore.writeCanonicalOnQueue` | `HealthSidecarPolicyTests`, `PhoneStatsStoreTests` |
-| Phone Health sidecar `healthData.json` | 🚫 excluded | `PhoneStatsStore.excludeFromBackup` (verify-or-discard) | `PhoneStatsStoreTests` |
+| Phone Health sidecar `healthData.json` | 🚫 excluded | `PhoneStatsStore.excludeFromBackup` (verify-or-discard; rolled back and re-excluded if `matchHistory.json` fails) | `PhoneStatsStoreTests` |
+| Phone recovery copies (`MatchArchive/Recovered/`, `<tmp>/DeuceMate Archive Copies/`) | 🔒 stripped (never copies sidecar) | `PhoneStatsStore.preservedFileEntries` / `settlePendingReplaceOnQueue` copy only health-stripped canonical/iCloud files, never `healthData.json` (an unreadable pre-sidecar legacy file before migration is the sole exception) | `PhoneStatsStoreTests` |
 | iCloud ubiquity backup | 🔒 stripped again | `ArchiveBackupPolicy.backupSnapshot` inside `PhoneStatsStore.pushBackupOnQueue` | `ArchiveBackupPolicyTests` |
 | Watch `matchHistory.json` | 🚫 excluded | `StatsStore` → `BackupExcludedFileWriter` | `StatsStoreTests` |
 | Watch live `appState.json` | 🚫 excluded | `ScoreViewModel.saveState` → `BackupExcludedFileWriter` | *(none dedicated — see §6)* |

@@ -6,7 +6,7 @@ Swift. Everything here is written in plain English and rendered by GitHub direct
 (the diagrams are [Mermaid](https://mermaid.js.org/) blocks inside Markdown, so they
 stay diffable and AI assistants can update them alongside code changes).
 
-**The five documents:**
+**The six documents:**
 
 | Document | Question it answers |
 |---|---|
