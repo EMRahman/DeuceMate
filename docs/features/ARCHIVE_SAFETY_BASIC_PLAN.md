@@ -94,11 +94,23 @@ Today `loadCanonicalOnQueue` reads `deletedMatchIDs.json`,
 Changes:
 - **Never move a file aside.** Delete the `.corrupt` move (and the
   `removeItem(at: aside)` that destroys an earlier `.corrupt` copy).
-- **Decode through `PersistedArchiveCodec.decode`** (#229), so an envelope with a
-  newer `schemaVersion` is reported as `newerSchemaVersion`. Note the limit: 1.4.0
+- **Decode `matchHistory.json` and `deletedMatchIDs.json` through
+  `PersistedArchiveCodec.decode`** (#229), so an envelope with a newer
+  `schemaVersion` is reported as `newerSchemaVersion`. Note the limit: 1.4.0
   still *writes* bare arrays, so an unknown enum value inside a bare array comes
   back as an ordinary `DecodingError`. The app **cannot** tell "needs a newer
   version" from "damaged" in that case, and the copy (§4.5) must not pretend it can.
+- **Don't use that codec for `forgottenPlayers.json`.** The ledger is a plain
+  JSON object (`{"schemaVersion": 1, "playerIDs": [...]}`), not an array or an
+  envelope. `PersistedArchiveCodec.decode` treats every object as an envelope
+  and requires a `format` header, so it would block every healthy archive. The
+  ledger keeps decoding with its own `ForgottenPlayerLedger` `Codable`, plus one
+  added check: a `schemaVersion` above `ForgottenPlayerLedger.currentSchemaVersion`
+  is `.newerVersion`. Invalid JSON, or JSON that isn't an object, is
+  `.undecodable`.
+  - *Accepted limit:* the ledger's decoder is deliberately lenient (`try?` per
+    field). A well-formed object with a damaged `playerIDs` value reads as an
+    empty ledger rather than failing. This plan doesn't change that.
 - **Classify the failure** into one `ArchiveOpenProblem` (pure, in Core):
 
   | Case | Cause | Result |
@@ -282,10 +294,33 @@ Support's way to give the user their matches back without a reinstall:
      verification or the manifest write fails, stop: nothing has changed.
   2. Write a `repair-in-progress` marker naming that snapshot folder. If the
      marker can't be written, stop: nothing has changed.
-  3. Build the repaired archive in memory: the file's records, deleted ids and
-     forgotten players. The ledger is unioned with the local one if that file
-     was readable. Health is merged back from the existing sidecar
-     (`HealthSidecarPolicy.merge`) in memory only.
+  3. Build the repaired archive in memory:
+     - **Records:** the file's records.
+     - **Deleted ids:** the readable local tombstones, unioned with the file's
+       `deletedMatchIDs` (below). Any record whose id is in that union is
+       dropped. Deletion wins, as in the normal Watch merge, so a deleted match
+       can't return through the file or the Watch resend in step 6.
+     - **Forgotten players:** the file's ledger, unioned with the local one if
+       that file was readable. Then every record is scrubbed with the union.
+     - **Health:** merged back from the existing sidecar
+       (`HealthSidecarPolicy.merge`), in memory only.
+
+     **How deleted ids travel.** `ManualMatchArchiveBackup.Archive` carries
+     records, forgotten players and notes, but no deleted ids: an ordinary import
+     takes tombstones from the local store. Add one optional field,
+     `deletedMatchIDs: [UUID]?`, following CLAUDE.md §4's backward-compatibility
+     recipe (`decodeIfPresent`, nil = no information, still schema 1, pinned in
+     `ManualMatchArchiveBackupTests`):
+     - Ordinary exports don't write it, and ordinary Backup & Transfer imports
+       ignore it, so their behaviour is unchanged. Only Open a File from
+       Support reads it.
+     - Support fills it from the repaired `deletedMatchIDs.json` whenever that
+       file was the damaged one, or was unreadable. When the local file is
+       readable, its ids are kept anyway, so the field may be omitted.
+     - If the local tombstone file was damaged and the support file has no
+       `deletedMatchIDs`, refuse the file ("This file is missing deleted-match
+       information. Please contact support."). Otherwise a deleted match could
+       come back from the Watch.
   4. Replace the three canonical files, each with an atomic write of its
      Health-stripped content. The Health sidecar is **not** rewritten: it is
      keyed by match id and still applies to the repaired records.
@@ -322,6 +357,10 @@ Support's way to give the user their matches back without a reinstall:
    support already holds.
 4. **Genuinely damaged.** Repair by hand using the coding path. Validate it with
    `swift test`, or a disposable simulator import, through `ManualMatchArchiveBackup`.
+   Always carry the deletion history: copy the ids from the attached
+   `deletedMatchIDs.json` (repaired if it was the damaged file) into the
+   support file's `deletedMatchIDs`. Leave every match with one of those ids out
+   of `records`, and copy the forgotten-players ledger into `forgottenPlayers`.
    Send it back for **Open a File from Support** (phase 2). Before phase 2 ships,
    the only options are waiting for phase 2 or, if support has confirmed the iCloud
    backup is good, a reinstall.
@@ -391,7 +430,7 @@ Support's way to give the user their matches back without a reinstall:
 | Phase | Surface | What | Rough size |
 |---|---|---|---|
 | 1 | `[Core]` + `[iOS]` | `ArchiveOpenProblem` classification and `ArchiveSupportReport` builder (Core). `PhoneStatsStore`: no move-aside, codec decode, `archiveState`, guard at the top of `adoptOnQueue`, retry on unlock and foreground, resend request on success. Blocking view, report preview, mail and share sending. Support runbook | ~150 store + ~120 Core + ~200 UI, plus tests |
-| 2 | `[iOS]` | Open a File from Support (§4.7): verified `Damaged/` copies, the `repair-in-progress` marker and rollback | ~200 plus tests |
+| 2 | `[Core]` + `[iOS]` | Open a File from Support (§4.7): verified `Damaged/` copies, the `repair-in-progress` marker and rollback, and the optional `deletedMatchIDs` field on `ManualMatchArchiveBackup.Archive` | ~230 plus tests |
 
 The same PRs also update (CLAUDE.md §6):
 - **CLAUDE.md §1** read-failure paragraph and the `PhoneStatsStore` row. The
@@ -425,6 +464,10 @@ The same PRs also update (CLAUDE.md §6):
   the sidecar or the notes store.
 - A missing `matchHistory.json` with the initialized marker present gives
   `blocked(.missing)`, and nothing is pushed.
+- A healthy archive written by `writeCanonicalOnQueue` opens: an existing
+  `forgottenPlayers.json` object (no `format` header) is read as a ledger, not
+  rejected as an envelope. A ledger with a `schemaVersion` above the current one
+  gives `.newerVersion`, and invalid JSON gives `.undecodable`.
 - Phase 2:
   - A valid support file copies the old files to `Damaged/` (verified), writes
     the canonical files, opens, and pushes.
@@ -440,6 +483,14 @@ The same PRs also update (CLAUDE.md §6):
     `blocked(.repairIncomplete)`, retries the rollback, and only then reports
     the original problem.
   - The Health sidecar is byte-identical after a repair.
+  - Deleted ids: readable local tombstones survive a repair whose file omits
+    `deletedMatchIDs`. The file's `deletedMatchIDs` are unioned in. A record
+    with a tombstoned id is dropped. After the Watch resends a tombstoned match,
+    it is still absent. A damaged local tombstone file plus a support file
+    without `deletedMatchIDs` is refused and changes nothing.
+  - Core: `ManualMatchArchiveBackup` decodes an export without
+    `deletedMatchIDs` as nil, round-trips one with it, and the ordinary
+    importer ignores it.
 
 **On a device, by hand:**
 - *Loading* after a restart with the Watch waking the app.
