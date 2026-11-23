@@ -502,6 +502,18 @@ struct SettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(archiveTransferStatus.isSuccess ? .green : .red)
                 }
+                NavigationLink {
+                    ArchiveDiagnosticsView()
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Archive Diagnostics")
+                        Spacer()
+                        if store.archiveDamageStatus.needsAttention {
+                            Text("Needs attention").foregroundStyle(.orange)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                }
             } header: {
                 Text("Backup & Transfer")
             } footer: {

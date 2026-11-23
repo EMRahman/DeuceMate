@@ -226,11 +226,98 @@ struct PhoneStatsStoreTests {
 
         let store = fixture.makeICloudStore()
         #expect(!store.isPausedForDamagedArchive)
+        // A legacy copy still needs attention in Archive Diagnostics; a sidecar copy doesn't.
+        #expect(store.archiveDamageStatus == (copyName.hasPrefix("healthData") ? .noProblems : .legacyOnly))
         store.syncICloudBackup()
         _ = store.loadHistory()
 
         let pushed = try JSONDecoder().decode([MatchRecord].self, from: Data(contentsOf: fixture.iCloudHistoryURL))
         #expect(pushed.map(\.id) == [kept.id])
+    }
+
+    // MARK: - Archive Diagnostics (ARCHIVE_DERISK_PLAN.md §5)
+
+    /// Every file in a folder with its bytes, to prove a pass changed nothing.
+    private func contents(of directory: URL) throws -> [String: Data] {
+        var result: [String: Data] = [:]
+        for name in try FileManager.default.contentsOfDirectory(atPath: directory.path) {
+            result[name] = try Data(contentsOf: directory.appendingPathComponent(name))
+        }
+        return result
+    }
+
+    @Test func inventoryListsEveryFileAndDecodesDamagedCopiesWithoutChangingAnything() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let kept = record(health: false)
+        try encode([kept], to: fixture.historyURL)
+        try encode([UUID](), to: fixture.tombstoneURL)
+        try Data("not json {{{".utf8).write(to: fixture.canonical.appendingPathComponent("matchHistory.json.corrupt-20261123T101500"))
+        try Data("[]".utf8).write(to: fixture.canonical.appendingPathComponent("deletedMatchIDs.json.corrupt"))
+        try encode([UUID](), to: fixture.legacyDocuments.appendingPathComponent("deletedMatchIDs.json"))
+        try encode([kept], to: fixture.iCloudHistoryURL)
+        try Data().write(to: fixture.iCloud.appendingPathComponent(".deletedMatchIDs.json.icloud"))
+        let store = fixture.makeICloudStore()
+        let before = try [fixture.canonical, fixture.legacyDocuments, fixture.iCloud].map(contents(of:))
+
+        let inventory = store.archiveInventory()
+
+        #expect(store.archiveDamageStatus == .damaged)
+        #expect(inventory.localFiles.map { "\($0.folder)/\($0.name)" } == [
+            "MatchArchive/deletedMatchIDs.json", "MatchArchive/deletedMatchIDs.json.corrupt",
+            "MatchArchive/matchHistory.json", "MatchArchive/matchHistory.json.corrupt-20261123T101500",
+            "Documents/deletedMatchIDs.json"
+        ])
+        #expect(inventory.localFiles.filter(\.isDamagedCopy).count == 2)
+        #expect(inventory.localFiles.allSatisfy { $0.size != nil && $0.modified != nil })
+        // The not-downloaded placeholder is listed under its real name.
+        #expect(inventory.iCloudFiles?.map(\.name) == ["deletedMatchIDs.json", "matchHistory.json"])
+        let decodes = Dictionary(uniqueKeysWithValues: inventory.damagedCopies.map { ($0.name, $0.decode) })
+        #expect(decodes["deletedMatchIDs.json.corrupt"] == .readable)
+        guard case .failed(let errorType, _, _)? = decodes["matchHistory.json.corrupt-20261123T101500"] else {
+            Issue.record("expected the dated copy to fail decoding")
+            return
+        }
+        #expect(errorType == "dataCorrupted")
+        #expect(try [fixture.canonical, fixture.legacyDocuments, fixture.iCloud].map(contents(of:)) == before)
+
+        // iCloud unavailable: its files are reported as unlistable.
+        #expect(fixture.makeStore().archiveInventory().iCloudFiles == nil)
+    }
+
+    @Test func sharingStagesOnlyBackedUpDamagedCopiesAndEndingTheGenerationRemovesThem() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let historyCopy = fixture.canonical.appendingPathComponent("matchHistory.json.corrupt-20261123T101500")
+        let sidecarCopy = fixture.canonical.appendingPathComponent("healthData.json.corrupt-20261123T101500")
+        try Data("not json {{{".utf8).write(to: historyCopy)
+        try Data("health {{{".utf8).write(to: sidecarCopy)
+        let store = fixture.makeStore()
+        let inventory = store.archiveInventory()
+        let report = ArchiveDiagnostics.Report(
+            appVersion: "1", appBuild: "1", osVersion: "iOS", date: inventory.date,
+            iCloudStatus: store.iCloudBackupStatus, localFiles: inventory.localFiles,
+            iCloudFiles: inventory.iCloudFiles, damagedCopies: inventory.damagedCopies
+        )
+        #expect(report.status == .damaged)
+        #expect(store.iCloudBackupStatus == .pausedDamagedArchive)
+        let staging = ExportStaging(rootURL: fixture.root.appendingPathComponent("Staging", isDirectory: true))
+        let generation = staging.beginGeneration()
+
+        let reportURL = try staging.write(Data(report.markdown.utf8), named: report.filename, in: generation)
+        // Even if asked, the Health sidecar's copy is never attached.
+        let copies = try store.copyDamagedCopies(
+            report.attachableCopyNames + [sidecarCopy.lastPathComponent], to: generation.directoryURL
+        )
+
+        #expect(copies.map(\.lastPathComponent) == [historyCopy.lastPathComponent])
+        #expect(try Data(contentsOf: copies[0]) == Data("not json {{{".utf8))
+        #expect(FileManager.default.fileExists(atPath: reportURL.path))
+        staging.endGeneration(generation)
+        #expect(!FileManager.default.fileExists(atPath: generation.directoryURL.path))
+        // The originals stay where they are.
+        #expect(FileManager.default.fileExists(atPath: historyCopy.path))
+        #expect(FileManager.default.fileExists(atPath: sidecarCopy.path))
     }
 
     @Test func unreadableMainSuspendsWritesInsteadOfReplacingArchive() throws {

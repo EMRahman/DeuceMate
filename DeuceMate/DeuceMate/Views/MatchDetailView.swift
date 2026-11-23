@@ -174,14 +174,7 @@ struct MatchDetailView: View {
             onPhone: store.history.contains { $0.id == record.id },
             watchIDs: syncService.onWatchIDs
         )
-        let iCloudStatus = ICloudBackupCopy.current(
-            isEnabled: true,
-            isPausedForDamagedArchive: store.isPausedForDamagedArchive,
-            isAvailable: store.isICloudAvailable,
-            isRestoring: store.isRestoringFromICloud,
-            hasPendingRestore: store.pendingRestorePreview != nil,
-            isUploaded: store.isBackupUploaded
-        )
+        let iCloudStatus = store.iCloudBackupStatus
         VStack(alignment: .leading, spacing: 4) {
             if syncService.isPaired {
                 HStack(spacing: 6) {

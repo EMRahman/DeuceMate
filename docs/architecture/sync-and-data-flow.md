@@ -64,10 +64,14 @@ restore are paused on every launch, so the iCloud backup keeps the matches as
 they were. The Matches screen says "iCloud backup paused — your iCloud copy is
 unchanged". Only an app update that recovers the copies and deletes them ends
 the pause. A damaged Health sidecar, or an undated `.corrupt` file left by
-1.4.0, doesn't pause anything. This is PR A of
-[`ARCHIVE_DERISK_PLAN.md`](../features/ARCHIVE_DERISK_PLAN.md); its PR B adds
-Archive Diagnostics, and the full redesign
-([`ARCHIVE_SAFETY_PLAN.md`](../features/ARCHIVE_SAFETY_PLAN.md)) is deferred.
+1.4.0, doesn't pause anything. Settings › Backup & Transfer › Archive
+Diagnostics (also opened by tapping the paused line) lists every archive file on
+the iPhone and in iCloud without reading iCloud contents, starting a download or
+writing anything, and shares a Markdown report for support or a coding agent,
+optionally with the damaged files. Both parts are
+[`ARCHIVE_DERISK_PLAN.md`](../features/ARCHIVE_DERISK_PLAN.md); the full
+redesign ([`ARCHIVE_SAFETY_PLAN.md`](../features/ARCHIVE_SAFETY_PLAN.md)) is
+deferred.
 
 **Live recovery (16 November 2026):** activation, reconnect, phone foreground,
 opening the live board and Sync Now request the existing Watch model's current
