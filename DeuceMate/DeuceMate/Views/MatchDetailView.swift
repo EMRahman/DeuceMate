@@ -50,7 +50,6 @@ struct MatchDetailView: View {
     /// Retired export generations whose files the open share sheet is still
     /// handing out; deleted when that sheet closes (`releaseHeldExports`).
     @State private var exportGenerationsHeldByShare: Set<ExportStaging.Generation> = []
-    @State private var showSaveFailure = false
     @State private var showEndAtCurrentScoreConfirmation = false
     @State private var showMatchInfoEditor = false
     @State private var showNotesEditor = false
@@ -180,8 +179,7 @@ struct MatchDetailView: View {
             isAvailable: store.isICloudAvailable,
             isRestoring: store.isRestoringFromICloud,
             hasPendingRestore: store.pendingRestorePreview != nil,
-            isUploaded: store.isBackupUploaded,
-            isBackupPaused: store.isArchiveBlocked || store.isBackupWithheld
+            isUploaded: store.isBackupUploaded
         )
         VStack(alignment: .leading, spacing: 4) {
             if syncService.isPaired {
@@ -224,7 +222,7 @@ struct MatchDetailView: View {
             }
             Label(iCloudStatus.text, systemImage: iCloudStatus.systemImage)
                 .foregroundStyle(
-                    iCloudStatus == .unavailable || iCloudStatus == .paused ? AnyShapeStyle(.orange) :
+                    iCloudStatus == .unavailable ? AnyShapeStyle(.orange) :
                     iCloudStatus == .pendingRestore ? AnyShapeStyle(.blue) :
                     AnyShapeStyle(.secondary)
                 )
@@ -920,11 +918,6 @@ struct MatchDetailView: View {
         .sheet(isPresented: $showAICoachSheet) {
             aiCoachSheet
         }
-        .alert(ArchiveSaveFailureCopy.matchNotSavedTitle, isPresented: $showSaveFailure) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(ArchiveSaveFailureCopy.message(savingPaused: store.isArchiveBlocked))
-        }
         .confirmationDialog(
             "End at current score?",
             isPresented: $showEndAtCurrentScoreConfirmation,
@@ -1042,10 +1035,7 @@ struct MatchDetailView: View {
         let completed = latest.endingAtCurrentScore()
         let shouldUpdateWatch = syncService.onWatchIDs.contains(record.id)
             || syncService.activeMatchID == record.id
-        guard store.appendMatchDurably(completed) else {
-            showSaveFailure = true
-            return
-        }
+        store.appendMatch(completed)
         if shouldUpdateWatch {
             syncService.sendMatchToWatch(completed)
         }

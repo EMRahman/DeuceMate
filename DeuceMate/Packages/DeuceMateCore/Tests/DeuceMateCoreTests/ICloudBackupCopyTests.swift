@@ -81,18 +81,7 @@ final class ICloudBackupCopyTests: XCTestCase {
         )
     }
 
-    func test_caseCount_isSeven() {
-        // `.paused` (archive writes suspended or backup push withheld, TECHNICAL_DEBT #18) is the seventh.
-        XCTAssertEqual(ICloudBackupCopy.allCases.count, 7)
-    }
-
-    // MARK: - Archive suspended / push withheld (TECHNICAL_DEBT #18)
-
-    func test_current_pausedWhenBackupPaused_outranksEverythingButToggleOff() {
-        XCTAssertEqual(ICloudBackupCopy.current(isEnabled: true, isAvailable: true, isUploaded: true, isBackupPaused: true), .paused)
-        XCTAssertEqual(ICloudBackupCopy.current(isEnabled: true, isAvailable: false, isBackupPaused: true), .paused)
-        XCTAssertEqual(ICloudBackupCopy.current(isEnabled: true, isAvailable: true, isRestoring: true, hasPendingRestore: true, isBackupPaused: true), .paused)
-        XCTAssertEqual(ICloudBackupCopy.current(isEnabled: false, isAvailable: true, isBackupPaused: true), .notBackedUp)
-        XCTAssertNotEqual(ICloudBackupCopy.paused.text, ICloudBackupCopy.backedUp.text)
+    func test_caseCount_isSix() {
+        XCTAssertEqual(ICloudBackupCopy.allCases.count, 6)
     }
 }

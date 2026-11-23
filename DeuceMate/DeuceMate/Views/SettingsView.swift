@@ -445,13 +445,9 @@ struct SettingsView: View {
                 } label: {
                     Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
                 }
-                .disabled(store.isArchiveBlocked || syncService.activationState != "Activated" || syncStatus == .inFlight)
+                .disabled(syncService.activationState != "Activated" || syncStatus == .inFlight)
 
-                if store.watchArchiveSaveFailed {
-                    Text("Received matches couldn’t be saved to this iPhone. Free up storage if needed, then tap Sync Now to retry.")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                } else if let syncStatus {
+                if let syncStatus {
                     switch syncStatus {
                     case .inFlight:
                         Text("Syncing…")
@@ -523,16 +519,10 @@ struct SettingsView: View {
                 } label: {
                     Label("Export Match Archive", systemImage: "square.and.arrow.up")
                 }
-                .disabled(store.isArchiveBlocked)
                 Button {
                     showArchiveImporter = true
                 } label: {
                     Label("Import Match Archive", systemImage: "square.and.arrow.down")
-                }
-                if store.isArchiveBlocked {
-                    Text("Your saved archive couldn't be loaded. Export is paused; you can still import a backup file and choose Replace to recover.")
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
                 }
                 if let archiveTransferStatus {
                     Text(archiveTransferStatus.message)
@@ -925,10 +915,7 @@ struct SettingsView: View {
     /// matches the file doesn't contain (MATCH_TAGS_PLAN.md §4.1: never
     /// silently orphan or erase them).
     private func replaceConfirmationMessage(_ preview: ManualMatchArchiveBackup.ImportPreview) -> String {
-        var message = store.isArchiveBlocked
-            ? "DeuceMate will keep a copy of the unreadable archive files on this iPhone, then replace the archive with \(preview.recordCount) imported matches. Imported health data will be preserved."
-            : "This will replace \(store.history.count) current matches with \(preview.recordCount) imported matches. Imported health data will be preserved."
-        message += " " + ArchiveRecoveryCopy.replaceKeepsBackupCopyNote
+        var message = "This will replace \(store.history.count) current matches with \(preview.recordCount) imported matches. Imported health data will be preserved."
         let plan = MatchNotesStore.shared.replacePlan(retainedMatchIDs: pendingImportRecordIDs)
         if plan.requiresConfirmation {
             let count = plan.discarded.count

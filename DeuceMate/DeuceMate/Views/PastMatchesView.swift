@@ -71,11 +71,6 @@ struct PastMatchesView: View {
     @State private var showManualEntry = false
     @State private var showICloudGuide = false
     @State private var showRestorePrompt = false
-    @State private var recovery = ArchiveRecoveryModel()
-    /// Why a permanent delete didn't happen; the match is still listed. Shown
-    /// in the confirmation popover itself, because an alert presented while
-    /// that popover is closing may never appear.
-    @State private var deleteFailure: String?
     @State private var pendingDelete: PendingDelete?
     @State private var matchRowFrameCache = MatchRowFrameCache()
     // Retain the origin through dismissal; clearing the pending item must not
@@ -117,9 +112,11 @@ struct PastMatchesView: View {
             // reference pastRecords (e.g. the live-match footer needs it).
             let archiveIDs = Set(store.history.map(\.id))
             let activeID = syncService.activeMatchID
-            // Exclude permanently-deleted (tombstoned) ids, and hide mirror rows
-            // while the canonical archive is blocked (unknown tombstones/ledger).
-            let watchOnly = (!store.isArchiveBlocked && syncService.isPaired)
+            // Exclude permanently-deleted (tombstoned) ids: a queued watch
+            // delete may not have pruned the cached mirror yet, and a stale
+            // "On Apple Watch only" row must not let "Sync to iPhone" undo a
+            // permanent delete.
+            let watchOnly = syncService.isPaired
                 ? syncService.watchMirror.filter {
                     !archiveIDs.contains($0.id) && !store.tombstoneIDs.contains($0.id)
                   }
@@ -132,22 +129,6 @@ struct PastMatchesView: View {
                 : (store.history + watchOnly)
                     .filter { $0.id != activeID }
                     .sorted(by: MatchChronology.newestFirst)
-
-            // An archive that couldn't be loaded, a withheld backup push, or a
-            // failed Watch save is explained first (TECHNICAL_DEBT #18).
-            if let problem = store.archiveProblem {
-                Section {
-                    ArchiveProblemNotice(problem: problem, recovery: recovery, store: store, syncService: syncService)
-                }
-            } else if store.isBackupWithheld {
-                Section {
-                    BackupWithheldNotice(count: store.withheldBackupMatchCount, recovery: recovery, store: store)
-                }
-            } else if store.watchArchiveSaveFailed {
-                Section {
-                    WatchSaveFailedNotice(syncService: syncService)
-                }
-            }
 
             // Trends — reads store.history directly, not pastRecords,
             // since watch-mirror rows may carry no stats (§6.1 of
@@ -244,7 +225,6 @@ struct PastMatchesView: View {
                     Image(systemName: "square.and.pencil")
                 }
                 .accessibilityLabel("Manual match entry")
-                .disabled(store.isArchiveBlocked)
             }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -259,7 +239,6 @@ struct PastMatchesView: View {
     var body: some View {
         NavigationStack {
             screenContent
-            .archiveRecoveryPresentations(recovery, store: store, syncService: syncService)
             .sheet(item: $selected, onDismiss: requestReviewIfEarned) { record in
                 NavigationStack {
                     MatchDetailView(record: record)
@@ -300,8 +279,7 @@ struct PastMatchesView: View {
                     guard let date = preview.newestMatchDate else { return "" }
                     return ", latest \(Self.dateFormatter.string(from: date))"
                 }()
-                let newerNote = ArchiveRecoveryCopy.restorePromptNewerNote(count: preview.newerFormatCount).map { " \($0)" } ?? ""
-                Text("Found a backup with \(preview.recordCount) match\(preview.recordCount == 1 ? "" : "es")\(dateStr).\(newerNote) Restore it to this iPhone?")
+                Text("Found a backup with \(preview.recordCount) match\(preview.recordCount == 1 ? "" : "es")\(dateStr). Restore it to this iPhone?")
             }
             .onChange(of: selected?.id) { _, id in
                 if let id { reviewPrompt.reportOpened(matchID: id, isActive: scenePhase == .active) }
@@ -319,30 +297,7 @@ struct PastMatchesView: View {
 
     @ViewBuilder
     private var emptyStateView: some View {
-        if let problem = store.archiveProblem {
-            // Never "No Matches Yet" when the saved archive couldn't be loaded.
-            VStack(alignment: .leading, spacing: 16) {
-                ArchiveProblemNotice(problem: problem, recovery: recovery, store: store, syncService: syncService)
-                iCloudStatusLabel
-                    .font(.footnote)
-            }
-            .padding(.horizontal, 24)
-        } else if store.isBackupWithheld {
-            // Nor when the backup still holds matches this iPhone lost.
-            VStack(alignment: .leading, spacing: 16) {
-                BackupWithheldNotice(count: store.withheldBackupMatchCount, recovery: recovery, store: store)
-                iCloudStatusLabel
-                    .font(.footnote)
-            }
-            .padding(.horizontal, 24)
-        } else if store.watchArchiveSaveFailed {
-            VStack(alignment: .leading, spacing: 16) {
-                WatchSaveFailedNotice(syncService: syncService)
-                iCloudStatusLabel
-                    .font(.footnote)
-            }
-            .padding(.horizontal, 24)
-        } else if syncService.isActivating {
+        if syncService.isActivating {
             VStack(spacing: 12) {
                 ProgressView()
                 Text("Connecting to Apple Watch…")
@@ -400,18 +355,12 @@ struct PastMatchesView: View {
             isAvailable: store.isICloudAvailable,
             isRestoring: store.isRestoringFromICloud,
             hasPendingRestore: store.pendingRestorePreview != nil,
-            isUploaded: store.isBackupUploaded,
-            isBackupPaused: store.isArchiveBlocked || store.isBackupWithheld
+            isUploaded: store.isBackupUploaded
         )
         switch status {
         case .backedUp, .restoring, .pendingUpload:
             Label(status.text, systemImage: status.systemImage)
                 .foregroundStyle(.secondary)
-        case .paused:
-            // Explained (with its actions) by `ArchiveProblemNotice` or
-            // `BackupWithheldNotice` on this screen; there is nothing to tap.
-            Label(status.text, systemImage: status.systemImage)
-                .foregroundStyle(.orange)
         case .pendingRestore:
             Button { showRestorePrompt = true } label: {
                 HStack(spacing: 4) {
@@ -495,7 +444,7 @@ struct PastMatchesView: View {
     private var hasNoRows: Bool {
         Self.showsEmptyArchive(hasHistory: !store.history.isEmpty,
                                hasLiveMatch: syncService.liveState?.record != nil,
-                               hasWatchRows: !store.isArchiveBlocked && syncService.isPaired && !syncService.watchMirror.isEmpty)
+                               hasWatchRows: syncService.isPaired && !syncService.watchMirror.isEmpty)
     }
 
     static func showsEmptyArchive(hasHistory: Bool, hasLiveMatch: Bool, hasWatchRows: Bool) -> Bool {
@@ -543,73 +492,44 @@ struct PastMatchesView: View {
     @ViewBuilder
     private func permanentDeletePopover(for pending: PendingDelete) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            if let deleteFailure {
-                permanentDeleteFailure(deleteFailure)
-            } else {
-                permanentDeleteConfirmation(for: pending)
+            Label("Delete permanently?", systemImage: "exclamationmark.triangle.fill")
+                .font(.headline)
+                .foregroundStyle(.red)
+
+            Group {
+                if pending.onWatch {
+                    Text("This deletes the match from iPhone and Apple Watch for good — this can't be undone.")
+                } else {
+                    Text("This deletes the match from iPhone for good — this can't be undone.")
+                }
             }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+
+            Divider()
+
+            Button(role: .destructive) {
+                performPermanentDelete(pending)
+            } label: {
+                Text("Delete Permanently")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+
+            Button(role: .cancel) {
+                pendingDelete = nil
+            } label: {
+                Text("Cancel")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
         }
         .padding()
         .frame(width: 320)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("permanent-delete-popover")
         .presentationCompactAdaptation(.popover)
-        .onDisappear { deleteFailure = nil }
-    }
-
-    @ViewBuilder
-    private func permanentDeleteFailure(_ message: String) -> some View {
-        Label(ArchiveSaveFailureCopy.matchNotDeletedTitle, systemImage: "exclamationmark.triangle.fill")
-            .font(.headline)
-            .foregroundStyle(.orange)
-        Text(message)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        Button {
-            pendingDelete = nil
-        } label: {
-            Text("OK")
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.bordered)
-        .accessibilityIdentifier("permanent-delete-failure-ok")
-    }
-
-    @ViewBuilder
-    private func permanentDeleteConfirmation(for pending: PendingDelete) -> some View {
-        Label("Delete permanently?", systemImage: "exclamationmark.triangle.fill")
-            .font(.headline)
-            .foregroundStyle(.red)
-
-        Group {
-            if pending.onWatch {
-                Text("This deletes the match from iPhone and Apple Watch for good — this can't be undone.")
-            } else {
-                Text("This deletes the match from iPhone for good — this can't be undone.")
-            }
-        }
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-
-        Divider()
-
-        Button(role: .destructive) {
-            performPermanentDelete(pending)
-        } label: {
-            Text("Delete Permanently")
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.borderedProminent)
-        .tint(.red)
-
-        Button(role: .cancel) {
-            pendingDelete = nil
-        } label: {
-            Text("Cancel")
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.bordered)
     }
 
     /// Resolves a row's storage location from the phone archive and the watch
@@ -721,12 +641,7 @@ struct PastMatchesView: View {
     /// Permanent deletion: drop the phone's retained copy and, when the match is
     /// also on the watch, issue the watch-side delete so it can't re-sync back.
     private func performPermanentDelete(_ pending: PendingDelete) {
-        // Shown in the popover, which stays open; the note is kept and the
-        // Watch isn't told.
-        guard store.deletePermanently(id: pending.record.id) else {
-            deleteFailure = ArchiveSaveFailureCopy.message(savingPaused: store.isArchiveBlocked)
-            return
-        }
+        store.deletePermanently(id: pending.record.id)
         // Permanent deletion also removes the match's private note (§4.1). If
         // the notes file is unreadable it is left untouched rather than
         // rewritten; the orphaned entry is harmless and never displayed.
