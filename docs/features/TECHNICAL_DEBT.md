@@ -67,6 +67,7 @@ when the item should constrain future changes.
 | [23](#23--validate-manual-match-scores-and-explain-invalid-input) | Correctness | Validate manual match scores and explain invalid input | Medium; inconsistent records can be resumed on Watch | Next manual-entry fix, after persistence containment | Small–medium |
 | [24](#24--add-accessible-watch-scoring-actions) | Accessibility | Add accessible Watch scoring actions | Core scoring has no named accessibility actions | Coordinate with walkthrough shared controls | Small–medium |
 | [25](#25--make-interactive-html-export-failures-recoverable) | Export / UX | Make interactive HTML export failures recoverable | Low; failed export disappears with no explanation | Independent usability fix | Small |
+| [30](#30--stop-rewriting-and-re-uploading-the-whole-archive-on-every-point) | Persistence / iCloud | Stop rewriting and re-uploading the whole iPhone archive on every point | Low today, with no reported issue. Cost grows with archive size: every live checkpoint rewrites the whole archive and pushes it to iCloud. Estimated ~1 GB a week written locally after a year at 3 matches a week, unmeasured | Review before archives get large, or with the next sync or persistence change. Independent of #18 | Small (throttle the push); small–medium (also coalesce local writes) |
 | [11](#11--de-duplicate-appthemeswift-into-core) | Duplication | De-duplicate `AppTheme.swift` (still byte-identical) | Medium change risk | Before the next theme edit | Small |
 | [12](#12--extract-the-point-categorisation-flow-state-machine-into-core) | Duplication | Extract point-categorisation flow state machine into Core | Medium change risk | Before the next outcome / ending-shot change | Medium |
 | [21](#21--record-an-executable-local-verification-gate) | Verification | Record an executable local verification gate | Medium regression/process risk | Establish now; require for scoring, persistence, and sync PRs | Small |
@@ -662,6 +663,104 @@ while paused is recovered by the full-history sync after Try Again.
 **Key files:** `StatsStore.swift` (Watch), `WatchHistoryCap.swift`,
 `PhoneStatsStore.swift` (`mergeIncoming`), `PhoneMatchSyncService.swift`,
 `WatchMatchSyncService.swift`.
+
+---
+
+### 30 — Stop rewriting and re-uploading the whole archive on every point
+
+**Status: open, for review (23 November 2026).** Found while sizing the archive
+for [`ARCHIVE_SAFETY_BASIC_PLAN.md`](ARCHIVE_SAFETY_BASIC_PLAN.md). No user has
+reported a problem. It is independent of #18 and needs no format change.
+
+**What happens today.** While the Watch can reach the iPhone, every scoring
+action rewrites the **whole** iPhone archive and its iCloud backup copy:
+
+1. **Watch.** `winPoint`/`losePoint`, `commitPointStat` (choosing the point's
+   category), `toggleSecondServe` and `undo` call
+   `ScoreViewModel.saveState(scoringChanged: true)`, which ends with
+   `sync.sendMatch(checkpoint)`.
+2. **Transport.** `MatchSyncTransport.sendRecord` sends the in-progress
+   checkpoint with `sendMessage` only when the iPhone is reachable. Out of range
+   it is dropped, and only completed matches are queued.
+3. **iPhone.** The `.singleMatch` event goes through
+   `PhoneMatchSyncService.reconcileTags` and `PhoneStatsStore.mergeIncoming` to
+   `adoptOnQueue`. There `writeCanonicalOnQueue` rewrites the forgotten-players
+   file, the Health sidecar, `matchHistory.json` and `deletedMatchIDs.json`, and
+   then schedules an iCloud push after a 2-second debounce
+   (`backupPushDebounce`).
+4. **iCloud.** `pushBackupOnQueue` compares against `lastPushedSnapshot`. The new
+   point always changes the content, so it rewrites all three backup files in
+   the ubiquity container through `coordinatedWriteBackup`.
+
+The debounce only merges actions less than 2 seconds apart, such as scoring a
+point and choosing its category straight away. Points are usually 30 or more
+seconds apart, so it is roughly one push per point, and often **two** local
+archive rewrites per point while point tracking is on.
+
+**Why it's built this way.** The per-point checkpoint keeps the iPhone archive
+current, even for a match that is never finished. That is useful for the
+archive and the live view. The iCloud backup doesn't need it: a backup a few
+minutes behind loses nothing mid-match, because the Watch holds the live match
+and sends the completed one reliably.
+
+**Estimated cost** (*not measured*: ~24 KB per match and ~86 points per match,
+from the 47-match test archive in `ARCHIVE_SAFETY_PLAN.md` §11, at 3 matches a
+week). Each match costs about 86 rewrites, up to twice that with point tracking.
+
+| Playing for | Matches | Archive | Written per match | Per week |
+|---|---|---|---|---|
+| 1 year | ~155 | ~3.7 MB | ~320 MB | ~1 GB |
+| 3 years | ~470 | ~11 MB | ~1 GB | ~3 GB |
+| 5 years | ~780 | ~19 MB | ~1.6 GB | ~5 GB |
+
+The same volume is *written* to the iCloud container. How much actually goes
+over the network is up to the iCloud daemon, which may merge versions, so the
+network figure is an upper bound. Each rewrite also re-encodes the whole archive
+as JSON on the store's queue, sometimes while the app has only background time
+after a Watch wake.
+
+**Application risk: low today.** There is no correctness or data-loss risk. The
+costs are energy, storage writes and iCloud traffic, and they grow with the
+archive. The first visible symptom would most likely be slow background merges
+or battery drain on long-standing archives.
+
+**Possible fix, in order of value:**
+1. **Throttle the iCloud push for in-progress checkpoints.** Push straight after
+   a completed match, a user edit, a delete or forget, or an import. For
+   in-progress checkpoints only, push at most every few minutes. This is one
+   condition in `adoptOnQueue`'s scheduling, with no format change and no
+   change to the local archive. Deletion intent must still reach the backup
+   promptly, so a delete or forget never waits for the throttle.
+2. **Coalesce local writes of in-progress checkpoints.** Write at most every
+   30–60 seconds, plus at each game or set end. Completed matches and user
+   edits keep writing at once. Reads still see the in-memory record, and the
+   Watch holds the live match, so a crash in between loses nothing. This
+   interacts with #4a and `ARCHIVE_SAFETY_BASIC_PLAN.md` §4.3, so design it
+   with those.
+3. **Only if launch decoding becomes slow** (a rough guess: 10–20 MB, years
+   away at this pace), split completed matches from in-progress ones (two files)
+   rather than one file per match. That is a format change with a one-off
+   conversion and a downgrade hazard: an older app would open a stale or
+   missing `matchHistory.json` and push it over the iCloud backup. It is only
+   safe after #18's "missing file means blocked, not empty" rule has shipped
+   in an earlier release.
+
+**Before fixing:** measure a real long-standing archive on a device. Record its
+size, encode time per save, and rewrites per match from the store's log, so the
+estimate above is replaced with real numbers.
+
+**Tests required:** `PhoneStatsStoreTests` with a fake clock and a fake
+ubiquity container:
+- a burst of in-progress checkpoints produces at most one push per throttle
+  window;
+- a completed match, a delete or forget, or an import pushes immediately;
+- with option 2, in-progress checkpoints are coalesced, but a completed match
+  is on disk before the merge returns.
+
+**Key files:** `ScoreViewModel.swift` (`saveState`), `MatchSyncTransport.swift`
+(`sendRecord`), `PhoneMatchSyncService.swift` (`reconcileTags`),
+`PhoneStatsStore.swift` (`adoptOnQueue`, `writeCanonicalOnQueue`,
+`scheduleICloudBackupSyncOnQueue`, `pushBackupOnQueue`).
 
 ---
 
