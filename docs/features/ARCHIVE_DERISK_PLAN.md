@@ -6,10 +6,10 @@ author: Claude, from the owner's direction after closing #240
 date: 2026-11-23
 fixes: "TECHNICAL_DEBT #18's one irreversible step: an iPhone archive that can't be decoded no longer overwrites the iCloud backup."
 stance: "Rare and self-inflicted. Prevent it, destroy nothing, and write recovery code only if it ever happens, inside the hotfix that fixes the cause."
-budget: "PR A ≤ 75 production lines; PR B ≤ 300 production lines. A finding that breaks the budget needs the owner's OK (§8)."
+budget: "PR A ≤ 75 production lines; PR B ≤ 340 production lines (raised from 300 for the file list, §5.3). A finding that breaks the budget needs the owner's OK (§8)."
 parts: "1 prevent (golden-file test); 2 destroy nothing (keep every copy, pause iCloud); 3 export reminder (ARCHIVE_EXPORT_REMINDER_PLAN.md, unchanged); 4 Archive Diagnostics (a report for support or a coding agent)"
 defers: "ARCHIVE_SAFETY_PLAN.md (full redesign). Its status is deferred, as a reference only."
-decisions_open: [D2, D3, D4]
+decisions_open: [D2, D3, D4, D5]
 decided: "D1: no Resume iCloud Backup button. Only a fixing build ends the pause, after it recovers the dated copies (§3.2)."
 -->
 
@@ -159,15 +159,19 @@ import the user's own export again, even if the iPhone archive never recovers.
 ## 5. Part 4: Archive Diagnostics (PR B)
 
 A screen that turns a damaged copy into a report a person or a coding agent can
-act on. It is the "application debugging stats" the owner asked for.
+act on. It is the "application debugging stats" the owner asked for. It also
+lists every archive file on the iPhone and in iCloud, so support can see the
+state of both without a Mac.
 
 ### 5.1 Where it appears
 
 - Tapping the paused iCloud indicator (§3.3).
 - **Settings › Backup & Transfer › Archive Diagnostics.** The row appears only
-  while at least one damaged copy exists, dated or legacy.
+  while at least one damaged copy exists, dated or legacy (D5).
 
 ### 5.2 What the screen shows
+
+The text depends on which copies exist. With a **dated** copy (iCloud paused):
 
 > **Some match data couldn't be opened**
 >
@@ -179,24 +183,45 @@ act on. It is the "application debugging stats" the owner asked for.
 > isn't one, share the report below with DeuceMate support, or give it to a
 > coding agent to look at.
 
-Below that, one row per damaged copy: the original file name, the date it was
-moved aside, and its size. Then the actions:
+With only **legacy** (undated) copies, iCloud was never paused, and the 1.4.0
+launch that kept the copy probably replaced the backup. So the screen says so:
+
+> **An earlier version couldn't open some match data**
+>
+> DeuceMate kept a copy of the file. Your iCloud backup wasn't paused at the
+> time and may have been replaced, so this copy may be the only one of those
+> matches. Keep it, and share the report below with DeuceMate support.
+
+Below the text, a **Files** section in two groups (the same rows as §5.3's
+file list):
+- **On this iPhone:** every file in `MatchArchive/`, with its size and
+  modified date. Damaged copies are marked. Any archive file an older build
+  left in `Documents/` is listed too.
+- **In iCloud:** every file in the backup, with its size, modified date and
+  upload status. Or one line saying iCloud is unavailable.
+
+Then the actions:
 1. **Share Report.** Opens the share sheet with
    `DeuceMate-archive-report-<date>.md`. It contains no match data (§5.3), so
    it is safe to send anywhere.
-2. **Share Report and Damaged Files.** The same report plus the damaged copies,
+2. **Share Report and Damaged Files.** The same report plus the damaged copies
+   of `matchHistory.json`, `deletedMatchIDs.json` and `forgottenPlayers.json`,
    after this disclosure:
    > These files contain your scores, player names and playing style notes.
    > Files from older versions may also contain heart rate, steps, distance and
    > calories. Private match notes are never included. Only share them with
    > DeuceMate support or a tool you trust. Never post them publicly.
 
-There is no Resume iCloud Backup action (D1, §3.2).
+A damaged copy of the Health sidecar (`healthData.json`) is listed and
+reported, but never attached: it holds only Health data, which DeuceMate can
+fetch again from Apple Health. There is no Resume iCloud Backup action (D1,
+§3.2).
 
 Sharing uses the existing share-sheet pattern (`GamePlanShareSheet`) and an
-`ExportStaging` generation, ended when the sheet closes. The user can pick
-Mail, AirDrop or Files, for example to get the files to a computer with a coding
-agent. There's no Mail composer and no new framework.
+`ExportStaging` generation, ended when the sheet closes. The report is a plain
+`.md` file, so the user can send it by Mail or Messages, AirDrop it, or save it
+with Files, for example to get it to a computer with a coding agent. There's no
+Mail composer and no new framework.
 
 ### 5.3 The report
 
@@ -206,7 +231,24 @@ readable by a person, and parseable by a coding agent without a hosted page.
 1. **What happened**, in two sentences, plus the support address.
 2. **Environment:** app version and build, iOS version, the report date. No
    device identifiers.
-3. **For each damaged copy:**
+3. **Files** (what the screen's Files section shows, as two Markdown tables):
+   - **On this iPhone:** every entry in `Application Support/MatchArchive/`
+     (not recursive) plus any `matchHistory.json` or `deletedMatchIDs.json`
+     left in `Documents/` by an older build. Per file: name, size in bytes,
+     modified date, and whether it is a damaged copy.
+   - **In iCloud:** the iCloud backup state (on, off, paused or unavailable),
+     then every entry at the top level of the iCloud container. Per file: name,
+     size, modified date, **upload status** (Uploaded, Uploading, Waiting to
+     upload, or Upload failed with the error's domain and code) and whether
+     it's downloaded to this iPhone. A placeholder for a file that isn't
+     downloaded (`.<name>.icloud` on older iOS) is shown under the file's real
+     name. A value iCloud doesn't report is shown as "unknown".
+   - All of it comes from `URL.resourceValues` and directory listings, on the
+     store's queue. It **never reads a file's contents, never starts a
+     download, and never writes**, so building the report can't change iCloud
+     or disturb the pause. File names are fixed by the app, so the list holds
+     no personal data.
+4. **For each damaged copy:**
    - name, original file, the date it was moved aside, size, and SHA-256
      (CryptoKit);
    - **the result of decoding it again now**, with this build. For a failure
@@ -219,11 +261,11 @@ readable by a person, and parseable by a coding agent without a hosted page.
 
    Decoding again on demand means nothing has to be stored at failure time,
    and the report always reflects the installed build.
-4. **Stored values this build accepts:** every raw value of the six persisted
+5. **Stored values this build accepts:** every raw value of the six persisted
    enums, from `allCases`. `Player`, `MatchType` and `MatchFormat` gain
    `CaseIterable`, which changes nothing that is stored. An agent can compare
    the bad value against this list.
-5. **Instructions for a coding agent**, fixed text:
+6. **Instructions for a coding agent**, fixed text:
    - Never change or delete the original file. Work on a copy.
    - **Change values, never drop records.** If the bad value looks like one
      DeuceMate used to accept (for example an old format name), stop. It's an
@@ -247,19 +289,23 @@ readable by a person, and parseable by a coding agent without a hosted page.
 **Privacy:** the report never contains a match, a name or a note. A decoding
 error names a field and a value, never a player. The builder's tests pin this.
 
-**Size:** about 255 production lines:
-- Core about 125: the report builder with its fixed text, the coding-path
-  formatter, and `CaseIterable`;
-- store about 35: list copies with size, date, hash and decode result; stage
-  copies;
-- views about 95: the screen, the Settings row, and the indicator tap.
+**Size:** about 315 production lines:
+- Core about 145: the report builder with its fixed text and the Files tables,
+  the coding-path formatter, and `CaseIterable`;
+- store about 65: list local and iCloud files with their resource values;
+  hash and decode result for damaged copies; stage copies;
+- views about 105: the screen with its two wordings and Files section, the
+  Settings row, and the indicator tap.
 
 About 200 test lines:
 - the report holds the coding path, hash and enum list, and never holds a name
   or note even when the damaged file does;
 - the readable-now wording;
 - staging and cleanup;
-- a legacy-only phone shows the row but isn't paused.
+- a legacy-only phone shows the row and the legacy wording, and isn't paused;
+- the Files tables: every local entry listed, a `Documents/` leftover listed,
+  iCloud upload states and "unknown" values formatted, iCloud unavailable;
+- the Health sidecar copy is reported but never attached.
 
 ## 6. Example: `quick4Games` deleted by mistake
 
@@ -286,7 +332,8 @@ About 200 test lines:
 - Reading a damaged copy back into the archive automatically, a "Restore from
   iCloud" action, or any repair inside the app.
 - Any way to end the iCloud pause inside the app, such as a Resume button (D1).
-- A file explorer for damaged files.
+- A file explorer for damaged files. Diagnostics lists files and their
+  metadata; it never opens the iCloud files or shows any file's contents.
 - A hosted recovery page. The report carries the agent instructions itself
   (D3).
 - The Mail composer, `OSLogStore`, crash logs or analytics.
@@ -315,13 +362,14 @@ These exist because #228–#240 grew with every review.
 | D2 | Should Share Report and Damaged Files exist, or the report only? | Both. The report alone diagnoses the cause, and the files are needed to repair genuine damage |
 | D3 | Also publish the agent instructions as a web page? | Not now. Do it only if support starts receiving these reports |
 | D4 | Ship PR A before PR B? | Yes. PR A closes the irreversible step on its own, and PR B can follow |
+| D5 | Show Archive Diagnostics **always**, not only while a damaged copy exists? The Files list would then help with any backup question, such as a restore that found nothing | Not now. Only while a damaged copy exists keeps Settings unchanged for almost everyone. Showing it always costs about 10 lines: a third, "everything is fine" wording |
 
 ## 10. Phases
 
 | PR | Surface | What | Production | Tests |
 |---|---|---|---|---|
 | A | `[Core]` + `[iOS]` | Golden-file test, dated copies, iCloud pause, `.pausedDamagedArchive` indicator | ≤ 75 | ~230 |
-| B | `[Core]` + `[iOS]` | Archive Diagnostics: report builder, screen, Settings row, share | ≤ 300 | ~190 |
+| B | `[Core]` + `[iOS]` | Archive Diagnostics: report builder, file list (iPhone and iCloud), screen, Settings row, share | ≤ 340 | ~230 |
 
 Each PR also updates:
 - CLAUDE.md §1 and the `PhoneStatsStore` row;
