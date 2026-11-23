@@ -1,7 +1,7 @@
 <!--
 machine-readable summary (parse this block first)
 
-status: proposal — design only, nothing implemented. No phase starts until the owner signs off on §3–§12.
+status: deferred — design only, nothing implemented. The owner chose ARCHIVE_SAFETY_BASIC_PLAN.md as the next step (2026-11-23); this plan is kept as a reference for what that plan leaves open.
 author: Claude, from the owner's review of the #222–#237 archive-safety work
 date: 2026-11-23
 supersedes: "the #228–#234 containment design (removed by the reset PR, #239) and ARCHIVE_SNAPSHOTS_PLAN.md"
@@ -32,8 +32,11 @@ decisions_open: [D1, D2, D3, D4, D5, D6, D7, D8, D9]
 
 # Plan: Archive safety, making bad files harmless
 
-**Status: proposal. Nothing here is implemented.** No phase starts until the owner
-has signed off on the architecture (§3–§12).
+**Status: deferred. Nothing here is implemented.** On 23 November 2026 the owner
+chose the smaller, fail-closed
+[`ARCHIVE_SAFETY_BASIC_PLAN.md`](ARCHIVE_SAFETY_BASIC_PLAN.md) as the fix for #18.
+This plan stays as a reference for the problems that plan leaves open (its §7).
+No phase here starts without a new owner decision.
 
 **Replaces:** the containment design built in #228–#234, which the reset PR
 (#239) removed, and [`ARCHIVE_SNAPSHOTS_PLAN.md`](ARCHIVE_SNAPSHOTS_PLAN.md).

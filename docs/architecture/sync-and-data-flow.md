@@ -58,9 +58,11 @@ at activation.
 file but can't decode it, for example when one match holds a value this version
 doesn't know. When that happens, it moves the file aside to `.corrupt`, starts
 an empty archive, and that launch's iCloud push overwrites the backup. The
-redesign is
-[`ARCHIVE_SAFETY_PLAN.md`](../features/ARCHIVE_SAFETY_PLAN.md), which is waiting
-for the owner's sign-off. An earlier attempt (#228–#234) was reset, so this
+planned fix is
+[`ARCHIVE_SAFETY_BASIC_PLAN.md`](../features/ARCHIVE_SAFETY_BASIC_PLAN.md) (fail
+closed, support-assisted), which is waiting for the owner's sign-off. The full
+redesign, [`ARCHIVE_SAFETY_PLAN.md`](../features/ARCHIVE_SAFETY_PLAN.md), is
+deferred. An earlier attempt (#228–#234) was reset, so this
 document describes the 1.4.0 behaviour.
 
 **Live recovery (16 November 2026):** activation, reconnect, phone foreground,

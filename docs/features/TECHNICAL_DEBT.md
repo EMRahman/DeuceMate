@@ -53,7 +53,7 @@ when the item should constrain future changes.
 
 | # | Area | Item | Application risk | Work band / trigger | Effort |
 |---|------|------|------------------|---------------------|--------|
-| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact, low–medium likelihood, open again.** The #228–#234 containment design was reset on 23 Nov 2026, so the iPhone has 1.4.0's behaviour: an undecodable file means an empty archive, and the iCloud backup gets overwritten. All 6 persisted enums stay pinned | **Next**, but only after the owner signs off on [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md). Any release before its phases (b) and (c) still has the gap | Medium, staged (plan phases a–d) |
+| [18](#18--fail-closed-on-undecodable-archives-persisted-enums-are-additive-only) | Persistence | Fail closed on undecodable archives; add persisted-enum guards | **Critical impact, low–medium likelihood, open again.** The #228–#234 containment design was reset on 23 Nov 2026, so the iPhone has 1.4.0's behaviour: an undecodable file means an empty archive, and the iCloud backup gets overwritten. All 6 persisted enums stay pinned | **Next**, but only after the owner signs off on [`ARCHIVE_SAFETY_BASIC_PLAN.md`](ARCHIVE_SAFETY_BASIC_PLAN.md) (fail closed, support-assisted). The full [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) is deferred. Any release before the basic plan's phase 1 still has the gap | Small–medium (basic plan phases 1–2) |
 | [4a-read](#4a-read--fail-closed-on-an-unreadable-live-state) | Persistence | Preserve and report an unreadable watch live state | Fail-closed `ScoreViewModel.loadState()` (with pre-decode version header) and Watch `MatchHistoryView` unreadable banner landed | Remaining: explicit Watch live-state abandon/reset recovery UX if desired | Small |
 | [27](#27--prevent-unrecorded-fitness-workouts-with-manager-tests-and-crash-recovery) | Health / Reliability | Prevent unrecorded Fitness workouts with manager tests and crash recovery | High impact when a workout is lost; remaining likelihood unverified | **Now**; physical-Watch save/sync checks before release | Medium, staged |
 | [19](#19--version-the-persisted-json-formats-forward-compatibility) | Persistence | Version persisted JSON and wire formats | Step 1 readers landed in #229 and were kept by the reset: the Watch history, the Watch→iPhone sync, manual archives (`supportedSchemaVersions` range plus a check before decoding), and the pre-decode `AppState` version check. The iPhone archive's reads went back to 1.4.0 | Step 2 for the iPhone archive is part of [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md) §5.1 and D9. Other writers stay on bare arrays until a format change needs envelopes | Small |
@@ -90,7 +90,11 @@ in, through fifteen PRs numbered from #222 to #237. The reset PR therefore put t
 back to 1.4.0. It kept #229's readers and Watch fixes and #228's enum pins. The
 replacement, [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md), makes bad files
 harmless instead of blocking them. It also lists the six rules its PRs are
-reviewed against. It is waiting for the owner's sign-off.
+reviewed against. On 23 November 2026 the owner chose a smaller fix first:
+[`ARCHIVE_SAFETY_BASIC_PLAN.md`](ARCHIVE_SAFETY_BASIC_PLAN.md) fails closed
+(every file and the iCloud backup left untouched, one blocking screen) and
+hands recovery to support. The full plan is deferred as a reference for what
+the basic plan leaves open. Both wait for the owner's sign-off.
 
 The original sequence is kept below as history. ↩︎ marks steps the reset
 removed.
@@ -389,8 +393,9 @@ Release.
   Watch protections from #229 and 4a-read also stay.
 - **Current behaviour:** 1.4.0's, so the cascade above is live again on the
   iPhone. Any release before plan phases (b) and (c) still has the gap.
-- **Next:** [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md), once the owner
-  signs off. Do not patch the gap piecemeal in the meantime.
+- **Next:** [`ARCHIVE_SAFETY_BASIC_PLAN.md`](ARCHIVE_SAFETY_BASIC_PLAN.md), once
+  the owner signs off. The full [`ARCHIVE_SAFETY_PLAN.md`](ARCHIVE_SAFETY_PLAN.md)
+  is deferred. Do not patch the gap piecemeal in the meantime.
 - **Still open from before:** open enums before adding the next persisted enum
   case (paired with #19). The plan's per-match reading (§5.2) covers the archive
   side of this.
