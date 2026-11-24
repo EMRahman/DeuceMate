@@ -421,6 +421,16 @@ Release.
 - **Still open from before:** open enums before adding the next persisted enum
   case (paired with #19). The plan's per-match reading (§5.2) covers the archive
   side of this.
+- **Follow-up, not scheduled (Codex on #249, 24 November 2026):** a launch
+  read that fails outright is still the 1.4.0 behaviour. This is an I/O error,
+  or iOS starting the app in the background while the iPhone is still locked
+  after a restart; it isn't a decode failure. For that run, saves and iCloud
+  stop and nothing is lost, but the Matches screen shows a short or empty list
+  with no explanation. Archive Diagnostics, which looks only at damaged copies,
+  reports "No problems found". Relaunching fixes it. If it's ever worth fixing,
+  decide in one change how that run is shown everywhere, with wording the owner
+  signs off, not by patching the Diagnostics status alone. The store already
+  publishes `isCanonicalArchiveUnreadable`.
 
 **Key files:** `ScoreTypes.swift`, `PointStat.swift`, `StatsStore.swift`,
 `PhoneStatsStore.swift`, `ArchiveBackupPolicy.swift`, `ScoreViewModel.swift`
