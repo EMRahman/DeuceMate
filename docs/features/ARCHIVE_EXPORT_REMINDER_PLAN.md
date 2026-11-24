@@ -402,7 +402,7 @@ This table is also the test list (§7).
 | 1 | `[Core]` | Done | `ArchiveExportReminderPolicy` + copy + tests (`SettingsCopy.archiveExportReminder`, `HealthExportConsent.hasRawHealthData`). |
 | 2 | `[iOS]` | Done | Extracted `ArchiveExportFlow` from `SettingsView` with no behaviour change. |
 | 3 | `[iOS]` | Done | `ArchiveExportReminderCoordinator`, `ArchiveExportReminderCard`, Settings toggle and last-export line, import baseline, unit + UI tests; `CLAUDE.md` §0 key exceptions; `docs/architecture/file-inventory.md` entries. |
-| 4 | `[Web]` | Done | Browser demo parity (`phone-demo.js`, `phone-demo-settings.js`, `phone-demo.css`, `scripts/iphone-demo-qa.cjs`). |
+| 4 | `[Web]` | Done | Browser demo parity (`phone-demo.js`, `phone-demo-settings.js`, `phone-demo.css`, `scripts/qa/iphone-demo-qa.cjs`). |
 
 `APP_STORE_METADATA.md` needs no new review note: the feature adds no data
 flow, only a pointer to an existing one.

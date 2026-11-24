@@ -89,7 +89,7 @@ async function main() {
     }
   }
   try {
-    await page.goto(process.env.PLAYWRIGHT_URL || pathToFileURL(path.resolve(__dirname, "../docs/website/try.html")).href);
+    await page.goto(process.env.PLAYWRIGHT_URL || pathToFileURL(path.resolve(__dirname, "../../docs/website/try.html")).href);
     await click(root.locator(".phone-body"), "☁ iCloud unavailable — stored on iPhone ›");
     await guideFits();
     assert.equal(await dialog.locator("li").count(), 4, "cloud guide must retain all native setup steps");

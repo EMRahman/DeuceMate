@@ -31,7 +31,7 @@ async function main() {
     await page.emulateMedia({colorScheme: "light"});
   }
   try {
-    await page.goto(process.env.PLAYWRIGHT_URL || pathToFileURL(path.resolve(__dirname, "../docs/website/try.html")).href);
+    await page.goto(process.env.PLAYWRIGHT_URL || pathToFileURL(path.resolve(__dirname, "../../docs/website/try.html")).href);
     const uncategorizedRecord = await page.evaluate(() => window.DeuceMatePhone.records().find(r => r.endTime && r.stats.length && r.stats.every(p => p.outcome === "uncategorized")));
     if (uncategorizedRecord) assert.equal(await root.locator(`.phone-match-wrap[data-match-id="${uncategorizedRecord.id}"] .phone-row-badge`).first().innerText(), "Stats", "native archive Stats badge depends on point history, independently of outcome categorization");
     await appearance("archive", root.locator(".phone-trends-card"), "rgb(0, 0, 0)");

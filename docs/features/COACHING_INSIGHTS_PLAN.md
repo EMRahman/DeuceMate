@@ -143,4 +143,4 @@ or spin is measured. All thresholds and causal limitations remain explicit here.
   perspective, set, exertion and export regressions.
 - `COACHING_PARITY_OUTPUT=/tmp/coaching.json swift test ...` writes fictional
   native fixtures; the same environment variable on
-  `node scripts/iphone-demo-coaching-qa.cjs` checks exact browser parity.
+  `node scripts/qa/iphone-demo-coaching-qa.cjs` checks exact browser parity.

@@ -12,7 +12,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const root = path.resolve(__dirname, "..");
+const root = path.resolve(__dirname, "../..");
 const website = path.join(root, "docs/website/assets");
 const context = vm.createContext({
   console,

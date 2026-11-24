@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /* Browser QA for the 1.3.1 demo additions: swipe-vibration confirmation, the live
  * scoreboard's "Not confirmed by the Watch" message and its unreachable copy.
- *   PLAYWRIGHT_MODULE=/path/to/playwright [PLAYWRIGHT_BROWSER=webkit] node scripts/iphone-demo-131-qa.cjs */
+ *   PLAYWRIGHT_MODULE=/path/to/playwright [PLAYWRIGHT_BROWSER=webkit] node scripts/qa/iphone-demo-131-qa.cjs */
 "use strict";
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const pw = require(process.env.PLAYWRIGHT_MODULE || "playwright");
-const URL = pathToFileURL(path.resolve(__dirname, "../docs/website/try.html")).href;
+const URL = pathToFileURL(path.resolve(__dirname, "../../docs/website/try.html")).href;
 
 async function startLive(page) {
   await page.evaluate(() => {

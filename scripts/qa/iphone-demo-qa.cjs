@@ -3,7 +3,7 @@
  * Browser QA for the simulated iPhone companion in docs/website/try.html.
  * No project dependency is added: set PLAYWRIGHT_MODULE to the installed
  * Playwright package entry point. Example:
- *   PLAYWRIGHT_MODULE=/path/to/playwright node scripts/iphone-demo-qa.cjs
+ *   PLAYWRIGHT_MODULE=/path/to/playwright node scripts/qa/iphone-demo-qa.cjs
  *
  * The script intentionally exercises user-visible behavior first and uses
  * window.DeuceMatePhone only for deterministic state assertions.
@@ -17,7 +17,7 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
-const URL = process.env.PLAYWRIGHT_URL || pathToFileURL(path.resolve(__dirname, "../docs/website/try.html")).href;
+const URL = process.env.PLAYWRIGHT_URL || pathToFileURL(path.resolve(__dirname, "../../docs/website/try.html")).href;
 const TIMEOUT = Number(process.env.PLAYWRIGHT_TIMEOUT || 8000);
 
 function check(condition, message) {

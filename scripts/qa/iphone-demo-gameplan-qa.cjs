@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* Browser QA for the demo's Prepare Game Plan and playing style notes (phone-demo-gameplan.js).
-   PLAYWRIGHT_MODULE=/path/to/playwright node scripts/iphone-demo-gameplan-qa.cjs
+   PLAYWRIGHT_MODULE=/path/to/playwright node scripts/qa/iphone-demo-gameplan-qa.cjs
    Screenshots: /tmp/deucemate-iphone-qa/gameplan-*.png */
 "use strict";
 const pw = require(process.env.PLAYWRIGHT_MODULE || "playwright"), browser = pw[process.env.PLAYWRIGHT_BROWSER || "chromium"];

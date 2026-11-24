@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
  * Browser QA for the demo embedded in the home page (docs/website/index.html).
- *   PLAYWRIGHT_MODULE=/path/to/playwright node scripts/home-demo-qa.cjs
+ *   PLAYWRIGHT_MODULE=/path/to/playwright node scripts/qa/home-demo-qa.cjs
  * PLAYWRIGHT_BROWSER=webkit runs it on the Safari engine. No project dependency
  * is added. It serves the site itself: the page reads try.html over HTTP.
  */
@@ -14,7 +14,7 @@ const path = require("node:path");
 
 const playwright = require(process.env.PLAYWRIGHT_MODULE || "playwright");
 const browserType = playwright[process.env.PLAYWRIGHT_BROWSER || "chromium"];
-const ROOT = path.resolve(__dirname, "../docs/website");
+const ROOT = path.resolve(__dirname, "../../docs/website");
 const TYPES = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".jpg": "image/jpeg" };
 const DEMO_ASSET = /assets\/(watch-demo|watch-app|phone-demo)/;
 

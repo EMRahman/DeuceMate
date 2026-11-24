@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /* Build a native manual archive from the browser's exact deterministic matches.
  * This writes a JSON file only; seed a disposable simulator via ArchiveTool.
- * Usage: node scripts/iphone-demo-native-fixtures.cjs /tmp/native-parity.json
+ * Usage: node scripts/qa/iphone-demo-native-fixtures.cjs /tmp/native-parity.json
  */
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const crypto = require("node:crypto");
-const assets = path.resolve(__dirname, "../docs/website/assets");
+const assets = path.resolve(__dirname, "../../docs/website/assets");
 const context = vm.createContext({ console, document: { querySelectorAll: () => [] }, window: {} });
 function load(name) { vm.runInContext(fs.readFileSync(path.join(assets, name), "utf8"), context); }
 load("watch-demo.js");

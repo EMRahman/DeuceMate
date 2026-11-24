@@ -46,9 +46,9 @@ in `/tmp/deucemate-native-export-references.xcresult`. Run it with the same
 opt-in `.xctestrun` setup described below, then:
 
 ```sh
-node scripts/iphone-demo-native-export-qa.cjs /tmp/deucemate-native-export-references /tmp/deucemate-native-parity.json
-PLAYWRIGHT_MODULE=/path/to/playwright node scripts/iphone-demo-export-qa.cjs
-PLAYWRIGHT_BROWSER=webkit PLAYWRIGHT_MODULE=/path/to/playwright node scripts/iphone-demo-export-qa.cjs
+node scripts/qa/iphone-demo-native-export-qa.cjs /tmp/deucemate-native-export-references /tmp/deucemate-native-parity.json
+PLAYWRIGHT_MODULE=/path/to/playwright node scripts/qa/iphone-demo-export-qa.cjs
+PLAYWRIGHT_BROWSER=webkit PLAYWRIGHT_MODULE=/path/to/playwright node scripts/qa/iphone-demo-export-qa.cjs
 ```
 
 The native comparison verifies every cell of **1,608 raw-point rows**, native
@@ -154,7 +154,7 @@ including filter-aware badges and absence of duplicate totals.
 ### Native simulator evidence
 
 Agents built and exercised the actual app on an iPhone 17 simulator (iOS 27.0,
-Xcode 27.1). `scripts/iphone-demo-native-fixtures.cjs` maps the browser's nine
+Xcode 27.1). `scripts/qa/iphone-demo-native-fixtures.cjs` maps the browser's nine
 fictional matches to deterministic native UUIDs. The opt-in simulator-only
 `NativeDemoParitySeedTests` imports them through `PhoneStatsStore` and verifies
 every identity; `NativeDemoParityTests` performs real taps and scrolling through
@@ -193,8 +193,8 @@ Then prepare the test-run file **beside the generated original** so Xcode's
 `__TESTROOT__` paths remain valid:
 
 ```sh
-node scripts/iphone-demo-native-fixtures.cjs /tmp/deucemate-native-parity.json
-python3 scripts/iphone-demo-native-config.py /path/to/generated.xctestrun /tmp/deucemate-native-parity.json
+node scripts/qa/iphone-demo-native-fixtures.cjs /tmp/deucemate-native-parity.json
+python3 scripts/qa/iphone-demo-native-config.py /path/to/generated.xctestrun /tmp/deucemate-native-parity.json
 ```
 
 The config helper prints a new `_NativeParity.xctestrun` path and sets the
@@ -232,7 +232,7 @@ destructive choice; the browser `window.confirm` was removed and its regression
 test now exercises the in-phone alert instead. Native file chooser/download
 operations remain browser-owned service boundaries.
 
-`scripts/iphone-demo-popup-qa.cjs` passes in Chromium and WebKit for all 16
+`scripts/qa/iphone-demo-popup-qa.cjs` passes in Chromium and WebKit for all 16
 presentations: export menu, health disclosure, report preview, AI Coach, AI prompt
 sharing, match actions, permanent deletion, ending a match, connection details,
 archive export/import/replacement, cloud restore, iCloud guidance, reset and expanded graph.
@@ -274,7 +274,7 @@ and the native captures `docs/app-store-screenshots/iphone-6.9/03-match-stats.pn
   controls remain accessible alternatives. Watch timer-only renders no longer
   replace the phone court or interrupt a gesture.
 
-`scripts/iphone-demo-visual-qa.cjs` checks these layouts and interactions in
+`scripts/qa/iphone-demo-visual-qa.cjs` checks these layouts and interactions in
 Chromium and WebKit, including an actual two-touch Chromium pinch, touch/keyboard
 trend inspection, report set scoping, graph pan/reset, filter persistence,
 independent filter scrolling, and 320px/mobile/desktop graph containment. It
@@ -309,7 +309,7 @@ order but carries fewer figures (points, serve, return, double faults, winners a
 unforced errors, pooled Σ/Σ); the token estimate is a character-count
 approximation, not `GamePlanTokenEstimator`; Advanced offers Detail but always one
 file; Share downloads the `.md` file; nothing is sent anywhere. Health data is
-never read. `scripts/iphone-demo-gameplan-qa.cjs` covers the page, defaults,
+never read. `scripts/qa/iphone-demo-gameplan-qa.cjs` covers the page, defaults,
 pack sections, names/notes withholding, the remembered and non-remembered
 choices, the finishing case and the notes editor.
 
@@ -338,14 +338,14 @@ exertion analysis. See `COACHING_INSIGHTS_PLAN.md` for the revised candidates. P
 namespaced browser archive. Device/cloud scenarios and reset live outside the
 replica under **Demo controls**.
 
-`node scripts/iphone-demo-model-qa.cjs` passes. It exercises seeded match scoring,
+`node scripts/qa/iphone-demo-model-qa.cjs` passes. It exercises seeded match scoring,
 doubles, full-history versus suffix-history score reconstruction, both report
 perspectives, generated viewer syntax and escaping, archive validation, all
 native trend metric identifiers, filtering before windowing, zero-denominator
 pooling, delta orientation, and completed-set/decider/step coverage. This is
 model evidence, not browser or visual evidence.
 
-`node scripts/iphone-demo-coaching-qa.cjs` also passes. Synthetic cases exercise
+`node scripts/qa/iphone-demo-coaching-qa.cjs` also passes. Synthetic cases exercise
 the coaching families, missing-data gates, focal/set scope and threshold pins
 against the current Core sources. With `COACHING_PARITY_OUTPUT` set, the script
 also compares the fictional fixtures generated by the Swift redesign tests. Expanded app and offline charts support native
@@ -359,23 +359,23 @@ adding a project dependency. No GitHub Actions were triggered.
 
 | Suite | Observed coverage |
 |---|---|
-| `scripts/iphone-demo-qa.cjs` | Expanded graph filters/zoom/pan/reset; Stats/Points; both offline HTML exports; Trends filtering; gated swipe input sharing the Watch scorer; outcome/shot/double-fault/undo; end confirmation; manual entry and Watch resume; invalid import retention. |
-| `scripts/iphone-demo-extended-qa.cjs` | Chromium and WebKit: actual downloads opened with and without JavaScript; set filtering; transparent offline hit targets; touch graph inspection; reduced motion; repeated keyboard scoring/focus; theme/max-HR settings; full-final-set validation; cloud restore; Merge/Replace confirmations; manual JSON export; phone/desktop screenshots. |
-| `scripts/iphone-demo-state-qa.cjs` | Chromium and WebKit: recoverable full swipe and keyboard activation; Watch-only storage across timer refresh; activation/sync/error states; corrupt archive preservation; disconnected input; blank dates; deletion across reload/sync; empty archives and reset; Trends modes/coverage; all text and CSV perspectives, in-app report previews; consent Cancel; AI stub and clipboard fallback; failed exports retaining the archive; narrow/landscape layout; manual Cancel/draw; health-free backup and Restore/Not Now; spoken-name settings; visible Watch start/warm-up/server/scoring flowing to iPhone. |
-| `scripts/iphone-demo-visual-qa.cjs` | Native Trends controls/charts/light/dark appearance, report group order and set-filtered bars, set-grouped Points, in-phone expanded cover, touch pinch (Chromium), pan/reset, filter persistence and narrow/desktop containment. |
-| `scripts/iphone-demo-popup-qa.cjs` | Chromium/WebKit: all 16 phone popup presentations, native AI/export/iCloud guidance layout, device/visible-viewport containment, resizing/scrolling, local dimming/feedback, clipboard fallback, focus, dismissal and cancellation. |
+| `scripts/qa/iphone-demo-qa.cjs` | Expanded graph filters/zoom/pan/reset; Stats/Points; both offline HTML exports; Trends filtering; gated swipe input sharing the Watch scorer; outcome/shot/double-fault/undo; end confirmation; manual entry and Watch resume; invalid import retention. |
+| `scripts/qa/iphone-demo-extended-qa.cjs` | Chromium and WebKit: actual downloads opened with and without JavaScript; set filtering; transparent offline hit targets; touch graph inspection; reduced motion; repeated keyboard scoring/focus; theme/max-HR settings; full-final-set validation; cloud restore; Merge/Replace confirmations; manual JSON export; phone/desktop screenshots. |
+| `scripts/qa/iphone-demo-state-qa.cjs` | Chromium and WebKit: recoverable full swipe and keyboard activation; Watch-only storage across timer refresh; activation/sync/error states; corrupt archive preservation; disconnected input; blank dates; deletion across reload/sync; empty archives and reset; Trends modes/coverage; all text and CSV perspectives, in-app report previews; consent Cancel; AI stub and clipboard fallback; failed exports retaining the archive; narrow/landscape layout; manual Cancel/draw; health-free backup and Restore/Not Now; spoken-name settings; visible Watch start/warm-up/server/scoring flowing to iPhone. |
+| `scripts/qa/iphone-demo-visual-qa.cjs` | Native Trends controls/charts/light/dark appearance, report group order and set-filtered bars, set-grouped Points, in-phone expanded cover, touch pinch (Chromium), pan/reset, filter persistence and narrow/desktop containment. |
+| `scripts/qa/iphone-demo-popup-qa.cjs` | Chromium/WebKit: all 16 phone popup presentations, native AI/export/iCloud guidance layout, device/visible-viewport containment, resizing/scrolling, local dimming/feedback, clipboard fallback, focus, dismissal and cancellation. |
 
 Run the model suites and all five browser suites. The default browser is Chromium;
 set `PLAYWRIGHT_BROWSER=webkit` for Safari-engine checks:
 
 ```sh
-node scripts/iphone-demo-model-qa.cjs
-node scripts/iphone-demo-coaching-qa.cjs
-PLAYWRIGHT_MODULE=/path/to/playwright node scripts/iphone-demo-qa.cjs
-PLAYWRIGHT_MODULE=/path/to/playwright node scripts/iphone-demo-extended-qa.cjs
-PLAYWRIGHT_MODULE=/path/to/playwright node scripts/iphone-demo-state-qa.cjs
-PLAYWRIGHT_MODULE=/path/to/playwright node scripts/iphone-demo-visual-qa.cjs
-PLAYWRIGHT_MODULE=/path/to/playwright node scripts/iphone-demo-popup-qa.cjs
+node scripts/qa/iphone-demo-model-qa.cjs
+node scripts/qa/iphone-demo-coaching-qa.cjs
+PLAYWRIGHT_MODULE=/path/to/playwright node scripts/qa/iphone-demo-qa.cjs
+PLAYWRIGHT_MODULE=/path/to/playwright node scripts/qa/iphone-demo-extended-qa.cjs
+PLAYWRIGHT_MODULE=/path/to/playwright node scripts/qa/iphone-demo-state-qa.cjs
+PLAYWRIGHT_MODULE=/path/to/playwright node scripts/qa/iphone-demo-visual-qa.cjs
+PLAYWRIGHT_MODULE=/path/to/playwright node scripts/qa/iphone-demo-popup-qa.cjs
 ```
 
 The default opens the local Try page; `PLAYWRIGHT_URL` can point to a local HTTP
@@ -482,7 +482,7 @@ interactive web export. Re-audit the Swift anchors above when the demo is
 changed. The checked items above are backed by the model/browser suites and
 rendered-artifact review described above; hardware services remain simulated.
 
-1.3.1 sync: Trends gained the native competition-type (trophy) and opponent (people, "vs Name") filters beside the format menu (`phone-demo-trends.js`, `TrendFilter.competitionType`/`opponentID`; doubles match either opponent; the opponent menu is hidden with no opponents, and a remembered opponent who no longer exists falls back to All). Swipe vibration now acts, not just toggles: after an applied watch swipe the demo calls `navigator.vibrate` (win 30 ms, lose 20-40-20, undo 12, undo only when something was undone) and nudges the screen, only while the shared setting is on (`ScoreInputHaptics`). The live scoreboard shows the native send-failure message ("Not confirmed by the Watch. Check the score before retrying.", 5 s) when the Watch doesn't confirm a phone command (`api.phoneCommand` now returns false for a rejection; a locally blocked swipe, as in native `handleSwipe`, shows nothing), beside the already-present WAITING FOR WATCH badge and "Last score shown" copy (#174). The Opponent detail ordering and trailing Manage link (#168) were already mirrored. Verified with `scripts/iphone-demo-131-qa.cjs` (new) plus the base, extended, state, Match Info and export suites on Chromium and WebKit, and light/dark screenshots of the Trends filters. The popup suite (`iphone-demo-popup-qa.cjs`) was already failing in `deleteFits` before this pass: at 320x740 the selected archive row ended up below the visible viewport (taller 1.3.0 rows) so the clamped popover sat 86 px from it; the suite now scrolls the row back into view after each resize, as a person would, and passes on Chromium and WebKit. `iphone-demo-visual-qa.cjs` now expects the three Trends menus (format, competition, opponent) instead of one select.
+1.3.1 sync: Trends gained the native competition-type (trophy) and opponent (people, "vs Name") filters beside the format menu (`phone-demo-trends.js`, `TrendFilter.competitionType`/`opponentID`; doubles match either opponent; the opponent menu is hidden with no opponents, and a remembered opponent who no longer exists falls back to All). Swipe vibration now acts, not just toggles: after an applied watch swipe the demo calls `navigator.vibrate` (win 30 ms, lose 20-40-20, undo 12, undo only when something was undone) and nudges the screen, only while the shared setting is on (`ScoreInputHaptics`). The live scoreboard shows the native send-failure message ("Not confirmed by the Watch. Check the score before retrying.", 5 s) when the Watch doesn't confirm a phone command (`api.phoneCommand` now returns false for a rejection; a locally blocked swipe, as in native `handleSwipe`, shows nothing), beside the already-present WAITING FOR WATCH badge and "Last score shown" copy (#174). The Opponent detail ordering and trailing Manage link (#168) were already mirrored. Verified with `scripts/qa/iphone-demo-131-qa.cjs` (new) plus the base, extended, state, Match Info and export suites on Chromium and WebKit, and light/dark screenshots of the Trends filters. The popup suite (`iphone-demo-popup-qa.cjs`) was already failing in `deleteFits` before this pass: at 320x740 the selected archive row ended up below the visible viewport (taller 1.3.0 rows) so the clamped popover sat 86 px from it; the suite now scrolls the row back into view after each resize, as a person would, and passes on Chromium and WebKit. `iphone-demo-visual-qa.cjs` now expects the three Trends menus (format, competition, opponent) instead of one select.
 
 
 ### Live Watch request/reply update — 16 November 2026
