@@ -4,7 +4,7 @@
  * state transitions. Each scenario gets a fresh browser context so storage and
  * simulator state cannot leak between cases.
  *
- *   PLAYWRIGHT_MODULE=/path/to/playwright node scripts/iphone-demo-state-qa.cjs
+ *   PLAYWRIGHT_MODULE=/path/to/playwright node scripts/qa/iphone-demo-state-qa.cjs
  */
 "use strict";
 
@@ -13,7 +13,7 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
-const DEMO_URL = process.env.PLAYWRIGHT_URL || pathToFileURL(path.resolve(__dirname, "../docs/website/try.html")).href;
+const DEMO_URL = process.env.PLAYWRIGHT_URL || pathToFileURL(path.resolve(__dirname, "../../docs/website/try.html")).href;
 const TIMEOUT = Number(process.env.PLAYWRIGHT_TIMEOUT || 4000);
 
 function check(value, message) { assert.ok(value, message); }

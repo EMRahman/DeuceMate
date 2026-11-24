@@ -1,7 +1,7 @@
 import XCTest
 
 /// Opt-in end-to-end comparison evidence using the browser's exact match fixtures.
-/// Generate with scripts/iphone-demo-native-fixtures.cjs and import using
+/// Generate with scripts/qa/iphone-demo-native-fixtures.cjs and import using
 /// NativeDemoParitySeedTests, then enable DEUCEMATE_NATIVE_PARITY in the test
 /// runner environment. Never touches a real device.
 final class NativeDemoParityTests: XCTestCase {

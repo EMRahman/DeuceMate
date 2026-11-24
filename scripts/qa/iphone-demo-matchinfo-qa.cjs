@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* Browser QA for the demo Match Info block, conversion, exports and Watch replica.
-   PLAYWRIGHT_MODULE=/path/to/playwright node scripts/iphone-demo-matchinfo-qa.cjs */
+   PLAYWRIGHT_MODULE=/path/to/playwright node scripts/qa/iphone-demo-matchinfo-qa.cjs */
 "use strict";
 const pw = require(process.env.PLAYWRIGHT_MODULE || "playwright"), chromium = pw[process.env.PLAYWRIGHT_BROWSER || "chromium"];
 const path = require("path"), { pathToFileURL } = require("url"), assert = require("assert");

@@ -7,7 +7,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const root = path.resolve(__dirname, "..");
+const root = path.resolve(__dirname, "../..");
 const jsPath = path.join(root, "docs/website/assets/phone-demo-coaching.js");
 const core = path.join(root, "DeuceMate/Packages/DeuceMateCore/Sources/DeuceMateCore/Stats");
 const window = {};

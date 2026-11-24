@@ -4,7 +4,7 @@
 "use strict";
 const assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm"),crypto=require("node:crypto");
 const directory=process.argv[2]||"/tmp/deucemate-native-export-references";
-const assets=path.resolve(__dirname,"../docs/website/assets"),context=vm.createContext({console,document:{querySelectorAll:()=>[]},window:{}});
+const assets=path.resolve(__dirname,"../../docs/website/assets"),context=vm.createContext({console,document:{querySelectorAll:()=>[]},window:{}});
 function load(name){vm.runInContext(fs.readFileSync(path.join(assets,name),"utf8"),context);}
 load("watch-demo.js");load("watch-demo-tracking.js");
 context.window.DeuceMateShell={history:[],settings:{track:false},screens:{},api:{}};

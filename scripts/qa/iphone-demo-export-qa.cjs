@@ -17,7 +17,7 @@ async function main() {
   async function download(action){const waiting=page.waitForEvent("download");await action();const item=await waiting,stream=await item.createReadStream();let content="";for await(const chunk of stream)content+=chunk.toString("utf8");return {content,name:item.suggestedFilename()};}
   function rawRows(prompt){return prompt.split("\n").filter(line=>/^\| \d+ \|/.test(line));}
   try {
-    await page.goto(process.env.PLAYWRIGHT_URL||pathToFileURL(path.resolve(__dirname,"../docs/website/try.html")).href);
+    await page.goto(process.env.PLAYWRIGHT_URL||pathToFileURL(path.resolve(__dirname,"../../docs/website/try.html")).href);
     await click(nav,"Manual match entry");
     const manual=root.locator(".phone-manual");
     assert.equal(await nav.getByRole("button",{name:"Cancel",exact:true}).count(),1);
