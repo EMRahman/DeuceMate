@@ -156,6 +156,10 @@ struct ArchiveExportReminderCoordinatorTests {
                 == .due(count: 5, missing: [.everything])
         )
         #expect(
+            c.reminder(for: plain, matchIDsWithNotes: [], archiveOpenedNormally: true, icloudStatus: .pausedDamagedArchive)
+                == .due(count: 5, missing: [.everything, .iCloudPaused])
+        )
+        #expect(
             c.reminder(for: plain, matchIDsWithNotes: [], archiveOpenedNormally: false, icloudStatus: .unavailable)
                 == .hidden
         )
