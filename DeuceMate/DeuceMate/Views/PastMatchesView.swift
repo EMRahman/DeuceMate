@@ -166,13 +166,18 @@ struct PastMatchesView: View {
                         pastMatchRow(record, archiveIDs: archiveIDs)
                     }
                 } header: {
-                    Text("Past Matches")
-                } footer: {
+                    // The summary and iCloud line sit under the title, not in
+                    // the footer, so a paused backup shows without scrolling
+                    // past every match.
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(archiveFooterText)
-                        iCloudStatusLabel
+                        Text("Past Matches")
+                        Group {
+                            Text(archiveSummaryText)
+                            iCloudStatusLabel
+                        }
+                        .font(.footnote)
+                        .textCase(nil)
                     }
-                    .font(.footnote)
                 }
             }
         }
@@ -411,7 +416,7 @@ struct PastMatchesView: View {
     /// Inline iCloud backup status: a Label when backed up, a tappable Button
     /// when off or unavailable (opening the iCloud guide) or paused for a
     /// damaged archive copy (opening Archive Diagnostics). Font and padding are left to
-    /// the call site so this can appear in both section footers and empty states.
+    /// the call site so this can appear in section headers, footers and empty states.
     @ViewBuilder
     private var iCloudStatusLabel: some View {
         let status = store.iCloudBackupStatus
@@ -942,7 +947,7 @@ struct PastMatchesView: View {
     /// full history is kept here while noting the watch's rolling limit. Mirrors
     /// the watch's foot-of-list note (which counts up to its cap) from the phone's
     /// keeps-everything perspective.
-    private var archiveFooterText: String {
+    private var archiveSummaryText: String {
         let count = store.history.count
         let noun = count == 1 ? "match" : "matches"
         return "\(count) \(noun) kept on iPhone — your full history stays here. Apple Watch holds the most recent \(WatchHistory.cap)."
@@ -981,7 +986,7 @@ struct PastMatchesView: View {
                 Text("Live Match")
             } footer: {
                 // Show iCloud status here only when there are no past
-                // records; otherwise it appears in the Past Matches footer.
+                // records; otherwise it appears under the Past Matches title.
                 if pastRecordsEmpty {
                     iCloudStatusLabel
                         .font(.footnote)
