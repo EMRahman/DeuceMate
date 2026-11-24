@@ -9,6 +9,7 @@
   var storageKey = "deucemate-browser-companion-v1", persistenceError = false, storageReadFailed = false, resetting = false;
   var connection = { paired: true, reachable: true, activation: "ready", syncing: false, syncFailure: false, archiveReadFailure: false, lastSync: null };
   var cloudBackup = null, cloudState = "unavailable";
+  var exportReminderState = { enabled: true, baseline: null, lastExportDate: null, threshold: 5 };
   var lastSignature = "", announceSignature = "", syncing = false, renderQueued = false;
   var displayedLiveId = null, lastPhoneSwipe = -Infinity;
   var receivedLive = null, receivedPhoneState = {}, liveReady = false, liveRequestPending = false;
@@ -235,7 +236,8 @@
     try {
       localStorage.setItem(storageKey, JSON.stringify({ archive: archive, watch: S.history, settings: settings,
         connection: connection, watchOnlyIDs: Array.from(watchOnlyIDs), tombstones: Array.from(tombstones),
-        live: watchLiveRecord(), cloudBackup: cloudBackup, cloudState: cloudState }));
+        live: watchLiveRecord(), cloudBackup: cloudBackup, cloudState: cloudState,
+        exportReminder: exportReminderState }));
     } catch (_) { persistenceError = true; }
   }
   function sync() {
@@ -621,8 +623,108 @@
     if (cloudState === "pending") return note("☁ Waiting to upload to iCloud (simulated)");
     return button("☁ iCloud unavailable — stored on iPhone ›", cloudGuide, "phone-cloud-status");
   }
+  function exportReminderHasNote(rec) {
+    return !!(window.DeuceMatePhoneMatchInfo && String(window.DeuceMatePhoneMatchInfo.getNote(rec.id) || "").trim());
+  }
+  function exportReminderHasHealth(rec) {
+    return !!(window.DeuceMatePhoneSettings && window.DeuceMatePhoneSettings.archiveHealthFields([rec]).length);
+  }
+  function exportReminderDue() {
+    if (!exportReminderState.enabled || connection.archiveReadFailure || storageReadFailed) return null;
+    var threshold = Number(exportReminderState.threshold) > 0 ? Number(exportReminderState.threshold) : 5;
+    var baseline = exportReminderState.baseline == null ? null : Number(exportReminderState.baseline);
+    var protectsNonHealth = cloudState === "uploaded" || cloudState === "pending";
+    var count = 0;
+    archive.forEach(function (r) {
+      if (r.endTime == null && r.iWon == null) return;
+      var completedAt = r.endTime != null ? r.endTime : r.startTime;
+      if (baseline != null && completedAt <= baseline) return;
+      if (!protectsNonHealth || exportReminderHasHealth(r) || exportReminderHasNote(r)) count += 1;
+    });
+    if (count < threshold) return null;
+    var hasHealth = archive.some(exportReminderHasHealth);
+    var hasNotes = archive.some(exportReminderHasNote);
+    var missing = [];
+    if (!protectsNonHealth) {
+      missing.push("everything");
+      if (hasNotes) missing.push("notes");
+    } else {
+      if (hasHealth) missing.push("health");
+      if (hasNotes) missing.push("notes");
+    }
+    return { count: count, missing: missing };
+  }
+  function exportReminderBody(due) {
+    var lead = "You've recorded " + due.count + " " + (due.count === 1 ? "match" : "matches") + " since your last export.";
+    var hasEverything = due.missing.indexOf("everything") >= 0;
+    var hasHealth = due.missing.indexOf("health") >= 0;
+    var hasNotes = due.missing.indexOf("notes") >= 0;
+    if (hasEverything) {
+      return hasNotes
+        ? lead + " Your matches aren't backed up anywhere else. An archive file keeps your matches, and can include your private notes if you choose to add them. Import it if you move to a new iPhone."
+        : lead + " Your matches aren't backed up anywhere else. An archive file keeps everything. Import it if you move to a new iPhone.";
+    }
+    if (hasHealth && hasNotes) {
+      return lead + " Your iCloud backup keeps scores and stats, but not heart rate, steps, distance, calories or private notes. An archive file keeps your health data, and can include your private notes if you choose to add them. Import it if you move to a new iPhone.";
+    }
+    if (hasHealth) {
+      return lead + " Your iCloud backup keeps scores and stats, but not heart rate, steps, distance or calories. An archive file keeps them all. Import it if you move to a new iPhone.";
+    }
+    if (hasNotes) {
+      return lead + " Your iCloud backup keeps scores and stats, but not private notes. An archive file can include your private notes when you choose to add them. Import it if you move to a new iPhone.";
+    }
+    return lead + " Save an archive file somewhere other than this iPhone so you can import it on a new iPhone.";
+  }
+  function exportReminderCard(due) {
+    var box = card();
+    box.classList.add("phone-export-reminder");
+    box.dataset.exportReminderCard = "true";
+    var title = h("h4", { class: "phone-export-reminder-head" }, icon("share"), "Keep a full copy of your matches");
+    var bodyText = h("p", { class: "phone-export-reminder-body" }, exportReminderBody(due));
+    var actions = h("div", { class: "phone-export-reminder-actions" },
+      button("Export Archive", function () { window.DeuceMatePhoneSettings.exportArchive(phone); }, "phone-primary"),
+      button("Later", function () { exportReminderAPI.snooze(); }));
+    var never = button("Don't Remind Me Again", function () { exportReminderAPI.disable(); }, "phone-export-reminder-never");
+    never.title = "You can turn reminders back on in Settings under Backup & Transfer.";
+    box.append(title, bodyText, actions, never);
+    return box;
+  }
+  var exportReminderAPI = {
+    isEnabled: function () { return !!exportReminderState.enabled; },
+    setEnabled: function (enabled) { exportReminderState.enabled = !!enabled; persist(); render(); },
+    disable: function () { exportReminderState.enabled = false; persist(); render(); },
+    snooze: function (now) { exportReminderState.baseline = now != null ? Number(now) : Date.now(); persist(); render(); },
+    recordExport: function (now) {
+      var ts = now != null ? Number(now) : Date.now();
+      exportReminderState.baseline = ts;
+      exportReminderState.lastExportDate = ts;
+      persist(); render();
+    },
+    recordImport: function (exportedAt) {
+      var ts = typeof exportedAt === "number" ? exportedAt : Date.parse(exportedAt);
+      if (!Number.isFinite(ts)) return;
+      var current = exportReminderState.baseline;
+      exportReminderState.baseline = current == null ? ts : Math.max(Number(current), ts);
+      persist();
+    },
+    lastExportDate: function () { return exportReminderState.lastExportDate; },
+    lastExportedText: function () {
+      if (exportReminderState.lastExportDate == null) return "Never exported";
+      return "Last exported " + new Date(exportReminderState.lastExportDate).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    },
+    threshold: function () { return exportReminderState.threshold; },
+    setThreshold: function (value) {
+      var n = Number(value);
+      exportReminderState.threshold = Number.isFinite(n) && n >= 1 ? Math.round(n) : 5;
+      persist(); render();
+    },
+    due: exportReminderDue
+  };
   function matches() {
     var out = h("div", {});
+    var live = connection.paired && connection.activation === "ready" ? liveRecord() : null;
+    var reminder = !live ? exportReminderDue() : null;
+    if (reminder) out.append(exportReminderCard(reminder));
     out.append(window.DeuceMatePhoneTrends.headline(phone));
     out.append(window.DeuceMatePhoneMatchInfo.opponentsSection(phone));
     if (connection.activation === "connecting") out.append(card(heading("Connecting to Apple Watch…"), note("Your iPhone archive stays available while Watch connectivity starts.")));
@@ -630,7 +732,6 @@
     if (connection.syncing) out.append(card(note("Syncing with Apple Watch… Your saved iPhone matches remain available.")));
     if (connection.syncFailure) out.append(card(heading("Watch sync unavailable"), note("The latest Watch sync failed. Matches already saved on this iPhone are still available.")));
     if (connection.archiveReadFailure || storageReadFailed) out.append(card(heading("Saved archive unavailable"), note("The saved browser archive could not be read. Any cached iPhone matches remain visible and have not been overwritten.")));
-    var live = connection.paired && connection.activation === "ready" ? liveRecord() : null;
     if (live) out.append(heading("Live Match"), card(row(live), button("▣ Live Scoreboard", function () { navigate("live"); }, "phone-primary")));
     var all = archive.slice();
     if (connection.paired) S.history.forEach(function (r) {
@@ -874,7 +975,7 @@
     return JSON.stringify([S.liveId, api.stateRef(), api.phoneState(), S.history, settings,
       connection.paired, connection.reachable, connection.activation, connection.syncing,
       connection.syncFailure, connection.archiveReadFailure, Array.from(watchOnlyIDs), commandFailed,
-      liveReady, liveRequestPending, receivedLive, receivedPhoneState]);
+      liveReady, liveRequestPending, receivedLive, receivedPhoneState, exportReminderState]);
   }
   function queueRender() {
     if (renderQueued) return;
@@ -900,7 +1001,7 @@
     records: function () { return copy(archive); }, openSelectedActions: function () { var r = archive.find(function (x) { return x.id === selected; }); if (r) recordActions(r); }, liveRecord: liveRecord, settings: settings,
     navigate: navigate, render: render, showSheet: showSheet, closeSheet: closeSheet, confirm: confirm, notify: notify,
     updateRecord: updateRecord, applyWatchMatchType: applyWatchMatchType, setSetting: setSetting, addRecord: addRecord, replaceRecords: replaceRecords, sync: sync, syncNow: syncNow, download: download,
-    connection: connection, refreshLiveState: refreshLiveState };
+    connection: connection, refreshLiveState: refreshLiveState, exportReminder: exportReminderAPI };
 
   // Guide boot runs before this deferred script, so starter history exists.
   try {
@@ -916,6 +1017,12 @@
       Object.assign(settings, saved.settings || {}); S.health = settings.health || "authorized";
       if (S.urlPresetActive) settings.track = presetTrack;
       cloudBackup = saved.cloudBackup || null; cloudState = saved.cloudState || "unavailable";
+      if (saved.exportReminder && typeof saved.exportReminder === "object") {
+        exportReminderState.enabled = saved.exportReminder.enabled !== false;
+        exportReminderState.baseline = typeof saved.exportReminder.baseline === "number" ? saved.exportReminder.baseline : null;
+        exportReminderState.lastExportDate = typeof saved.exportReminder.lastExportDate === "number" ? saved.exportReminder.lastExportDate : null;
+        exportReminderState.threshold = Number(saved.exportReminder.threshold) >= 1 ? Math.round(Number(saved.exportReminder.threshold)) : 5;
+      }
       api.configure({ tracking: settings.track, compass: settings.compass, health: S.health === "authorized" });
       S.applyTheme();
       if (!S.urlPresetActive && saved.live && saved.live.resume && !saved.live.endTime) {
@@ -953,8 +1060,15 @@
   });
   activation.value = connection.activation;
   activation.addEventListener("change", function () { connection.activation = activation.value; if (connection.activation === "ready") sync(); persist(); render(); });
+  var reminderThreshold = h("select", { "aria-label": "Export reminder threshold" });
+  [["5", "5 matches (default)"], ["1", "1 match (demo)"]].forEach(function (choice) {
+    reminderThreshold.append(h("option", { value: choice[0] }, choice[1]));
+  });
+  reminderThreshold.value = String(exportReminderState.threshold === 1 ? 1 : 5);
+  reminderThreshold.addEventListener("change", function () { exportReminderAPI.setThreshold(Number(reminderThreshold.value)); });
   experiments.append(demoToggle("Watch paired", "paired"), demoToggle("Watch reachable", "reachable"),
     h("label", { class: "phone-field" }, "Watch activation", activation),
+    h("label", { class: "phone-field" }, "Export reminder threshold", reminderThreshold),
     demoToggle("Sync pending", "syncing"), demoToggle("Simulate sync failure", "syncFailure"),
     demoToggle("Simulate saved archive read failure", "archiveReadFailure"),
     button("Browser export tools", function () {

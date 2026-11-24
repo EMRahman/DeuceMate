@@ -377,7 +377,34 @@ async function main() {
     await page.waitForTimeout(200);
     check((await phoneState(page)).records.length === beforeImport,
       "invalid/malicious archive must not replace or mutate the current archive");
-    process.stdout.write("[base QA] manual entry, Watch history, and invalid import checks passed\n");
+
+    // Archive export reminder card + Settings toggle & Last exported line.
+    const reminderToggle = root.getByRole("checkbox", { name: "Remind Me to Export", exact: true });
+    await reminderToggle.waitFor({ state: "visible", timeout: TIMEOUT });
+    check(await reminderToggle.isChecked(), "Remind Me to Export should default ON");
+    const lastExported = root.locator("[data-archive-last-exported]");
+    check((await lastExported.innerText()) === "Never exported", "initial archive should show Never exported");
+    await page.getByRole("button", { name: "Back to Matches" }).click();
+    const reminderCard = root.locator("[data-export-reminder-card]");
+    // Clear the live match resumed above so the Matches reminder card can appear.
+    await page.evaluate(() => {
+      const shell = window.DeuceMateShell;
+      shell.api.clear(); shell.liveId = null; shell.popAll();
+      window.DeuceMatePhone.render();
+    });
+    await reminderCard.waitFor({ state: "visible", timeout: TIMEOUT });
+    await reminderCard.getByRole("button", { name: "Don't Remind Me Again", exact: true }).click();
+    await reminderCard.waitFor({ state: "hidden", timeout: TIMEOUT });
+    await root.getByRole("button", { name: "Settings" }).click();
+    check(!(await reminderToggle.isChecked()), "Don't Remind Me Again must switch Remind Me to Export off");
+    await reminderToggle.check();
+    await page.getByRole("button", { name: "Back to Matches" }).click();
+    await reminderCard.waitFor({ state: "visible", timeout: TIMEOUT });
+    await reminderCard.getByRole("button", { name: "Later", exact: true }).click();
+    await reminderCard.waitFor({ state: "hidden", timeout: TIMEOUT });
+    await root.getByRole("button", { name: "Settings" }).click();
+    check((await lastExported.innerText()) === "Never exported", "Later must not change Last exported");
+    process.stdout.write("[base QA] manual entry, Watch history, invalid import, and export reminder checks passed\n");
 
     // Browser layout should stay inside the device frame without horizontal
     // scrolling; an enlarged viewport is checked separately for responsive

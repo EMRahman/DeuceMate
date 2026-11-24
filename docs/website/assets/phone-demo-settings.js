@@ -15,7 +15,8 @@
     input: "Lets you swipe to score on the iPhone scoreboard.",
     birth: "Estimates your maximum heart rate from your age.",
     override: "Sets your maximum heart rate manually instead of by age.",
-    level: "Your skill level, used to tailor AI coaching advice."
+    level: "Your skill level, used to tailor AI coaching advice.",
+    archiveExportReminder: "Reminds you every 5 matches to save a full archive file."
   };
   var THEMES = [["default", "Classic"], ["clayCourt", "Clay Court"], ["grassCourt", "Grass Court"], ["hardCourtDay", "Hard Court"], ["hardCourtNight", "Hard Court (Night)"]];
   var LEVELS = [["2.5–3.0", "Beginner (2.5–3.0)"], ["3.0–3.5", "Intermediate (3.0–3.5)"], ["3.5–4.5", "Club player (3.5–4.5)"]];
@@ -196,7 +197,12 @@
     out.appendChild(section("Watch Sync", syncRows, "Match data is synced between your iPhone and Apple Watch using Apple's WatchConnectivity framework. This browser demo simulates the connection; it does not report a real Apple Watch."));
 
     out.appendChild(section("Match Details", [buttonRow(phone, "people", "Players", function () { window.DeuceMatePhoneMatchInfo.playersSheet(phone); })], "Opponents and partners you have added to matches. Rename them, set their playing profile, or forget them everywhere."));
-    var transfer = [buttonRow(phone, "share", "Export Match Archive", function () { exportArchive(phone); }), buttonRow(phone, "import", "Import Match Archive", function () { importArchive(phone); })];
+    var transfer = [
+      buttonRow(phone, "share", "Export Match Archive", function () { exportArchive(phone); }),
+      buttonRow(phone, "import", "Import Match Archive", function () { importArchive(phone); }),
+      node("p", { class: "phone-list-footnote phone-archive-last-exported", "data-archive-last-exported": "true" }, phone.exportReminder.lastExportedText()),
+      toggle("Remind Me to Export", COPY.archiveExportReminder, phone.exportReminder.isEnabled(), function (v) { phone.exportReminder.setEnabled(v); })
+    ];
     out.appendChild(section("Backup & Transfer", transfer, "Automatic iCloud and device restores keep scores and non-health stats, but not recorded heart rate, steps, distance, or calories. Before moving to a new iPhone, Export Match Archive here, then Import it on the new phone. Manual archive files are full-fidelity and may include those HealthKit-derived values. Browser exports are local JSON files; no cloud service is connected."));
     out.appendChild(section("About", [
       valueRow("Version", "Browser demo"),
@@ -247,6 +253,7 @@
   function downloadArchive(phone, recs) {
     var payload = { format: "deucemate-browser-demo-archive", version: 1, exportedAt: new Date().toISOString(), records: recs };
     if (phone.download("deucemate_archive_" + new Date().toISOString().slice(0, 10) + ".json", "application/json", JSON.stringify(payload, null, 2))) {
+      phone.exportReminder.recordExport();
       phone.notify("Archive exported to a local JSON file (" + recs.length + " matches).");
     }
   }
@@ -288,7 +295,7 @@
         try {
           var data = JSON.parse(String(reader.result)), incoming = data && data.records;
           if (!data || data.format !== "deucemate-browser-demo-archive" || data.version !== 1 || !Array.isArray(incoming) || !incoming.every(validRecord)) throw new Error("This file is not a valid DeuceMate browser demo archive.");
-          phone.showSheet("Import Match Archive", archiveImportChoices(phone, incoming), { presentation: "actions" });
+          phone.showSheet("Import Match Archive", archiveImportChoices(phone, incoming, data.exportedAt), { presentation: "actions" });
         } catch (e) { phone.notify("Import failed: " + e.message); }
       };
       reader.onerror = function () { phone.notify("Import failed: could not read the selected file."); };
@@ -296,15 +303,17 @@
     });
     file.click();
   }
-  function archiveImportChoices(phone, incoming) {
+  function archiveImportChoices(phone, incoming, exportedAt) {
     var wrap = node("div", { class: "phone-demo-disclosure" });
     wrap.appendChild(node("p", {}, "Found " + incoming.length + " matches. Choose how to apply this archive to the browser demo."));
     wrap.appendChild(phone.button("Merge", function () {
       var map = Object.create(null); phone.records().concat(incoming).forEach(function (r) { map[r.id] = r; });
+      phone.exportReminder.recordImport(exportedAt);
       phone.replaceRecords(Object.keys(map).map(function (id) { return map[id]; })); phone.closeSheet(); phone.notify("Archive merged.");
     }, "phone-primary"));
     wrap.appendChild(phone.button("Replace Archive", function () {
       phone.confirm("Replace Match Archive?", "Replace " + phone.records().length + " current matches with " + incoming.length + " imported matches?", "Replace Archive", function () {
+        phone.exportReminder.recordImport(exportedAt);
         phone.replaceRecords(incoming); phone.notify("Archive replaced.");
       });
     }, "phone-secondary"));
@@ -469,5 +478,6 @@
   }
 
   window.DeuceMatePhoneSettings = { settings: settings, manual: manual, validRecord: validRecord,
+    exportArchive: exportArchive, archiveHealthFields: archiveHealthFields,
     resetManual: function () { resetManual(); manualActive = false; } };
 }());

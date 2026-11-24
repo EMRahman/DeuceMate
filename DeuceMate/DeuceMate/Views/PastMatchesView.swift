@@ -59,6 +59,8 @@ private final class MatchRowFrameCache {
 struct PastMatchesView: View {
     @EnvironmentObject private var store: PhoneStatsStore
     @EnvironmentObject private var syncService: PhoneMatchSyncService
+    @ObservedObject private var notesStore: MatchNotesStore = .shared
+    @ObservedObject private var reminderCoordinator: ArchiveExportReminderCoordinator = .shared
     @Environment(\.appTheme) private var theme
     @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
@@ -71,6 +73,9 @@ struct PastMatchesView: View {
     @State private var showManualEntry = false
     @State private var showICloudGuide = false
     @State private var showRestorePrompt = false
+    @State private var showArchiveExport = false
+    @State private var archiveExportStatus: ArchiveTransferStatus?
+    @State private var deferExportReminderUntilNextAppear = false
     @State private var pendingDelete: PendingDelete?
     @State private var matchRowFrameCache = MatchRowFrameCache()
     // Retain the origin through dismissal; clearing the pending item must not
@@ -129,6 +134,16 @@ struct PastMatchesView: View {
                 : (store.history + watchOnly)
                     .filter { $0.id != activeID }
                     .sorted(by: MatchChronology.newestFirst)
+
+            let storedLive = store.history.first(where: { $0.id == activeID })
+            let compactLive = syncService.liveState?.record
+            let hasLiveMatch = liveSectionDisplayRecord(stored: storedLive, live: compactLive) != nil
+
+            // Periodic manual archive export reminder — first section above
+            // Trends when due, hidden while a live match is active, while a
+            // restore prompt is open, or on the dismissal that requested a
+            // review (ARCHIVE_EXPORT_REMINDER_PLAN.md §2.1, §5.4).
+            exportReminderSection(hasLiveMatch: hasLiveMatch)
 
             // Trends — reads store.history directly, not pastRecords,
             // since watch-mirror rows may carry no stats (§6.1 of
@@ -234,6 +249,27 @@ struct PastMatchesView: View {
                 }
             }
         }
+        .archiveExportFlow(
+            isPresented: $showArchiveExport,
+            store: store,
+            notesStore: notesStore,
+            reminderCoordinator: reminderCoordinator
+        ) { outcome in
+            switch outcome {
+            case .exported:
+                archiveExportStatus = ArchiveTransferStatus(
+                    message: "Archive exported",
+                    isSuccess: true
+                )
+            case .failed(let message):
+                archiveExportStatus = ArchiveTransferStatus(
+                    message: "Export failed: \(message)",
+                    isSuccess: false
+                )
+            case .cancelled:
+                break
+            }
+        }
     }
 
     var body: some View {
@@ -282,10 +318,26 @@ struct PastMatchesView: View {
                 Text("Found a backup with \(preview.recordCount) match\(preview.recordCount == 1 ? "" : "es")\(dateStr). Restore it to this iPhone?")
             }
             .onChange(of: selected?.id) { _, id in
-                if let id { reviewPrompt.reportOpened(matchID: id, isActive: scenePhase == .active) }
+                if let id {
+                    archiveExportStatus = nil
+                    reviewPrompt.reportOpened(matchID: id, isActive: scenePhase == .active)
+                }
             }
-            .onChange(of: scenePhase) { _, phase in
+            .onChange(of: showSettings) { _, presented in
+                if presented {
+                    archiveExportStatus = nil
+                } else {
+                    deferExportReminderUntilNextAppear = false
+                }
+            }
+            .onChange(of: scenePhase) { oldPhase, phase in
                 reviewPrompt.scenePhaseChanged(isActive: phase == .active)
+                if phase == .active && oldPhase == .background {
+                    deferExportReminderUntilNextAppear = false
+                }
+            }
+            .onAppear {
+                deferExportReminderUntilNextAppear = false
             }
             .onChange(of: store.pendingRestorePreview) { _, preview in
                 if preview != nil { showRestorePrompt = true }
@@ -652,6 +704,64 @@ struct PastMatchesView: View {
         pendingDelete = nil
     }
 
+    // MARK: - Archive export reminder
+
+    @ViewBuilder
+    private func exportReminderSection(hasLiveMatch: Bool) -> some View {
+        if let status = archiveExportStatus {
+            Section {
+                Text(status.message)
+                    .font(.footnote)
+                    .foregroundStyle(status.isSuccess ? .green : .red)
+                    .accessibilityIdentifier("archive-export-status")
+            }
+        }
+        if case let .due(count, missing) = currentExportReminder(hasLiveMatch: hasLiveMatch) {
+            ArchiveExportReminderCard(
+                count: count,
+                missing: missing,
+                onExport: {
+                    archiveExportStatus = nil
+                    showArchiveExport = true
+                },
+                onLater: {
+                    archiveExportStatus = nil
+                    reminderCoordinator.snooze()
+                },
+                onDisable: {
+                    archiveExportStatus = nil
+                    reminderCoordinator.disable()
+                }
+            )
+        }
+    }
+
+    private func currentExportReminder(hasLiveMatch: Bool) -> ArchiveExportReminderPolicy.Reminder {
+        guard !hasLiveMatch,
+              !deferExportReminderUntilNextAppear,
+              !showRestorePrompt,
+              store.pendingRestorePreview == nil,
+              !store.isRestoringFromICloud,
+              !store.isCanonicalArchiveUnreadable
+        else {
+            return .hidden
+        }
+        let icloudStatus = ICloudBackupCopy.current(
+            isEnabled: true,
+            isAvailable: store.isICloudAvailable,
+            isRestoring: store.isRestoringFromICloud,
+            hasPendingRestore: store.pendingRestorePreview != nil,
+            isUploaded: store.isBackupUploaded
+        )
+        let matchIDsWithNotes = Set(notesStore.notes.values.filter { !$0.isCleared }.map(\.matchID))
+        return reminderCoordinator.reminder(
+            for: store.history,
+            matchIDsWithNotes: matchIDsWithNotes,
+            archiveOpenedNormally: true,
+            icloudStatus: icloudStatus
+        )
+    }
+
     // MARK: - Review prompt
 
     /// Runs when a match report closes, the moment the player has just finished
@@ -664,9 +774,15 @@ struct PastMatchesView: View {
             try? await Task.sleep(for: .seconds(1))
             guard selected == nil, pendingDelete == nil, scenePhase == .active,
                   !showSettings, !scoreboard.isPresented, !showManualEntry,
-                  !showICloudGuide, !showRestorePrompt,
+                  !showICloudGuide, !showRestorePrompt, !showArchiveExport,
                   reviewPrompt.shouldRequestReviewOnClose(history: store.history, now: closedAt)
-            else { return }
+            else {
+                deferExportReminderUntilNextAppear = false
+                return
+            }
+            // §5.4: wait until the next time the Matches screen appears before
+            // showing the export reminder card on a dismissal that asks for a review.
+            deferExportReminderUntilNextAppear = true
             reviewPrompt.recordRequest()
             requestReview()
         }

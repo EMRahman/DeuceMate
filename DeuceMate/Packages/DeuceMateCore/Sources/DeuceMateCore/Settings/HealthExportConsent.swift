@@ -111,6 +111,14 @@ public enum HealthExportConsent {
         return HealthExportField.allCases.filter { union.contains($0) }
     }
 
+    /// Whether `record` holds any raw stored HealthKit-derived value (heart
+    /// rate, steps, calories, or distance), including a stored `0` total.
+    /// Shared by archive export disclosure and `ArchiveExportReminderPolicy` so
+    /// both use one definition of "carries Health data".
+    public static func hasRawHealthData(in record: MatchRecord) -> Bool {
+        !rawStoredFields(in: record).isEmpty
+    }
+
     /// The raw stored health categories in one record — heart rate, steps,
     /// calories, distance (never derived zones). The manual archive serialises
     /// raw records as-is, so **any non-nil value counts**, including a stored `0`

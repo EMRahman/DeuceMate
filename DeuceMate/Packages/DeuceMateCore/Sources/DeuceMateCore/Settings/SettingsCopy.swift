@@ -18,6 +18,7 @@ public enum SettingsCopy: CaseIterable, Sendable {
     case overrideMaxHR
     case playerLevelNTRP
     case iCloudSync
+    case archiveExportReminder
 
     /// One concise sentence describing what the setting does. Plain language a club
     /// player understands, ends with a period, and kept short enough for the Watch.
@@ -36,6 +37,7 @@ public enum SettingsCopy: CaseIterable, Sendable {
         case .overrideMaxHR:         return "Sets your maximum heart rate manually instead of by age."
         case .playerLevelNTRP:       return "Your skill level, used to tailor AI coaching advice."
         case .iCloudSync:            return "Backs up your match history to your personal iCloud account."
+        case .archiveExportReminder: return "Reminds you every 5 matches to save a full archive file."
         }
     }
 
