@@ -397,13 +397,15 @@ struct PastMatchesView: View {
 
     // MARK: - iCloud status
 
-    /// Inline iCloud backup status: a Label when backed up, a tappable Button
-    /// (opening Settings) when off or unavailable. Font and padding are left to
+    /// Inline iCloud backup status: a Label when backed up (orange when paused
+    /// for a damaged archive copy), a tappable Button (opening Settings) when
+    /// off or unavailable. Font and padding are left to
     /// the call site so this can appear in both section footers and empty states.
     @ViewBuilder
     private var iCloudStatusLabel: some View {
         let status = ICloudBackupCopy.current(
             isEnabled: true,
+            isPausedForDamagedArchive: store.isPausedForDamagedArchive,
             isAvailable: store.isICloudAvailable,
             isRestoring: store.isRestoringFromICloud,
             hasPendingRestore: store.pendingRestorePreview != nil,
@@ -413,6 +415,10 @@ struct PastMatchesView: View {
         case .backedUp, .restoring, .pendingUpload:
             Label(status.text, systemImage: status.systemImage)
                 .foregroundStyle(.secondary)
+        case .pausedDamagedArchive:
+            // A plain label for now; Archive Diagnostics makes it a button (PR B).
+            Label(status.text, systemImage: status.systemImage)
+                .foregroundStyle(.orange)
         case .pendingRestore:
             Button { showRestorePrompt = true } label: {
                 HStack(spacing: 4) {
@@ -748,6 +754,7 @@ struct PastMatchesView: View {
         }
         let icloudStatus = ICloudBackupCopy.current(
             isEnabled: true,
+            isPausedForDamagedArchive: store.isPausedForDamagedArchive,
             isAvailable: store.isICloudAvailable,
             isRestoring: store.isRestoringFromICloud,
             hasPendingRestore: store.pendingRestorePreview != nil,

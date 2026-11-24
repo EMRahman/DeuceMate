@@ -54,16 +54,20 @@ matches and a fresh Watch has none, it directs the user to open a match and choo
 are refreshed through `sessionWatchStateDidChange`, rather than remaining frozen
 at activation.
 
-**Known gap (TECHNICAL_DEBT #18).** Sometimes the iPhone can read its archive
-file but can't decode it, for example when one match holds a value this version
-doesn't know. When that happens, it moves the file aside to `.corrupt`, starts
-an empty archive, and that launch's iCloud push overwrites the backup. The
-next step is
-[`ARCHIVE_DERISK_PLAN.md`](../features/ARCHIVE_DERISK_PLAN.md): keep every
-damaged copy and pause iCloud while one exists. Its decisions are signed off
-and its PR A is next, and the full redesign
-([`ARCHIVE_SAFETY_PLAN.md`](../features/ARCHIVE_SAFETY_PLAN.md)) is deferred. An earlier attempt (#228–#234) was reset, so this
-document describes the 1.4.0 behaviour.
+**Undecodable archive (TECHNICAL_DEBT #18).** Sometimes the iPhone can read its
+archive file but can't decode it, for example when one match holds a value this
+version doesn't know. It then keeps the file as a dated, backup-excluded copy
+(`matchHistory.json.corrupt-20261123T101500`) and never deletes it, and starts
+an empty archive so new matches still save. While a dated copy of the history,
+tombstones or forgotten-player ledger exists, iCloud push **and** initial
+restore are paused on every launch, so the iCloud backup keeps the matches as
+they were. The Matches screen says "iCloud backup paused — your iCloud copy is
+unchanged". Only an app update that recovers the copies and deletes them ends
+the pause. A damaged Health sidecar, or an undated `.corrupt` file left by
+1.4.0, doesn't pause anything. This is PR A of
+[`ARCHIVE_DERISK_PLAN.md`](../features/ARCHIVE_DERISK_PLAN.md); its PR B adds
+Archive Diagnostics, and the full redesign
+([`ARCHIVE_SAFETY_PLAN.md`](../features/ARCHIVE_SAFETY_PLAN.md)) is deferred.
 
 **Live recovery (16 November 2026):** activation, reconnect, phone foreground,
 opening the live board and Sync Now request the existing Watch model's current

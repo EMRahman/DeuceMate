@@ -9,19 +9,44 @@ struct PhoneStatsStoreTests {
         let root: URL
         let canonical: URL
         let legacyDocuments: URL
+        /// Stands in for the iCloud container (see `makeICloudStore`).
+        let iCloud: URL
 
         init() throws {
             root = FileManager.default.temporaryDirectory
                 .appendingPathComponent("phone-stats-store-\(UUID().uuidString)", isDirectory: true)
             canonical = root.appendingPathComponent("MatchArchive", isDirectory: true)
             legacyDocuments = root.appendingPathComponent("Documents", isDirectory: true)
+            iCloud = root.appendingPathComponent("iCloud", isDirectory: true)
             try FileManager.default.createDirectory(at: canonical, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(at: legacyDocuments, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: iCloud, withIntermediateDirectories: true)
         }
 
         var historyURL: URL { canonical.appendingPathComponent("matchHistory.json") }
         var tombstoneURL: URL { canonical.appendingPathComponent("deletedMatchIDs.json") }
         var healthURL: URL { canonical.appendingPathComponent("healthData.json") }
+        var initializedURL: URL { canonical.appendingPathComponent("archiveInitialized.json") }
+        var iCloudHistoryURL: URL { iCloud.appendingPathComponent("matchHistory.json") }
+
+        /// Dated damaged copies (`<file>.corrupt-<stamp>`) of `url`, oldest first.
+        func damagedCopies(of url: URL) throws -> [URL] {
+            try FileManager.default.contentsOfDirectory(atPath: canonical.path)
+                .filter { $0.hasPrefix(url.lastPathComponent + ".corrupt-") }
+                .sorted()
+                .map { canonical.appendingPathComponent($0) }
+        }
+
+        /// A store whose backup passes write to `iCloud`. Sync stays manual:
+        /// call `syncICloudBackup()`, then any synchronous call to drain the queue.
+        func makeICloudStore() -> PhoneStatsStore {
+            PhoneStatsStore(storageConfiguration: .init(
+                canonicalDirectoryURL: canonical,
+                legacyDocumentsDirectoryURL: legacyDocuments,
+                startsICloudSync: false,
+                iCloudContainerURL: { iCloud }
+            ))
+        }
 
         func makeStore() -> PhoneStatsStore {
             PhoneStatsStore(storageConfiguration: .init(
@@ -116,9 +141,96 @@ struct PhoneStatsStoreTests {
         store.appendMatch(incoming)
         #expect(Set(store.loadHistory().map(\.id)) == Set([stripped.id, incoming.id]))
         #expect(FileManager.default.fileExists(atPath: fixture.healthURL.path))
-        #expect(FileManager.default.fileExists(atPath: fixture.healthURL.appendingPathExtension("corrupt").path))
-        #expect(try fixture.healthURL.appendingPathExtension("corrupt")
+        // The damaged sidecar is kept as a dated, backup-excluded copy, and a
+        // damaged sidecar never pauses iCloud (ARCHIVE_DERISK_PLAN.md §3.2).
+        let sidecarCopy = try #require(try fixture.damagedCopies(of: fixture.healthURL).first)
+        #expect(try sidecarCopy
             .resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+        #expect(!store.isPausedForDamagedArchive)
+    }
+
+    // MARK: - Damaged copies and the iCloud pause (ARCHIVE_DERISK_PLAN.md §3)
+
+    @Test func decodeFailureKeepsDatedCopyAndLeavesEarlierCopies() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let earlierDated = fixture.canonical.appendingPathComponent("matchHistory.json.corrupt-20260101T000000")
+        let legacy = fixture.canonical.appendingPathComponent("matchHistory.json.corrupt")
+        try Data("earlier".utf8).write(to: earlierDated)
+        try Data("legacy".utf8).write(to: legacy)
+        try Data("not json {{{".utf8).write(to: fixture.historyURL)
+
+        let store = fixture.makeStore()
+
+        #expect(store.loadHistory().isEmpty)
+        #expect(store.isPausedForDamagedArchive)
+        let copies = try fixture.damagedCopies(of: fixture.historyURL)
+        #expect(copies.count == 2)
+        #expect(try Data(contentsOf: earlierDated) == Data("earlier".utf8))
+        #expect(try Data(contentsOf: legacy) == Data("legacy".utf8))
+        let newCopy = try #require(copies.first { $0 != earlierDated })
+        #expect(newCopy.lastPathComponent.wholeMatch(of: #/matchHistory\.json\.corrupt-\d{8}T\d{6}/#) != nil)
+        #expect(try Data(contentsOf: newCopy) == Data("not json {{{".utf8))
+        #expect(try newCopy.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+
+        // The app stays usable: new matches still save on the iPhone.
+        let incoming = record()
+        store.appendMatch(incoming)
+        #expect(fixture.makeStore().loadHistory().map(\.id) == [incoming.id])
+    }
+
+    @Test(arguments: ["matchHistory.json", "deletedMatchIDs.json", "forgottenPlayers.json"])
+    func damagedCopyPausesICloudOnThisAndNextLaunch(damagedFile: String) throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        // An initialized archive, so a normal pass would push (the 1.4.0 overwrite).
+        try encode([record(health: false)], to: fixture.historyURL)
+        try encode([UUID](), to: fixture.tombstoneURL)
+        try encode(true, to: fixture.initializedURL)
+        try Data("not json {{{".utf8).write(to: fixture.canonical.appendingPathComponent(damagedFile))
+        try encode([record(health: false), record(health: false)], to: fixture.iCloudHistoryURL)
+        let iCloudBefore = try Data(contentsOf: fixture.iCloudHistoryURL)
+        let iCloudFilesBefore = Set(try FileManager.default.contentsOfDirectory(atPath: fixture.iCloud.path))
+
+        let store = fixture.makeICloudStore()
+        #expect(store.isPausedForDamagedArchive)
+        store.syncICloudBackup()
+        store.appendMatch(record())
+        store.syncICloudBackup()
+        _ = store.loadHistory()
+
+        let relaunched = fixture.makeICloudStore()
+        #expect(relaunched.isPausedForDamagedArchive)
+        relaunched.syncICloudBackup()
+        _ = relaunched.loadHistory()
+
+        #expect(try Data(contentsOf: fixture.iCloudHistoryURL) == iCloudBefore)
+        #expect(Set(try FileManager.default.contentsOfDirectory(atPath: fixture.iCloud.path)) == iCloudFilesBefore)
+        #expect(try fixture.damagedCopies(of: fixture.canonical.appendingPathComponent(damagedFile)).count == 1)
+    }
+
+    /// Controls for the pause: copies that must not pause iCloud still push.
+    @Test(arguments: [
+        "matchHistory.json.corrupt",                  // legacy 1.4.0 copy, undated
+        "healthData.json.corrupt-20261123T101500"     // damaged Health sidecar
+    ])
+    func copiesThatMustNotPauseICloudStillPush(copyName: String) throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let kept = record(health: false)
+        try encode([kept], to: fixture.historyURL)
+        try encode([UUID](), to: fixture.tombstoneURL)
+        try encode(true, to: fixture.initializedURL)
+        try Data("not json {{{".utf8).write(to: fixture.canonical.appendingPathComponent(copyName))
+        try encode([record(health: false)], to: fixture.iCloudHistoryURL)
+
+        let store = fixture.makeICloudStore()
+        #expect(!store.isPausedForDamagedArchive)
+        store.syncICloudBackup()
+        _ = store.loadHistory()
+
+        let pushed = try JSONDecoder().decode([MatchRecord].self, from: Data(contentsOf: fixture.iCloudHistoryURL))
+        #expect(pushed.map(\.id) == [kept.id])
     }
 
     @Test func unreadableMainSuspendsWritesInsteadOfReplacingArchive() throws {

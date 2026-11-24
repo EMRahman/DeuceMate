@@ -26,6 +26,38 @@ final class ICloudBackupCopyTests: XCTestCase {
         XCTAssertEqual(ICloudBackupCopy.current(isEnabled: false, isAvailable: true, hasPendingRestore: true), .notBackedUp)
     }
 
+    func test_current_pausedForDamagedArchive_winsOverEverythingButToggleOff() {
+        // ARCHIVE_DERISK_PLAN.md §3.3: a dated damaged copy pauses iCloud, and
+        // the indicator must say so whatever else is going on.
+        XCTAssertEqual(
+            ICloudBackupCopy.current(isEnabled: true, isPausedForDamagedArchive: true, isAvailable: true, isUploaded: true),
+            .pausedDamagedArchive
+        )
+        XCTAssertEqual(
+            ICloudBackupCopy.current(isEnabled: true, isPausedForDamagedArchive: true, isAvailable: false),
+            .pausedDamagedArchive
+        )
+        XCTAssertEqual(
+            ICloudBackupCopy.current(
+                isEnabled: true, isPausedForDamagedArchive: true, isAvailable: true,
+                isRestoring: true, hasPendingRestore: true, isUploaded: nil
+            ),
+            .pausedDamagedArchive
+        )
+        // Only "toggle off" outranks it.
+        XCTAssertEqual(
+            ICloudBackupCopy.current(isEnabled: false, isPausedForDamagedArchive: true, isAvailable: true),
+            .notBackedUp
+        )
+        // The default leaves every existing resolution unchanged.
+        XCTAssertEqual(ICloudBackupCopy.current(isEnabled: true, isAvailable: true, isUploaded: true), .backedUp)
+    }
+
+    func test_pausedForDamagedArchive_copy() {
+        XCTAssertEqual(ICloudBackupCopy.pausedDamagedArchive.text, "iCloud backup paused — your iCloud copy is unchanged")
+        XCTAssertEqual(ICloudBackupCopy.pausedDamagedArchive.systemImage, "exclamationmark.icloud")
+    }
+
     func test_current_unavailableWhenSignedOut() {
         XCTAssertEqual(ICloudBackupCopy.current(isEnabled: true, isAvailable: false), .unavailable)
         // Unavailability outranks restoring and pendingRestore (they require iCloud).
@@ -81,7 +113,7 @@ final class ICloudBackupCopyTests: XCTestCase {
         )
     }
 
-    func test_caseCount_isSix() {
-        XCTAssertEqual(ICloudBackupCopy.allCases.count, 6)
+    func test_caseCount_isSeven() {
+        XCTAssertEqual(ICloudBackupCopy.allCases.count, 7)
     }
 }

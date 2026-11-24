@@ -120,6 +120,22 @@ final class ArchiveExportReminderPolicyTests: XCTestCase {
         XCTAssertEqual(state, .due(count: 5, missing: [.everything]))
     }
 
+    func test_pausedICloudCountsPlainMatchesAndSaysSo() {
+        let plain = (1...5).map { i in
+            makeRecord(endOffset: TimeInterval(i * 60))
+        }
+        let state = ArchiveExportReminderPolicy.state(
+            records: plain,
+            matchIDsWithNotes: [],
+            isEnabled: true,
+            archiveOpenedNormally: true,
+            backupProtectsNonHealthData: ArchiveExportReminderPolicy.backupProtectsNonHealthData(for: .pausedDamagedArchive),
+            isICloudPaused: true,
+            baseline: nil
+        )
+        XCTAssertEqual(state, .due(count: 5, missing: [.everything, .iCloudPaused]))
+    }
+
     func test_inProgressMatchesNeverCount() {
         let inProgress = (1...6).map { _ in
             makeRecord(endOffset: nil, iWon: nil, totalSteps: 500)
@@ -291,6 +307,7 @@ final class ArchiveExportReminderPolicyTests: XCTestCase {
         XCTAssertTrue(ArchiveExportReminderPolicy.backupProtectsNonHealthData(for: .pendingRestore))
         XCTAssertFalse(ArchiveExportReminderPolicy.backupProtectsNonHealthData(for: .notBackedUp))
         XCTAssertFalse(ArchiveExportReminderPolicy.backupProtectsNonHealthData(for: .unavailable))
+        XCTAssertFalse(ArchiveExportReminderPolicy.backupProtectsNonHealthData(for: .pausedDamagedArchive))
     }
 
     // MARK: - Copy invariants (§1, §2.1, §4, §6)
@@ -321,6 +338,20 @@ final class ArchiveExportReminderPolicyTests: XCTestCase {
         XCTAssertTrue(noCloud.contains("Your matches aren't backed up anywhere else."))
         XCTAssertFalse(noCloud.localizedCaseInsensitiveContains("iCloud"))
 
+        // Paused for a damaged archive: says iCloud is paused and never claims
+        // the file holds everything, because it can't hold what couldn't be opened.
+        let paused = ArchiveExportReminderCopy.body(count: 5, missing: [.everything, .iCloudPaused])
+        XCTAssertTrue(paused.contains("iCloud backup is paused, so they're only on this iPhone."))
+        XCTAssertTrue(paused.contains("won't include the match data DeuceMate couldn't open"))
+        XCTAssertTrue(paused.contains("your iCloud backup is unchanged"))
+        XCTAssertFalse(paused.localizedCaseInsensitiveContains("keeps everything"))
+        XCTAssertFalse(paused.localizedCaseInsensitiveContains("aren't backed up anywhere else"))
+        XCTAssertFalse(paused.localizedCaseInsensitiveContains("private notes"))
+        let pausedWithNotes = ArchiveExportReminderCopy.body(count: 5, missing: [.everything, .iCloudPaused, .notes])
+        XCTAssertTrue(pausedWithNotes.localizedCaseInsensitiveContains("private notes"))
+        XCTAssertTrue(pausedWithNotes.localizedCaseInsensitiveContains("choose"))
+        XCTAssertFalse(pausedWithNotes.localizedCaseInsensitiveContains("keeps everything"))
+
         let noCloudWithNotes = ArchiveExportReminderCopy.body(count: 5, missing: [.everything, .notes])
         XCTAssertTrue(noCloudWithNotes.contains("Your matches aren't backed up anywhere else."))
         XCTAssertTrue(noCloudWithNotes.localizedCaseInsensitiveContains("private notes"))
@@ -335,6 +366,8 @@ final class ArchiveExportReminderPolicyTests: XCTestCase {
             healthAndNotes,
             noCloud,
             noCloudWithNotes,
+            paused,
+            pausedWithNotes,
             ArchiveExportReminderCopy.body(count: 5, missing: []),
         ]
         for text in allVariants {

@@ -23,6 +23,10 @@ public enum ArchiveExportReminderPolicy {
         case health
         case notes
         case everything
+        /// iCloud is paused for a damaged archive (ARCHIVE_DERISK_PLAN.md §3.3).
+        /// Always comes with `.everything`; the card says why and that the file
+        /// can't hold the match data that couldn't be opened.
+        case iCloudPaused
     }
 
     public enum Reminder: Equatable, Sendable {
@@ -31,12 +35,13 @@ public enum ArchiveExportReminderPolicy {
     }
 
     /// Whether the current iCloud backup state protects scores, points, stats
-    /// and match details. Only `.notBackedUp` and `.unavailable` leave the
-    /// whole archive unprotected; pending/restoring/uploaded states all have
-    /// iCloud enabled and available.
+    /// and match details. `.notBackedUp`, `.unavailable` and
+    /// `.pausedDamagedArchive` (new matches stay off iCloud until a fixing
+    /// build) leave the whole archive unprotected; pending/restoring/uploaded
+    /// states all have iCloud enabled and available.
     public static func backupProtectsNonHealthData(for status: ICloudBackupCopy) -> Bool {
         switch status {
-        case .notBackedUp, .unavailable:
+        case .notBackedUp, .unavailable, .pausedDamagedArchive:
             return false
         case .backedUp, .pendingUpload, .restoring, .pendingRestore:
             return true
@@ -71,6 +76,7 @@ public enum ArchiveExportReminderPolicy {
         isEnabled: Bool,
         archiveOpenedNormally: Bool,
         backupProtectsNonHealthData: Bool,
+        isICloudPaused: Bool = false,
         baseline: Date?,
         threshold: Int = Self.threshold
     ) -> Reminder {
@@ -90,6 +96,7 @@ public enum ArchiveExportReminderPolicy {
 
         if !backupProtectsNonHealthData {
             missing.insert(.everything)
+            if isICloudPaused { missing.insert(.iCloudPaused) }
             if hasNotes { missing.insert(.notes) }
         } else {
             if hasHealth { missing.insert(.health) }
@@ -147,6 +154,13 @@ public enum ArchiveExportReminderCopy {
         let matchWord = count == 1 ? "match" : "matches"
         let lead = "You've recorded \(count) \(matchWord) since your last export."
 
+        if missing.contains(.iCloudPaused) {
+            // The export holds only what this iPhone could open, so never "keeps everything".
+            let keeps = missing.contains(.notes)
+                ? "An archive file keeps them, and can include your private notes if you choose to add them."
+                : "An archive file keeps them."
+            return "\(lead) iCloud backup is paused, so they're only on this iPhone. \(keeps) It won't include the match data DeuceMate couldn't open: that's still kept on this iPhone, and your iCloud backup is unchanged."
+        }
         if missing.contains(.everything) {
             if missing.contains(.notes) {
                 return "\(lead) Your matches aren't backed up anywhere else. An archive file keeps your matches, and can include your private notes if you choose to add them. Import it if you move to a new iPhone."

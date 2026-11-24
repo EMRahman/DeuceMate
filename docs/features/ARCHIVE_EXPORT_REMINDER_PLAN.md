@@ -83,6 +83,12 @@ card as its first section, above Trends:
 - When iCloud backup is off or unavailable, the second sentence becomes "Your
   matches aren't backed up anywhere else." (`ICloudBackupCopy.current` already
   resolves this state.)
+- While iCloud is paused for a damaged archive (`ARCHIVE_DERISK_PLAN.md`
+  §3.3), the text after the count becomes: "iCloud backup is paused, so
+  they're only on this iPhone. An archive file keeps them. It won't include
+  the match data DeuceMate couldn't open: that's still kept on this iPhone,
+  and your iCloud backup is unchanged." The export holds only what the iPhone
+  could open, so this variant never says "keeps everything".
 - It is a plain `Section`, not an alert, sheet, banner overlay or local
   notification. Scrolling past it is a valid way to ignore it.
 - It is hidden while a live match section is showing, so the live row stays

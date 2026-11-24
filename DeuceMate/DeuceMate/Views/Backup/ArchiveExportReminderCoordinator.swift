@@ -35,6 +35,7 @@ final class ArchiveExportReminderCoordinator: ObservableObject {
             isEnabled: isEnabled,
             archiveOpenedNormally: archiveOpenedNormally,
             backupProtectsNonHealthData: ArchiveExportReminderPolicy.backupProtectsNonHealthData(for: icloudStatus),
+            isICloudPaused: icloudStatus == .pausedDamagedArchive,
             baseline: baseline
         )
     }
