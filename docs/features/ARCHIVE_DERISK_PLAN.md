@@ -16,7 +16,7 @@ hotfix_rule: "Any fix for a decode failure must recover the dated copies into th
 
 # Plan: De-risk the undecodable archive (#18), proportionately
 
-**Status: decisions signed off (2026-11-23). PR A (Parts 1–2) and PR B (Part 4) are implemented.**
+**Status: decisions signed off (2026-11-23). PR A (Parts 1–2) and PR B (Part 4) are merged (#247, #249). Device testing is a gate for the next release: [`SUBMISSION_REVIEW.md`](../release/SUBMISSION_REVIEW.md#246-247-249--archive-safety-archive-diagnostics-and-the-export-reminder).**
 
 **Read with:** [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md) #18 (the cascade) and
 [`ARCHIVE_EXPORT_REMINDER_PLAN.md`](ARCHIVE_EXPORT_REMINDER_PLAN.md) (part 3).

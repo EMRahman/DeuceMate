@@ -249,6 +249,117 @@ Input on, open the iPhone's Live Scoreboard during a match:
 #174's PR notes that if the badge flickers on a device, a delay may be added to the
 badge only, never to the input gate.
 
+### #246, #247, #249 — archive safety, Archive Diagnostics and the export reminder
+
+These merged after 1.4.0, so the 1.4.0 approval above doesn't cover them. Tick
+every box before writing release notes for the release after 1.4.0, and record
+the devices and date here. None of it has been tested on a physical iPhone yet.
+The simulator has no iCloud, so the check that matters most, that **the iCloud
+copy doesn't change while iCloud is paused**, can only be done on a device.
+
+**Before you start.** On any iPhone with real matches, use Settings › Backup &
+Transfer › Export Match Archive, turn on **Include private notes** (it's off by
+default) and save the file somewhere off the phone. iCloud doesn't keep Health
+data or private notes, so this file is the safety net: an export made with the
+switch off doesn't contain the notes. If you can, do the damaged-archive steps
+on a spare iPhone or a test Apple ID, with throwaway matches.
+
+**Healthy archive.** A TestFlight build on any iPhone with iCloud signed in.
+
+- [ ] **Archive Diagnostics.** Open Settings › Backup & Transfer › Archive
+  Diagnostics, the last row. **Expected:**
+  - the row has no orange "Needs attention", and the screen says "No problems
+    found";
+  - Files in iCloud lists the backup files (at least `matchHistory.json` and
+    `deletedMatchIDs.json`) with real sizes, dates and "Uploaded" (the simulator
+    can only say "unavailable");
+  - there's no Share Report and Damaged Files action.
+- [ ] **The report holds no personal data.** Tap Share Report, then open the
+  `.md` file in Files or Mail. **Expected:** the app and iOS versions, the file
+  tables and the accepted values. No player names, notes, scores or device
+  identifiers.
+- [ ] **Matches screen.** **Expected:** "N matches kept on iPhone…" and the
+  iCloud line sit directly under the Past Matches title, not below the last
+  match.
+- [ ] **Export reminder.** With iCloud on, complete 5 matches that record Health
+  data or have a private note. **Expected:**
+  - "Keep a full copy of your matches" appears above Trends and names what iCloud
+    doesn't keep;
+  - Later hides it until 5 more such matches;
+  - Don't Remind Me Again hides it and turns off Settings › Backup & Transfer ›
+    Remind Me to Export, and turning that back on shows it again;
+  - Export Archive saves a file, the card goes, and "Last exported" updates.
+
+**Damaged archive.** A build installed from Xcode on a spare iPhone with iCloud
+signed in. Download Container and Replace Container only work with a build
+installed from Xcode, not TestFlight. The Watch isn't needed for these steps;
+use manual entry for new matches.
+
+- [ ] **Note the iCloud files.** In Archive Diagnostics › Files in iCloud, take
+  a screenshot of each file's size and modified time.
+- [ ] **Make the damage.**
+  1. In Xcode, open Window › Devices and Simulators, select the iPhone, then
+     DeuceMate › gear menu › Download Container…. Keep this download untouched:
+     it's the reset.
+  2. In a copy of it, open
+     `AppData/Library/Application Support/MatchArchive/matchHistory.json`.
+  3. Change one match's `"matchFormat"` value, for example `"standard"`, to
+     `"retiredFormat"`.
+  4. Use Replace Container… with the edited copy.
+- [ ] **Paused state.** Launch the app. **Expected:**
+  - the archive is empty;
+  - under "No Matches Yet" (later, under the Past Matches title), the orange
+    "iCloud backup paused — your iCloud copy is unchanged ›" appears;
+  - tapping it opens Archive Diagnostics, with "Some match data couldn't be
+    opened" and Damaged copies (1) for `matchHistory.json`;
+  - the Settings row shows orange "Needs attention";
+  - Share Report includes "Damaged copies", whose decoding failure is at
+    `[n].matchFormat` with the value `retiredFormat`, followed by the coding-agent
+    instructions.
+- [ ] **iCloud stays unchanged.** Add a match with manual entry, force-quit the
+  app and reopen it. **Expected:**
+  - the new match is saved;
+  - iCloud is still paused after relaunch;
+  - Files in iCloud shows the same sizes and modified times as your screenshot.
+    This is the most important check.
+- [ ] **Sharing damaged files.** Tap Share Report and Damaged Files.
+  **Expected:** a "Share Damaged Files?" alert explaining what the files contain
+  comes first. The share sheet then offers the report and
+  `matchHistory.json.corrupt-<date>`, and never a copy of `healthData.json`.
+- [ ] **Reminder while paused.** Complete 5 new matches; while paused, every
+  completed match counts. **Expected:**
+  - the card says "iCloud backup is paused, so they're only on this iPhone… It
+    won't include the match data DeuceMate couldn't open…", and never "keeps
+    everything";
+  - Export Archive saves a file holding only the new matches.
+- [ ] **Reset.** Use Replace Container… with the untouched download and relaunch.
+  **Expected:** the original matches are back, there's no paused line, and
+  Diagnostics says "No problems found".
+  - **Don't reset by deleting only the `.corrupt-<date>` file.** iCloud would
+    resume and upload the reduced archive over the good backup. That's by
+    design, because only a fixing app update should end the pause.
+  - If the download is lost, delete and reinstall the app instead. iCloud
+    restores the matches from before the test, which also shows the backup
+    survived. Then import the export from "Before you start" to get Health data
+    and notes back.
+
+**Not tested by hand.** A failed launch read (the unscheduled follow-up under
+[technical debt #18](../features/TECHNICAL_DEBT.md)), a damaged Health file and
+1.4.0's undated `.corrupt` files are covered by unit tests.
+
+**Optional preview on the simulator.** To look at the paused screens without a
+device:
+1. Install a debug build and run
+   `xcrun simctl get_app_container <simulator> ehsan.DeuceMate data`.
+2. Before the first launch, put three files in
+   `Library/Application Support/MatchArchive/`:
+   - a valid `matchHistory.json`;
+   - `archiveInitialized.json` containing `true`;
+   - a file named `matchHistory.json.corrupt-20261124T080000`, with any content.
+
+The pause comes from the dated copy, so the matches still show. The simulator
+can't show iCloud files.
+
 ## Submitted — 1.3.1 (build 15), 4 November 2026
 
 The iPhone app and embedded Apple Watch app are both configured as
