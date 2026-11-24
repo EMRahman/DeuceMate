@@ -738,16 +738,17 @@
       if (!tombstones.has(r.id) && !all.some(function (a) { return a.id === r.id; })) all.push(r);
     });
     var past = sortRecords(all).filter(function (r) { return !live || r.id !== live.id; });
-    out.append(heading("Past Matches"));
+    // Native shows the summary and iCloud line under the Past Matches title.
+    out.append(heading("Past Matches"),
+      note(archive.length + " " + (archive.length === 1 ? "match" : "matches") + " kept on iPhone — your full history stays here. Apple Watch holds the most recent 25."),
+      cloudStatusRow());
     if (past.length) out.append(card(past.map(row)));
     else {
       var emptyTitle = connection.activation === "connecting" ? "Connecting to Apple Watch…" : connection.activation === "unavailable" ? "Apple Watch Unavailable" : connection.paired ? "No Matches Yet" : "No Apple Watch Paired";
       var emptyCopy = connection.activation === "connecting" ? "Watch history will appear after connectivity is ready. You can enter matches manually meanwhile." : connection.activation === "unavailable" ? "Watch connectivity couldn't be started. You can still create, review, and export matches on this iPhone." : connection.paired ? "Open DeuceMate on your Apple Watch — your match history will sync automatically." : "Pair an Apple Watch with DeuceMate installed to sync your match history here.";
       out.append(card(heading(emptyTitle), note(emptyCopy), button("Enter a match manually", function () { navigate("manual"); })));
     }
-    out.append(note(archive.length + " " + (archive.length === 1 ? "match" : "matches") + " kept on iPhone — your full history stays here. Apple Watch holds the most recent 25."),
-      cloudStatusRow(),
-      button("↻ Sync Now", syncNow));
+    out.append(button("↻ Sync Now", syncNow));
     if (persistenceError) out.append(note("Browser storage is unavailable. This session still works; export your demo archive to keep it."));
     return out;
   }

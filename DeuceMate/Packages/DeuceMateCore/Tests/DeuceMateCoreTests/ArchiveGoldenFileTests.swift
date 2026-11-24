@@ -50,14 +50,11 @@ final class ArchiveGoldenFileTests: XCTestCase {
         let points = records.flatMap(\.stats)
 
         // Every case of every persisted enum decodes.
-        XCTAssertEqual(Set(records.map(\.matchFormat)), [
-            .standard, .bestOf3FullFinalSet, .superTiebreak, .perpetualSuperTiebreak,
-            .quick4Games, .shortSets, .fast4, .perpetualPoints
-        ], file: file, line: line)
-        XCTAssertEqual(Set(records.map(\.matchType)), [.singles, .doubles], file: file, line: line)
-        XCTAssertEqual(Set(points.map(\.server)), [.me, .opponent], file: file, line: line)
-        XCTAssertEqual(Set(points.map(\.winner)), [.me, .opponent], file: file, line: line)
         // `allCases`: a new case fails here until a match using it is appended.
+        XCTAssertEqual(Set(records.map(\.matchFormat)), Set(MatchFormat.allCases), file: file, line: line)
+        XCTAssertEqual(Set(records.map(\.matchType)), Set(MatchType.allCases), file: file, line: line)
+        XCTAssertEqual(Set(points.map(\.server)), Set(Player.allCases), file: file, line: line)
+        XCTAssertEqual(Set(points.map(\.winner)), Set(Player.allCases), file: file, line: line)
         XCTAssertEqual(Set(records.compactMap(\.doublesServer)), Set(DoublesServer.allCases), file: file, line: line)
         XCTAssertEqual(Set(points.map(\.outcome)), Set(PointOutcome.allCases), file: file, line: line)
         XCTAssertEqual(Set(points.compactMap(\.endingShot)), Set(EndingShot.allCases), file: file, line: line)
