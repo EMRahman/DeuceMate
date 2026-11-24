@@ -258,10 +258,11 @@ The simulator has no iCloud, so the check that matters most, that **the iCloud
 copy doesn't change while iCloud is paused**, can only be done on a device.
 
 **Before you start.** On any iPhone with real matches, use Settings › Backup &
-Transfer › Export Match Archive and save the file somewhere off the phone. iCloud
-doesn't keep Health data or private notes, so this file is the safety net. If you
-can, do the damaged-archive steps on a spare iPhone or a test Apple ID, with
-throwaway matches.
+Transfer › Export Match Archive, turn on **Include private notes** (it's off by
+default) and save the file somewhere off the phone. iCloud doesn't keep Health
+data or private notes, so this file is the safety net: an export made with the
+switch off doesn't contain the notes. If you can, do the damaged-archive steps
+on a spare iPhone or a test Apple ID, with throwaway matches.
 
 **Healthy archive.** A TestFlight build on any iPhone with iCloud signed in.
 
